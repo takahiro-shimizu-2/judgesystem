@@ -1,0 +1,1 @@
+employee_id	company_id	office_id	employee_name	birthdate	is_retired_flg	contact_info	created_at	updated_at

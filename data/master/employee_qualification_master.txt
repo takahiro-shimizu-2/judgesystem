@@ -1,0 +1,1 @@
+employee_qual_id	employee_id	qualification_id	obtained_date	license_number	is_active_flg	revocation_date	remarks	created_at	updated_at

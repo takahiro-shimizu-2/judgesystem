@@ -1,0 +1,1 @@
+employee_experience_id	employee_id	project_name	role_position	start_date	end_date	agency_id	construction_id	is_original_contractor_flg	final_score	remarks	created_at	updated_at
