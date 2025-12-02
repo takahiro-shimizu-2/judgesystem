@@ -208,7 +208,7 @@ def checkSpecificAgency(agency, agencyMap, officeLicenses, constructionMap, requ
     if len(requiredItems) > 0:
         matchingLicenses = []
         for lic in specificLicenses:
-            cInfo = constructionMap[lic["construction_no"]]
+            cInfo = constructionMap[fr"{int(lic['construction_no']):04}"]
             if not cInfo:
                 continue
             itemMatched = False
@@ -263,7 +263,7 @@ def checkDefault(requiredItems, officeLicenses, constructionMap, agencyMap, requ
     if len(requiredItems) > 0:
         matchingLicenses = []
         for lic in officeLicenses:
-            cInfo = constructionMap[lic["construction_no"]]
+            cInfo = constructionMap[fr"{int(lic['construction_no']):04}"]
             if not cInfo:
                 continue
             itemMatched = False
@@ -309,7 +309,7 @@ def checkDefault(requiredItems, officeLicenses, constructionMap, agencyMap, requ
                     }
 
     # 地域要件
-    if len(requiredAreas > 0):
+    if len(requiredAreas) > 0:
         areaLicenses = []
         for lic in officeLicenses:
             agInfo = agencyMap.get(lic["agency_no"])
