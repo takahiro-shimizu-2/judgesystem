@@ -248,7 +248,8 @@ class OCRutils:
                 data=doc_data,
                 mime_type='application/pdf',
             ),
-            prompt])
+            prompt
+        ])
         # print(response.text)
 
         text=response.text
@@ -374,7 +375,8 @@ class OCRutils:
                 data=doc_data,
                 mime_type='application/pdf',
             ),
-            prompt])
+            prompt
+        ])
         # print(response.text)
         text=response.text
         #json_text = extract_json(text=response.text)
@@ -456,6 +458,12 @@ class GCPVM:
         client = self.client
 
         sql = fr"select * from {tablename}"
+        df = client.query(sql).result().to_dataframe()
+        return df
+    
+    def any_query(self, sql):
+        client = self.client
+
         df = client.query(sql).result().to_dataframe()
         return df
 
@@ -625,8 +633,14 @@ class GCPVM:
             print(fr"ALREADY EXISTS: {project_id}.{dataset_name}.{tablename_requirements}.")
 
 
-
         # 転写処理
+        # BigQueryのような分析基盤は OLAP寄り。
+        # ID管理や逐次更新はOLTP型DB（RDBMS）が得意
+        #
+        # ID ... GENERATE_UUID() で UUID を作る方法はある。
+        # バッチ処理なら連番採番で問題なさそう。同時実行が想定される(例：近い時刻に異なる注文をinsert)場合は問題あるかもしれない。
+        # TODO: 要テスト
+        # 疑問:row_number付与の order by 列は pdf_urlがよいのか？
         sql = fr"""
         INSERT INTO `{project_id}.{dataset_name}.{tablename_announcements}` (
             preID,
@@ -657,40 +671,72 @@ class GCPVM:
             createdDate,
             updatedDate
             )
-        SELECT 
-        tbl_pre.preID, 
-        tbl_pre.workName,
-        tbl_pre.userAnnNo,
-        NULL AS topAgencyNo,
-        tbl_pre.topAgencyName,
-        NULL AS subAgencyNo,
-        tbl_pre.subAgencyName,
-        NULL as workPlace,
-        tbl_pre.pdfUrl,
-        NULL as zipcode,
-        NULL as addres,
-        NULL as department,
-        NULL as assigneeName,
-        NULL as telephone,
-        NULL as fax,
-        NULL as mail,
-        tbl_pre.publishDate,
-        NULL as docDistStart,
-        tbl_pre.docDistEnd,
-        NULL as submissionStart,
-        tbl_pre.submissionEnd,
-        NULL as bidStartDate,
-        tbl_pre.bidEndDate,
-        FALSE AS doneOCR,
-        tbl_pre.remarks,
-        FORMAT_TIMESTAMP('%Y-%m-%d %H:%M:%S', CURRENT_TIMESTAMP()) AS createdDate,
-        FORMAT_TIMESTAMP('%Y-%m-%d %H:%M:%S', CURRENT_TIMESTAMP()) AS updatedDate
+        WITH maxval AS (
+            SELECT IFNULL(MAX(preID), 0) AS maxid FROM `{project_id}.{dataset_name}.{tablename_announcements}`
+        ), 
+        to_insert AS (
+        SELECT
+            ROW_NUMBER() OVER (ORDER BY tbl_pre.pdfurl) AS rn,
+            tbl_pre.workName,
+            tbl_pre.userAnnNo,
+            NULL AS topAgencyNo,
+            tbl_pre.topAgencyName,
+            NULL AS subAgencyNo,
+            tbl_pre.subAgencyName,
+            cast(NULL as string) as workPlace,
+            tbl_pre.pdfUrl,
+            cast(NULL as string) as zipcode,
+            cast(NULL as string) as addres,
+            cast(NULL as string) as department,
+            cast(NULL as string) as assigneeName,
+            cast(NULL as string) as telephone,
+            cast(NULL as string) as fax,
+            cast(NULL as string) as mail,
+            tbl_pre.publishDate,
+            cast(NULL as string) as docDistStart,
+            tbl_pre.docDistEnd,
+            cast(NULL as string) as submissionStart,
+            tbl_pre.submissionEnd,
+            cast(NULL as string) as bidStartDate,
+            tbl_pre.bidEndDate,
+            FALSE AS doneOCR,
+            tbl_pre.remarks,
+            FORMAT_TIMESTAMP('%Y-%m-%d %H:%M:%S', CURRENT_TIMESTAMP()) AS createdDate,
+            FORMAT_TIMESTAMP('%Y-%m-%d %H:%M:%S', CURRENT_TIMESTAMP()) AS updatedDate
         FROM `{project_id}.{dataset_name}.{tablename_pre}` AS tbl_pre
-        WHERE NOT EXISTS (
-        SELECT 1
-        FROM `{project_id}.{dataset_name}.{tablename_announcements}` AS tbl
-        WHERE tbl_pre.pdfurl = tbl.pdfUrl
+        LEFT JOIN `{project_id}.{dataset_name}.{tablename_announcements}` AS tbl
+            ON tbl_pre.pdfurl = tbl.pdfurl
+        WHERE tbl.pdfurl IS NULL
         )
+        SELECT 
+        rn + maxid,
+        workName,
+        userAnnNo,
+        topAgencyNo,
+        topAgencyName,
+        subAgencyNo,
+        subAgencyName,
+        workPlace,
+        pdfUrl,
+        zipcode,
+        addres,
+        department,
+        assigneeName,
+        telephone,
+        fax,
+        mail,
+        publishDate,
+        docDistStart,
+        docDistEnd,
+        submissionStart,
+        submissionEnd,
+        bidStartDate,
+        bidEndDate,
+        doneOCR,
+        remarks,
+        createdDate,
+        updatedDate
+        FROM to_insert, maxval
         """
 
         client.query(sql).result()
@@ -1317,6 +1363,11 @@ class SQLITE3:
         df = pd.read_sql_query(sql, conn)
         return df
 
+    def any_query(self, sql):
+        conn = self.conn
+        cur = self.cur
+        df = pd.read_sql_query(sql, conn)
+        return df
 
     def step0_table_creation(self, bid_announcements_pre_file=None):
         if bid_announcements_pre_file is None:
@@ -1465,8 +1516,14 @@ class SQLITE3:
             print(fr"ALREADY EXISTS: {tablename_requirements}.")
 
 
-
         # 転写処理
+        # BigQueryのような分析基盤は OLAP寄り。
+        # ID管理や逐次更新はOLTP型DB（RDBMS）が得意
+        #
+        # ID ... GENERATE_UUID() で UUID を作る方法はある。
+        # バッチ処理なら連番採番で問題なさそう。同時実行が想定される(例：近い時刻に異なる注文をinsert)場合は問題あるかもしれない。
+        # TODO: 要テスト
+        # 疑問:row_number付与の order by 列は pdf_urlがよいのか？
         sql = fr"""
         INSERT INTO {tablename_announcements} (
             preID,
@@ -1497,41 +1554,74 @@ class SQLITE3:
             createdDate,
             updatedDate
             )
-        SELECT 
-        tbl_pre.preID, 
-        tbl_pre.workName,
-        tbl_pre.userAnnNo,
-        NULL AS topAgencyNo,
-        tbl_pre.topAgencyName,
-        NULL AS subAgencyNo,
-        tbl_pre.subAgencyName,
-        NULL as workPlace,
-        tbl_pre.pdfUrl,
-        NULL as zipcode,
-        NULL as addres,
-        NULL as department,
-        NULL as assigneeName,
-        NULL as telephone,
-        NULL as fax,
-        NULL as mail,
-        tbl_pre.publishDate,
-        NULL as docDistStart,
-        tbl_pre.docDistEnd,
-        NULL as submissionStart,
-        tbl_pre.submissionEnd,
-        NULL as bidStartDate,
-        tbl_pre.bidEndDate,
-        FALSE AS doneOCR,
-        tbl_pre.remarks,
-        strftime('%Y-%m-%d %H:%M:%S', CURRENT_TIMESTAMP) AS createdDate,
-        strftime('%Y-%m-%d %H:%M:%S', CURRENT_TIMESTAMP) AS updatedDate
+        WITH maxval AS (
+            SELECT IFNULL(MAX(preID), 0) AS maxid FROM {tablename_announcements}
+        ), 
+        to_insert AS (
+        SELECT
+            ROW_NUMBER() OVER (ORDER BY tbl_pre.pdfurl) AS rn,
+            tbl_pre.workName,
+            tbl_pre.userAnnNo,
+            NULL AS topAgencyNo,
+            tbl_pre.topAgencyName,
+            NULL AS subAgencyNo,
+            tbl_pre.subAgencyName,
+            NULL as workPlace,
+            tbl_pre.pdfUrl,
+            NULL as zipcode,
+            NULL as addres,
+            NULL as department,
+            NULL as assigneeName,
+            NULL as telephone,
+            NULL as fax,
+            NULL as mail,
+            tbl_pre.publishDate,
+            NULL as docDistStart,
+            tbl_pre.docDistEnd,
+            NULL as submissionStart,
+            tbl_pre.submissionEnd,
+            NULL as bidStartDate,
+            tbl_pre.bidEndDate,
+            FALSE AS doneOCR,
+            tbl_pre.remarks,
+            strftime('%Y-%m-%d %H:%M:%S', CURRENT_TIMESTAMP) AS createdDate,
+            strftime('%Y-%m-%d %H:%M:%S', CURRENT_TIMESTAMP) AS updatedDate
         FROM {tablename_pre} AS tbl_pre
-        WHERE NOT EXISTS (
-        SELECT 1
-        FROM {tablename_announcements} AS tbl
-        WHERE tbl_pre.pdfurl = tbl.pdfUrl
+        LEFT JOIN {tablename_announcements} AS tbl
+            ON tbl_pre.pdfurl = tbl.pdfurl
+        WHERE tbl.pdfurl IS NULL
         )
+        SELECT 
+        rn + maxid,
+        workName,
+        userAnnNo,
+        topAgencyNo,
+        topAgencyName,
+        subAgencyNo,
+        subAgencyName,
+        workPlace,
+        pdfUrl,
+        zipcode,
+        addres,
+        department,
+        assigneeName,
+        telephone,
+        fax,
+        mail,
+        publishDate,
+        docDistStart,
+        docDistEnd,
+        submissionStart,
+        submissionEnd,
+        bidStartDate,
+        bidEndDate,
+        doneOCR,
+        remarks,
+        createdDate,
+        updatedDate
+        FROM to_insert, maxval
         """
+
         # FORMAT_TIMESTAMP('%Y-%m-%d %H:%M:%S', CURRENT_TIMESTAMP())
         # -> strftime('%Y-%m-%d %H:%M:%S', CURRENT_TIMESTAMP)
         cur.execute(sql)
@@ -2259,21 +2349,25 @@ if __name__ == "__main__":
         exit(1)
 
 
-    obj.step0_table_creation()
-    obj.step1_transfer(remove_table=True)
+    obj.step0_table_creation(bid_announcements_pre_file=bid_announcements_pre_file)
+    obj.step1_transfer(remove_table=False)
     obj.step2_ocr(ocr_utils = OCRutils(google_ai_studio_api_key_filepath=google_ai_studio_api_key_filepath))
     obj.step3(remove_table=True)
 
 
+    # obj.select_to_table(tablename="bid_announcements_pre")
     # obj.select_to_table(tablename="bid_announcements")
     # obj.select_to_table(tablename="bid_requirements")
     # obj.select_to_table(tablename="sufficient_requirements")
     # obj.select_to_table(tablename="insufficient_requirements")
     # obj.select_to_table(tablename="company_bid_judgement")
+    # obj.any_query(sql = "SELECT name FROM sqlite_master WHERE type='table'")
 
+    # obj.select_to_table(tablename="vocal-raceway-473509-f1.October_20251004.bid_announcements_pre")
     # obj.select_to_table(tablename="vocal-raceway-473509-f1.October_20251004.bid_announcements")
     # obj.select_to_table(tablename="vocal-raceway-473509-f1.October_20251004.bid_requirements")
     # obj.select_to_table(tablename="vocal-raceway-473509-f1.October_20251004.sufficient_requirements")
     # obj.select_to_table(tablename="vocal-raceway-473509-f1.October_20251004.insufficient_requirements")
     # obj.select_to_table(tablename="vocal-raceway-473509-f1.October_20251004.company_bid_judgement")
+    # obj.any_query(sql = fr"SELECT table_name FROM `{bigquery_project_id}.{bigquery_dataset_name}.INFORMATION_SCHEMA.TABLES`")
 

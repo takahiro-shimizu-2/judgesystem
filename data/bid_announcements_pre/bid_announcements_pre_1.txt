@@ -1,3 +1,3 @@
-preID	workName	userAnnNo	topAgencyName	subAgencyName	publishDate	docDistEnd	submissionEnd	bidEndDate	remarks	pdfUrl	transferFlag	reasonForNG
-1	令和7年度矢臼別演習場周辺地区経常管理業務		防衛省	北海道防衛局	R7.2.17			R7.3.24		https://www.mod.go.jp/rdb/hokkaido/keiyaku/koukoku06_obihiro/pdf/070217_1.pdf	FALSE	
-2	令和７年度矢臼別演習場周辺地区施肥業務		防衛省	北海道防衛局	R7.2.17			R7.3.24		https://www.mod.go.jp/rdb/hokkaido/keiyaku/koukoku06_obihiro/pdf/070217_2.pdf	FALSE	
+workName	userAnnNo	topAgencyName	subAgencyName	publishDate	docDistEnd	submissionEnd	bidEndDate	remarks	pdfUrl	transferFlag	reasonForNG
+令和7年度矢臼別演習場周辺地区経常管理業務		防衛省	北海道防衛局	R7.2.17			R7.3.24		https://www.mod.go.jp/rdb/hokkaido/keiyaku/koukoku06_obihiro/pdf/070217_1.pdf	FALSE	
+令和７年度矢臼別演習場周辺地区施肥業務		防衛省	北海道防衛局	R7.2.17			R7.3.24		https://www.mod.go.jp/rdb/hokkaido/keiyaku/koukoku06_obihiro/pdf/070217_2.pdf	FALSE	
