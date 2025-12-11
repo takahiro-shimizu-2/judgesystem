@@ -386,6 +386,7 @@ class OCRutils:
         return dict1
 
     def convertRequirementTextDict(self, requirement_texts):
+        # requirement_texts = {"preID":1, "資格・条件":["(2)令和07・08・09年度防衛省競争参加資格(全省庁統一資格)の「役務の提供等」において、開札時までに「C」又は「D」の等級に格付けされ北海道地域の競争参加を希望する者であること(会社更生法(平成14年法律第154号)に基づき更生手続開始の申立てがなされている者又は民事再生法(平成11年法律第225号)に基づき再生手続開始の申立てがなされている者については、手続開始の決定後、再度級別の格付けを受けていること。)。"]}
         preID = requirement_texts["preID"]
         preid_list = []
         seqid_list = []
@@ -393,44 +394,43 @@ class OCRutils:
         requirement_text_list = []
         createdDate_list = []
         updatedDate_list = []
-        req_type_list = ["欠格要件","業種・等級要件","所在地要件","技術者要件","実績要件","その他"]
+        # req_type_list = ["欠格要件","業種・等級要件","所在地要件","技術者要件","実績要件","その他"]
+        req_type_list_search_list = {
+            "欠格要件":[
+                "70条","71条","会社更生法","民事再生法","更生手続",
+                "再生手続","情報保全","資本関係","人的関係","滞納",
+                "外国法","取引停止","破産","暴力団","指名停止",
+                "後見人","法人格取消"
+            ],
+            "業種・等級要件":["競争参加資格","一般競争","指名競争","等級","総合審査"],
+            "所在地要件":["所在","県内","市内","防衛局管内","本店が","支店が"],
+            "技術者要件":[
+                "施工管理技士","技術士","資格者証","電気工事士","建築士",
+                "基幹技能者","監理技術者","主任技術者","監理技術者資格者証","監理技術者講習修了証"
+            ],
+            "実績要件":[
+                "実績","工事成績","元請けとして","元請として","点以上",
+                "jv比率","過去実績"
+            ],
+            "その他要件":["jv","共同企業体","出資比率"] # JV, 共同企業体, or 不明
+        }
         for i, text in enumerate(requirement_texts["資格・条件"]):
             # TODO
             # text は、"改行分割" が必要？
             # 未処理。
 
+            has_other_req = True
             text_lower = text.lower()
-            for req_type in req_type_list:
-                if req_type == "欠格要件":
-                    search_list = [
-                        "70条","71条","会社更生法","民事再生法","更生手続",
-                        "再生手続","情報保全","資本関係","人的関係","滞納",
-                        "外国法","取引停止","破産","暴力団","指名停止",
-                        "後見人","法人格取消"
-                    ]
-                elif req_type == "業種・等級要件":
-                    search_list = ["競争参加資格","一般競争","指名競争","等級","総合審査"]
-                elif req_type == "所在地要件":
-                    search_list = ["所在","県内","市内","防衛局管内","本店が","支店が"]
-                elif req_type == "技術者要件":
-                    search_list = [
-                        "施工管理技士","技術士","資格者証","電気工事士","建築士",
-                        "基幹技能者","監理技術者","主任技術者","監理技術者資格者証","監理技術者講習修了証"
-                    ]
-                elif req_type == "実績要件":
-                    search_list = [
-                        "実績","工事成績","元請けとして","元請として","点以上",
-                        "jv比率","過去実績"
-                    ]            
-
+            for req_type, search_list in req_type_list_search_list.items():
                 search_str = "|".join(search_list)
-                if re.search(search_str, text_lower):
+                if (req_type != "その他要件" and re.search(search_str, text_lower)) or (req_type == "その他要件" and re.search(search_str, text_lower)) or (req_type == "その他要件" and not re.search(search_str, text_lower) and has_other_req):
                     preid_list.append(preID)
                     seqid_list.append(i)
                     requirement_type_list.append(req_type)
                     requirement_text_list.append(text)
                     createdDate_list.append("")
                     updatedDate_list.append("")
+                    has_other_req = False
 
         new_dict = {
             "preID":preid_list,
@@ -1673,16 +1673,17 @@ class SQLITE3:
 
             ocr_announcements_file = fr"ocr_announcements_{preID}.json"
             ocr_announcements_filepath = fr"data/ocr/{ocr_announcements_file}"
+
             if not os.path.exists(ocr_announcements_filepath):
                 print("   Trying ocr(announcements).")
                 json_value = ocr_utils.getJsonFrompdfurl(pdfurl, preID=preID)
-                new_json = ocr_utils.convertJson(json_value=json_value)
                 with open(ocr_announcements_filepath, "w", encoding="utf-8") as f:
-                    json.dump(new_json, f, ensure_ascii=False, indent=2)
+                    json.dump(json_value, f, ensure_ascii=False, indent=2)
             else:
                 print("   Already getting announcements.")
                 with open(ocr_announcements_filepath, "r", encoding="utf-8") as f:
-                    new_json = json.load(f)
+                    json_value = json.load(f)
+            new_json = ocr_utils.convertJson(json_value=json_value)
 
 
             ocr_requirements_file = fr"ocr_requirements_{preID}.json"
@@ -1690,13 +1691,13 @@ class SQLITE3:
             if not os.path.exists(ocr_requirements_filepath):
                 print("   Trying ocr(requirements).")
                 requirement_texts = ocr_utils.getRequirementText(pdfurl, preID=preID)
-                dic = ocr_utils.convertRequirementTextDict(requirement_texts=requirement_texts)
                 with open(ocr_requirements_filepath, "w", encoding="utf-8") as f:
-                    json.dump(dic, f, ensure_ascii=False, indent=2)
+                    json.dump(requirement_texts, f, ensure_ascii=False, indent=2)
             else:
                 print("   Already getting requirements.")
                 with open(ocr_requirements_filepath, "r", encoding="utf-8") as f:
-                    dic = json.load(f)
+                    requirement_texts = json.load(f)
+            dic = ocr_utils.convertRequirementTextDict(requirement_texts=requirement_texts)
 
             all_announcements.append(new_json)
             all_requirement_texts.append(pd.DataFrame(dic))
@@ -2281,6 +2282,7 @@ if __name__ == "__main__":
     # 
     # sqlite3想定
     # python source/bid_announcement_judgement_tools/main.py --bid_announcements_pre_file data/bid_announcements_pre/bid_announcements_pre_1.txt --google_ai_studio_api_key_filepath data/sec/google_ai_studio_api_key.txt --sqlite3_db_file_path data/example.db
+    # python source/bid_announcement_judgement_tools/main.py --bid_announcements_pre_file data/bid_announcements_pre/all.txt --google_ai_studio_api_key_filepath data/sec/google_ai_studio_api_key.txt --sqlite3_db_file_path data/example.db --step1_transfer_remove_table --step3_remove_table
     # python -i source/bid_announcement_judgement_tools/main.py --stop_processing
 
     parser = argparse.ArgumentParser(description="")
@@ -2295,6 +2297,9 @@ if __name__ == "__main__":
     parser.add_argument("--bigquery_project_id", default=None)
     parser.add_argument("--bigquery_dataset_name", default=None)
 
+    parser.add_argument("--step1_transfer_remove_table", action="store_true")
+    parser.add_argument("--step3_remove_table", action="store_true")
+
     try:
         args = parser.parse_args()
         bid_announcements_pre_file = args.bid_announcements_pre_file
@@ -2306,10 +2311,16 @@ if __name__ == "__main__":
         bigquery_location = args.bigquery_location
         bigquery_project_id = args.bigquery_project_id
         bigquery_dataset_name = args.bigquery_dataset_name
+
+        step1_transfer_remove_table = args.step1_transfer_remove_table
+        step3_remove_table = args.step3_remove_table
     except:
         bid_announcements_pre_file = "data/bid_announcements_pre/bid_announcements_pre_1.txt"
         use_bigquery = False
         stop_processing = True
+
+        step1_transfer_remove_table = False
+        step3_remove_table = False
 
     if bid_announcements_pre_file is None:
         bid_announcements_pre_file = "data/bid_announcements_pre/bid_announcements_pre_1.txt"
@@ -2350,9 +2361,9 @@ if __name__ == "__main__":
 
 
     obj.step0_table_creation(bid_announcements_pre_file=bid_announcements_pre_file)
-    obj.step1_transfer(remove_table=False)
+    obj.step1_transfer(remove_table=step1_transfer_remove_table)
     obj.step2_ocr(ocr_utils = OCRutils(google_ai_studio_api_key_filepath=google_ai_studio_api_key_filepath))
-    obj.step3(remove_table=True)
+    obj.step3(remove_table=step3_remove_table)
 
 
     # obj.select_to_table(tablename="bid_announcements_pre")
