@@ -2,6 +2,7 @@
 
 import re
 import pandas as pd
+import argparse
 
 #######################################
 # 業種・等級要件の判定
@@ -503,9 +504,18 @@ def checkGradeAndItemRequirement(
 
 
 if __name__ == "__main__":
-    companyNo = 1
-    officeNo = 1
-    requirementText = "令和07・08・09年度防衛省競争参加資格(全省庁統一資格)の「役務の提供等」において、開札時までに「C」又は「D」の等級に格付けされ北海道地域の競争参加を希望する者であること"
+    parser = argparse.ArgumentParser(description="")
+    parser.add_argument("--requirementText",default="dummy")
+    parser.add_argument("--companyNo",type=int,default=1)
+    parser.add_argument("--officeNo",type=int,default=1)
+    
+    args = parser.parse_args()
+    requirementText = args.requirementText
+    companyNo = args.companyNo
+    officeNo = args.officeNo
+
+    # requirementText = "令和07・08・09年度防衛省競争参加資格(全省庁統一資格)の「役務の提供等」において、開札時までに「C」又は「D」の等級に格付けされ北海道地域の競争参加を希望する者であること"
+    # requirementText = "全省庁統一資格の「物品の販売」に係る等級がA、B、C、D等級であること"
 
     print(checkGradeAndItemRequirement(requirementText, companyNo, officeNo))
 
