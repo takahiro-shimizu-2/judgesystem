@@ -153,8 +153,8 @@ def checkAllMinistryUnified(requiredItems, agencyMap, officeLicenses, constructi
                 if checkGrade(
                     licenseGrade = lic["license_grade"], 
                     requiredGrade = requiredGrade, 
-                    gradeComparison = gradeComparison
-                ):
+                    comparison = gradeComparison
+                    ):
                     gradeLicenses.append(lic)
 
             if len(gradeLicenses) == 0:
@@ -230,7 +230,11 @@ def checkSpecificAgency(agency, agencyMap, officeLicenses, constructionMap, requ
             for lic in matchingLicenses:
                 if not lic["license_grade"]:
                     continue
-                if checkGrade(lic["license_grade"], requiredGrade, gradeComparison):
+                if checkGrade(
+                    licenseGrade = lic["license_grade"], 
+                    requiredGrade = requiredGrade, 
+                    comparison = gradeComparison
+                    ):
                     gradeLicenses.append(lic)
 
             if len(gradeLicenses) == 0:
@@ -287,8 +291,13 @@ def checkDefault(requiredItems, officeLicenses, constructionMap, agencyMap, requ
             for lic in matchingLicenses:
                 if not lic["license_grade"]:
                     continue
-                if checkGrade(lic["license_grade"], requiredGrade, gradeComparison):
+                if checkGrade(
+                    licenseGrade = lic["license_grade"], 
+                    requiredGrade = requiredGrade, 
+                    comparison = gradeComparison
+                    ):
                     gradeLicenses.append(lic)
+                    
             if len(gradeLicenses) == 0:
                 return {
                     "is_ok": False,
