@@ -1073,10 +1073,11 @@ class GCPVM:
 
         # check
         sql = fr"""
-        SELECT * FROM `{project_id}.{dataset_name}.{tablename_company_bid_judgement}`
+        SELECT * FROM `{project_id}.{dataset_name}.{tablename_company_bid_judgement}` where final_status is NULL
         """
         df = client.query(sql).result().to_dataframe()
 
+        print(fr"Target of checking requirement : {df.shape[0]}")
 
         for index, row1 in df.iterrows():
             preID = row1["preID"]
@@ -2007,11 +2008,12 @@ class SQLITE3:
 
         # check
         sql = fr"""
-        SELECT * FROM {tablename_company_bid_judgement}
+        SELECT * FROM {tablename_company_bid_judgement} where final_status is NULL
         """
         #val = client.query(sql).result().to_dataframe()
         df = pd.read_sql_query(sql, conn)
 
+        print(fr"Target of checking requirement : {df.shape[0]}")
 
         for index, row1 in df.iterrows():
             preID = row1["preID"]
@@ -2041,7 +2043,7 @@ class SQLITE3:
                 requirementText = requirement_text
                 companyNo = company_id
                 officeNo = office_id
-                    
+                
                 if requirement_type == "欠格要件":
                     val = checkIneligibilityDynamic(
                         requirementText=requirement_text, 
