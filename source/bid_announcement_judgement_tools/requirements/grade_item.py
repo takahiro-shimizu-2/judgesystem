@@ -217,8 +217,8 @@ def checkSpecificAgency(agency, agencyMap, officeLicenses, constructionMap, requ
                 if cInfo["construction_name"].find(reqItem) >= 0:
                     itemMatched = True
                     break
-        if itemMatched:
-            matchingLicenses.append(lic)
+            if itemMatched:
+                matchingLicenses.append(lic)
 
         if len(matchingLicenses) == 0:
             return {
