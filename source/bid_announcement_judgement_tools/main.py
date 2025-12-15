@@ -1820,15 +1820,15 @@ class SQLITE3:
             NULL
             from {tmp_tablename_announcements} source where true
             ON CONFLICT(preid) DO UPDATE SET
-                preid = bid_announcements.preid,
-                workname = bid_announcements.workname,
-                userAnnNo = bid_announcements.userannno,
-                topAgencyNo = bid_announcements.topagencyno,
-                topAgencyName = bid_announcements.topagencyname,
-                subAgencyNo = bid_announcements.subagencyno,
-                subAgencyName = bid_announcements.subagencyname,
+                preid = {tablename_announcements}.preid,
+                workname = {tablename_announcements}.workname,
+                userAnnNo = {tablename_announcements}.userannno,
+                topAgencyNo = {tablename_announcements}.topagencyno,
+                topAgencyName = {tablename_announcements}.topagencyname,
+                subAgencyNo = {tablename_announcements}.subagencyno,
+                subAgencyName = {tablename_announcements}.subagencyname,
                 workplace = excluded.workplace,
-                pdfUrl = bid_announcements.pdfurl,
+                pdfUrl = {tablename_announcements}.pdfurl,
                 zipcode = excluded.zipcode,
                 address = excluded.address,
                 department = excluded.department,
@@ -1836,17 +1836,17 @@ class SQLITE3:
                 telephone = excluded.telephone,
                 fax = excluded.fax,
                 mail = excluded.mail,
-                publishDate = bid_announcements.publishDate,
+                publishDate = {tablename_announcements}.publishDate,
                 docdiststart = excluded.docdiststart,
                 docdistend = excluded.docdistend,
                 submissionstart = excluded.submissionstart,
                 submissionend = excluded.submissionend,
                 bidstartdate = excluded.bidstartdate,
-                bidEndDate = bid_announcements.bidenddate,
+                bidEndDate = {tablename_announcements}.bidenddate,
                 doneocr = TRUE,
-                remarks = bid_announcements.remarks, 
-                createdDate = bid_announcements.createddate,
-                updatedDate = bid_announcements.updateddate
+                remarks = {tablename_announcements}.remarks, 
+                createdDate = {tablename_announcements}.createddate,
+                updatedDate = {tablename_announcements}.updateddate
             """
             cur.execute(sql)
 
@@ -2048,272 +2048,391 @@ class SQLITE3:
         SELECT * FROM {tablename_company_bid_judgement} where final_status is NULL
         """
         #val = client.query(sql).result().to_dataframe()
-        df = pd.read_sql_query(sql, conn)
+        df0 = pd.read_sql_query(sql, conn)
 
-        print(fr"Target of checking requirement : {df.shape[0]}")
+        print(fr"Target of checking requirement : {df0.shape[0]}")
 
-        for index, row1 in df.iterrows():
-            preID = row1["preID"]
-            company_id = row1["company_id"]
-            office_id = row1["office_id"]
-            tmp_result = []
-            if False:
-                preID = int(df["preID"][0])
-                company_id = int(df["company_id"][0])
-                office_id = int(df["office_id"][0])
-
-            sql = fr"""
-            SELECT * FROM {tablename_requirements} where preID = {preID}
-            """
-
-
-            req_df = pd.read_sql_query(sql, conn)
-            if req_df.shape[0] == 0:
-                print(fr"preID={preID}: No requirement found. Skip anyway.")
-                continue
-
-            for jndex, row2 in req_df.iterrows():
+        # 部分的に(chunk_sizeごとに)実行。
+        chunk_size = 1000
+        for start in range(0, len(df0), chunk_size):
+            df = df0.iloc[start:start+chunk_size]
+            result_judgement_list = []
+            result_sufficient_requirements_list = []
+            result_insufficient_requirements_list = []
+            for index, row1 in df.iterrows():
+                preID = row1["preID"]
+                company_id = row1["company_id"]
+                office_id = row1["office_id"]
+                tmp_result_judgement_list = []
                 if False:
-                    i = 0
-                    row2 = req_df.iloc[i]
+                    preID = int(df["preID"][0])
+                    company_id = int(df["company_id"][0])
+                    office_id = int(df["office_id"][0])
 
-                requirement_type = row2["requirement_type"]
-                requirement_text = row2["requirement_text"]
-                seqid = row2["seqid"]
+                sql = fr"""
+                SELECT * FROM {tablename_requirements} where preID = {preID}
+                """
 
-                requirementText = requirement_text
-                companyNo = company_id
-                officeNo = office_id
-                
-                if requirement_type == "欠格要件":
-                    val = checkIneligibilityDynamic(
-                        requirementText=requirement_text, 
-                        companyNo=company_id, 
-                        officeNo=office_id,
-                        company_data = pd.read_csv("data/master/company_master.txt",sep="\t"), 
-                        office_registration_authorization_data=pd.read_csv("data/master/office_registration_authorization_master.txt",sep="\t")
-                    )
-                elif requirement_type == "業種・等級要件":
-                    val = checkGradeAndItemRequirement(
-                        requirementText=requirement_text, 
-                        companyNo=company_id, 
-                        officeNo=office_id,
-                        licenseData = pd.read_csv("data/master/office_registration_authorization_master.txt",sep="\t", converters={"construction_id": lambda x: str(x)}),
-                        agencyData = pd.read_csv("data/master/agency_master.txt",sep="\t"),
-                        constructionData = pd.read_csv("data/master/construction_master.txt",sep="\t")
-                    )
-                elif requirement_type == "所在地要件":
-                    val = checkLocationRequirement(
-                        requirementText=requirement_text, 
-                        companyNo=company_id, 
-                        officeNo=office_id,
-                        agencyData=pd.read_csv("data/master/agency_master.txt",sep="\t"),
-                        officeData = pd.read_csv("data/master/office_master.txt",sep="\t")
-                    )
+                req_df = pd.read_sql_query(sql, conn)
+                if req_df.shape[0] == 0:
+                    print(fr"preID={preID}: No requirement found. Skip anyway.")
+                    continue
 
-                elif requirement_type == "実績要件":
-                    val = checkExperienceRequirement(
-                        requirementText=requirement_text, 
-                        companyNo=company_id, 
-                        officeNo=office_id,
-                        office_experience_data=pd.read_csv("data/master/office_work_achivements_master.txt",sep="\t"),
-                        agency_data=pd.read_csv("data/master/agency_master.txt",sep="\t"), 
-                        construction_data=pd.read_csv("data/master/construction_master.txt",sep="\t")
-                    )
-                elif requirement_type == "技術者要件":
-                    val = checkTechnicianRequirement(
-                        requirementText=requirement_text, 
-                        companyNo=company_id, 
-                        officeNo=office_id,
-                        employeeData=pd.read_csv("data/master/employee_master.txt", sep="\t"), 
-                        qualData=pd.read_csv("data/master/employee_qualification_master.txt", sep="\t"), 
-                        qualMasterData=pd.read_csv("data/master/technician_qualification_master.txt", sep="\t"),
-                        expData = pd.read_csv("data/master/technician_experience_master.txt", sep="\t")
-                    )
-                else:
-                    val = {"is_ok":False, "reason":"その他要件があります。確認してください"}
-                
-                tmp_result.append({
-                    "announcement_id":preID,
-                    "seqid":seqid,
-                    "company_id":company_id,
-                    "office_id":office_id,
-                    "requirementType":requirement_type,
-                    "is_ok":val["is_ok"],
-                    "result":val["reason"]
-                })
+                for jndex, row2 in req_df.iterrows():
+                    if False:
+                        i = 0
+                        row2 = req_df.iloc[i]
+
+                    requirement_type = row2["requirement_type"]
+                    requirement_text = row2["requirement_text"]
+                    seqid = row2["seqid"]
+
+                    requirementText = requirement_text
+                    companyNo = company_id
+                    officeNo = office_id
+                    
+                    if requirement_type == "欠格要件":
+                        val = checkIneligibilityDynamic(
+                            requirementText=requirement_text, 
+                            companyNo=company_id, 
+                            officeNo=office_id,
+                            company_data = pd.read_csv("data/master/company_master.txt",sep="\t"), 
+                            office_registration_authorization_data=pd.read_csv("data/master/office_registration_authorization_master.txt",sep="\t")
+                        )
+                    elif requirement_type == "業種・等級要件":
+                        val = checkGradeAndItemRequirement(
+                            requirementText=requirement_text, 
+                            companyNo=company_id, 
+                            officeNo=office_id,
+                            licenseData = pd.read_csv("data/master/office_registration_authorization_master.txt",sep="\t", converters={"construction_id": lambda x: str(x)}),
+                            agencyData = pd.read_csv("data/master/agency_master.txt",sep="\t"),
+                            constructionData = pd.read_csv("data/master/construction_master.txt",sep="\t")
+                        )
+                    elif requirement_type == "所在地要件":
+                        val = checkLocationRequirement(
+                            requirementText=requirement_text, 
+                            companyNo=company_id, 
+                            officeNo=office_id,
+                            agencyData=pd.read_csv("data/master/agency_master.txt",sep="\t"),
+                            officeData = pd.read_csv("data/master/office_master.txt",sep="\t")
+                        )
+
+                    elif requirement_type == "実績要件":
+                        val = checkExperienceRequirement(
+                            requirementText=requirement_text, 
+                            companyNo=company_id, 
+                            officeNo=office_id,
+                            office_experience_data=pd.read_csv("data/master/office_work_achivements_master.txt",sep="\t"),
+                            agency_data=pd.read_csv("data/master/agency_master.txt",sep="\t"), 
+                            construction_data=pd.read_csv("data/master/construction_master.txt",sep="\t")
+                        )
+                    elif requirement_type == "技術者要件":
+                        val = checkTechnicianRequirement(
+                            requirementText=requirement_text, 
+                            companyNo=company_id, 
+                            officeNo=office_id,
+                            employeeData=pd.read_csv("data/master/employee_master.txt", sep="\t"), 
+                            qualData=pd.read_csv("data/master/employee_qualification_master.txt", sep="\t"), 
+                            qualMasterData=pd.read_csv("data/master/technician_qualification_master.txt", sep="\t"),
+                            expData = pd.read_csv("data/master/technician_experience_master.txt", sep="\t")
+                        )
+                    else:
+                        val = {"is_ok":False, "reason":"その他要件があります。確認してください"}
+                    
+                    tmp_result_judgement_list.append({
+                        "announcement_id":preID,
+                        "seqid":seqid,
+                        "company_id":company_id,
+                        "office_id":office_id,
+                        "requirementType":requirement_type,
+                        "is_ok":val["is_ok"],
+                        "result":val["reason"]
+                    })
 
 
-                if val["is_ok"]:
-                    sql = fr"""insert into {tablename_sufficient_requirement_master} (
-                        preID,
-                        seqid,
-                        company_id,
-                        office_id,
-                        requirement_type,
-                        requirement_description,
-                        createdDate,
-                        updatedDate
-                    ) values (
-                        {preID},
-                        {seqid},
-                        {company_id},
-                        {office_id},
-                        '{requirement_type}',
-                        '{val["reason"]}',
-                        '',
-                        ''
-                    )
-                    ON CONFLICT(preID, seqid, company_id, office_id, requirement_type) DO UPDATE SET
-                        preid = preid,
-                        seqid = seqid,
-                        company_id = company_id,
-                        office_id = office_id,
-                        requirement_type = excluded.requirement_type,
-                        requirement_description = excluded.requirement_description,
-                        createdDate = excluded.createdDate,
-                        updatedDate = excluded.updatedDate
-                    """
-                else:
-                    sql = fr"""insert into {tablename_insufficient_requirement_master} (
-                        preID,
-                        seqid,
-                        company_id,
-                        office_id,
-                        requirement_type,
-                        requirement_description,
-                        suggestions_for_improvement,
-                        final_comment,
-                        createdDate,
-                        updatedDate
-                    ) values (
-                        {preID},
-                        {seqid},
-                        {company_id},
-                        {office_id},
-                        '{requirement_type}',
-                        '{val["reason"]}',
-                        '',
-                        '',
-                        '',
-                        ''
-                    )
-                    ON CONFLICT(preID, seqid, company_id, office_id, requirement_type) DO UPDATE SET
-                        preid = preid,
-                        seqid = seqid,
-                        company_id = company_id,
-                        office_id = office_id,
-                        requirement_type = excluded.requirement_type,
-                        requirement_description = excluded.requirement_description,
-                        suggestions_for_improvement = excluded.suggestions_for_improvement,
-                        final_comment = excluded.final_comment,
-                        createdDate = excluded.createdDate,
-                        updatedDate = excluded.updatedDate
-                    """
+                    if val["is_ok"]:
+                        result_sufficient_requirements_list.append({
+                            "preID":preID,
+                            "seqid":seqid,
+                            "company_id":company_id,
+                            "office_id":office_id,
+                            "requirement_type":requirement_type,
+                            "requirement_description":val["reason"],
+                            "createdDate":"",
+                            "updatedDate":""
+                        })
 
+                        if False:
+                            sql = fr"""insert into {tablename_sufficient_requirement_master} (
+                                preID,
+                                seqid,
+                                company_id,
+                                office_id,
+                                requirement_type,
+                                requirement_description,
+                                createdDate,
+                                updatedDate
+                            ) values (
+                                {preID},
+                                {seqid},
+                                {company_id},
+                                {office_id},
+                                '{requirement_type}',
+                                '{val["reason"]}',
+                                '',
+                                ''
+                            )
+                            ON CONFLICT(preID, seqid, company_id, office_id, requirement_type) DO UPDATE SET
+                                preid = preid,
+                                seqid = seqid,
+                                company_id = company_id,
+                                office_id = office_id,
+                                requirement_type = excluded.requirement_type,
+                                requirement_description = excluded.requirement_description,
+                                createdDate = excluded.createdDate,
+                                updatedDate = excluded.updatedDate
+                            """
+                    else:
+                        result_insufficient_requirements_list.append({
+                            "preID":preID,
+                            "seqid":seqid,
+                            "company_id":company_id,
+                            "office_id":office_id,
+                            "requirement_type":requirement_type,
+                            "requirement_description":val["reason"],
+                            "suggestions_for_improvement":"",
+                            "final_comment":"",
+                            "createdDate":"",
+                            "updatedDate":""
+                        })
+                        if False:
+                            sql = fr"""insert into {tablename_insufficient_requirement_master} (
+                                preID,
+                                seqid,
+                                company_id,
+                                office_id,
+                                requirement_type,
+                                requirement_description,
+                                suggestions_for_improvement,
+                                final_comment,
+                                createdDate,
+                                updatedDate
+                            ) values (
+                                {preID},
+                                {seqid},
+                                {company_id},
+                                {office_id},
+                                '{requirement_type}',
+                                '{val["reason"]}',
+                                '',
+                                '',
+                                '',
+                                ''
+                            )
+                            ON CONFLICT(preID, seqid, company_id, office_id, requirement_type) DO UPDATE SET
+                                preid = preid,
+                                seqid = seqid,
+                                company_id = company_id,
+                                office_id = office_id,
+                                requirement_type = excluded.requirement_type,
+                                requirement_description = excluded.requirement_description,
+                                suggestions_for_improvement = excluded.suggestions_for_improvement,
+                                final_comment = excluded.final_comment,
+                                createdDate = excluded.createdDate,
+                                updatedDate = excluded.updatedDate
+                            """
+
+                    # cur.execute(sql)
+
+
+                tmp_result_judgement_df = pd.DataFrame(tmp_result_judgement_list)
+
+                def summarize_result(preID, company_id, office_id, tmp_result_df):
+                    checked_requirement = {
+                        "preID":preID,
+                        "company_id":company_id,
+                        "office_id":office_id,
+                        "requirement_ineligibility":True,
+                        "requirement_grade_item":True,
+                        "requirement_location":True,
+                        "requirement_experience":True,
+                        "requirement_technician":True,
+                        "requirement_other":True,
+                        "deficit_requirement_message":"",
+                        "final_status":True,
+                        "message":"",
+                        "remarks":"",
+                        "createdDate":"",
+                        "updatedDate":""
+                    }
+                    requirement_type_map = {
+                        "欠格要件":"requirement_ineligibility",
+                        "業種・等級要件":"requirement_grade_item",
+                        "所在地要件":"requirement_location",
+                        "実績要件":"requirement_experience",
+                        "技術者要件":"requirement_technician"
+                    }
+
+                    is_ok_false = tmp_result_df[~tmp_result_df["is_ok"]]
+
+                    if is_ok_false.shape[0] > 0:
+                        ng_req_types = is_ok_false["requirementType"].unique()
+                        for type_ in ng_req_types:
+                            type_name = requirement_type_map.get(type_, "requirement_other")
+                            checked_requirement[type_name] = False
+                            is_ok_false_type = is_ok_false[is_ok_false["requirementType"] == type_]
+                            result_values = is_ok_false_type["result"].str.replace(rf"{type_}[:：]", "", regex=True).unique()
+                            result_values = "[" + type_ + "]" + "|".join(result_values)
+
+                            if checked_requirement["deficit_requirement_message"] == "":
+                                checked_requirement["deficit_requirement_message"] = result_values
+                            else:
+                                checked_requirement["deficit_requirement_message"] = checked_requirement["deficit_requirement_message"] + " " + result_values
+                        checked_requirement["final_status"] = False
+
+                    return checked_requirement
+
+                result_judgement_list.append(summarize_result(preID=preID, company_id=company_id, office_id=office_id, tmp_result_df=tmp_result_judgement_df))
+
+
+            result_judgement = pd.DataFrame(result_judgement_list)
+            result_insufficient_requirements = pd.DataFrame(result_insufficient_requirements_list)
+            result_sufficient_requirements = pd.DataFrame(result_sufficient_requirements_list)
+
+            if result_judgement.shape[0] > 0:
+                tmp_result_judgement_table = "tmp_result_judgement"
+                result_judgement.to_sql(tmp_result_judgement_table, conn, if_exists="replace", index=False)
+                sql = fr"""insert into {tablename_company_bid_judgement} (
+                    preID,
+                    company_id,
+                    office_id,
+                    requirement_ineligibility,
+                    requirement_grade_item,
+                    requirement_location,
+                    requirement_experience,
+                    requirement_technician,
+                    requirement_other,
+                    deficit_requirement_message,
+                    final_status,
+                    message,
+                    remarks,
+                    createdDate,
+                    updatedDate
+                ) 
+                select 
+                    preID,
+                    company_id,
+                    office_id,
+                    requirement_ineligibility,
+                    requirement_grade_item,
+                    requirement_location,
+                    requirement_experience,
+                    requirement_technician,
+                    requirement_other,
+                    deficit_requirement_message,
+                    final_status,
+                    message,
+                    remarks,
+                    createdDate,
+                    updatedDate
+                from {tmp_result_judgement_table} where true
+                ON CONFLICT(preID, company_id, office_id) DO UPDATE SET
+                    preid = {tablename_company_bid_judgement}.preid,
+                    company_id = {tablename_company_bid_judgement}.company_id,
+                    office_id = {tablename_company_bid_judgement}.office_id,
+                    requirement_ineligibility = excluded.requirement_ineligibility,
+                    requirement_grade_item = excluded.requirement_grade_item,
+                    requirement_location = excluded.requirement_location,
+                    requirement_experience = excluded.requirement_experience,
+                    requirement_technician = excluded.requirement_technician,
+                    requirement_other = excluded.requirement_other,
+                    deficit_requirement_message = excluded.deficit_requirement_message,
+                    final_status = excluded.final_status,
+                    message = excluded.message,
+                    remarks = excluded.remarks,
+                    createdDate = excluded.createdDate,
+                    updatedDate = excluded.updatedDate
+                """
                 cur.execute(sql)
+                cur.execute(fr"DROP TABLE IF EXISTS {tmp_result_judgement_table}")
 
+            if result_insufficient_requirements.shape[0] > 0:
+                tmp_result_insufficient_requirements_master_table = "tmp_result_insufficient_requirements"
+                result_insufficient_requirements.to_sql(tmp_result_insufficient_requirements_master_table, conn, if_exists="replace", index=False)
+                sql = fr"""insert into {tablename_insufficient_requirement_master} (
+                    preID,
+                    seqid,
+                    company_id,
+                    office_id,
+                    requirement_type,
+                    requirement_description,
+                    suggestions_for_improvement,
+                    final_comment,
+                    createdDate,
+                    updatedDate
+                )
+                select
+                    preID,
+                    seqid,
+                    company_id,
+                    office_id,
+                    requirement_type,
+                    requirement_description,
+                    suggestions_for_improvement,
+                    final_comment,
+                    createdDate,
+                    updatedDate
+                from {tmp_result_insufficient_requirements_master_table} where true
+                ON CONFLICT(preID, seqid, company_id, office_id, requirement_type) DO UPDATE SET
+                    preid = {tablename_insufficient_requirement_master}.preid,
+                    seqid = {tablename_insufficient_requirement_master}.seqid,
+                    company_id = {tablename_insufficient_requirement_master}.company_id,
+                    office_id = {tablename_insufficient_requirement_master}.office_id,
+                    requirement_type = excluded.requirement_type,
+                    requirement_description = excluded.requirement_description,
+                    suggestions_for_improvement = excluded.suggestions_for_improvement,
+                    final_comment = excluded.final_comment,
+                    createdDate = excluded.createdDate,
+                    updatedDate = excluded.updatedDate
+                """
+                cur.execute(sql)
+                cur.execute(fr"DROP TABLE IF EXISTS {tmp_result_insufficient_requirements_master_table}")
 
-            tmp_result_df = pd.DataFrame(tmp_result)
-
-            def summarize_result(tmp_result_df):
-                checked_requirement = {
-                    "requirement_ineligibility":True,
-                    "requirement_grade_item":True,
-                    "requirement_location":True,
-                    "requirement_experience":True,
-                    "requirement_technician":True,
-                    "requirement_other":True,
-                    "deficit_requirement_message":"",
-                    "final_status":True,
-                    "message":"",
-                    "remarks":"",
-                    "createdDate":"",
-                    "updatedDate":""
-                }
-                requirement_type_map = {
-                    "欠格要件":"requirement_ineligibility",
-                    "業種・等級要件":"requirement_grade_item",
-                    "所在地要件":"requirement_location",
-                    "実績要件":"requirement_experience",
-                    "技術者要件":"requirement_technician"
-                }
-
-                is_ok_false = tmp_result_df[~tmp_result_df["is_ok"]]
-
-                if is_ok_false.shape[0] > 0:
-                    ng_req_types = is_ok_false["requirementType"].unique()
-                    for type_ in ng_req_types:
-                        type_name = requirement_type_map.get(type_, "requirement_other")
-                        checked_requirement[type_name] = False
-                        is_ok_false_type = is_ok_false[is_ok_false["requirementType"] == type_]
-                        result_values = is_ok_false_type["result"].str.replace(rf"{type_}[:：]", "", regex=True).unique()
-                        result_values = "[" + type_ + "]" + "|".join(result_values)
-
-                        if checked_requirement["deficit_requirement_message"] == "":
-                            checked_requirement["deficit_requirement_message"] = result_values
-                        else:
-                            checked_requirement["deficit_requirement_message"] = checked_requirement["deficit_requirement_message"] + " " + result_values
-                    checked_requirement["final_status"] = False
-
-                return checked_requirement
-
-            checked_requirement = summarize_result(tmp_result_df=tmp_result_df)
-
-            sql = fr"""insert into {tablename_company_bid_judgement} (
-                preID,
-                company_id,
-                office_id,
-                requirement_ineligibility,
-                requirement_grade_item,
-                requirement_location,
-                requirement_experience,
-                requirement_technician,
-                requirement_other,
-                deficit_requirement_message,
-                final_status,
-                message,
-                remarks,
-                createdDate,
-                updatedDate
-            ) values (
-                {preID},
-                {company_id},
-                {office_id},
-                {checked_requirement["requirement_ineligibility"]},
-                {checked_requirement["requirement_grade_item"]},
-                {checked_requirement["requirement_location"]},
-                {checked_requirement["requirement_experience"]},
-                {checked_requirement["requirement_technician"]},
-                {checked_requirement["requirement_other"]},
-                '{checked_requirement["deficit_requirement_message"]}',
-                {checked_requirement["final_status"]},
-                '{checked_requirement["message"]}',
-                '{checked_requirement["remarks"]}',
-                '{checked_requirement["createdDate"]}',
-                '{checked_requirement["updatedDate"]}'
-            )
-            ON CONFLICT(preID, company_id, office_id) DO UPDATE SET
-                preid = preid,
-                company_id = company_id,
-                office_id = office_id,
-                requirement_ineligibility = excluded.requirement_ineligibility,
-                requirement_grade_item = excluded.requirement_grade_item,
-                requirement_location = excluded.requirement_location,
-                requirement_experience = excluded.requirement_experience,
-                requirement_technician = excluded.requirement_technician,
-                requirement_other = excluded.requirement_other,
-                deficit_requirement_message = excluded.deficit_requirement_message,
-                final_status = excluded.final_status,
-                message = excluded.message,
-                remarks = excluded.remarks,
-                createdDate = excluded.createdDate,
-                updatedDate = excluded.updatedDate
-            """
-            cur.execute(sql)
-
-
-
+            if result_sufficient_requirements.shape[0] > 0:
+                tmp_result_sufficient_requirements_master_table = "tmp_result_sufficient_requirements"
+                result_sufficient_requirements.to_sql(tmp_result_sufficient_requirements_master_table, conn, if_exists="replace", index=False)
+                sql = fr"""insert into {tablename_sufficient_requirement_master} (
+                    preID,
+                    seqid,
+                    company_id,
+                    office_id,
+                    requirement_type,
+                    requirement_description,
+                    createdDate,
+                    updatedDate
+                )
+                select
+                    preID,
+                    seqid,
+                    company_id,
+                    office_id,
+                    requirement_type,
+                    requirement_description,
+                    createdDate,
+                    updatedDate                    
+                from {tmp_result_sufficient_requirements_master_table} where true
+                ON CONFLICT(preID, seqid, company_id, office_id, requirement_type) DO UPDATE SET
+                    preid = {tablename_sufficient_requirement_master}.preid,
+                    seqid = {tablename_sufficient_requirement_master}.seqid,
+                    company_id = {tablename_sufficient_requirement_master}.company_id,
+                    office_id = {tablename_sufficient_requirement_master}.office_id,
+                    requirement_type = excluded.requirement_type,
+                    requirement_description = excluded.requirement_description,
+                    createdDate = excluded.createdDate,
+                    updatedDate = excluded.updatedDate
+                """
+                cur.execute(sql)
+                cur.execute(fr"DROP TABLE IF EXISTS {tmp_result_sufficient_requirements_master_table}")
 
 
 
