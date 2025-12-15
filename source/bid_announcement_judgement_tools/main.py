@@ -7,6 +7,8 @@ import sqlite3  # sqlite3使わない想定でもimport
 import os
 import argparse
 from google import genai # For OCR
+from google.genai.errors import ClientError
+from google.genai import types
 import httpx
 import re
 import json
@@ -20,14 +22,8 @@ try:
     from pandas_gbq import to_gbq
 except Exception as e:
     print(e)
-
 try:
     from google.api_core.exceptions import NotFound
-except Exception as e:
-    print(e)
-
-try:
-    from google.genai import types  # いらないかも。(vertex ai?)
 except Exception as e:
     print(e)
 
@@ -784,35 +780,40 @@ class GCPVM:
             if not os.path.exists("data/ocr"):
                 os.makedirs("data/ocr", exist_ok=True)
 
-            ocr_announcements_file = fr"ocr_announcements_{preID}.json"
-            ocr_announcements_filepath = fr"data/ocr/{ocr_announcements_file}"
-            if not os.path.exists(ocr_announcements_filepath):
-                print("   Trying ocr(announcements).")
-                json_value = ocr_utils.getJsonFrompdfurl(pdfurl, preID=preID)
+            try:
+                # ocr for announcements
+                ocr_announcements_file = fr"ocr_announcements_{preID}.json"
+                ocr_announcements_filepath = fr"data/ocr/{ocr_announcements_file}"
+                if not os.path.exists(ocr_announcements_filepath):
+                    print("   Trying ocr(announcements).")
+                    json_value = ocr_utils.getJsonFrompdfurl(pdfurl, preID=preID)
+                    with open(ocr_announcements_filepath, "w", encoding="utf-8") as f:
+                        json.dump(json_value, f, ensure_ascii=False, indent=2)
+                else:
+                    print("   Already getting announcements.")
+                    with open(ocr_announcements_filepath, "r", encoding="utf-8") as f:
+                        json_value = json.load(f)
                 new_json = ocr_utils.convertJson(json_value=json_value)
-                with open(ocr_announcements_filepath, "w", encoding="utf-8") as f:
-                    json.dump(new_json, f, ensure_ascii=False, indent=2)
-            else:
-                print("   Already getting announcements.")
-                with open(ocr_announcements_filepath, "r", encoding="utf-8") as f:
-                    new_json = json.load(f)
 
-
-            ocr_requirements_file = fr"ocr_requirements_{preID}.json"
-            ocr_requirements_filepath = fr"data/ocr/{ocr_requirements_file}"
-            if not os.path.exists(ocr_requirements_filepath):
-                print("   Trying ocr(requirements).")
-                requirement_texts = ocr_utils.getRequirementText(pdfurl, preID=preID)
+                # ocr for requirements
+                ocr_requirements_file = fr"ocr_requirements_{preID}.json"
+                ocr_requirements_filepath = fr"data/ocr/{ocr_requirements_file}"
+                if not os.path.exists(ocr_requirements_filepath):
+                    print("   Trying ocr(requirements).")
+                    requirement_texts = ocr_utils.getRequirementText(pdfurl, preID=preID)
+                    with open(ocr_requirements_filepath, "w", encoding="utf-8") as f:
+                        json.dump(requirement_texts, f, ensure_ascii=False, indent=2)
+                else:
+                    print("   Already getting requirements.")
+                    with open(ocr_requirements_filepath, "r", encoding="utf-8") as f:
+                        requirement_texts = json.load(f)
                 dic = ocr_utils.convertRequirementTextDict(requirement_texts=requirement_texts)
-                with open(ocr_requirements_filepath, "w", encoding="utf-8") as f:
-                    json.dump(dic, f, ensure_ascii=False, indent=2)
-            else:
-                print("   Already getting requirements.")
-                with open(ocr_requirements_filepath, "r", encoding="utf-8") as f:
-                    dic = json.load(f)
 
-            all_announcements.append(new_json)
-            all_requirement_texts.append(pd.DataFrame(dic))
+                all_announcements.append(new_json)
+                all_requirement_texts.append(pd.DataFrame(dic))
+            except ClientError as e:
+                print(e)
+                break
 
 
 
@@ -1093,6 +1094,10 @@ class GCPVM:
             SELECT * FROM `{project_id}.{dataset_name}.{tablename_requirements}` where preID = {preID}
             """
             req_df = client.query(sql).result().to_dataframe()
+            if req_df.shape[0] == 0:
+                print(fr"preID={preID}: No requirement found. Skip anyway.")
+                continue
+
             for jndex, row2 in req_df.iterrows():
                 if False:
                     i = 0
@@ -1672,36 +1677,40 @@ class SQLITE3:
             if not os.path.exists("data/ocr"):
                 os.makedirs("data/ocr", exist_ok=True)
 
-            ocr_announcements_file = fr"ocr_announcements_{preID}.json"
-            ocr_announcements_filepath = fr"data/ocr/{ocr_announcements_file}"
+            try:
+                # ocr for announcements
+                ocr_announcements_file = fr"ocr_announcements_{preID}.json"
+                ocr_announcements_filepath = fr"data/ocr/{ocr_announcements_file}"
+                if not os.path.exists(ocr_announcements_filepath):
+                    print("   Trying ocr(announcements).")
+                    json_value = ocr_utils.getJsonFrompdfurl(pdfurl, preID=preID)
+                    with open(ocr_announcements_filepath, "w", encoding="utf-8") as f:
+                        json.dump(json_value, f, ensure_ascii=False, indent=2)
+                else:
+                    print("   Already getting announcements.")
+                    with open(ocr_announcements_filepath, "r", encoding="utf-8") as f:
+                        json_value = json.load(f)
+                new_json = ocr_utils.convertJson(json_value=json_value)
 
-            if not os.path.exists(ocr_announcements_filepath):
-                print("   Trying ocr(announcements).")
-                json_value = ocr_utils.getJsonFrompdfurl(pdfurl, preID=preID)
-                with open(ocr_announcements_filepath, "w", encoding="utf-8") as f:
-                    json.dump(json_value, f, ensure_ascii=False, indent=2)
-            else:
-                print("   Already getting announcements.")
-                with open(ocr_announcements_filepath, "r", encoding="utf-8") as f:
-                    json_value = json.load(f)
-            new_json = ocr_utils.convertJson(json_value=json_value)
+                # ocr for requirements
+                ocr_requirements_file = fr"ocr_requirements_{preID}.json"
+                ocr_requirements_filepath = fr"data/ocr/{ocr_requirements_file}"
+                if not os.path.exists(ocr_requirements_filepath):
+                    print("   Trying ocr(requirements).")
+                    requirement_texts = ocr_utils.getRequirementText(pdfurl, preID=preID)
+                    with open(ocr_requirements_filepath, "w", encoding="utf-8") as f:
+                        json.dump(requirement_texts, f, ensure_ascii=False, indent=2)
+                else:
+                    print("   Already getting requirements.")
+                    with open(ocr_requirements_filepath, "r", encoding="utf-8") as f:
+                        requirement_texts = json.load(f)
+                dic = ocr_utils.convertRequirementTextDict(requirement_texts=requirement_texts)
 
-
-            ocr_requirements_file = fr"ocr_requirements_{preID}.json"
-            ocr_requirements_filepath = fr"data/ocr/{ocr_requirements_file}"
-            if not os.path.exists(ocr_requirements_filepath):
-                print("   Trying ocr(requirements).")
-                requirement_texts = ocr_utils.getRequirementText(pdfurl, preID=preID)
-                with open(ocr_requirements_filepath, "w", encoding="utf-8") as f:
-                    json.dump(requirement_texts, f, ensure_ascii=False, indent=2)
-            else:
-                print("   Already getting requirements.")
-                with open(ocr_requirements_filepath, "r", encoding="utf-8") as f:
-                    requirement_texts = json.load(f)
-            dic = ocr_utils.convertRequirementTextDict(requirement_texts=requirement_texts)
-
-            all_announcements.append(new_json)
-            all_requirement_texts.append(pd.DataFrame(dic))
+                all_announcements.append(new_json)
+                all_requirement_texts.append(pd.DataFrame(dic))
+            except ClientError as e:
+                print(e)
+                break
 
 
         ######################################
@@ -2021,9 +2030,9 @@ class SQLITE3:
             office_id = row1["office_id"]
             tmp_result = []
             if False:
-                preID = 1
-                company_id = 1
-                office_id = 1
+                preID = int(df["preID"][0])
+                company_id = int(df["company_id"][0])
+                office_id = int(df["office_id"][0])
 
             sql = fr"""
             SELECT * FROM {tablename_requirements} where preID = {preID}
@@ -2031,6 +2040,10 @@ class SQLITE3:
 
 
             req_df = pd.read_sql_query(sql, conn)
+            if req_df.shape[0] == 0:
+                print(fr"preID={preID}: No requirement found. Skip anyway.")
+                continue
+
             for jndex, row2 in req_df.iterrows():
                 if False:
                     i = 0
@@ -2284,6 +2297,7 @@ if __name__ == "__main__":
     # 
     # sqlite3想定
     # python source/bid_announcement_judgement_tools/main.py --bid_announcements_pre_file data/bid_announcements_pre/bid_announcements_pre_1.txt --google_ai_studio_api_key_filepath data/sec/google_ai_studio_api_key.txt --sqlite3_db_file_path data/example.db
+    # python source/bid_announcement_judgement_tools/main.py --bid_announcements_pre_file data/bid_announcements_pre/all.txt --google_ai_studio_api_key_filepath data/sec/google_ai_studio_api_key.txt --sqlite3_db_file_path data/example.db
     # python source/bid_announcement_judgement_tools/main.py --bid_announcements_pre_file data/bid_announcements_pre/all.txt --google_ai_studio_api_key_filepath data/sec/google_ai_studio_api_key.txt --sqlite3_db_file_path data/example.db --step1_transfer_remove_table --step3_remove_table
     # python -i source/bid_announcement_judgement_tools/main.py --stop_processing
 
