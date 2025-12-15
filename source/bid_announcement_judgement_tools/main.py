@@ -12,6 +12,7 @@ from google.genai import types
 import httpx
 import re
 import json
+import time
 
 try:
     from google.cloud import bigquery
@@ -185,11 +186,13 @@ class OCRutils:
             print(fr"    OCRutils: {str(e)}")
             self.client = None
 
-    def getJsonFrompdfurl(self, pdfurl, preID):
-        client = self.client
-
+    def getPDFDataFromUrl(self, pdfurl):
         # Retrieve and encode the PDF byte
         doc_data = httpx.get(pdfurl).content
+        return doc_data
+
+    def getJsonFromDocData(self, doc_data, preID):
+        client = self.client
 
         prompt = """
         Goal: Extract specific information related to construction projects and bidding procedures from the provided context.
@@ -294,11 +297,8 @@ class OCRutils:
         return new_json
 
 
-    def getRequirementText(self, pdfurl, preID):
+    def getRequirementText(self, doc_data, preID):
         client = self.client
-
-        # Retrieve and encode the PDF byte
-        doc_data = httpx.get(pdfurl).content
 
         prompt = """
         # Goal Seek Prompt for Bid Qualification Extraction
@@ -776,9 +776,23 @@ class GCPVM:
             print(f"Processing OCR for preID={preID}...")
 
             pdfurl = row["pdfUrl"]
+            if False:
+                preID = int(df1["preID"][11])
+                pdfurl = df1["pdfUrl"][11]
 
             if not os.path.exists("data/ocr"):
                 os.makedirs("data/ocr", exist_ok=True)
+
+            if not os.path.exists("data/pdf"):
+                os.makedirs("data/pdf", exist_ok=True)
+
+            time.sleep(1)
+            doc_data = ocr_utils.getPDFDataFromUrl(pdfurl)
+            if not os.path.exists(fr"data/pdf/{preID}.pdf"):
+                # 基本的には元の pdf と同じものを保存できる。
+                print(fr"   Save data/pdf/{preID}.pdf.")
+                with open(fr"data/pdf/{preID}.pdf", "wb") as f:
+                    f.write(doc_data)
 
             try:
                 # ocr for announcements
@@ -786,7 +800,7 @@ class GCPVM:
                 ocr_announcements_filepath = fr"data/ocr/{ocr_announcements_file}"
                 if not os.path.exists(ocr_announcements_filepath):
                     print("   Trying ocr(announcements).")
-                    json_value = ocr_utils.getJsonFrompdfurl(pdfurl, preID=preID)
+                    json_value = ocr_utils.getJsonFromDocData(doc_data=doc_data, preID=preID)
                     with open(ocr_announcements_filepath, "w", encoding="utf-8") as f:
                         json.dump(json_value, f, ensure_ascii=False, indent=2)
                 else:
@@ -800,7 +814,7 @@ class GCPVM:
                 ocr_requirements_filepath = fr"data/ocr/{ocr_requirements_file}"
                 if not os.path.exists(ocr_requirements_filepath):
                     print("   Trying ocr(requirements).")
-                    requirement_texts = ocr_utils.getRequirementText(pdfurl, preID=preID)
+                    requirement_texts = ocr_utils.getRequirementText(doc_data=doc_data, preID=preID)
                     with open(ocr_requirements_filepath, "w", encoding="utf-8") as f:
                         json.dump(requirement_texts, f, ensure_ascii=False, indent=2)
                 else:
@@ -1673,9 +1687,23 @@ class SQLITE3:
             print(f"Processing OCR for preID={preID}...")
 
             pdfurl = row["pdfUrl"]
+            if False:
+                preID = int(df1["preID"][11])
+                pdfurl = df1["pdfUrl"][11]
 
             if not os.path.exists("data/ocr"):
                 os.makedirs("data/ocr", exist_ok=True)
+
+            if not os.path.exists("data/pdf"):
+                os.makedirs("data/pdf", exist_ok=True)
+
+            time.sleep(1)
+            doc_data = ocr_utils.getPDFDataFromUrl(pdfurl)
+            if not os.path.exists(fr"data/pdf/{preID}.pdf"):
+                # 基本的には元の pdf と同じものを保存できる。
+                print(fr"   Save data/pdf/{preID}.pdf.")
+                with open(fr"data/pdf/{preID}.pdf", "wb") as f:
+                    f.write(doc_data)
 
             try:
                 # ocr for announcements
@@ -1683,7 +1711,7 @@ class SQLITE3:
                 ocr_announcements_filepath = fr"data/ocr/{ocr_announcements_file}"
                 if not os.path.exists(ocr_announcements_filepath):
                     print("   Trying ocr(announcements).")
-                    json_value = ocr_utils.getJsonFrompdfurl(pdfurl, preID=preID)
+                    json_value = ocr_utils.getJsonFromDocData(doc_data=doc_data, preID=preID)
                     with open(ocr_announcements_filepath, "w", encoding="utf-8") as f:
                         json.dump(json_value, f, ensure_ascii=False, indent=2)
                 else:
@@ -1697,7 +1725,7 @@ class SQLITE3:
                 ocr_requirements_filepath = fr"data/ocr/{ocr_requirements_file}"
                 if not os.path.exists(ocr_requirements_filepath):
                     print("   Trying ocr(requirements).")
-                    requirement_texts = ocr_utils.getRequirementText(pdfurl, preID=preID)
+                    requirement_texts = ocr_utils.getRequirementText(doc_data=doc_data, preID=preID)
                     with open(ocr_requirements_filepath, "w", encoding="utf-8") as f:
                         json.dump(requirement_texts, f, ensure_ascii=False, indent=2)
                 else:
