@@ -1090,282 +1090,394 @@ class GCPVM:
         sql = fr"""
         SELECT * FROM `{project_id}.{dataset_name}.{tablename_company_bid_judgement}` where final_status is NULL
         """
-        df = client.query(sql).result().to_dataframe()
+        df0 = client.query(sql).result().to_dataframe()
 
-        print(fr"Target of checking requirement : {df.shape[0]}")
+        print(fr"Target of checking requirement : {df0.shape[0]}")
 
-        for index, row1 in df.iterrows():
-            preID = row1["preID"]
-            company_id = row1["company_id"]
-            office_id = row1["office_id"]
-            tmp_result = []
-            if False:
-                preID = 1
-                company_id = 1
-                office_id = 1
-
-            sql = fr"""
-            SELECT * FROM `{project_id}.{dataset_name}.{tablename_requirements}` where preID = {preID}
-            """
-            req_df = client.query(sql).result().to_dataframe()
-            if req_df.shape[0] == 0:
-                print(fr"preID={preID}: No requirement found. Skip anyway.")
-                continue
-
-            for jndex, row2 in req_df.iterrows():
+        # 部分的に(chunk_sizeごとに)実行。
+        chunk_size = 1000
+        for start in range(0, len(df0), chunk_size):
+            df = df0.iloc[start:start+chunk_size]
+            result_judgement_list = []
+            result_sufficient_requirements_list = []
+            result_insufficient_requirements_list = []
+            for index, row1 in df.iterrows():
+                preID = row1["preID"]
+                company_id = row1["company_id"]
+                office_id = row1["office_id"]
+                tmp_result_judgement_list = []
                 if False:
-                    i = 0
-                    row2 = req_df.iloc[i]
+                    preID = 1
+                    company_id = 1
+                    office_id = 1
 
-                requirement_type = row2["requirement_type"]
-                requirement_text = row2["requirement_text"]
-                seqid = row2["seqid"]
+                sql = fr"""
+                SELECT * FROM `{project_id}.{dataset_name}.{tablename_requirements}` where preID = {preID}
+                """
+                req_df = client.query(sql).result().to_dataframe()
+                if req_df.shape[0] == 0:
+                    print(fr"preID={preID}: No requirement found. Skip anyway.")
+                    continue
 
-                requirementText = requirement_text
-                companyNo = company_id
-                officeNo = office_id
-                
+                for jndex, row2 in req_df.iterrows():
+                    if False:
+                        i = 0
+                        row2 = req_df.iloc[i]
 
-                if requirement_type == "欠格要件":
-                    val = checkIneligibilityDynamic(
-                        requirementText=requirement_text, 
-                        companyNo=company_id, 
-                        officeNo=office_id,
-                        company_data = pd.read_csv("data/master/company_master.txt",sep="\t"), 
-                        office_registration_authorization_data=pd.read_csv("data/master/office_registration_authorization_master.txt",sep="\t")
-                    )
-                elif requirement_type == "業種・等級要件":
-                    val = checkGradeAndItemRequirement(
-                        requirementText=requirement_text, 
-                        companyNo=company_id, 
-                        officeNo=office_id,
-                        licenseData = pd.read_csv("data/master/office_registration_authorization_master.txt",sep="\t", converters={"construction_id": lambda x: str(x)}),
-                        agencyData = pd.read_csv("data/master/agency_master.txt",sep="\t"),
-                        constructionData = pd.read_csv("data/master/construction_master.txt",sep="\t")
-                    )
-                elif requirement_type == "所在地要件":
-                    val = checkLocationRequirement(
-                        requirementText=requirement_text, 
-                        companyNo=company_id, 
-                        officeNo=office_id,
-                        agencyData=pd.read_csv("data/master/agency_master.txt",sep="\t"),
-                        officeData = pd.read_csv("data/master/office_master.txt",sep="\t")
-                    )
+                    requirement_type = row2["requirement_type"]
+                    requirement_text = row2["requirement_text"]
+                    seqid = row2["seqid"]
 
-                elif requirement_type == "実績要件":
-                    val = checkExperienceRequirement(
-                        requirementText=requirement_text, 
-                        companyNo=company_id, 
-                        officeNo=office_id,
-                        office_experience_data=pd.read_csv("data/master/office_work_achivements_master.txt",sep="\t"),
-                        agency_data=pd.read_csv("data/master/agency_master.txt",sep="\t"), 
-                        construction_data=pd.read_csv("data/master/construction_master.txt",sep="\t")
-                    )
-                elif requirement_type == "技術者要件":
-                    val = checkTechnicianRequirement(
-                        requirementText=requirement_text, 
-                        companyNo=company_id, 
-                        officeNo=office_id,
-                        employeeData=pd.read_csv("data/master/employee_master.txt", sep="\t"), 
-                        qualData=pd.read_csv("data/master/employee_qualification_master.txt", sep="\t"), 
-                        qualMasterData=pd.read_csv("data/master/technician_qualification_master.txt", sep="\t"),
-                        expData = pd.read_csv("data/master/technician_experience_master.txt", sep="\t")
-                    )
-                else:
-                    val = {"is_ok":False, "reason":"その他要件があります。確認してください"}
-
-                
-                tmp_result.append({
-                    "announcement_id":preID,
-                    "seqid":seqid,
-                    "company_id":company_id,
-                    "office_id":office_id,
-                    "requirementType":requirement_type,
-                    "is_ok":val["is_ok"],
-                    "result":val["reason"]
-                })
-
-                if val["is_ok"]:
-                    sql = fr"""MERGE `{project_id}.{dataset_name}.{tablename_sufficient_requirement_master}` AS target
-                    USING (
-                        select
-                        {preID} as preid,
-                        {seqid} as seqid,
-                        {company_id} as company_id,
-                        {office_id} as office_id,
-                        '{requirement_type}' as requirement_type,
-                        '{val["reason"]}' as requirement_description,
-                        '' as createdDate,
-                        '' as updatedDate
-                    ) AS source
-                    ON 
-                    target.preid = source.preid and
-                    target.seqid = source.seqid and
-                    target.company_id = source.company_id and
-                    target.office_id = source.office_id and
-                    target.requirement_type = source.requirement_type
-                    when not matched then
-                    insert (
-                        preID,
-                        seqid,
-                        company_id,
-                        office_id,
-                        requirement_type,
-                        requirement_description,
-                        createdDate,
-                        updatedDate
-                    )
-                    values (
-                        source.preID,
-                        source.seqid,
-                        source.company_id,
-                        source.office_id,
-                        source.requirement_type,
-                        source.requirement_description,
-                        source.createdDate,
-                        source.updatedDate
-                    )
-                    """
+                    requirementText = requirement_text
+                    companyNo = company_id
+                    officeNo = office_id
                     
-                else:
-                    sql = fr"""MERGE `{project_id}.{dataset_name}.{tablename_insufficient_requirement_master}` AS target
-                    USING (
-                        select
-                        {preID} as preid,
-                        {seqid} as seqid,
-                        {company_id} as company_id,
-                        {office_id} as office_id,
-                        '{requirement_type}' as requirement_type,
-                        '{val["reason"]}' as requirement_description,
-                        '' as suggestions_for_improvement,
-                        '' as final_comment,
-                        '' as createdDate,
-                        '' as updatedDate
-                    ) AS source
-                    ON 
-                    target.preid = source.preid and
-                    target.seqid = source.seqid and
-                    target.company_id = source.company_id and
-                    target.office_id = source.office_id and
-                    target.requirement_type = source.requirement_type
-                    when not matched then
-                    insert (
-                        preID,
-                        seqid,
-                        company_id,
-                        office_id,
-                        requirement_type,
-                        requirement_description,
-                        suggestions_for_improvement,
-                        final_comment,
-                        createdDate,
-                        updatedDate
-                    )
-                    values (
-                        source.preID,
-                        source.seqid,
-                        source.company_id,
-                        source.office_id,
-                        source.requirement_type,
-                        source.requirement_description,
-                        source.suggestions_for_improvement,
-                        source.final_comment,
-                        source.createdDate,
-                        source.updatedDate
-                    )
-                    """
 
+                    if requirement_type == "欠格要件":
+                        val = checkIneligibilityDynamic(
+                            requirementText=requirement_text, 
+                            companyNo=company_id, 
+                            officeNo=office_id,
+                            company_data = pd.read_csv("data/master/company_master.txt",sep="\t"), 
+                            office_registration_authorization_data=pd.read_csv("data/master/office_registration_authorization_master.txt",sep="\t")
+                        )
+                    elif requirement_type == "業種・等級要件":
+                        val = checkGradeAndItemRequirement(
+                            requirementText=requirement_text, 
+                            companyNo=company_id, 
+                            officeNo=office_id,
+                            licenseData = pd.read_csv("data/master/office_registration_authorization_master.txt",sep="\t", converters={"construction_id": lambda x: str(x)}),
+                            agencyData = pd.read_csv("data/master/agency_master.txt",sep="\t"),
+                            constructionData = pd.read_csv("data/master/construction_master.txt",sep="\t")
+                        )
+                    elif requirement_type == "所在地要件":
+                        val = checkLocationRequirement(
+                            requirementText=requirement_text, 
+                            companyNo=company_id, 
+                            officeNo=office_id,
+                            agencyData=pd.read_csv("data/master/agency_master.txt",sep="\t"),
+                            officeData = pd.read_csv("data/master/office_master.txt",sep="\t")
+                        )
+
+                    elif requirement_type == "実績要件":
+                        val = checkExperienceRequirement(
+                            requirementText=requirement_text, 
+                            companyNo=company_id, 
+                            officeNo=office_id,
+                            office_experience_data=pd.read_csv("data/master/office_work_achivements_master.txt",sep="\t"),
+                            agency_data=pd.read_csv("data/master/agency_master.txt",sep="\t"), 
+                            construction_data=pd.read_csv("data/master/construction_master.txt",sep="\t")
+                        )
+                    elif requirement_type == "技術者要件":
+                        val = checkTechnicianRequirement(
+                            requirementText=requirement_text, 
+                            companyNo=company_id, 
+                            officeNo=office_id,
+                            employeeData=pd.read_csv("data/master/employee_master.txt", sep="\t"), 
+                            qualData=pd.read_csv("data/master/employee_qualification_master.txt", sep="\t"), 
+                            qualMasterData=pd.read_csv("data/master/technician_qualification_master.txt", sep="\t"),
+                            expData = pd.read_csv("data/master/technician_experience_master.txt", sep="\t")
+                        )
+                    else:
+                        val = {"is_ok":False, "reason":"その他要件があります。確認してください"}
+
+                    
+                    tmp_result_judgement_list.append({
+                        "announcement_id":preID,
+                        "seqid":seqid,
+                        "company_id":company_id,
+                        "office_id":office_id,
+                        "requirementType":requirement_type,
+                        "is_ok":val["is_ok"],
+                        "result":val["reason"]
+                    })
+
+                    if val["is_ok"]:
+                        result_sufficient_requirements_list.append({
+                            "preID":preID,
+                            "seqid":seqid,
+                            "company_id":company_id,
+                            "office_id":office_id,
+                            "requirement_type":requirement_type,
+                            "requirement_description":val["reason"],
+                            "createdDate":"",
+                            "updatedDate":""
+                        })
+                        
+                        if False:
+                            sql = fr"""MERGE `{project_id}.{dataset_name}.{tablename_sufficient_requirement_master}` AS target
+                            USING (
+                                select
+                                {preID} as preid,
+                                {seqid} as seqid,
+                                {company_id} as company_id,
+                                {office_id} as office_id,
+                                '{requirement_type}' as requirement_type,
+                                '{val["reason"]}' as requirement_description,
+                                '' as createdDate,
+                                '' as updatedDate
+                            ) AS source
+                            ON 
+                            target.preid = source.preid and
+                            target.seqid = source.seqid and
+                            target.company_id = source.company_id and
+                            target.office_id = source.office_id and
+                            target.requirement_type = source.requirement_type
+                            when not matched then
+                            insert (
+                                preID,
+                                seqid,
+                                company_id,
+                                office_id,
+                                requirement_type,
+                                requirement_description,
+                                createdDate,
+                                updatedDate
+                            )
+                            values (
+                                source.preID,
+                                source.seqid,
+                                source.company_id,
+                                source.office_id,
+                                source.requirement_type,
+                                source.requirement_description,
+                                source.createdDate,
+                                source.updatedDate
+                            )
+                            """
+                    else:
+                        result_insufficient_requirements_list.append({
+                            "preID":preID,
+                            "seqid":seqid,
+                            "company_id":company_id,
+                            "office_id":office_id,
+                            "requirement_type":requirement_type,
+                            "requirement_description":val["reason"],
+                            "suggestions_for_improvement":"",
+                            "final_comment":"",
+                            "createdDate":"",
+                            "updatedDate":""
+                        })
+                        if False:
+                            sql = fr"""MERGE `{project_id}.{dataset_name}.{tablename_insufficient_requirement_master}` AS target
+                            USING (
+                                select
+                                {preID} as preid,
+                                {seqid} as seqid,
+                                {company_id} as company_id,
+                                {office_id} as office_id,
+                                '{requirement_type}' as requirement_type,
+                                '{val["reason"]}' as requirement_description,
+                                '' as suggestions_for_improvement,
+                                '' as final_comment,
+                                '' as createdDate,
+                                '' as updatedDate
+                            ) AS source
+                            ON 
+                            target.preid = source.preid and
+                            target.seqid = source.seqid and
+                            target.company_id = source.company_id and
+                            target.office_id = source.office_id and
+                            target.requirement_type = source.requirement_type
+                            when not matched then
+                            insert (
+                                preID,
+                                seqid,
+                                company_id,
+                                office_id,
+                                requirement_type,
+                                requirement_description,
+                                suggestions_for_improvement,
+                                final_comment,
+                                createdDate,
+                                updatedDate
+                            )
+                            values (
+                                source.preID,
+                                source.seqid,
+                                source.company_id,
+                                source.office_id,
+                                source.requirement_type,
+                                source.requirement_description,
+                                source.suggestions_for_improvement,
+                                source.final_comment,
+                                source.createdDate,
+                                source.updatedDate
+                            )
+                            """
+
+                    # client.query(sql).result()
+
+                tmp_result_judgement_df = pd.DataFrame(tmp_result_judgement_list)
+
+                def summarize_result(preID, company_id, office_id, tmp_result_df):
+                    checked_requirement = {
+                        "preID":preID,
+                        "company_id":company_id,
+                        "office_id":office_id,
+                        "requirement_ineligibility":True,
+                        "requirement_grade_item":True,
+                        "requirement_location":True,
+                        "requirement_experience":True,
+                        "requirement_technician":True,
+                        "requirement_other":True,
+                        "deficit_requirement_message":"",
+                        "final_status":True,
+                        "message":"",
+                        "remarks":"",
+                        "createdDate":"",
+                        "updatedDate":""
+                    }
+                    requirement_type_map = {
+                        "欠格要件":"requirement_ineligibility",
+                        "業種・等級要件":"requirement_grade_item",
+                        "所在地要件":"requirement_location",
+                        "実績要件":"requirement_experience",
+                        "技術者要件":"requirement_technician"
+                    }
+
+                    is_ok_false = tmp_result_df[~tmp_result_df["is_ok"]]
+
+                    if is_ok_false.shape[0] > 0:
+                        ng_req_types = is_ok_false["requirementType"].unique()
+                        for type_ in ng_req_types:
+                            type_name = requirement_type_map.get(type_, "requirement_other")
+                            checked_requirement[type_name] = False
+                            is_ok_false_type = is_ok_false[is_ok_false["requirementType"] == type_]
+                            result_values = is_ok_false_type["result"].str.replace(rf"{type_}[:：]", "", regex=True).unique()
+                            result_values = "[" + type_ + "]" + "|".join(result_values)
+
+                            if checked_requirement["deficit_requirement_message"] == "":
+                                checked_requirement["deficit_requirement_message"] = result_values
+                            else:
+                                checked_requirement["deficit_requirement_message"] = checked_requirement["deficit_requirement_message"] + " " + result_values
+                        checked_requirement["final_status"] = False
+
+                    return checked_requirement
+
+                result_judgement_list.append(summarize_result(preID=preID, company_id=company_id, office_id=office_id, tmp_result_df=tmp_result_judgement_df))
+
+
+            result_judgement = pd.DataFrame(result_judgement_list)
+            result_insufficient_requirements = pd.DataFrame(result_insufficient_requirements_list)
+            result_sufficient_requirements = pd.DataFrame(result_sufficient_requirements_list)
+
+            if result_judgement.shape[0] > 0:
+                tmp_result_judgement_table = "tmp_result_judgement"
+                to_gbq(
+                    dataframe=result_judgement, 
+                    destination_table=fr"{dataset_name}.{tmp_result_judgement_table}",  # dataset.table 形式
+                    project_id=fr"{project_id}", 
+                    if_exists='replace'
+                )
+                sql = fr"""MERGE `{project_id}.{dataset_name}.{tablename_company_bid_judgement}` AS target
+                USING `{project_id}.{dataset_name}.{tmp_result_judgement_table}` AS source
+                ON 
+                target.preid = source.preid and
+                target.company_id = source.company_id and
+                target.office_id = source.office_id
+                when matched then
+                UPDATE SET
+                    target.requirement_ineligibility = source.requirement_ineligibility,
+                    target.requirement_grade_item = source.requirement_grade_item,
+                    target.requirement_location = source.requirement_location,
+                    target.requirement_experience = source.requirement_experience,
+                    target.requirement_technician = source.requirement_technician,
+                    target.requirement_other = source.requirement_other,
+                    target.deficit_requirement_message = source.deficit_requirement_message,
+                    target.final_status = source.final_status,
+                    target.message = source.message,
+                    target.remarks = source.remarks,
+                    target.createdDate = source.createdDate,
+                    target.updatedDate = source.updatedDate
+                """
                 client.query(sql).result()
+                client.delete_table(fr"{project_id}.{dataset_name}.{tmp_result_judgement_table}", not_found_ok=True)
 
+            if result_insufficient_requirements.shape[0] > 0:
+                tmp_result_insufficient_requirements_master_table = "tmp_result_insufficient_requirements"
+                to_gbq(
+                    dataframe=result_insufficient_requirements, 
+                    destination_table=fr"{dataset_name}.{tmp_result_insufficient_requirements_master_table}",  # dataset.table 形式
+                    project_id=fr"{project_id}", 
+                    if_exists='replace'
+                )
+                sql = fr"""MERGE `{project_id}.{dataset_name}.{tablename_insufficient_requirement_master}` AS target
+                USING `{project_id}.{dataset_name}.{tmp_result_insufficient_requirements_master_table}` AS source
+                ON 
+                target.preid = source.preid and
+                target.seqid = source.seqid and
+                target.company_id = source.company_id and
+                target.office_id = source.office_id and
+                target.requirement_type = source.requirement_type
+                WHEN NOT MATCHED THEN
+                INSERT (
+                    preid,
+                    seqid,
+                    company_id,
+                    office_id,
+                    requirement_type,
+                    requirement_description,
+                    suggestions_for_improvement,
+                    final_comment,
+                    createdDate,
+                    updatedDate
+                )
+                VALUES (
+                    source.preid,
+                    source.seqid,
+                    source.company_id,
+                    source.office_id,
+                    source.requirement_type,
+                    source.requirement_description,
+                    source.suggestions_for_improvement,
+                    source.final_comment,
+                    source.createdDate,
+                    source.updatedDate
+                """
+                client.query(sql).result()
+                client.delete_table(fr"{project_id}.{dataset_name}.{tmp_result_insufficient_requirements_master_table}", not_found_ok=True)
 
-            tmp_result_df = pd.DataFrame(tmp_result)
-
-            def summarize_result(tmp_result_df):
-                checked_requirement = {
-                    "requirement_ineligibility":True,
-                    "requirement_grade_item":True,
-                    "requirement_location":True,
-                    "requirement_experience":True,
-                    "requirement_technician":True,
-                    "requirement_other":True,
-                    "deficit_requirement_message":"",
-                    "final_status":True,
-                    "message":"",
-                    "remarks":"",
-                    "createdDate":"",
-                    "updatedDate":""
-                }
-                requirement_type_map = {
-                    "欠格要件":"requirement_ineligibility",
-                    "業種・等級要件":"requirement_grade_item",
-                    "所在地要件":"requirement_location",
-                    "実績要件":"requirement_experience",
-                    "技術者要件":"requirement_technician"
-                }
-
-                is_ok_false = tmp_result_df[~tmp_result_df["is_ok"]]
-
-                if is_ok_false.shape[0] > 0:
-                    ng_req_types = is_ok_false["requirementType"].unique()
-                    for type_ in ng_req_types:
-                        type_name = requirement_type_map.get(type_, "requirement_other")
-                        checked_requirement[type_name] = False
-                        is_ok_false_type = is_ok_false[is_ok_false["requirementType"] == type_]
-                        result_values = is_ok_false_type["result"].str.replace(rf"{type_}[:：]", "", regex=True).unique()
-                        result_values = "[" + type_ + "]" + "|".join(result_values)
-
-                        if checked_requirement["deficit_requirement_message"] == "":
-                            checked_requirement["deficit_requirement_message"] = result_values
-                        else:
-                            checked_requirement["deficit_requirement_message"] = checked_requirement["deficit_requirement_message"] + " " + result_values
-                    checked_requirement["final_status"] = False
-
-                return checked_requirement
-
-            checked_requirement = summarize_result(tmp_result_df=tmp_result_df)
-
-            sql = fr"""MERGE `{project_id}.{dataset_name}.{tablename_company_bid_judgement}` AS target
-            USING (
-                select
-                {preID} as preid,
-                {company_id} as company_id,
-                {office_id} as office_id,
-                {checked_requirement["requirement_ineligibility"]} as requirement_ineligibility,
-                {checked_requirement["requirement_grade_item"]} as requirement_grade_item,
-                {checked_requirement["requirement_location"]} as requirement_location,
-                {checked_requirement["requirement_experience"]} as requirement_experience,
-                {checked_requirement["requirement_technician"]} as requirement_technician,
-                {checked_requirement["requirement_other"]} as requirement_other,
-                '{checked_requirement["deficit_requirement_message"]}' as deficit_requirement_message,
-                {checked_requirement["final_status"]} as final_status,
-                '{checked_requirement["message"]}' as message,
-                '{checked_requirement["remarks"]}' as remarks,
-                '{checked_requirement["createdDate"]}' as createdDate,
-                '{checked_requirement["updatedDate"]}' as updatedDate
-            ) AS source
-            ON 
-            target.preid = source.preid and
-            target.company_id = source.company_id and
-            target.office_id = source.office_id
-            when matched then
-            UPDATE SET
-                target.requirement_ineligibility = source.requirement_ineligibility,
-                target.requirement_grade_item = source.requirement_grade_item,
-                target.requirement_location = source.requirement_location,
-                target.requirement_experience = source.requirement_experience,
-                target.requirement_technician = source.requirement_technician,
-                target.requirement_other = source.requirement_other,
-                target.deficit_requirement_message = source.deficit_requirement_message,
-                target.final_status = source.final_status,
-                target.message = source.message,
-                target.remarks = source.remarks,
-                target.createdDate = source.createdDate,
-                target.updatedDate = source.updatedDate
-            """
-
-            client.query(sql).result()
-
-
+            if result_sufficient_requirements.shape[0] > 0:
+                tmp_result_sufficient_requirements_master_table = "tmp_result_sufficient_requirements"
+                to_gbq(
+                    dataframe=result_sufficient_requirements, 
+                    destination_table=fr"{dataset_name}.{tmp_result_sufficient_requirements_master_table}",  # dataset.table 形式
+                    project_id=fr"{project_id}", 
+                    if_exists='replace'
+                )
+                sql = fr"""MERGE `{project_id}.{dataset_name}.{tablename_sufficient_requirement_master}` AS target
+                USING `{project_id}.{dataset_name}.{tablename_sufficient_requirement_master}` AS source
+                ON 
+                target.preid = source.preid and
+                target.seqid = source.seqid and
+                target.company_id = source.company_id and
+                target.office_id = source.office_id and
+                target.requirement_type = source.requirement_type
+                when not matched then
+                insert (
+                    preID,
+                    seqid,
+                    company_id,
+                    office_id,
+                    requirement_type,
+                    requirement_description,
+                    createdDate,
+                    updatedDate
+                )
+                values (
+                    source.preID,
+                    source.seqid,
+                    source.company_id,
+                    source.office_id,
+                    source.requirement_type,
+                    source.requirement_description,
+                    source.createdDate,
+                    source.updatedDate
+                )
+                """
+                client.query(sql).result()
+                client.delete_table(fr"{project_id}.{dataset_name}.{tmp_result_sufficient_requirements_master_table}", not_found_ok=True)
 
 
 class SQLITE3:
