@@ -1439,6 +1439,7 @@ class GCPVM:
                     source.final_comment,
                     source.createdDate,
                     source.updatedDate
+                )
                 """
                 client.query(sql).result()
                 client.delete_table(fr"{project_id}.{dataset_name}.{tmp_result_insufficient_requirements_master_table}", not_found_ok=True)
