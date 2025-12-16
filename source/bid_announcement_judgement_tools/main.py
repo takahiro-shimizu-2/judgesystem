@@ -767,6 +767,7 @@ class GCPVM:
         sql = fr"""
         SELECT * FROM `{project_id}.{dataset_name}.{tablename_announcements}`
         where doneOCR = FALSE
+        order by preID
         """
         df1 = client.query(sql).result().to_dataframe()
 
