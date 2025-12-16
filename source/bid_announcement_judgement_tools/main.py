@@ -1454,7 +1454,7 @@ class GCPVM:
                     if_exists='replace'
                 )
                 sql = fr"""MERGE `{project_id}.{dataset_name}.{tablename_sufficient_requirement_master}` AS target
-                USING `{project_id}.{dataset_name}.{tablename_sufficient_requirement_master}` AS source
+                USING `{project_id}.{dataset_name}.{tmp_result_sufficient_requirements_master_table}` AS source
                 ON 
                 target.preid = source.preid and
                 target.seqid = source.seqid and
