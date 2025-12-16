@@ -115,6 +115,7 @@ class Master:
         if dbtype is None:
             print("Please specify dbtype.")
         elif dbtype == "bigquery":
+            print(fr"Upload {self.project_id}.{self.dataset_name}.{tablename}")
             to_gbq(
                 dataframe=office_master, 
                 destination_table=fr"{self.dataset_name}.{tablename}",  # dataset.table 形式
@@ -122,6 +123,7 @@ class Master:
                 if_exists='replace'
             )
         elif dbtype == "sqlite3":
+            print(fr"Upload {tablename}")
             office_master.to_sql(
                 name=tablename, 
                 con = self.conn, 
@@ -513,6 +515,8 @@ class GCPVM:
             "reasonForNG"
         ]:
             df[cname] = df[cname].astype("string")
+
+        print(fr"Upload {project_id}.{dataset_name}.{tablename}")
         to_gbq(
             dataframe=df, 
             destination_table=fr"{dataset_name}.{tablename}",  # dataset.table 形式
@@ -525,7 +529,6 @@ class GCPVM:
         SELECT * FROM `{project_id}.{dataset_name}.INFORMATION_SCHEMA.TABLES`
         """
         val = client.query(sql).result().to_dataframe()
-        print(val)
 
 
 
@@ -837,6 +840,7 @@ class GCPVM:
 
         df1 = pd.DataFrame(all_announcements)
         if df1.shape[0] > 0:
+            print(fr"Upload {project_id}.{dataset_name}.{tmp_tablename_announcements}")
             to_gbq(
                 dataframe=df1, 
                 destination_table=fr"{dataset_name}.{tmp_tablename_announcements}",  # dataset.table 形式
@@ -881,14 +885,13 @@ class GCPVM:
 
         if all_requirement_texts != []:
             df2 = pd.concat(all_requirement_texts, ignore_index=True)
+            print(fr"Upload {project_id}.{dataset_name}.{tmp_tablename_requirements}")
             to_gbq(
                 dataframe=df2, 
                 destination_table=fr"{dataset_name}.{tmp_tablename_requirements}",  # dataset.table 形式
                 project_id=project_id, 
                 if_exists='replace'
             )
-
-            to_gbq(df2, fr'{dataset_name}.{tmp_tablename_requirements}', project_id=fr'{project_id}', if_exists='replace')
 
             sql = fr"""MERGE `{project_id}.{dataset_name}.{tablename_requirements}` AS target
             USING `{project_id}.{dataset_name}.{tmp_tablename_requirements}` AS source
@@ -1203,7 +1206,7 @@ class GCPVM:
                             "createdDate":"",
                             "updatedDate":""
                         })
-                        
+
                         if False:
                             sql = fr"""MERGE `{project_id}.{dataset_name}.{tablename_sufficient_requirement_master}` AS target
                             USING (
@@ -1364,6 +1367,7 @@ class GCPVM:
 
             if result_judgement.shape[0] > 0:
                 tmp_result_judgement_table = "tmp_result_judgement"
+                print(fr"Upload {project_id}.{dataset_name}.{tmp_result_judgement_table}")
                 to_gbq(
                     dataframe=result_judgement, 
                     destination_table=fr"{dataset_name}.{tmp_result_judgement_table}",  # dataset.table 形式
@@ -1396,6 +1400,7 @@ class GCPVM:
 
             if result_insufficient_requirements.shape[0] > 0:
                 tmp_result_insufficient_requirements_master_table = "tmp_result_insufficient_requirements"
+                print(fr"Upload {project_id}.{dataset_name}.{tmp_result_insufficient_requirements_master_table}")
                 to_gbq(
                     dataframe=result_insufficient_requirements, 
                     destination_table=fr"{dataset_name}.{tmp_result_insufficient_requirements_master_table}",  # dataset.table 形式
@@ -1440,6 +1445,7 @@ class GCPVM:
 
             if result_sufficient_requirements.shape[0] > 0:
                 tmp_result_sufficient_requirements_master_table = "tmp_result_sufficient_requirements"
+                print(fr"Upload {project_id}.{dataset_name}.{tmp_result_sufficient_requirements_master_table}")
                 to_gbq(
                     dataframe=result_sufficient_requirements, 
                     destination_table=fr"{dataset_name}.{tmp_result_sufficient_requirements_master_table}",  # dataset.table 形式
@@ -1527,6 +1533,7 @@ class SQLITE3:
 
         # データ用意
         df = pd.read_csv(bid_announcements_pre_file, sep="\t")
+        print(fr"Upload {tablename}")
         df.to_sql(tablename, conn, if_exists="replace", index=False)
 
         # check
@@ -1859,6 +1866,7 @@ class SQLITE3:
 
         df1 = pd.DataFrame(all_announcements)
         if df1.shape[0] > 0:
+            print(fr"Upload {tmp_tablename_announcements}")
             df1.to_sql(tmp_tablename_announcements, conn, if_exists="replace", index=False)
             if False:
                 sql = fr"""
@@ -1972,6 +1980,7 @@ class SQLITE3:
 
         if all_requirement_texts != []:
             df2 = pd.concat(all_requirement_texts, ignore_index=True)
+            print(fr"Upload {tmp_tablename_requirements}")
             df2.to_sql(tmp_tablename_requirements, conn, if_exists="replace", index=False)
 
 
@@ -2413,6 +2422,7 @@ class SQLITE3:
 
             if result_judgement.shape[0] > 0:
                 tmp_result_judgement_table = "tmp_result_judgement"
+                print(fr"Upload {tmp_result_judgement_table}")
                 result_judgement.to_sql(tmp_result_judgement_table, conn, if_exists="replace", index=False)
                 sql = fr"""insert into {tablename_company_bid_judgement} (
                     preID,
@@ -2470,6 +2480,7 @@ class SQLITE3:
 
             if result_insufficient_requirements.shape[0] > 0:
                 tmp_result_insufficient_requirements_master_table = "tmp_result_insufficient_requirements"
+                print(fr"Upload {tmp_result_insufficient_requirements_master_table}")
                 result_insufficient_requirements.to_sql(tmp_result_insufficient_requirements_master_table, conn, if_exists="replace", index=False)
                 sql = fr"""insert into {tablename_insufficient_requirement_master} (
                     preID,
@@ -2512,6 +2523,7 @@ class SQLITE3:
 
             if result_sufficient_requirements.shape[0] > 0:
                 tmp_result_sufficient_requirements_master_table = "tmp_result_sufficient_requirements"
+                print(fr"Upload {tmp_result_sufficient_requirements_master_table}")
                 result_sufficient_requirements.to_sql(tmp_result_sufficient_requirements_master_table, conn, if_exists="replace", index=False)
                 sql = fr"""insert into {tablename_sufficient_requirement_master} (
                     preID,
@@ -2553,6 +2565,8 @@ if __name__ == "__main__":
     # google ai studio に接続しなくてよいなら  --google_ai_studio_api_key_filepath 無しでよい。
     # python source/bid_announcement_judgement_tools/main.py --bid_announcements_pre_file data/bid_announcements_pre/bid_announcements_pre_1.txt --google_ai_studio_api_key_filepath data/sec/google_ai_studio_api_key.txt --bigquery_location SPECIFY_LOCATION --bigquery_project_id SPECIFY_PROJECT_ID --bigquery_dataset_name SPECIFY_DATASET_NAME --use_gcp_vm
     # python source/bid_announcement_judgement_tools/main.py --bid_announcements_pre_file data/bid_announcements_pre/bid_announcements_pre_1.txt --google_ai_studio_api_key_filepath data/sec/google_ai_studio_api_key.txt --bigquery_location "asia-northeast1" --bigquery_project_id vocal-raceway-473509-f1 --bigquery_dataset_name October_20251004 --use_gcp_vm
+    # python source/bid_announcement_judgement_tools/main.py --bid_announcements_pre_file data/bid_announcements_pre/all.txt --google_ai_studio_api_key_filepath data/sec/google_ai_studio_api_key.txt --bigquery_location "asia-northeast1" --bigquery_project_id vocal-raceway-473509-f1 --bigquery_dataset_name October_20251004 --use_gcp_vm
+    # python source/bid_announcement_judgement_tools/main.py --bid_announcements_pre_file data/bid_announcements_pre/all.txt --google_ai_studio_api_key_filepath data/sec/google_ai_studio_api_key.txt --bigquery_location "asia-northeast1" --bigquery_project_id vocal-raceway-473509-f1 --bigquery_dataset_name October_20251004 --use_gcp_vm  --step1_transfer_remove_table --step3_remove_table
     # 
     # sqlite3想定
     # python source/bid_announcement_judgement_tools/main.py --bid_announcements_pre_file data/bid_announcements_pre/bid_announcements_pre_1.txt --google_ai_studio_api_key_filepath data/sec/google_ai_studio_api_key.txt --sqlite3_db_file_path data/example.db
