@@ -745,7 +745,6 @@ class GCPVM:
         SELECT * FROM `{project_id}.{dataset_name}.{tablename_announcements}`
         """
         val = client.query(sql).result().to_dataframe()
-        print(val)
 
 
     def step2_ocr(self, ocr_utils):
@@ -1544,8 +1543,6 @@ class SQLITE3:
         #val = client.query(sql).result().to_dataframe()
         val = pd.read_sql_query(sql, conn)
 
-        print(val)
-
 
 
     def step1_transfer(self, remove_table=False):
@@ -1773,7 +1770,6 @@ class SQLITE3:
         """
         #val = client.query(sql).result().to_dataframe()
         val = pd.read_sql_query(sql, conn)
-        #print(val)
 
 
     def step2_ocr(self, ocr_utils):
