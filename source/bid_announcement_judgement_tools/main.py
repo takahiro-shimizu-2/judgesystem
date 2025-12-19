@@ -1159,7 +1159,6 @@ class GCPVM:
 
                     
                     tmp_result_judgement_list.append({
-                        "announcement_id":announcement_no,
                         "requirement_no":requirement_no,
                         "company_no":company_no,
                         "office_no":office_no,
@@ -2238,7 +2237,6 @@ class SQLITE3:
                         val = {"is_ok":False, "reason":"その他要件があります。確認してください"}
                     
                     tmp_result_judgement_list.append({
-                        "announcement_id":announcement_no,
                         "requirement_no":requirement_no,
                         "company_no":company_no,
                         "office_no":office_no,
