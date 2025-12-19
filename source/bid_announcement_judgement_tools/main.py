@@ -145,7 +145,7 @@ class Master:
         print(master.getOfficeMaster())
         print(master.getOfficeRegistrationAuthorizationMaster())
         print(master.getOfficeWorkAchivementsMaster())
-        print(master.getTechnicianExperienceMaster())
+        print(master.getEmployeeExperienceMaster())
         print(master.getTechnicianQualificationMaster())
 
 
