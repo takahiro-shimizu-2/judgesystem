@@ -1,4 +1,4 @@
-"company_id"	"office_id"	"office_registration_id"	"agency_id"	"construction_id"	"license_grade"	"license_score"	"status"	"registered_date"	"expiration_date"	"is_suspended"	"remarks"	"created_at"	"updated_at"
+"company_no"	"office_no"	"office_registration_no"	"agency_no"	"construction_no"	"license_grade"	"license_score"	"status"	"registered_date"	"expiration_date"	"is_suspended"	"remarks"	"created_at"	"updated_at"
 1	1	1	1	1	"D"	42	"有効"	"2025-04-01"		0		"2025/04/22"	
 1	1	2	1	5	"D"	42	"有効"	"2025-04-01"		0		"2025/04/22"	
 1	1	3	1	1	"D"	42	"有効"	"2025-04-01"		0		"2025/04/22"	

@@ -1,4 +1,4 @@
-qualification_id	qualification_name	qualification_type	qualification_category	issuing_organization	parent_qualification_id	qualification_level	sort_order	remarks	created_at	updated_at
+qualification_no	qualification_name	qualification_type	qualification_category	issuing_organization	parent_qualification_id	qualification_level	sort_order	remarks	created_at	updated_at
 0001	監理技術者資格者証		監理技術者資格	一般財団法人 建設業技術者センター					2025/02/02	(自動)
 0002	監理技術者講習修了証		監理技術者資格	一般財団法人 建設業技術者センター					2025/02/02	(自動)
 0003	1級建設機械施工管理技士		建設業法（技術検定）	一般社団法人 日本建設機械施工協会		1			2025/02/02	(自動)

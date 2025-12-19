@@ -15,7 +15,7 @@ def getConstructionInfo(constructionNo, construction_data=pd.read_csv("data/mast
     # 営業品目マスター
     # construction_data
 
-    data = construction_data[construction_data["construction_id"] == constructionNo]
+    data = construction_data[construction_data["construction_no"] == constructionNo]
     if data.shape[0] == 0:
         return None
     else:
@@ -23,10 +23,10 @@ def getConstructionInfo(constructionNo, construction_data=pd.read_csv("data/mast
             print(f"Warning: constructionNo={constructionNo} に対して複数行ヒット({data.shape[0]}行)")
         row_dict = data.iloc[0].to_dict()
         return {
-            "construction_no": row_dict["construction_id"],      # 工事種別連番
+            "construction_no": row_dict["construction_no"],      # 工事種別連番
             "construction_name": row_dict["construction_name"],  # 工事種別名称
             "category_segment": row_dict["category_segment"],    # カテゴリ区分
-            "parent_construction_no": row_dict["parent_construction_id"]  # 上位工事種別
+            "parent_construction_no": row_dict["parent_construction_no"]  # 上位工事種別
         }
 
 
@@ -34,7 +34,7 @@ def getAgencyInfo(agencyNo, agency_data = pd.read_csv("data/master/agency_master
     # 発注者機関マスター
     # agency_data
 
-    data = agency_data[agency_data["agency_id"] == agencyNo]
+    data = agency_data[agency_data["agency_no"] == agencyNo]
     if data.shape[0] == 0:
         return None
     
@@ -44,15 +44,15 @@ def getAgencyInfo(agencyNo, agency_data = pd.read_csv("data/master/agency_master
 
     # TODO
     # 親機関名取得は要検討。
-    parentAgencyNo = row_dict["parent_agency_id"]
+    parentAgencyNo = row_dict["parent_agency_no"]
     parentName = None
 
-    parentdata = agency_data[agency_data["agency_id"] == parentAgencyNo]
+    parentdata = agency_data[agency_data["agency_no"] == parentAgencyNo]
     if data.shape[0] >= 1:
         parentName = parentdata.iloc[0]["agency_name"]
 
     return {
-        "agency_no": row_dict["agency_id"],
+        "agency_no": row_dict["agency_no"],
         "agency_name": row_dict["agency_name"],
         "parent_agency_no": parentAgencyNo,
         "parent_name": parentName,
@@ -64,18 +64,18 @@ def getAgencyInfo(agencyNo, agency_data = pd.read_csv("data/master/agency_master
 def getOfficeExperiences(officeNo, office_experience_data = pd.read_csv("data/master/office_work_achivements_master.txt",sep="\t")):
     # 拠点工事実績マスター  office_experience_data
     # officeNo だけじゃなくて company_no も必要？
-    # ※masterには company_id 列は無い。
+    # ※masterには company_no 列は無い。
         
 
-    office_experience_data = office_experience_data[office_experience_data["office_id"] == officeNo]
+    office_experience_data = office_experience_data[office_experience_data["office_no"] == officeNo]
     experiences = []
     for index, row in office_experience_data.iterrows():
         row_dict = row.to_dict()
         experiences.append({
-            "office_experience_no": row_dict["office_experience_id"],
-            "office_no": row_dict["office_id"],
-            "agency_no": row_dict["agency_id"],
-            "construction_no": row_dict["construction_id"],
+            "office_experience_no": row_dict["office_experience_no"],
+            "office_no": row_dict["office_no"],
+            "agency_no": row_dict["agency_no"],
+            "construction_no": row_dict["construction_no"],
             "project_name": row_dict["project_name"],
             "contractor_layer": row_dict["contractor_layer"],   # 請負階層
             "start_date": row_dict["start_date"],         # 着工日

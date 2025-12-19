@@ -1,4 +1,4 @@
-construction_id	construction_name	category_segment	official_code	parent_construction_id	construction_level	sort_order	remarks	created_at	updated_at
+construction_no	construction_name	category_segment	official_code	parent_construction_no	construction_level	sort_order	remarks	created_at	updated_at
 0001	全省庁統一	全省庁統一	-	NULL	0	1	全省庁統一トップ	2025-02-02	(自動)
 0002	各発注機関用	各発注機関用	-	NULL	0	5	各発注機関用トップ	2025-02-02	(自動)
 0003	物品の製造	全省庁統一	-	1	1	2	中カテゴリ：物品の製造	2025-02-02	(自動)

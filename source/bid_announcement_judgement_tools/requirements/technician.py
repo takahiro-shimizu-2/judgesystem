@@ -188,7 +188,7 @@ def getQualificationName(qualificationNo, qualMasterData=pd.read_csv("data/maste
     # 2: 種別
     # ...
 
-    subData = qualMasterData[qualMasterData["qualification_id"] == qualificationNo]
+    subData = qualMasterData[qualMasterData["qualification_no"] == qualificationNo]
     if subData.shape[0] == 0:
         return None
     elif subData.shape[0] > 1:
@@ -227,13 +227,13 @@ def getEmployeeQualifications(
 
     # 指定された会社に所属し、退職していない従業員を抽出
     # 特定の拠点が指定されている場合はそれもチェック
-    subData = employeeData[(employeeData["company_id"] == companyNo) & (employeeData["is_retired_flg"])]
-    subData = subData[(employeeData["office_id"] == officeNo)]
+    subData = employeeData[(employeeData["company_no"] == companyNo) & (employeeData["is_retired_flg"])]
+    subData = subData[(employeeData["office_no"] == officeNo)]
 
     # 欠損対応は必要？
     for index, row in subData.iterrows():
         employees.append({
-            "employee_no": row["employee_id"],
+            "employee_no": row["employee_no"],
             "employee_name": row["employee_name"],
             "office_no": row["office_nid"]
         })
@@ -259,11 +259,11 @@ def getEmployeeQualifications(
 
     # for (let i = 1; i < qualData.length; i++) {
     for index, row in qualData.iterrows():
-        employeeNo = row["employee_id"]
+        employeeNo = row["employee_no"]
         # 対象従業員の資格で、有効なものを抽出
         if employeeNo in employeeIds and row["is_active_flg"]:
             # 技術者資格マスターから資格名を取得
-            qualificationName = getQualificationName(qualificationNo=row["qualification_id"], qualMasterData=qualMasterData)
+            qualificationName = getQualificationName(qualificationNo=row["qualification_no"], qualMasterData=qualMasterData)
 
             if qualificationName:
                 # 該当する従業員情報を取得
@@ -288,13 +288,13 @@ def getEmployeeExperiences(companyNo, officeNo, employeeData = pd.read_csv("data
     # employeeData = pd.read_csv("data/master/employee_master.txt", sep="\t")
     employees = []
 
-    subData = employeeData[(employeeData["company_id"]==companyNo) & (employeeData["is_retired_flg"])]
+    subData = employeeData[(employeeData["company_no"]==companyNo) & (employeeData["is_retired_flg"])]
     for index, row in subData.iterrows():
-        if row["office_id"] == officeNo:
+        if row["office_no"] == officeNo:
             employees.append({
-                "employee_no": row["employee_id"],
+                "employee_no": row["employee_no"],
                 "employee_name": row["employee_name"],
-                "office_no": row["office_id"]
+                "office_no": row["office_no"]
             })
     if len(employees) == 0:
         return []
@@ -331,8 +331,8 @@ def getEmployeeExperiences(companyNo, officeNo, employeeData = pd.read_csv("data
             "role_position": row["role_position"],
             "start_date": row["start_date"],
             "end_date": row["end_date"],
-            "agency_no": row["agency_id"],
-            "construction_no": row["construction_id"],
+            "agency_no": row["agency_no"],
+            "construction_no": row["construction_no"],
             "is_original_contractor": row["is_original_contractor_flg"],
             "final_score": row["final_score"]
         })

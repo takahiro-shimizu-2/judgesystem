@@ -1,4 +1,4 @@
-agency_id	agency_name	parent_agency_id	agency_level	sort_order	agency_area	official_url	remarks	created_at	updated_at
+agency_no	agency_name	parent_agency_no	agency_level	sort_order	agency_area	official_url	remarks	created_at	updated_at
 1	全省庁統一	NULL	0	1				2/2/2025	(自動)
 2	北海道	1	1	1	北海道		全省庁統一	2/2/2025	(自動)
 3	東北	1	1	1	青森県,岩手県,宮城県,秋田県,山形県,福島県		全省庁統一	2/2/2025	(自動)

@@ -1,1 +1,1 @@
-office_experience_id	company_id	office_id	agency_id	construction_id	project_name	contractor_layer	start_date	completion_date	final_score	total_amount	is_jv_flag	jv_ratio	remarks
+office_experience_no	company_no	office_no	agency_no	construction_no	project_name	contractor_layer	start_date	completion_date	final_score	total_amount	is_jv_flag	jv_ratio	remarks

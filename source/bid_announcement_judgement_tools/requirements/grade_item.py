@@ -349,7 +349,7 @@ def checkGradeAndItemRequirement(
         requirementText, 
         companyNo, 
         officeNo,
-        licenseData = pd.read_csv("data/master/office_registration_authorization_master.txt",sep="\t", converters={"construction_id": lambda x: str(x)}),
+        licenseData = pd.read_csv("data/master/office_registration_authorization_master.txt",sep="\t", converters={"construction_no": lambda x: str(x)}),
         agencyData = pd.read_csv("data/master/agency_master.txt",sep="\t"),
         constructionData = pd.read_csv("data/master/construction_master.txt",sep="\t")
     ):
@@ -439,11 +439,11 @@ def checkGradeAndItemRequirement(
     # licenseData = licenseSheet.getDataRange().getValues();
     # licenseData = None
     officeLicenses = []
-    subset_data = licenseData[licenseData["office_id"]==officeNo]
+    subset_data = licenseData[licenseData["office_no"]==officeNo]
     for index, row in subset_data.iterrows():
         officeLicenses.append({
-            "agency_no": row["agency_id"],
-            "construction_no": row["construction_id"],
+            "agency_no": row["agency_no"],
+            "construction_no": row["construction_no"],
             "license_grade": row["license_grade"],
             "license_score": row["license_score"],
             "is_suspended": row["is_suspended"]
@@ -460,9 +460,9 @@ def checkGradeAndItemRequirement(
     # agencyData = pd.read_csv("data/master/agency_master.txt",sep="\t")
     agencyMap = {}
     for index, row in agencyData.iterrows():
-        agencyMap[row["agency_id"]] = {
+        agencyMap[row["agency_no"]] = {
             "agency_name": row["agency_name"],
-            "parent_agency_no": row["parent_agency_id"],
+            "parent_agency_no": row["parent_agency_no"],
             "agency_area": row["agency_area"]
         }
 
@@ -470,7 +470,7 @@ def checkGradeAndItemRequirement(
     # constructionData = pd.read_csv("data/master/construction_master.txt",sep="\t")
     constructionMap = {}
     for index, row in constructionData.iterrows():
-        constructionMap[ f"{row['construction_id']:04d}" ] = {
+        constructionMap[ f"{row['construction_no']:04d}" ] = {
             "construction_name": row["construction_name"],
             "category_segment": row["category_segment"]
         }

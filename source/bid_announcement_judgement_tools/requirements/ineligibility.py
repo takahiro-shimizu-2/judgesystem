@@ -16,8 +16,8 @@ def isOfficeSuspended(companyNo, officeNo, office_registration_authorization_dat
     
     # TODO: 拠点連場(officeNo) だけではだめで、company_no も観ないとダメな気がする。
     target_data = office_registration_authorization_data[
-        (office_registration_authorization_data["office_id"] == officeNo) &
-        (office_registration_authorization_data["company_id"] == companyNo)
+        (office_registration_authorization_data["office_no"] == officeNo) &
+        (office_registration_authorization_data["company_no"] == companyNo)
     ]
     if target_data.shape[0] >= 1:
         keyname = "is_suspended" # 指名停止フラグ
@@ -32,7 +32,7 @@ def findCompanyRow(companyNo, company_data = pd.read_csv("data/master/company_ma
     # 企業マスター
     # company_data
 
-    data = company_data[company_data["company_id"] == companyNo]
+    data = company_data[company_data["company_no"] == companyNo]
     if data.shape[0] == 0:
         return None
     else:

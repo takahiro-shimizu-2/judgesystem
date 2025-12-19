@@ -161,7 +161,7 @@ class OCRutils:
         doc_data = httpx.get(pdfurl).content
         return doc_data
 
-    def getJsonFromDocData(self, doc_data, preID):
+    def getJsonFromDocData(self, doc_data):
         client = self.client
 
         prompt = """
@@ -225,7 +225,6 @@ class OCRutils:
         #json_text = extract_json(text=response.text)
         text2 = text.replace('\n', '').replace('```json', '').replace("```","")
         dict1 = json.loads(text2)
-        dict1["preID"] = preID
         return dict1
 
     def convertJson(self, json_value):
@@ -236,7 +235,7 @@ class OCRutils:
             return datestr
 
         new_json = {}
-        new_json["preID"] = json_value.get("preID")
+        new_json["announcement_no"] = json_value.get("announcement_no")
         new_json["workplace"] = json_value.get("工事場所", None)
 
         tmp_json = json_value.get("入札手続等担当部局", None)
@@ -267,7 +266,7 @@ class OCRutils:
         return new_json
 
 
-    def getRequirementText(self, doc_data, preID):
+    def getRequirementText(self, doc_data):
         client = self.client
 
         prompt = """
@@ -348,14 +347,13 @@ class OCRutils:
         #json_text = extract_json(text=response.text)
         text2 = text.replace('\n', '').replace('```json', '').replace("```","")
         dict1 = json.loads(text2)
-        dict1["preID"] = preID
         return dict1
 
     def convertRequirementTextDict(self, requirement_texts):
-        # requirement_texts = {"preID":1, "資格・条件":["(2)令和07・08・09年度防衛省競争参加資格(全省庁統一資格)の「役務の提供等」において、開札時までに「C」又は「D」の等級に格付けされ北海道地域の競争参加を希望する者であること(会社更生法(平成14年法律第154号)に基づき更生手続開始の申立てがなされている者又は民事再生法(平成11年法律第225号)に基づき再生手続開始の申立てがなされている者については、手続開始の決定後、再度級別の格付けを受けていること。)。"]}
-        preID = requirement_texts["preID"]
-        preid_list = []
-        seqid_list = []
+        # requirement_texts = {"announcement_no":1, "資格・条件":["(2)令和07・08・09年度防衛省競争参加資格(全省庁統一資格)の「役務の提供等」において、開札時までに「C」又は「D」の等級に格付けされ北海道地域の競争参加を希望する者であること(会社更生法(平成14年法律第154号)に基づき更生手続開始の申立てがなされている者又は民事再生法(平成11年法律第225号)に基づき再生手続開始の申立てがなされている者については、手続開始の決定後、再度級別の格付けを受けていること。)。"]}
+        announcement_no = requirement_texts["announcement_no"]
+        announcement_no_list = []
+        requirement_no_list = []
         requirement_type_list = []
         requirement_text_list = []
         createdDate_list = []
@@ -390,8 +388,8 @@ class OCRutils:
             for req_type, search_list in req_type_list_search_list.items():
                 search_str = "|".join(search_list)
                 if (req_type != "その他要件" and re.search(search_str, text_lower)) or (req_type == "その他要件" and re.search(search_str, text_lower)) or (req_type == "その他要件" and not re.search(search_str, text_lower) and has_other_req):
-                    preid_list.append(preID)
-                    seqid_list.append(i)
+                    announcement_no_list.append(announcement_no)
+                    requirement_no_list.append(i)
                     requirement_type_list.append(req_type)
                     requirement_text_list.append(text)
                     createdDate_list.append("")
@@ -399,8 +397,8 @@ class OCRutils:
                     has_other_req = False
 
         new_dict = {
-            "preID":preid_list,
-            "seqid":seqid_list,
+            "announcement_no":announcement_no_list,
+            "requirement_no":requirement_no_list,
             "requirement_type":requirement_type_list,
             "requirement_text":requirement_text_list,
             "createdDate":createdDate_list,
@@ -531,7 +529,7 @@ class GCPVM:
         if tablename.shape[0] == 0:
             sql = fr"""
             create table `{project_id}.{dataset_name}.{tablename_announcements}` (
-            preID int64,
+            announcement_no int64,
             workName string,
             userAnnNo int64,
             topAgencyNo int64,
@@ -586,8 +584,8 @@ class GCPVM:
             # テーブルが無いなら作成
             sql = fr"""
             create table `{project_id}.{dataset_name}.{tablename_requirements}` (
-            preID int64,
-            seqid int64,
+            announcement_no int64,
+            requirement_no int64,
             requirement_type string,
             requirement_text string,
             done_judgement bool,
@@ -611,7 +609,7 @@ class GCPVM:
         # 疑問:row_number付与の order by 列は pdf_urlがよいのか？
         sql = fr"""
         INSERT INTO `{project_id}.{dataset_name}.{tablename_announcements}` (
-            preID,
+            announcement_no,
             workName,
             userAnnNo,
             topAgencyNo,
@@ -640,7 +638,7 @@ class GCPVM:
             updatedDate
             )
         WITH maxval AS (
-            SELECT IFNULL(MAX(preID), 0) AS maxid FROM `{project_id}.{dataset_name}.{tablename_announcements}`
+            SELECT IFNULL(MAX(announcement_no), 0) AS maxid FROM `{project_id}.{dataset_name}.{tablename_announcements}`
         ), 
         to_insert AS (
         SELECT
@@ -734,7 +732,7 @@ class GCPVM:
         sql = fr"""
         SELECT * FROM `{project_id}.{dataset_name}.{tablename_announcements}`
         where doneOCR = FALSE
-        order by preID
+        order by announcement_no
         """
         df1 = client.query(sql).result().to_dataframe()
 
@@ -743,12 +741,12 @@ class GCPVM:
         all_announcements = []
         all_requirement_texts = []
         for index, row in df1.iterrows():
-            preID = row["preID"]
-            print(f"Processing OCR for preID={preID}...")
+            announcement_no = row["announcement_no"]
+            print(f"Processing OCR for announcement_no={announcement_no}...")
 
             pdfurl = row["pdfUrl"]
             if False:
-                preID = int(df1["preID"][11])
+                announcement_no = int(df1["announcement_no"][11])
                 pdfurl = df1["pdfUrl"][11]
 
             if not os.path.exists("data/ocr"):
@@ -759,19 +757,20 @@ class GCPVM:
 
             time.sleep(1)
             doc_data = ocr_utils.getPDFDataFromUrl(pdfurl)
-            if not os.path.exists(fr"data/pdf/{preID}.pdf"):
+            if not os.path.exists(fr"data/pdf/{announcement_no}.pdf"):
                 # 基本的には元の pdf と同じものを保存できる。
-                print(fr"   Save data/pdf/{preID}.pdf.")
-                with open(fr"data/pdf/{preID}.pdf", "wb") as f:
+                print(fr"   Save data/pdf/{announcement_no}.pdf.")
+                with open(fr"data/pdf/{announcement_no}.pdf", "wb") as f:
                     f.write(doc_data)
 
             try:
                 # ocr for announcements
-                ocr_announcements_file = fr"ocr_announcements_{preID}.json"
+                ocr_announcements_file = fr"ocr_announcements_{announcement_no}.json"
                 ocr_announcements_filepath = fr"data/ocr/{ocr_announcements_file}"
                 if not os.path.exists(ocr_announcements_filepath):
                     print("   Trying ocr(announcements).")
-                    json_value = ocr_utils.getJsonFromDocData(doc_data=doc_data, preID=preID)
+                    json_value = ocr_utils.getJsonFromDocData(doc_data=doc_data)
+                    json_value["announcement_no"] = announcement_no
                     with open(ocr_announcements_filepath, "w", encoding="utf-8") as f:
                         json.dump(json_value, f, ensure_ascii=False, indent=2)
                 else:
@@ -781,11 +780,12 @@ class GCPVM:
                 new_json = ocr_utils.convertJson(json_value=json_value)
 
                 # ocr for requirements
-                ocr_requirements_file = fr"ocr_requirements_{preID}.json"
+                ocr_requirements_file = fr"ocr_requirements_{announcement_no}.json"
                 ocr_requirements_filepath = fr"data/ocr/{ocr_requirements_file}"
                 if not os.path.exists(ocr_requirements_filepath):
                     print("   Trying ocr(requirements).")
-                    requirement_texts = ocr_utils.getRequirementText(doc_data=doc_data, preID=preID)
+                    requirement_texts = ocr_utils.getRequirementText(doc_data=doc_data)
+                    requirement_texts["announcement_no"] = announcement_no
                     with open(ocr_requirements_filepath, "w", encoding="utf-8") as f:
                         json.dump(requirement_texts, f, ensure_ascii=False, indent=2)
                 else:
@@ -818,7 +818,7 @@ class GCPVM:
         
             sql = fr"""MERGE `{project_id}.{dataset_name}.{tablename_announcements}` AS target
             USING `{project_id}.{dataset_name}.{tmp_tablename_announcements}` AS source
-            ON target.preid = source.preid
+            ON target.announcement_no = source.announcement_no
             when matched AND target.doneocr = FALSE then
             UPDATE SET
                 target.workplace = source.workplace,
@@ -863,11 +863,11 @@ class GCPVM:
 
             sql = fr"""MERGE `{project_id}.{dataset_name}.{tablename_requirements}` AS target
             USING `{project_id}.{dataset_name}.{tmp_tablename_requirements}` AS source
-            ON target.preid = source.preid
+            ON target.announcement_no = source.announcement_no
             when not matched then
             insert (
-                preID,
-                seqid,
+                announcement_no,
+                requirement_no,
                 requirement_type,
                 requirement_text,
                 done_judgement,
@@ -875,8 +875,8 @@ class GCPVM:
                 updatedDate
             )
             values (
-                source.preid,
-                source.seqid,
+                source.announcement_no,
+                source.requirement_no,
                 source.requirement_type,
                 source.requirement_text,
                 FALSE,
@@ -943,9 +943,9 @@ class GCPVM:
                 if target_tablename == tablename_company_bid_judgement:
                     sql = fr"""
                     create table `{project_id}.{dataset_name}.{tablename_company_bid_judgement}` (
-                        preID int64,
-                        company_id int64,
-                        office_id int64,
+                        announcement_no int64,
+                        company_no int64,
+                        office_no int64,
                         requirement_ineligibility bool,
                         requirement_grade_item bool,
                         requirement_location bool,
@@ -964,10 +964,10 @@ class GCPVM:
                 elif target_tablename == tablename_sufficient_requirement_master:
                     sql = fr"""
                     create table `{project_id}.{dataset_name}.{tablename_sufficient_requirement_master}` (
-                        preID int64,
-                        seqid int64,
-                        company_id int64,
-                        office_id int64,
+                        announcement_no int64,
+                        requirement_no int64,
+                        company_no int64,
+                        office_no int64,
                         requirement_type string,
                         requirement_description string,
                         createdDate string,
@@ -977,10 +977,10 @@ class GCPVM:
                 elif target_tablename == tablename_insufficient_requirement_master:
                     sql = fr"""
                     create table `{project_id}.{dataset_name}.{tablename_insufficient_requirement_master}` (
-                        preID int64,
-                        seqid int64,
-                        company_id int64,
-                        office_id int64,
+                        announcement_no int64,
+                        requirement_no int64,
+                        company_no int64,
+                        office_no int64,
                         requirement_type string,
                         requirement_description string,
                         suggestions_for_improvement string,
@@ -1010,24 +1010,24 @@ class GCPVM:
         sql = fr"""MERGE `{project_id}.{dataset_name}.{tablename_company_bid_judgement}` AS target
         USING (
             select
-            a.preid,
-            b.company_id,
-            b.office_id
+            a.announcement_no,
+            b.company_no,
+            b.office_no
             from 
             `{project_id}.{dataset_name}.{tablename_announcements}` a
             cross join
             `{project_id}.{dataset_name}.{tablename_office_master}` b
-            group by a.preid, b.company_id, b.office_id
+            group by a.announcement_no, b.company_no, b.office_no
         ) AS source
         ON 
-        target.preid = source.preid and
-        target.company_id = source.company_id and
-        target.office_id = source.office_id
+        target.announcement_no = source.announcement_no and
+        target.company_no = source.company_no and
+        target.office_no = source.office_no
         when not matched then
         insert (
-            preID,
-            company_id,
-            office_id,
+            announcement_no,
+            company_no,
+            office_no,
             requirement_ineligibility,
             requirement_grade_item,
             requirement_location,
@@ -1042,9 +1042,9 @@ class GCPVM:
             updatedDate
         )
         values (
-            source.preid,
-            source.company_id,
-            source.office_id,
+            source.announcement_no,
+            source.company_no,
+            source.office_no,
             NULL,
             NULL,
             NULL,
@@ -1078,21 +1078,21 @@ class GCPVM:
             result_sufficient_requirements_list = []
             result_insufficient_requirements_list = []
             for index, row1 in df.iterrows():
-                preID = row1["preID"]
-                company_id = row1["company_id"]
-                office_id = row1["office_id"]
+                announcement_no = row1["announcement_no"]
+                company_no = row1["company_no"]
+                office_no = row1["office_no"]
                 tmp_result_judgement_list = []
                 if False:
-                    preID = 1
-                    company_id = 1
-                    office_id = 1
+                    announcement_no = 1
+                    company_no = 1
+                    office_no = 1
 
                 sql = fr"""
-                SELECT * FROM `{project_id}.{dataset_name}.{tablename_requirements}` where preID = {preID}
+                SELECT * FROM `{project_id}.{dataset_name}.{tablename_requirements}` where announcement_no = {announcement_no}
                 """
                 req_df = client.query(sql).result().to_dataframe()
                 if req_df.shape[0] == 0:
-                    print(fr"preID={preID}: No requirement found. Skip anyway.")
+                    print(fr"announcement_no={announcement_no}: No requirement found. Skip anyway.")
                     continue
 
                 for jndex, row2 in req_df.iterrows():
@@ -1102,26 +1102,26 @@ class GCPVM:
 
                     requirement_type = row2["requirement_type"]
                     requirement_text = row2["requirement_text"]
-                    seqid = row2["seqid"]
+                    requirement_no = row2["requirement_no"]
 
                     requirementText = requirement_text
-                    companyNo = company_id
-                    officeNo = office_id
+                    companyNo = company_no
+                    officeNo = office_no
                     
 
                     if requirement_type == "欠格要件":
                         val = checkIneligibilityDynamic(
                             requirementText=requirement_text, 
-                            companyNo=company_id, 
-                            officeNo=office_id,
+                            companyNo=company_no, 
+                            officeNo=office_no,
                             company_data = pd.read_csv("data/master/company_master.txt",sep="\t"), 
                             office_registration_authorization_data=pd.read_csv("data/master/office_registration_authorization_master.txt",sep="\t")
                         )
                     elif requirement_type == "業種・等級要件":
                         val = checkGradeAndItemRequirement(
                             requirementText=requirement_text, 
-                            companyNo=company_id, 
-                            officeNo=office_id,
+                            companyNo=company_no, 
+                            officeNo=office_no,
                             licenseData = pd.read_csv("data/master/office_registration_authorization_master.txt",sep="\t", converters={"construction_id": lambda x: str(x)}),
                             agencyData = pd.read_csv("data/master/agency_master.txt",sep="\t"),
                             constructionData = pd.read_csv("data/master/construction_master.txt",sep="\t")
@@ -1129,8 +1129,8 @@ class GCPVM:
                     elif requirement_type == "所在地要件":
                         val = checkLocationRequirement(
                             requirementText=requirement_text, 
-                            companyNo=company_id, 
-                            officeNo=office_id,
+                            companyNo=company_no, 
+                            officeNo=office_no,
                             agencyData=pd.read_csv("data/master/agency_master.txt",sep="\t"),
                             officeData = pd.read_csv("data/master/office_master.txt",sep="\t")
                         )
@@ -1138,8 +1138,8 @@ class GCPVM:
                     elif requirement_type == "実績要件":
                         val = checkExperienceRequirement(
                             requirementText=requirement_text, 
-                            companyNo=company_id, 
-                            officeNo=office_id,
+                            companyNo=company_no, 
+                            officeNo=office_no,
                             office_experience_data=pd.read_csv("data/master/office_work_achivements_master.txt",sep="\t"),
                             agency_data=pd.read_csv("data/master/agency_master.txt",sep="\t"), 
                             construction_data=pd.read_csv("data/master/construction_master.txt",sep="\t")
@@ -1147,8 +1147,8 @@ class GCPVM:
                     elif requirement_type == "技術者要件":
                         val = checkTechnicianRequirement(
                             requirementText=requirement_text, 
-                            companyNo=company_id, 
-                            officeNo=office_id,
+                            companyNo=company_no, 
+                            officeNo=office_no,
                             employeeData=pd.read_csv("data/master/employee_master.txt", sep="\t"), 
                             qualData=pd.read_csv("data/master/employee_qualification_master.txt", sep="\t"), 
                             qualMasterData=pd.read_csv("data/master/technician_qualification_master.txt", sep="\t"),
@@ -1159,10 +1159,10 @@ class GCPVM:
 
                     
                     tmp_result_judgement_list.append({
-                        "announcement_id":preID,
-                        "seqid":seqid,
-                        "company_id":company_id,
-                        "office_id":office_id,
+                        "announcement_id":announcement_no,
+                        "requirement_no":requirement_no,
+                        "company_no":company_no,
+                        "office_no":office_no,
                         "requirementType":requirement_type,
                         "is_ok":val["is_ok"],
                         "result":val["reason"]
@@ -1170,10 +1170,10 @@ class GCPVM:
 
                     if val["is_ok"]:
                         result_sufficient_requirements_list.append({
-                            "preID":preID,
-                            "seqid":seqid,
-                            "company_id":company_id,
-                            "office_id":office_id,
+                            "announcement_no":announcement_no,
+                            "requirement_no":requirement_no,
+                            "company_no":company_no,
+                            "office_no":office_no,
                             "requirement_type":requirement_type,
                             "requirement_description":val["reason"],
                             "createdDate":"",
@@ -1184,37 +1184,37 @@ class GCPVM:
                             sql = fr"""MERGE `{project_id}.{dataset_name}.{tablename_sufficient_requirement_master}` AS target
                             USING (
                                 select
-                                {preID} as preid,
-                                {seqid} as seqid,
-                                {company_id} as company_id,
-                                {office_id} as office_id,
+                                {announcement_no} as announcement_no,
+                                {requirement_no} as requirement_no,
+                                {company_no} as company_no,
+                                {office_no} as office_no,
                                 '{requirement_type}' as requirement_type,
                                 '{val["reason"]}' as requirement_description,
                                 '' as createdDate,
                                 '' as updatedDate
                             ) AS source
                             ON 
-                            target.preid = source.preid and
-                            target.seqid = source.seqid and
-                            target.company_id = source.company_id and
-                            target.office_id = source.office_id and
+                            target.announcement_no = source.announcement_no and
+                            target.requirement_no = source.requirement_no and
+                            target.company_no = source.company_no and
+                            target.office_no = source.office_no and
                             target.requirement_type = source.requirement_type
                             when not matched then
                             insert (
-                                preID,
-                                seqid,
-                                company_id,
-                                office_id,
+                                announcement_no,
+                                requirement_no,
+                                company_no,
+                                office_no,
                                 requirement_type,
                                 requirement_description,
                                 createdDate,
                                 updatedDate
                             )
                             values (
-                                source.preID,
-                                source.seqid,
-                                source.company_id,
-                                source.office_id,
+                                source.announcement_no,
+                                source.requirement_no,
+                                source.company_no,
+                                source.office_no,
                                 source.requirement_type,
                                 source.requirement_description,
                                 source.createdDate,
@@ -1223,10 +1223,10 @@ class GCPVM:
                             """
                     else:
                         result_insufficient_requirements_list.append({
-                            "preID":preID,
-                            "seqid":seqid,
-                            "company_id":company_id,
-                            "office_id":office_id,
+                            "announcement_no":announcement_no,
+                            "requirement_no":requirement_no,
+                            "company_no":company_no,
+                            "office_no":office_no,
                             "requirement_type":requirement_type,
                             "requirement_description":val["reason"],
                             "suggestions_for_improvement":"",
@@ -1238,10 +1238,10 @@ class GCPVM:
                             sql = fr"""MERGE `{project_id}.{dataset_name}.{tablename_insufficient_requirement_master}` AS target
                             USING (
                                 select
-                                {preID} as preid,
-                                {seqid} as seqid,
-                                {company_id} as company_id,
-                                {office_id} as office_id,
+                                {announcement_no} as announcement_no,
+                                {requirement_no} as requirement_no,
+                                {company_no} as company_no,
+                                {office_no} as office_no,
                                 '{requirement_type}' as requirement_type,
                                 '{val["reason"]}' as requirement_description,
                                 '' as suggestions_for_improvement,
@@ -1250,17 +1250,17 @@ class GCPVM:
                                 '' as updatedDate
                             ) AS source
                             ON 
-                            target.preid = source.preid and
-                            target.seqid = source.seqid and
-                            target.company_id = source.company_id and
-                            target.office_id = source.office_id and
+                            target.announcement_no = source.announcement_no and
+                            target.requirement_no = source.requirement_no and
+                            target.company_no = source.company_no and
+                            target.office_no = source.office_no and
                             target.requirement_type = source.requirement_type
                             when not matched then
                             insert (
-                                preID,
-                                seqid,
-                                company_id,
-                                office_id,
+                                announcement_no,
+                                requirement_no,
+                                company_no,
+                                office_no,
                                 requirement_type,
                                 requirement_description,
                                 suggestions_for_improvement,
@@ -1269,10 +1269,10 @@ class GCPVM:
                                 updatedDate
                             )
                             values (
-                                source.preID,
-                                source.seqid,
-                                source.company_id,
-                                source.office_id,
+                                source.announcement_no,
+                                source.requirement_no,
+                                source.company_no,
+                                source.office_no,
                                 source.requirement_type,
                                 source.requirement_description,
                                 source.suggestions_for_improvement,
@@ -1286,11 +1286,11 @@ class GCPVM:
 
                 tmp_result_judgement_df = pd.DataFrame(tmp_result_judgement_list)
 
-                def summarize_result(preID, company_id, office_id, tmp_result_df):
+                def summarize_result(announcement_no, company_no, office_no, tmp_result_df):
                     checked_requirement = {
-                        "preID":preID,
-                        "company_id":company_id,
-                        "office_id":office_id,
+                        "announcement_no":announcement_no,
+                        "company_no":company_no,
+                        "office_no":office_no,
                         "requirement_ineligibility":True,
                         "requirement_grade_item":True,
                         "requirement_location":True,
@@ -1331,7 +1331,7 @@ class GCPVM:
 
                     return checked_requirement
 
-                result_judgement_list.append(summarize_result(preID=preID, company_id=company_id, office_id=office_id, tmp_result_df=tmp_result_judgement_df))
+                result_judgement_list.append(summarize_result(announcement_no=announcement_no, company_no=company_no, office_no=office_no, tmp_result_df=tmp_result_judgement_df))
 
 
             result_judgement = pd.DataFrame(result_judgement_list)
@@ -1350,9 +1350,9 @@ class GCPVM:
                 sql = fr"""MERGE `{project_id}.{dataset_name}.{tablename_company_bid_judgement}` AS target
                 USING `{project_id}.{dataset_name}.{tmp_result_judgement_table}` AS source
                 ON 
-                target.preid = source.preid and
-                target.company_id = source.company_id and
-                target.office_id = source.office_id
+                target.announcement_no = source.announcement_no and
+                target.company_no = source.company_no and
+                target.office_no = source.office_no
                 when matched then
                 UPDATE SET
                     target.requirement_ineligibility = source.requirement_ineligibility,
@@ -1383,17 +1383,17 @@ class GCPVM:
                 sql = fr"""MERGE `{project_id}.{dataset_name}.{tablename_insufficient_requirement_master}` AS target
                 USING `{project_id}.{dataset_name}.{tmp_result_insufficient_requirements_master_table}` AS source
                 ON 
-                target.preid = source.preid and
-                target.seqid = source.seqid and
-                target.company_id = source.company_id and
-                target.office_id = source.office_id and
+                target.announcement_no = source.announcement_no and
+                target.requirement_no = source.requirement_no and
+                target.company_no = source.company_no and
+                target.office_no = source.office_no and
                 target.requirement_type = source.requirement_type
                 WHEN NOT MATCHED THEN
                 INSERT (
-                    preid,
-                    seqid,
-                    company_id,
-                    office_id,
+                    announcement_no,
+                    requirement_no,
+                    company_no,
+                    office_no,
                     requirement_type,
                     requirement_description,
                     suggestions_for_improvement,
@@ -1402,10 +1402,10 @@ class GCPVM:
                     updatedDate
                 )
                 VALUES (
-                    source.preid,
-                    source.seqid,
-                    source.company_id,
-                    source.office_id,
+                    source.announcement_no,
+                    source.requirement_no,
+                    source.company_no,
+                    source.office_no,
                     source.requirement_type,
                     source.requirement_description,
                     source.suggestions_for_improvement,
@@ -1429,27 +1429,27 @@ class GCPVM:
                 sql = fr"""MERGE `{project_id}.{dataset_name}.{tablename_sufficient_requirement_master}` AS target
                 USING `{project_id}.{dataset_name}.{tmp_result_sufficient_requirements_master_table}` AS source
                 ON 
-                target.preid = source.preid and
-                target.seqid = source.seqid and
-                target.company_id = source.company_id and
-                target.office_id = source.office_id and
+                target.announcement_no = source.announcement_no and
+                target.requirement_no = source.requirement_no and
+                target.company_no = source.company_no and
+                target.office_no = source.office_no and
                 target.requirement_type = source.requirement_type
                 when not matched then
                 insert (
-                    preID,
-                    seqid,
-                    company_id,
-                    office_id,
+                    announcement_no,
+                    requirement_no,
+                    company_no,
+                    office_no,
                     requirement_type,
                     requirement_description,
                     createdDate,
                     updatedDate
                 )
                 values (
-                    source.preID,
-                    source.seqid,
-                    source.company_id,
-                    source.office_id,
+                    source.announcement_no,
+                    source.requirement_no,
+                    source.company_no,
+                    source.office_no,
                     source.requirement_type,
                     source.requirement_description,
                     source.createdDate,
@@ -1552,12 +1552,12 @@ class SQLITE3:
             # テーブルが無いなら作成
             sql = fr"""
             create table {tablename_announcements} (
-            preID integer PRIMARY KEY,
+            announcement_no integer PRIMARY KEY,
             workName string,
-            userAnnNo int64,
-            topAgencyNo int64,
+            userAnnNo integer,
+            topAgencyNo integer,
             topAgencyName string,
-            subAgencyNo int64,
+            subAgencyNo integer,
             subAgencyName string,
             workPlace string,
             pdfUrl string,
@@ -1611,14 +1611,14 @@ class SQLITE3:
             # テーブルが無いなら作成
             sql = fr"""
             create table {tablename_requirements} (
-            preID integer,
-            seqid integer,
+            requirement_no integer,
+            announcement_no integer,
             requirement_type string,
             requirement_text string,
             done_judgement bool,
             createdDate string,
             updatedDate string,
-            UNIQUE(preid, seqid, requirement_type)
+            UNIQUE(announcement_no, requirement_no, requirement_type)
             )
             """
             cur.execute(sql)
@@ -1638,7 +1638,7 @@ class SQLITE3:
         # 疑問:row_number付与の order by 列は pdf_urlがよいのか？
         sql = fr"""
         INSERT INTO {tablename_announcements} (
-            preID,
+            announcement_no,
             workName,
             userAnnNo,
             topAgencyNo,
@@ -1667,7 +1667,7 @@ class SQLITE3:
             updatedDate
             )
         WITH maxval AS (
-            SELECT IFNULL(MAX(preID), 0) AS maxid FROM {tablename_announcements}
+            SELECT IFNULL(MAX(announcement_no), 0) AS maxno FROM {tablename_announcements}
         ), 
         to_insert AS (
         SELECT
@@ -1704,7 +1704,7 @@ class SQLITE3:
         WHERE tbl.pdfurl IS NULL
         )
         SELECT 
-        rn + maxid,
+        rn + maxno,
         workName,
         userAnnNo,
         topAgencyNo,
@@ -1773,12 +1773,12 @@ class SQLITE3:
         all_announcements = []
         all_requirement_texts = []
         for index, row in df1.iterrows():
-            preID = row["preID"]
-            print(f"Processing OCR for preID={preID}...")
+            announcement_no = row["announcement_no"]
+            print(f"Processing OCR for announcement_no={announcement_no}...")
 
             pdfurl = row["pdfUrl"]
             if False:
-                preID = int(df1["preID"][11])
+                announcement_no = int(df1["announcement_no"][11])
                 pdfurl = df1["pdfUrl"][11]
 
             if not os.path.exists("data/ocr"):
@@ -1789,19 +1789,20 @@ class SQLITE3:
 
             time.sleep(1)
             doc_data = ocr_utils.getPDFDataFromUrl(pdfurl)
-            if not os.path.exists(fr"data/pdf/{preID}.pdf"):
+            if not os.path.exists(fr"data/pdf/{announcement_no}.pdf"):
                 # 基本的には元の pdf と同じものを保存できる。
-                print(fr"   Save data/pdf/{preID}.pdf.")
-                with open(fr"data/pdf/{preID}.pdf", "wb") as f:
+                print(fr"   Save data/pdf/{announcement_no}.pdf.")
+                with open(fr"data/pdf/{announcement_no}.pdf", "wb") as f:
                     f.write(doc_data)
 
             try:
                 # ocr for announcements
-                ocr_announcements_file = fr"ocr_announcements_{preID}.json"
+                ocr_announcements_file = fr"ocr_announcements_{announcement_no}.json"
                 ocr_announcements_filepath = fr"data/ocr/{ocr_announcements_file}"
                 if not os.path.exists(ocr_announcements_filepath):
                     print("   Trying ocr(announcements).")
-                    json_value = ocr_utils.getJsonFromDocData(doc_data=doc_data, preID=preID)
+                    json_value = ocr_utils.getJsonFromDocData(doc_data=doc_data)
+                    json_value["announcement_no"] = announcement_no
                     with open(ocr_announcements_filepath, "w", encoding="utf-8") as f:
                         json.dump(json_value, f, ensure_ascii=False, indent=2)
                 else:
@@ -1811,11 +1812,12 @@ class SQLITE3:
                 new_json = ocr_utils.convertJson(json_value=json_value)
 
                 # ocr for requirements
-                ocr_requirements_file = fr"ocr_requirements_{preID}.json"
+                ocr_requirements_file = fr"ocr_requirements_{announcement_no}.json"
                 ocr_requirements_filepath = fr"data/ocr/{ocr_requirements_file}"
                 if not os.path.exists(ocr_requirements_filepath):
                     print("   Trying ocr(requirements).")
-                    requirement_texts = ocr_utils.getRequirementText(doc_data=doc_data, preID=preID)
+                    requirement_texts = ocr_utils.getRequirementText(doc_data=doc_data)
+                    requirement_texts["announcement_no"] = announcement_no
                     with open(ocr_requirements_filepath, "w", encoding="utf-8") as f:
                         json.dump(requirement_texts, f, ensure_ascii=False, indent=2)
                 else:
@@ -1853,7 +1855,7 @@ class SQLITE3:
                 print(val_pre)
 
             sql = fr"""insert into {tablename_announcements} (
-                preID,
+                announcement_no,
                 workName,
                 userAnnNo,
                 topAgencyNo,
@@ -1882,7 +1884,7 @@ class SQLITE3:
                 updatedDate
             )
             select 
-            preID,
+            announcement_no,
             NULL,
             NULL,
             NULL,
@@ -1910,8 +1912,8 @@ class SQLITE3:
             NULL,
             NULL
             from {tmp_tablename_announcements} source where true
-            ON CONFLICT(preid) DO UPDATE SET
-                preid = {tablename_announcements}.preid,
+            ON CONFLICT(announcement_no) DO UPDATE SET
+                announcement_no = {tablename_announcements}.announcement_no,
                 workname = {tablename_announcements}.workname,
                 userAnnNo = {tablename_announcements}.userannno,
                 topAgencyNo = {tablename_announcements}.topagencyno,
@@ -1956,8 +1958,8 @@ class SQLITE3:
 
 
             sql = fr"""insert into {tablename_requirements} (
-                preID,
-                seqid,
+                requirement_no,
+                announcement_no,
                 requirement_type,
                 requirement_text,
                 done_judgement,
@@ -1965,17 +1967,17 @@ class SQLITE3:
                 updatedDate
             )
             select 
-            preID,
-            seqid,
+            requirement_no,
+            announcement_no,
             requirement_type,
             requirement_text,
             0,
             createdDate,
             updatedDate
             from {tmp_tablename_requirements} source where true
-            ON CONFLICT(preid, seqid, requirement_type) DO UPDATE SET
-                preid = excluded.preid,
-                seqid = excluded.seqid,
+            ON CONFLICT(announcement_no, requirement_no, requirement_type) DO UPDATE SET
+                announcement_no = excluded.announcement_no,
+                requirement_no = excluded.requirement_no,
                 requirement_type = excluded.requirement_type,
                 requirement_text = excluded.requirement_text,
                 createdDate = excluded.createddate,
@@ -2030,9 +2032,9 @@ class SQLITE3:
                 if target_tablename == tablename_company_bid_judgement:
                     sql = fr"""
                     create table {target_tablename} (
-                        preID int64,
-                        company_id int64,
-                        office_id int64,
+                        announcement_no integer,
+                        company_no integer,
+                        office_no integer,
                         requirement_ineligibility bool,
                         requirement_grade_item bool,
                         requirement_location bool,
@@ -2045,37 +2047,37 @@ class SQLITE3:
                         remarks string,
                         createdDate string,
                         updatedDate string,
-                        unique(preID, company_id, office_id)
+                        unique(announcement_no, company_no, office_no)
                     )
                     """
                 elif target_tablename == tablename_sufficient_requirement_master:
                     sql = fr"""
                     create table {target_tablename} (
-                        preID int64,
-                        seqid int64,
-                        company_id int64,
-                        office_id int64,
+                        announcement_no integer,
+                        requirement_no integer,
+                        company_no integer,
+                        office_no integer,
                         requirement_type string,
                         requirement_description string,
                         createdDate string,
                         updatedDate string,
-                        unique(preID, seqid, company_id, office_id, requirement_type)
+                        unique(announcement_no, requirement_no, company_no, office_no, requirement_type)
                     )
                     """
                 elif target_tablename == tablename_insufficient_requirement_master:
                     sql = fr"""
                     create table {target_tablename} (
-                        preID int64,
-                        seqid int64,
-                        company_id int64,
-                        office_id int64,
+                        announcement_no integer,
+                        requirement_no integer,
+                        company_no integer,
+                        office_no integer,
                         requirement_type string,
                         requirement_description string,
                         suggestions_for_improvement string,
                         final_comment string,
                         createdDate string,
                         updatedDate string,
-                        unique(preID, seqid, company_id, office_id, requirement_type)
+                        unique(announcement_no, requirement_no, company_no, office_no, requirement_type)
                     )
                     """                
                 else:
@@ -2098,9 +2100,9 @@ class SQLITE3:
 
 
         sql = fr"""insert into {tablename_company_bid_judgement} (
-            preID,
-            company_id,
-            office_id,
+            announcement_no,
+            company_no,
+            office_no,
             requirement_ineligibility,
             requirement_grade_item,
             requirement_location,
@@ -2115,9 +2117,9 @@ class SQLITE3:
             updatedDate
         )
         select 
-        a.preID,
-        b.company_id,
-        b.office_id,
+        a.announcement_no,
+        b.company_no,
+        b.office_no,
         NULL,
         NULL,
         NULL,
@@ -2134,7 +2136,7 @@ class SQLITE3:
         cross join 
         {tablename_office_master} as b
         where true
-        ON CONFLICT(preID, company_id, office_id) DO NOTHING
+        ON CONFLICT(announcement_no, company_no, office_no) DO NOTHING
         """
         cur.execute(sql)
 
@@ -2156,22 +2158,22 @@ class SQLITE3:
             result_sufficient_requirements_list = []
             result_insufficient_requirements_list = []
             for index, row1 in df.iterrows():
-                preID = row1["preID"]
-                company_id = row1["company_id"]
-                office_id = row1["office_id"]
+                announcement_no = row1["announcement_no"]
+                company_no = row1["company_no"]
+                office_no = row1["office_no"]
                 tmp_result_judgement_list = []
                 if False:
-                    preID = int(df["preID"][0])
-                    company_id = int(df["company_id"][0])
-                    office_id = int(df["office_id"][0])
+                    announcement_no = int(df["announcement_no"][0])
+                    company_no = int(df["company_no"][0])
+                    office_no = int(df["office_no"][0])
 
                 sql = fr"""
-                SELECT * FROM {tablename_requirements} where preID = {preID}
+                SELECT * FROM {tablename_requirements} where announcement_no = {announcement_no}
                 """
 
                 req_df = pd.read_sql_query(sql, conn)
                 if req_df.shape[0] == 0:
-                    print(fr"preID={preID}: No requirement found. Skip anyway.")
+                    print(fr"announcement_no={announcement_no}: No requirement found. Skip anyway.")
                     continue
 
                 for jndex, row2 in req_df.iterrows():
@@ -2181,34 +2183,34 @@ class SQLITE3:
 
                     requirement_type = row2["requirement_type"]
                     requirement_text = row2["requirement_text"]
-                    seqid = row2["seqid"]
+                    requirement_no = row2["requirement_no"]
 
                     requirementText = requirement_text
-                    companyNo = company_id
-                    officeNo = office_id
+                    companyNo = company_no
+                    officeNo = office_no
                     
                     if requirement_type == "欠格要件":
                         val = checkIneligibilityDynamic(
                             requirementText=requirement_text, 
-                            companyNo=company_id, 
-                            officeNo=office_id,
+                            companyNo=company_no, 
+                            officeNo=office_no,
                             company_data = pd.read_csv("data/master/company_master.txt",sep="\t"), 
                             office_registration_authorization_data=pd.read_csv("data/master/office_registration_authorization_master.txt",sep="\t")
                         )
                     elif requirement_type == "業種・等級要件":
                         val = checkGradeAndItemRequirement(
                             requirementText=requirement_text, 
-                            companyNo=company_id, 
-                            officeNo=office_id,
-                            licenseData = pd.read_csv("data/master/office_registration_authorization_master.txt",sep="\t", converters={"construction_id": lambda x: str(x)}),
+                            companyNo=company_no, 
+                            officeNo=office_no,
+                            licenseData = pd.read_csv("data/master/office_registration_authorization_master.txt",sep="\t", converters={"construction_no": lambda x: str(x)}),
                             agencyData = pd.read_csv("data/master/agency_master.txt",sep="\t"),
                             constructionData = pd.read_csv("data/master/construction_master.txt",sep="\t")
                         )
                     elif requirement_type == "所在地要件":
                         val = checkLocationRequirement(
                             requirementText=requirement_text, 
-                            companyNo=company_id, 
-                            officeNo=office_id,
+                            companyNo=company_no, 
+                            officeNo=office_no,
                             agencyData=pd.read_csv("data/master/agency_master.txt",sep="\t"),
                             officeData = pd.read_csv("data/master/office_master.txt",sep="\t")
                         )
@@ -2216,8 +2218,8 @@ class SQLITE3:
                     elif requirement_type == "実績要件":
                         val = checkExperienceRequirement(
                             requirementText=requirement_text, 
-                            companyNo=company_id, 
-                            officeNo=office_id,
+                            companyNo=company_no, 
+                            officeNo=office_no,
                             office_experience_data=pd.read_csv("data/master/office_work_achivements_master.txt",sep="\t"),
                             agency_data=pd.read_csv("data/master/agency_master.txt",sep="\t"), 
                             construction_data=pd.read_csv("data/master/construction_master.txt",sep="\t")
@@ -2225,8 +2227,8 @@ class SQLITE3:
                     elif requirement_type == "技術者要件":
                         val = checkTechnicianRequirement(
                             requirementText=requirement_text, 
-                            companyNo=company_id, 
-                            officeNo=office_id,
+                            companyNo=company_no, 
+                            officeNo=office_no,
                             employeeData=pd.read_csv("data/master/employee_master.txt", sep="\t"), 
                             qualData=pd.read_csv("data/master/employee_qualification_master.txt", sep="\t"), 
                             qualMasterData=pd.read_csv("data/master/technician_qualification_master.txt", sep="\t"),
@@ -2236,10 +2238,10 @@ class SQLITE3:
                         val = {"is_ok":False, "reason":"その他要件があります。確認してください"}
                     
                     tmp_result_judgement_list.append({
-                        "announcement_id":preID,
-                        "seqid":seqid,
-                        "company_id":company_id,
-                        "office_id":office_id,
+                        "announcement_id":announcement_no,
+                        "requirement_no":requirement_no,
+                        "company_no":company_no,
+                        "office_no":office_no,
                         "requirementType":requirement_type,
                         "is_ok":val["is_ok"],
                         "result":val["reason"]
@@ -2248,10 +2250,10 @@ class SQLITE3:
 
                     if val["is_ok"]:
                         result_sufficient_requirements_list.append({
-                            "preID":preID,
-                            "seqid":seqid,
-                            "company_id":company_id,
-                            "office_id":office_id,
+                            "announcement_no":announcement_no,
+                            "requirement_no":requirement_no,
+                            "company_no":company_no,
+                            "office_no":office_no,
                             "requirement_type":requirement_type,
                             "requirement_description":val["reason"],
                             "createdDate":"",
@@ -2260,29 +2262,29 @@ class SQLITE3:
 
                         if False:
                             sql = fr"""insert into {tablename_sufficient_requirement_master} (
-                                preID,
-                                seqid,
-                                company_id,
-                                office_id,
+                                announcement_no,
+                                requirement_no,
+                                company_no,
+                                office_no,
                                 requirement_type,
                                 requirement_description,
                                 createdDate,
                                 updatedDate
                             ) values (
-                                {preID},
-                                {seqid},
-                                {company_id},
-                                {office_id},
+                                {announcement_no},
+                                {requirement_no},
+                                {company_no},
+                                {office_no},
                                 '{requirement_type}',
                                 '{val["reason"]}',
                                 '',
                                 ''
                             )
-                            ON CONFLICT(preID, seqid, company_id, office_id, requirement_type) DO UPDATE SET
-                                preid = preid,
-                                seqid = seqid,
-                                company_id = company_id,
-                                office_id = office_id,
+                            ON CONFLICT(announcement_no, requirement_no, company_no, office_no, requirement_type) DO UPDATE SET
+                                announcement_no = announcement_no,
+                                requirement_no = requirement_no,
+                                company_no = company_no,
+                                office_no = office_no,
                                 requirement_type = excluded.requirement_type,
                                 requirement_description = excluded.requirement_description,
                                 createdDate = excluded.createdDate,
@@ -2290,10 +2292,10 @@ class SQLITE3:
                             """
                     else:
                         result_insufficient_requirements_list.append({
-                            "preID":preID,
-                            "seqid":seqid,
-                            "company_id":company_id,
-                            "office_id":office_id,
+                            "announcement_no":announcement_no,
+                            "requirement_no":requirement_no,
+                            "company_no":company_no,
+                            "office_no":office_no,
                             "requirement_type":requirement_type,
                             "requirement_description":val["reason"],
                             "suggestions_for_improvement":"",
@@ -2303,10 +2305,10 @@ class SQLITE3:
                         })
                         if False:
                             sql = fr"""insert into {tablename_insufficient_requirement_master} (
-                                preID,
-                                seqid,
-                                company_id,
-                                office_id,
+                                announcement_no,
+                                requirement_no,
+                                company_no,
+                                office_no,
                                 requirement_type,
                                 requirement_description,
                                 suggestions_for_improvement,
@@ -2314,10 +2316,10 @@ class SQLITE3:
                                 createdDate,
                                 updatedDate
                             ) values (
-                                {preID},
-                                {seqid},
-                                {company_id},
-                                {office_id},
+                                {announcement_no},
+                                {requirement_no},
+                                {company_no},
+                                {office_no},
                                 '{requirement_type}',
                                 '{val["reason"]}',
                                 '',
@@ -2325,11 +2327,11 @@ class SQLITE3:
                                 '',
                                 ''
                             )
-                            ON CONFLICT(preID, seqid, company_id, office_id, requirement_type) DO UPDATE SET
-                                preid = preid,
-                                seqid = seqid,
-                                company_id = company_id,
-                                office_id = office_id,
+                            ON CONFLICT(announcement_no, requirement_no, company_no, office_no, requirement_type) DO UPDATE SET
+                                announcement_no = announcement_no,
+                                requirement_no = requirement_no,
+                                company_no = company_no,
+                                office_no = office_no,
                                 requirement_type = excluded.requirement_type,
                                 requirement_description = excluded.requirement_description,
                                 suggestions_for_improvement = excluded.suggestions_for_improvement,
@@ -2343,11 +2345,11 @@ class SQLITE3:
 
                 tmp_result_judgement_df = pd.DataFrame(tmp_result_judgement_list)
 
-                def summarize_result(preID, company_id, office_id, tmp_result_df):
+                def summarize_result(announcement_no, company_no, office_no, tmp_result_df):
                     checked_requirement = {
-                        "preID":preID,
-                        "company_id":company_id,
-                        "office_id":office_id,
+                        "announcement_no":announcement_no,
+                        "company_no":company_no,
+                        "office_no":office_no,
                         "requirement_ineligibility":True,
                         "requirement_grade_item":True,
                         "requirement_location":True,
@@ -2388,7 +2390,7 @@ class SQLITE3:
 
                     return checked_requirement
 
-                result_judgement_list.append(summarize_result(preID=preID, company_id=company_id, office_id=office_id, tmp_result_df=tmp_result_judgement_df))
+                result_judgement_list.append(summarize_result(announcement_no=announcement_no, company_no=company_no, office_no=office_no, tmp_result_df=tmp_result_judgement_df))
 
 
             result_judgement = pd.DataFrame(result_judgement_list)
@@ -2400,9 +2402,9 @@ class SQLITE3:
                 print(fr"Upload {tmp_result_judgement_table}")
                 result_judgement.to_sql(tmp_result_judgement_table, conn, if_exists="replace", index=False)
                 sql = fr"""insert into {tablename_company_bid_judgement} (
-                    preID,
-                    company_id,
-                    office_id,
+                    announcement_no,
+                    company_no,
+                    office_no,
                     requirement_ineligibility,
                     requirement_grade_item,
                     requirement_location,
@@ -2417,9 +2419,9 @@ class SQLITE3:
                     updatedDate
                 ) 
                 select 
-                    preID,
-                    company_id,
-                    office_id,
+                    announcement_no,
+                    company_no,
+                    office_no,
                     requirement_ineligibility,
                     requirement_grade_item,
                     requirement_location,
@@ -2433,10 +2435,10 @@ class SQLITE3:
                     createdDate,
                     updatedDate
                 from {tmp_result_judgement_table} where true
-                ON CONFLICT(preID, company_id, office_id) DO UPDATE SET
-                    preid = {tablename_company_bid_judgement}.preid,
-                    company_id = {tablename_company_bid_judgement}.company_id,
-                    office_id = {tablename_company_bid_judgement}.office_id,
+                ON CONFLICT(announcement_no, company_no, office_no) DO UPDATE SET
+                    announcement_no = {tablename_company_bid_judgement}.announcement_no,
+                    company_no = {tablename_company_bid_judgement}.company_no,
+                    office_no = {tablename_company_bid_judgement}.office_no,
                     requirement_ineligibility = excluded.requirement_ineligibility,
                     requirement_grade_item = excluded.requirement_grade_item,
                     requirement_location = excluded.requirement_location,
@@ -2458,10 +2460,10 @@ class SQLITE3:
                 print(fr"Upload {tmp_result_insufficient_requirements_master_table}")
                 result_insufficient_requirements.to_sql(tmp_result_insufficient_requirements_master_table, conn, if_exists="replace", index=False)
                 sql = fr"""insert into {tablename_insufficient_requirement_master} (
-                    preID,
-                    seqid,
-                    company_id,
-                    office_id,
+                    announcement_no,
+                    requirement_no,
+                    company_no,
+                    office_no,
                     requirement_type,
                     requirement_description,
                     suggestions_for_improvement,
@@ -2470,10 +2472,10 @@ class SQLITE3:
                     updatedDate
                 )
                 select
-                    preID,
-                    seqid,
-                    company_id,
-                    office_id,
+                    announcement_no,
+                    requirement_no,
+                    company_no,
+                    office_no,
                     requirement_type,
                     requirement_description,
                     suggestions_for_improvement,
@@ -2481,11 +2483,11 @@ class SQLITE3:
                     createdDate,
                     updatedDate
                 from {tmp_result_insufficient_requirements_master_table} where true
-                ON CONFLICT(preID, seqid, company_id, office_id, requirement_type) DO UPDATE SET
-                    preid = {tablename_insufficient_requirement_master}.preid,
-                    seqid = {tablename_insufficient_requirement_master}.seqid,
-                    company_id = {tablename_insufficient_requirement_master}.company_id,
-                    office_id = {tablename_insufficient_requirement_master}.office_id,
+                ON CONFLICT(announcement_no, requirement_no, company_no, office_no, requirement_type) DO UPDATE SET
+                    announcement_no = {tablename_insufficient_requirement_master}.announcement_no,
+                    requirement_no = {tablename_insufficient_requirement_master}.requirement_no,
+                    company_no = {tablename_insufficient_requirement_master}.company_no,
+                    office_no = {tablename_insufficient_requirement_master}.office_no,
                     requirement_type = excluded.requirement_type,
                     requirement_description = excluded.requirement_description,
                     suggestions_for_improvement = excluded.suggestions_for_improvement,
@@ -2501,30 +2503,30 @@ class SQLITE3:
                 print(fr"Upload {tmp_result_sufficient_requirements_master_table}")
                 result_sufficient_requirements.to_sql(tmp_result_sufficient_requirements_master_table, conn, if_exists="replace", index=False)
                 sql = fr"""insert into {tablename_sufficient_requirement_master} (
-                    preID,
-                    seqid,
-                    company_id,
-                    office_id,
+                    announcement_no,
+                    requirement_no,
+                    company_no,
+                    office_no,
                     requirement_type,
                     requirement_description,
                     createdDate,
                     updatedDate
                 )
                 select
-                    preID,
-                    seqid,
-                    company_id,
-                    office_id,
+                    announcement_no,
+                    requirement_no,
+                    company_no,
+                    office_no,
                     requirement_type,
                     requirement_description,
                     createdDate,
                     updatedDate                    
                 from {tmp_result_sufficient_requirements_master_table} where true
-                ON CONFLICT(preID, seqid, company_id, office_id, requirement_type) DO UPDATE SET
-                    preid = {tablename_sufficient_requirement_master}.preid,
-                    seqid = {tablename_sufficient_requirement_master}.seqid,
-                    company_id = {tablename_sufficient_requirement_master}.company_id,
-                    office_id = {tablename_sufficient_requirement_master}.office_id,
+                ON CONFLICT(announcement_no, requirement_no, company_no, office_no, requirement_type) DO UPDATE SET
+                    announcement_no = {tablename_sufficient_requirement_master}.announcement_no,
+                    requirement_no = {tablename_sufficient_requirement_master}.requirement_no,
+                    company_no = {tablename_sufficient_requirement_master}.company_no,
+                    office_no = {tablename_sufficient_requirement_master}.office_no,
                     requirement_type = excluded.requirement_type,
                     requirement_description = excluded.requirement_description,
                     createdDate = excluded.createdDate,
