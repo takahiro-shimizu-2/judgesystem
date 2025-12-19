@@ -435,7 +435,7 @@ class GCPVM:
         return df
 
 
-    def step0_table_creation(self, bid_announcements_pre_file=None):
+    def step0_create_bid_announcements_pre(self, bid_announcements_pre_file=None):
         if bid_announcements_pre_file is None:
             bid_announcements_pre_file = self.bid_announcements_pre_file
 
@@ -497,7 +497,7 @@ class GCPVM:
         sql = fr"""
         SELECT * FROM `{project_id}.{dataset_name}.INFORMATION_SCHEMA.TABLES`
         """
-        val = client.query(sql).result().to_dataframe()
+        #val = client.query(sql).result().to_dataframe()
 
 
 
@@ -1483,7 +1483,7 @@ class SQLITE3:
         df = pd.read_sql_query(sql, conn)
         return df
 
-    def step0_table_creation(self, bid_announcements_pre_file=None):
+    def step0_create_bid_announcements_pre(self, bid_announcements_pre_file=None):
         if bid_announcements_pre_file is None:
             bid_announcements_pre_file = self.bid_announcements_pre_file
 
@@ -1516,7 +1516,6 @@ class SQLITE3:
         sql = fr"""
         SELECT * FROM {tablename}
         """
-        #val = client.query(sql).result().to_dataframe()
         #val = pd.read_sql_query(sql, conn)
 
 
@@ -2619,7 +2618,7 @@ if __name__ == "__main__":
         exit(1)
 
 
-    obj.step0_table_creation(bid_announcements_pre_file=bid_announcements_pre_file)
+    obj.step0_create_bid_announcements_pre(bid_announcements_pre_file=bid_announcements_pre_file)
     obj.step1_transfer(remove_table=step1_transfer_remove_table)
     obj.step2_ocr(ocr_utils = OCRutils(google_ai_studio_api_key_filepath=google_ai_studio_api_key_filepath))
     obj.step3(remove_table=step3_remove_table)
