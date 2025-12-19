@@ -39,9 +39,9 @@ def expandRegionToPrefectures(regionName=None, agencyData=pd.read_csv("data/mast
 
     return regionPrefectureMap[regionName]
 
-def getOfficeLocation(companyNo, officeNo, officeData = pd.read_csv("data/master/office_master.txt",sep="\t")):
+def getOfficeLocation(officeNo, officeData = pd.read_csv("data/master/office_master.txt",sep="\t")):
     
-    target_data = officeData[(officeData["company_no"] == companyNo) & (officeData["office_no"] == officeNo)]
+    target_data = officeData[officeData["office_no"] == officeNo]
     if target_data.shape[0] >= 1:
         officelocation = target_data["office_address"].tolist()[0]
         officetype = target_data["office_type"].tolist()[0]
@@ -238,7 +238,6 @@ def extractOfficeTypes(requirementText):
 
 def checkLocationRequirement(
     requirementText, 
-    companyNo, 
     officeNo, 
     agencyData=pd.read_csv("data/master/agency_master.txt",sep="\t"),
     officeData = pd.read_csv("data/master/office_master.txt",sep="\t")
@@ -253,7 +252,6 @@ def checkLocationRequirement(
     prefectures = list(set(prefectures + prefectures_from_regions))
 
     officelocation, officetype, officeprefecture = getOfficeLocation(
-        companyNo=companyNo, 
         officeNo=officeNo,
         officeData = officeData
     )

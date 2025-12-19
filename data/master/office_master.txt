@@ -1,4 +1,4 @@
-"company_no"	"office_no"	"office_name"	"office_type"	"office_address"	"office_telephone"	"Located_Prefecture"	"created_date"	"updated_date"
+"office_no"	"company_no"	"office_name"	"office_type"	"office_address"	"office_telephone"	"Located_Prefecture"	"created_date"	"updated_date"
 1	1	"株式会社円通"	"本社"	"愛知県瀬戸市高根町3丁目92"		"愛知県"	"2025/04/22"	
-2	1	"株式会社国広建設"	"本社"	"福岡県遠賀郡岡垣町大字糠塚525番"		"福岡県"	"2025/06/10"	
-2	2	"株式会社国広建設"	"支社"	"大分県"		"大分県"	"2025/06/10"	
+2	2	"株式会社国広建設"	"本社"	"福岡県遠賀郡岡垣町大字糠塚525番"		"福岡県"	"2025/06/10"	
+3	2	"株式会社国広建設"	"支社"	"大分県"		"大分県"	"2025/06/10"	

@@ -10,15 +10,11 @@ import pandas as pd
 # ※requirementType === "欠格要件"の場合。
 #######################################
 
-def isOfficeSuspended(companyNo, officeNo, office_registration_authorization_data=pd.read_csv("data/master/office_registration_authorization_master.txt",sep="\t")):
+def isOfficeSuspended(officeNo, office_registration_authorization_data=pd.read_csv("data/master/office_registration_authorization_master.txt",sep="\t")):
     # 拠点登録許可マスター
     # office_registration_authorization_data
     
-    # TODO: 拠点連場(officeNo) だけではだめで、company_no も観ないとダメな気がする。
-    target_data = office_registration_authorization_data[
-        (office_registration_authorization_data["office_no"] == officeNo) &
-        (office_registration_authorization_data["company_no"] == companyNo)
-    ]
+    target_data = office_registration_authorization_data[office_registration_authorization_data["office_no"] == officeNo]
     if target_data.shape[0] >= 1:
         keyname = "is_suspended" # 指名停止フラグ
         is_suspended_flg = target_data[keyname].tolist()[0]
@@ -162,7 +158,6 @@ def checkIneligibilityDynamic(requirementText, companyNo, officeNo, company_data
     if re.search(r"指名停止|営業停止|取引停止", requirementText):
         # 拠点マスター or 拠点登録許可マスターで is_suspended_flg をチェック
         if isOfficeSuspended(
-            companyNo=companyNo, 
             officeNo=officeNo,
             office_registration_authorization_data=office_registration_authorization_data
             ):

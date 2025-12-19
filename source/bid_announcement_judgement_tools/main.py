@@ -1120,7 +1120,6 @@ class GCPVM:
                     elif requirement_type == "業種・等級要件":
                         val = checkGradeAndItemRequirement(
                             requirementText=requirement_text, 
-                            companyNo=company_no, 
                             officeNo=office_no,
                             licenseData = pd.read_csv("data/master/office_registration_authorization_master.txt",sep="\t", converters={"construction_id": lambda x: str(x)}),
                             agencyData = pd.read_csv("data/master/agency_master.txt",sep="\t"),
@@ -1129,7 +1128,6 @@ class GCPVM:
                     elif requirement_type == "所在地要件":
                         val = checkLocationRequirement(
                             requirementText=requirement_text, 
-                            companyNo=company_no, 
                             officeNo=office_no,
                             agencyData=pd.read_csv("data/master/agency_master.txt",sep="\t"),
                             officeData = pd.read_csv("data/master/office_master.txt",sep="\t")
@@ -1138,7 +1136,6 @@ class GCPVM:
                     elif requirement_type == "実績要件":
                         val = checkExperienceRequirement(
                             requirementText=requirement_text, 
-                            companyNo=company_no, 
                             officeNo=office_no,
                             office_experience_data=pd.read_csv("data/master/office_work_achivements_master.txt",sep="\t"),
                             agency_data=pd.read_csv("data/master/agency_master.txt",sep="\t"), 
@@ -2199,7 +2196,6 @@ class SQLITE3:
                     elif requirement_type == "業種・等級要件":
                         val = checkGradeAndItemRequirement(
                             requirementText=requirement_text, 
-                            companyNo=company_no, 
                             officeNo=office_no,
                             licenseData = pd.read_csv("data/master/office_registration_authorization_master.txt",sep="\t", converters={"construction_no": lambda x: str(x)}),
                             agencyData = pd.read_csv("data/master/agency_master.txt",sep="\t"),
@@ -2208,7 +2204,6 @@ class SQLITE3:
                     elif requirement_type == "所在地要件":
                         val = checkLocationRequirement(
                             requirementText=requirement_text, 
-                            companyNo=company_no, 
                             officeNo=office_no,
                             agencyData=pd.read_csv("data/master/agency_master.txt",sep="\t"),
                             officeData = pd.read_csv("data/master/office_master.txt",sep="\t")
@@ -2217,7 +2212,6 @@ class SQLITE3:
                     elif requirement_type == "実績要件":
                         val = checkExperienceRequirement(
                             requirementText=requirement_text, 
-                            companyNo=company_no, 
                             officeNo=office_no,
                             office_experience_data=pd.read_csv("data/master/office_work_achivements_master.txt",sep="\t"),
                             agency_data=pd.read_csv("data/master/agency_master.txt",sep="\t"), 

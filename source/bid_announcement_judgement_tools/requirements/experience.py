@@ -63,8 +63,6 @@ def getAgencyInfo(agencyNo, agency_data = pd.read_csv("data/master/agency_master
 
 def getOfficeExperiences(officeNo, office_experience_data = pd.read_csv("data/master/office_work_achivements_master.txt",sep="\t")):
     # 拠点工事実績マスター  office_experience_data
-    # officeNo だけじゃなくて company_no も必要？
-    # ※masterには company_no 列は無い。
         
 
     office_experience_data = office_experience_data[office_experience_data["office_no"] == officeNo]
@@ -533,7 +531,7 @@ def generateFailureReason(conditions):
     return "要求される実績条件を満たす工事実績が確認できません"
 
 
-def checkExperienceRequirement(requirementText, companyNo, officeNo, office_experience_data=pd.read_csv("data/master/office_work_achivements_master.txt",sep="\t"), agency_data=pd.read_csv("data/master/agency_master.txt",sep="\t"), construction_data=pd.read_csv("data/master/construction_master.txt",sep="\t")):
+def checkExperienceRequirement(requirementText, officeNo, office_experience_data=pd.read_csv("data/master/office_work_achivements_master.txt",sep="\t"), agency_data=pd.read_csv("data/master/agency_master.txt",sep="\t"), construction_data=pd.read_csv("data/master/construction_master.txt",sep="\t")):
     # 1. 要件テキストから条件を抽出
     conditions = extractExperienceConditions(text=requirementText)
     # 2. 拠点の実績データを取得

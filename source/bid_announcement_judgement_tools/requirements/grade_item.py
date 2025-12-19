@@ -347,7 +347,6 @@ def checkDefault(requiredItems, officeLicenses, constructionMap, agencyMap, requ
 
 def checkGradeAndItemRequirement(
         requirementText, 
-        companyNo, 
         officeNo,
         licenseData = pd.read_csv("data/master/office_registration_authorization_master.txt",sep="\t", converters={"construction_no": lambda x: str(x)}),
         agencyData = pd.read_csv("data/master/agency_master.txt",sep="\t"),
@@ -506,17 +505,15 @@ def checkGradeAndItemRequirement(
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="")
     parser.add_argument("--requirementText",default="dummy")
-    parser.add_argument("--companyNo",type=int,default=1)
     parser.add_argument("--officeNo",type=int,default=1)
     
     args = parser.parse_args()
     requirementText = args.requirementText
-    companyNo = args.companyNo
     officeNo = args.officeNo
 
     # requirementText = "令和07・08・09年度防衛省競争参加資格(全省庁統一資格)の「役務の提供等」において、開札時までに「C」又は「D」の等級に格付けされ北海道地域の競争参加を希望する者であること"
     # requirementText = "全省庁統一資格の「物品の販売」に係る等級がA、B、C、D等級であること"
 
-    print(checkGradeAndItemRequirement(requirementText, companyNo, officeNo))
+    print(checkGradeAndItemRequirement(requirementText, officeNo))
 
 
