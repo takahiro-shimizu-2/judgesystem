@@ -55,10 +55,10 @@ class Master:
             "construction_master":"data/master/construction_master.txt",
             "employee_master":"data/master/employee_master.txt",
             "employee_qualification_master":"data/master/employee_qualification_master.txt",
+            "employee_experience_master":"data/master/employee_experience_master.txt",
             "office_master":"data/master/office_master.txt",
             "office_registration_authorization_master":"data/master/office_registration_authorization_master.txt",
             "office_work_achivements_master":"data/master/office_work_achivements_master.txt",
-            "technician_experience_master":"data/master/technician_experience_master.txt",
             "technician_qualification_master":"data/master/technician_qualification_master.txt"
         }
 
@@ -91,9 +91,12 @@ class Master:
     def getEmployeeMaster(self):
         return pd.read_csv(self.employee_master, sep="\t")
     
+    def getEmployeeExperienceMaster(self):
+        return pd.read_csv(self.employee_experience_master, sep="\t")
+    
     def getEmployeeQualificationMaster(self):
         return pd.read_csv(self.employee_qualification_master, sep="\t")
-    
+        
     def getOfficeMaster(self):
         return pd.read_csv(self.office_master, sep="\t")
     
@@ -102,9 +105,6 @@ class Master:
 
     def getOfficeWorkAchivementsMaster(self):
         return pd.read_csv(self.office_work_achivements_master, sep="\t")
-
-    def getTechnicianExperienceMaster(self):
-        return pd.read_csv(self.technician_experience_master, sep="\t")
     
     def getTechnicianQualificationMaster(self):
         return pd.read_csv(self.technician_qualification_master, sep="\t")
@@ -1179,7 +1179,7 @@ class GCPVM:
                             employeeData=pd.read_csv("data/master/employee_master.txt", sep="\t"), 
                             qualData=pd.read_csv("data/master/employee_qualification_master.txt", sep="\t"), 
                             qualMasterData=pd.read_csv("data/master/technician_qualification_master.txt", sep="\t"),
-                            expData = pd.read_csv("data/master/technician_experience_master.txt", sep="\t")
+                            expData = pd.read_csv("data/master/employee_experience_master.txt", sep="\t")
                         )
                     else:
                         val = {"is_ok":False, "reason":"その他要件があります。確認してください"}
@@ -2253,7 +2253,7 @@ class SQLITE3:
                             employeeData=pd.read_csv("data/master/employee_master.txt", sep="\t"), 
                             qualData=pd.read_csv("data/master/employee_qualification_master.txt", sep="\t"), 
                             qualMasterData=pd.read_csv("data/master/technician_qualification_master.txt", sep="\t"),
-                            expData = pd.read_csv("data/master/technician_experience_master.txt", sep="\t")
+                            expData = pd.read_csv("data/master/employee_experience_master.txt", sep="\t")
                         )
                     else:
                         val = {"is_ok":False, "reason":"その他要件があります。確認してください"}

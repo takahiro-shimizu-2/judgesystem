@@ -283,7 +283,7 @@ def getEmployeeQualifications(
 
 
 # 指定された企業・拠点に所属する従業員の実務経験情報を取得
-def getEmployeeExperiences(companyNo, officeNo, employeeData = pd.read_csv("data/master/employee_master.txt", sep="\t"), expData = pd.read_csv("data/master/technician_experience_master.txt", sep="\t")):
+def getEmployeeExperiences(companyNo, officeNo, employeeData = pd.read_csv("data/master/employee_master.txt", sep="\t"), expData = pd.read_csv("data/master/employee_experience_master.txt", sep="\t")):
     # 1. 従業員マスターから対象拠点の従業員を取得
     # employeeData = pd.read_csv("data/master/employee_master.txt", sep="\t")
     employees = []
@@ -301,7 +301,7 @@ def getEmployeeExperiences(companyNo, officeNo, employeeData = pd.read_csv("data
 
     # 2. 従業員工事経験マスターから経験情報を取得
     # expSheet = getSheetByName("従業員工事経験マスター")
-    # expData = pd.read_csv("data/master/technician_experience_master.txt", sep="\t")
+    # expData = pd.read_csv("data/master/employee_experience_master.txt", sep="\t")
     experiences = []
 
     # 従業員工事経験マスターの構造:
@@ -695,7 +695,7 @@ def checkTechnicianRequirement(
         employeeData=pd.read_csv("data/master/employee_master.txt", sep="\t"), 
         qualData=pd.read_csv("data/master/employee_qualification_master.txt", sep="\t"), 
         qualMasterData=pd.read_csv("data/master/technician_qualification_master.txt", sep="\t"),
-        expData = pd.read_csv("data/master/technician_experience_master.txt", sep="\t")
+        expData = pd.read_csv("data/master/employee_experience_master.txt", sep="\t")
         ):
     try:
         # 1. 要件テキストから必要な資格や条件を抽出
