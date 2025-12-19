@@ -1,6 +1,5 @@
 #coding: utf-8
 
-
 import pandas as pd
 import numpy as np
 import sqlite3  # sqlite3使わない想定でもimport
@@ -13,6 +12,7 @@ import httpx
 import re
 import json
 import time
+from dataclasses import dataclass
 
 try:
     from google.cloud import bigquery
@@ -45,9 +45,8 @@ except ModuleNotFoundError:
 
 class Master:
     # 状態を持ってないので、master を集めたクラスを作る必要は無い？
-    # アップロードする際に DB 接続情報を保持させるからクラスが必要？
 
-    def __init__(self, sql_connector):
+    def __init__(self):
 
         master_dict = {
             "agency_master":"data/master/agency_master.txt",
@@ -64,20 +63,6 @@ class Master:
 
         for key, val in master_dict.items():
             setattr(self, key, val)
-
-        try:
-            self.client = sql_connector.client
-            self.project_id = sql_connector.project_id
-            self.dataset_name = sql_connector.dataset_name
-        except Exception as e:
-            print(fr"    class Master: {str(e)}")
-
-        try:
-            self.conn = sql_connector.conn
-            self.cur = sql_connector.cur
-        except Exception as e:
-            print(fr"    class Master: {str(e)}")
-
 
     def getAgencyMaster(self):
         return pd.read_csv(self.agency_master, sep="\t")
@@ -109,31 +94,6 @@ class Master:
     def getTechnicianQualificationMaster(self):
         return pd.read_csv(self.technician_qualification_master, sep="\t")
 
-
-    def uploadOfficeMaster(self, tablename="office_master", dbtype=None):
-        office_master = self.getOfficeMaster()
-        if dbtype is None:
-            print("Please specify dbtype.")
-        elif dbtype == "bigquery":
-            print(fr"Upload {self.project_id}.{self.dataset_name}.{tablename}")
-            to_gbq(
-                dataframe=office_master, 
-                destination_table=fr"{self.dataset_name}.{tablename}",  # dataset.table 形式
-                project_id=fr"{self.project_id}", 
-                if_exists='replace'
-            )
-        elif dbtype == "sqlite3":
-            print(fr"Upload {tablename}")
-            office_master.to_sql(
-                name=tablename, 
-                con = self.conn, 
-                if_exists="replace", 
-                index=False
-            )
-        else:
-            print(fr"Unknown dbtype={dbtype}.")
-
-
     @staticmethod
     def test():
         master = Master(sqlite3_db_file_path="data/example.db")
@@ -149,7 +109,15 @@ class Master:
         print(master.getTechnicianQualificationMaster())
 
 
-
+@dataclass(frozen=True)
+class TablenamesConfig:
+    bid_announcements_pre: str = "bid_announcements_pre"
+    bid_announcements: str = "bid_announcements"
+    bid_requirements: str = "bid_requirements"
+    company_bid_judgement: str = "company_bid_judgement"
+    sufficient_requirements: str = "sufficient_requirements"
+    insufficient_requirements: str = "insufficient_requirements"
+    office_master: str = "office_master"
 
 
 class SQLConnector:
@@ -444,13 +412,14 @@ class OCRutils:
 
 
 class GCPVM:
-    def __init__(self, bid_announcements_pre_file, google_ai_studio_api_key_filepath=None, sql_connector=None):
+    def __init__(self, bid_announcements_pre_file, google_ai_studio_api_key_filepath=None, sql_connector=None, tablenamesconfig=None):
         self.bid_announcements_pre_file = bid_announcements_pre_file
         self.google_ai_studio_api_key_filepath = google_ai_studio_api_key_filepath
 
         self.client = sql_connector.client
         self.project_id = sql_connector.project_id
         self.dataset_name = sql_connector.dataset_name
+        self.tablenamesconfig = tablenamesconfig
 
     def select_to_table(self, tablename):
         client = self.client
@@ -474,7 +443,7 @@ class GCPVM:
 
         project_id = self.project_id
         dataset_name = self.dataset_name
-        tablename = "bid_announcements_pre"
+        tablename = self.tablenamesconfig.bid_announcements_pre
 
 
         # テーブル 'bid_announcements_pre' の存在確認
@@ -539,9 +508,9 @@ class GCPVM:
 
         project_id = self.project_id
         dataset_name = self.dataset_name
-        tablename_pre = "bid_announcements_pre"
-        tablename_announcements = "bid_announcements"
-        tablename_requirements = "bid_requirements"
+        tablename_pre = self.tablenamesconfig.bid_announcements_pre
+        tablename_announcements = self.tablenamesconfig.bid_announcements
+        tablename_requirements = self.tablenamesconfig.bid_requirements
 
         # まずは、bid_announcements テーブルの存在を確認。名前取得で検証。
         # (bq コマンドの方法もあるらしいが)
@@ -754,10 +723,9 @@ class GCPVM:
         project_id = self.project_id
         dataset_name = self.dataset_name
 
-        tablename_pre = "bid_announcements_pre"
-        tablename_announcements = "bid_announcements"
+        tablename_announcements = self.tablenamesconfig.bid_announcements
         tmp_tablename_announcements = fr"tmp_{tablename_announcements}"
-        tablename_requirements = "bid_requirements"
+        tablename_requirements = self.tablenamesconfig.bid_requirements
         tmp_tablename_requirements = fr"tmp_{tablename_requirements}"
         
 
@@ -934,18 +902,14 @@ class GCPVM:
         project_id = self.project_id
         dataset_name = self.dataset_name
 
-        tablename_pre = "bid_announcements_pre"
-        tablename_announcements = "bid_announcements"
-        tmp_tablename_announcements = fr"tmp_{tablename_announcements}"
-        tablename_requirements = "bid_requirements"
-        tmp_tablename_requirements = fr"tmp_{tablename_requirements}"
-        tablename_company_bid_judgement = "company_bid_judgement"
+        tablename_announcements = self.tablenamesconfig.bid_announcements
+        tablename_requirements = self.tablenamesconfig.bid_requirements
+        tablename_company_bid_judgement = self.tablenamesconfig.company_bid_judgement
 
-        tablename_office_master = "office_master"
+        tablename_office_master = self.tablenamesconfig.office_master
 
-
-        tablename_sufficient_requirement_master = "sufficient_requirements"
-        tablename_insufficient_requirement_master = "insufficient_requirements"
+        tablename_sufficient_requirement_master = self.tablenamesconfig.sufficient_requirements
+        tablename_insufficient_requirement_master = self.tablenamesconfig.insufficient_requirements
 
 
 
@@ -1032,6 +996,15 @@ class GCPVM:
                 print(fr"NEWLY CREATED: {target_tablename}.")
             else:
                 print(fr"ALREADY EXISTS: {target_tablename}.")
+
+        # office_master テーブルを作成
+        tmp_office_master = pd.read_csv("data/master/office_master.txt",sep="\t")
+        to_gbq(
+            dataframe=tmp_office_master, 
+            destination_table=fr"{dataset_name}.{tablename_office_master}",
+            project_id=fr"{project_id}", 
+            if_exists='replace'
+        )
 
 
         sql = fr"""MERGE `{project_id}.{dataset_name}.{tablename_company_bid_judgement}` AS target
@@ -1488,12 +1461,14 @@ class GCPVM:
 
 
 class SQLITE3:
-    def __init__(self, bid_announcements_pre_file, google_ai_studio_api_key_filepath=None, sqlite3_db_file_path=None, sql_connector=None):
+    def __init__(self, bid_announcements_pre_file, google_ai_studio_api_key_filepath=None, sqlite3_db_file_path=None, sql_connector=None, tablenamesconfig=None):
         self.bid_announcements_pre_file = bid_announcements_pre_file
         self.google_ai_studio_api_key_filepath = google_ai_studio_api_key_filepath
 
         self.conn = sql_connector.conn
         self.cur = sql_connector.cur
+
+        self.tablenamesconfig = tablenamesconfig
 
     def select_to_table(self, tablename):
         conn = self.conn
@@ -1515,8 +1490,8 @@ class SQLITE3:
         conn = self.conn
         cur = self.cur
 
-        tablename = "bid_announcements_pre"
-            
+        tablename = self.tablenamesconfig.bid_announcements_pre
+        
         sql = """
         SELECT name FROM sqlite_master WHERE type='table'
         """
@@ -1542,7 +1517,7 @@ class SQLITE3:
         SELECT * FROM {tablename}
         """
         #val = client.query(sql).result().to_dataframe()
-        val = pd.read_sql_query(sql, conn)
+        #val = pd.read_sql_query(sql, conn)
 
 
 
@@ -1551,9 +1526,9 @@ class SQLITE3:
         conn = self.conn
         cur = self.cur
 
-        tablename_pre = "bid_announcements_pre"
-        tablename_announcements = "bid_announcements"
-        tablename_requirements = "bid_requirements"
+        tablename_pre = self.tablenamesconfig.bid_announcements_pre
+        tablename_announcements = self.tablenamesconfig.bid_announcements
+        tablename_requirements = self.tablenamesconfig.bid_requirements
 
 
         # テーブル 'bid_announcements' の存在確認。名前取得で検証。
@@ -1770,7 +1745,7 @@ class SQLITE3:
         SELECT * FROM {tablename_announcements}
         """
         #val = client.query(sql).result().to_dataframe()
-        val = pd.read_sql_query(sql, conn)
+        #val = pd.read_sql_query(sql, conn)
 
 
     def step2_ocr(self, ocr_utils):
@@ -1778,10 +1753,9 @@ class SQLITE3:
         conn = self.conn
         cur = self.cur
 
-        tablename_pre = "bid_announcements_pre"
-        tablename_announcements = "bid_announcements"
+        tablename_announcements = self.tablenamesconfig.bid_announcements
         tmp_tablename_announcements = fr"tmp_{tablename_announcements}"
-        tablename_requirements = "bid_requirements"
+        tablename_requirements = self.tablenamesconfig.bid_requirements
         tmp_tablename_requirements = fr"tmp_{tablename_requirements}"
 
         # OCR
@@ -2016,18 +1990,14 @@ class SQLITE3:
         conn = self.conn
         cur = self.cur
 
-        tablename_pre = "bid_announcements_pre"
-        tablename_announcements = "bid_announcements"
-        tmp_tablename_announcements = fr"tmp_{tablename_announcements}"
-        tablename_requirements = "bid_requirements"
-        tmp_tablename_requirements = fr"tmp_{tablename_requirements}"
-        tablename_company_bid_judgement = "company_bid_judgement"
+        tablename_announcements = self.tablenamesconfig.bid_announcements
+        tablename_requirements = self.tablenamesconfig.bid_requirements
+        tablename_company_bid_judgement = self.tablenamesconfig.company_bid_judgement
 
-        tablename_office_master = "office_master"
+        tablename_office_master = self.tablenamesconfig.office_master
 
-
-        tablename_sufficient_requirement_master = "sufficient_requirements"
-        tablename_insufficient_requirement_master = "insufficient_requirements"
+        tablename_sufficient_requirement_master = self.tablenamesconfig.sufficient_requirements
+        tablename_insufficient_requirement_master = self.tablenamesconfig.insufficient_requirements
 
 
 
@@ -2117,7 +2087,15 @@ class SQLITE3:
             else:
                 print(fr"ALREADY EXISTS: {target_tablename}.")
 
-
+        # office_master テーブルを作成
+        tmp_office_master = pd.read_csv("data/master/office_master.txt",sep="\t")
+        print(fr"Upload {tablename_office_master}")
+        tmp_office_master.to_sql(
+            name=tablename_office_master, 
+            con = conn, 
+            if_exists="replace", 
+            index=False
+        )
 
 
         sql = fr"""insert into {tablename_company_bid_judgement} (
@@ -2620,28 +2598,22 @@ if __name__ == "__main__":
         bigquery_project_id=bigquery_project_id,
         bigquery_dataset_name=bigquery_dataset_name
     )
-
-    master = Master(sql_connector=sql_connector)
-
-
-
+    master = Master()
 
     if use_gcp_vm:
         obj = GCPVM(
             bid_announcements_pre_file=bid_announcements_pre_file,
             google_ai_studio_api_key_filepath=google_ai_studio_api_key_filepath,
-            sql_connector=sql_connector
+            sql_connector=sql_connector,
+            tablenamesconfig=TablenamesConfig
         )
-        master.uploadOfficeMaster(tablename="office_master",dbtype="bigquery")
-        # obj.select_to_table(tablename="vocal-raceway-473509-f1.October_20251004.office_master")
     else:
         obj = SQLITE3(
             bid_announcements_pre_file=bid_announcements_pre_file,
             google_ai_studio_api_key_filepath=google_ai_studio_api_key_filepath,
-            sql_connector=sql_connector
+            sql_connector=sql_connector,
+            tablenamesconfig=TablenamesConfig
         )
-        master.uploadOfficeMaster(tablename="office_master",dbtype="sqlite3")
-        # obj.select_to_table(tablename="office_master")
 
     if stop_processing:
         exit(1)
