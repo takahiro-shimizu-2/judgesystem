@@ -13,6 +13,7 @@ import re
 import json
 import time
 from dataclasses import dataclass
+from abc import ABC, abstractmethod
 
 try:
     from google.cloud import bigquery
@@ -118,26 +119,6 @@ class TablenamesConfig:
     sufficient_requirements: str = "sufficient_requirements"
     insufficient_requirements: str = "insufficient_requirements"
     office_master: str = "office_master"
-
-
-class SQLConnector:
-
-    def __init__(self, sqlite3_db_file_path=None, bigquery_location=None, bigquery_project_id=None, bigquery_dataset_name=None):
-        self.sqlite3_db_file_path = sqlite3_db_file_path
-        try:
-            # isolation_level=None で autocommit モード (変更のたびに conn.commit() を呼び出す必要がなくなる)
-            self.conn = sqlite3.connect(sqlite3_db_file_path, isolation_level=None)
-            self.cur = self.conn.cursor()
-        except Exception as e:
-            print(fr"    SQLConnector: {str(e)}")
-
-        try:
-            self.location = bigquery_location
-            self.client = bigquery.Client(location=bigquery_location)
-            self.project_id = bigquery_project_id
-            self.dataset_name = bigquery_dataset_name
-        except Exception as e:
-            print(fr"    SQLConnector: {str(e)}")
 
 
 class OCRutils:
@@ -407,208 +388,176 @@ class OCRutils:
         return new_dict
 
 
+class DBOperator:
+    def __init__(self, sqlite3_db_file_path=None, bigquery_location=None, bigquery_project_id=None, bigquery_dataset_name=None):
+        self.sqlite3_db_file_path = sqlite3_db_file_path
+        try:
+            # isolation_level=None で autocommit モード (変更のたびに conn.commit() を呼び出す必要がなくなる)
+            self.conn = sqlite3.connect(sqlite3_db_file_path, isolation_level=None)
+            self.cur = self.conn.cursor()
+        except Exception as e:
+            print(fr"    SQLConnector: {str(e)}")
 
+        try:
+            self.location = bigquery_location
+            self.client = bigquery.Client(location=bigquery_location)
+            self.project_id = bigquery_project_id
+            self.dataset_name = bigquery_dataset_name
+        except Exception as e:
+            print(fr"    SQLConnector: {str(e)}")
 
-class GCPVM:
-    def __init__(self, bid_announcements_pre_file, google_ai_studio_api_key_filepath=None, sql_connector=None, tablenamesconfig=None):
-        self.bid_announcements_pre_file = bid_announcements_pre_file
-        self.google_ai_studio_api_key_filepath = google_ai_studio_api_key_filepath
-
-        self.client = sql_connector.client
-        self.project_id = sql_connector.project_id
-        self.dataset_name = sql_connector.dataset_name
-        self.tablenamesconfig = tablenamesconfig
-
-    def select_to_table(self, tablename):
-        client = self.client
-
-        sql = fr"select * from {tablename}"
-        df = client.query(sql).result().to_dataframe()
-        return df
-    
+    @abstractmethod
     def any_query(self, sql):
-        client = self.client
+        raise NotImplementedError
 
-        df = client.query(sql).result().to_dataframe()
+    @abstractmethod
+    def ifTableExists(self, tablename):
+        raise NotImplementedError
+
+    @abstractmethod
+    def dropTable(self, tablename):
+        raise NotImplementedError
+
+    @abstractmethod
+    def uploadDataToTable(self, data, tablename):
+        raise NotImplementedError
+
+    @abstractmethod
+    def selectToTable(self, tablename, where_clause=""):
+        raise NotImplementedError
+
+    @abstractmethod
+    def createBidAnnouncements(self, bid_announcements_tablename):
+        raise NotImplementedError
+    
+    @abstractmethod
+    def createBidRequirements(self, bid_requirements_tablename):
+        raise NotImplementedError
+
+    @abstractmethod
+    def transferAnnouncements(self, bid_announcements_tablename, bid_announcements_pre_tablename):
+        raise NotImplementedError
+
+    @abstractmethod
+    def updateAnnouncements(self, bid_announcements_tablename, bid_announcements_tablename_for_update):
+        raise NotImplementedError
+
+    @abstractmethod
+    def updateRequirements(self, bid_requirements_tablename, bid_requirements_tablename_for_update):
+        raise NotImplementedError
+
+    @abstractmethod
+    def createCompanyBidJudgements(self, company_bid_judgement_tablename):
+        raise NotImplementedError
+
+    @abstractmethod
+    def createSufficientRequirements(self, sufficient_requirements_tablename):
+        raise NotImplementedError
+
+    @abstractmethod
+    def createInsufficientRequirements(self, insufficient_requirements_tablename):
+        raise NotImplementedError
+
+    @abstractmethod
+    def preupdateCompanyBidJudgement(self, company_bid_judgement_tablename, office_master_tablename, bid_announcements_tablename):
+        raise NotImplementedError
+
+    @abstractmethod
+    def updateCompanyBidJudgement(self, company_bid_judgement_tablename, company_bid_judgement_tablename_for_update):
+        raise NotImplementedError
+
+    @abstractmethod
+    def updateSufficientRequirements(self, sufficient_requirements_tablename, sufficient_requirements_tablename_for_update):
+        raise NotImplementedError
+
+    @abstractmethod
+    def updateInsufficientRequirements(self, insufficient_requirements_tablename, insufficient_requirements_tablename_for_update):
+        raise NotImplementedError
+
+class DBOperatorGCPVM(DBOperator):
+
+    def any_query(self, sql):
+        df = self.client.query(sql).result().to_dataframe()
         return df
 
-
-    def step0_create_bid_announcements_pre(self, bid_announcements_pre_file=None):
-        if bid_announcements_pre_file is None:
-            bid_announcements_pre_file = self.bid_announcements_pre_file
-
-        client = self.client
-
-        project_id = self.project_id
-        dataset_name = self.dataset_name
-        tablename = self.tablenamesconfig.bid_announcements_pre
-
-
-        # テーブル 'bid_announcements_pre' の存在確認
+    def ifTableExists(self, tablename):
         sql = fr"""
-        SELECT table_name FROM `{project_id}.{dataset_name}.INFORMATION_SCHEMA.TABLES`
+        SELECT table_name FROM `{self.project_id}.{self.dataset_name}.INFORMATION_SCHEMA.TABLES`
         WHERE table_name = '{tablename}'
         """
-        df = client.query(sql).result().to_dataframe()
-        # .result() は、BigQuery のクエリジョブが 完了するまで待機し、結果を取得する処理
-        # DML クエリ（INSERT, UPDATE, DELETE）を実行する場合 (必須)
-        # → クエリが完了しないと変更が反映されないため、必ず .result() を呼ぶべき。
-        # SELECT クエリの結果を使いたい場合
-        # → .result() を使って結果をイテレートできる。
-            
+        df = self.client.query(sql).result().to_dataframe()
         if df.shape[0] == 1:
-            # テーブル名があれば、いったん削除。
-            sql = fr"""
-            drop table `{project_id}.{dataset_name}.{tablename}`
-            """
-            client.query(sql).result()
-            print(fr"TABLE DELETED: {project_id}.{dataset_name}.{tablename}")
-        else:
-            print(fr"TABLE Not exists: {project_id}.{dataset_name}.{tablename}")
+            return True
+        return False
 
-        # データ用意
-        df = pd.read_csv(bid_announcements_pre_file, sep="\t")
-        df["userAnnNo"] = df["userAnnNo"].astype("Int64")
-        for cname in [
-            "workName",
-            "topAgencyName",
-            "subAgencyName",
-            "publishDate",
-            "docDistEnd",
-            "submissionEnd",
-            "bidEndDate",
-            "remarks",
-            "pdfUrl",
-            "reasonForNG"
-        ]:
-            df[cname] = df[cname].astype("string")
+    def dropTable(self, tablename):
+        self.client.delete_table(fr"{self.project_id}.{self.dataset_name}.{tablename}", not_found_ok=True)
 
-        print(fr"Upload {project_id}.{dataset_name}.{tablename}")
+    def uploadDataToTable(self, data, tablename):
         to_gbq(
-            dataframe=df, 
-            destination_table=fr"{dataset_name}.{tablename}",  # dataset.table 形式
-            project_id=project_id, 
+            dataframe=data, 
+            destination_table=fr"{self.dataset_name}.{tablename}",  # dataset.table 形式
+            project_id=self.project_id, 
             if_exists='replace'
         )
 
-        # check
+    def selectToTable(self, tablename, where_clause=""):
+        sql = fr"select * from `{self.project_id}.{self.dataset_name}.{tablename}` {where_clause}"
+        df = self.client.query(sql).result().to_dataframe()
+        return df
+
+    def createBidAnnouncements(self, bid_announcements_tablename):
         sql = fr"""
-        SELECT * FROM `{project_id}.{dataset_name}.INFORMATION_SCHEMA.TABLES`
+        create table `{self.project_id}.{self.dataset_name}.{bid_announcements_tablename}` (
+        announcement_no int64,
+        workName string,
+        userAnnNo int64,
+        topAgencyNo int64,
+        topAgencyName string,
+        subAgencyNo int64,
+        subAgencyName string,
+        workPlace string,
+        pdfUrl string,
+        zipcode string,
+        address string,
+        department string,
+        assigneeName string,
+        telephone string,
+        fax string,
+        mail string,
+        publishDate string,
+        docDistStart string,
+        docDistEnd string,
+        submissionStart string,
+        submissionEnd string,    
+        bidStartDate string,
+        bidEndDate string,
+        doneOCR bool,
+        remarks string, 
+        createdDate string,
+        updatedDate string
+        )
         """
-        #val = client.query(sql).result().to_dataframe()
+        self.client.query(sql).result()
 
 
-
-
-    def step1_transfer(self, remove_table=False):
-
-        client = self.client
-
-        project_id = self.project_id
-        dataset_name = self.dataset_name
-        tablename_pre = self.tablenamesconfig.bid_announcements_pre
-        tablename_announcements = self.tablenamesconfig.bid_announcements
-        tablename_requirements = self.tablenamesconfig.bid_requirements
-
-        # まずは、bid_announcements テーブルの存在を確認。名前取得で検証。
-        # (bq コマンドの方法もあるらしいが)
+    def createBidRequirements(self, bid_requirements_tablename):
         sql = fr"""
-        SELECT table_name FROM `{project_id}.{dataset_name}.INFORMATION_SCHEMA.TABLES`
-        WHERE table_name = '{tablename_announcements}'
+        create table `{self.project_id}.{self.dataset_name}.{bid_requirements_tablename}` (
+        announcement_no int64,
+        requirement_no int64,
+        requirement_type string,
+        requirement_text string,
+        done_judgement bool,
+        createdDate string,
+        updatedDate string
+        )
         """
-        tablename = client.query(sql).result().to_dataframe()
+        self.client.query(sql).result()
 
-        # テーブルが存在するなら、引数に応じて削除
-        if tablename.shape[0] == 1:
-            if remove_table:
-                client.delete_table(fr"{project_id}.{dataset_name}.{tablename_announcements}", not_found_ok=True)
-                print(fr"DELETE existing table: {project_id}.{dataset_name}.{tablename_announcements}")
-                tablename = tablename.iloc[0:0]
-
-        # テーブルが無いなら作成
-        if tablename.shape[0] == 0:
-            sql = fr"""
-            create table `{project_id}.{dataset_name}.{tablename_announcements}` (
-            announcement_no int64,
-            workName string,
-            userAnnNo int64,
-            topAgencyNo int64,
-            topAgencyName string,
-            subAgencyNo int64,
-            subAgencyName string,
-            workPlace string,
-            pdfUrl string,
-            zipcode string,
-            address string,
-            department string,
-            assigneeName string,
-            telephone string,
-            fax string,
-            mail string,
-            publishDate string,
-            docDistStart string,
-            docDistEnd string,
-            submissionStart string,
-            submissionEnd string,    
-            bidStartDate string,
-            bidEndDate string,
-            doneOCR bool,
-            remarks string, 
-            createdDate string,
-            updatedDate string
-            )
-            """
-            client.query(sql).result()
-            print(fr"NEWLY CREATED: {project_id}.{dataset_name}.{tablename_announcements}.")
-        else:
-            print(fr"ALREADY EXISTS: {project_id}.{dataset_name}.{tablename_announcements}.")
-
-
-
-        # 同様に、bid_requirements にも行う。
+    def transferAnnouncements(self, bid_announcements_tablename, bid_announcements_pre_tablename):
         sql = fr"""
-        SELECT table_name FROM `{project_id}.{dataset_name}.INFORMATION_SCHEMA.TABLES`
-        WHERE table_name = '{tablename_requirements}'
-        """
-        tablename = client.query(sql).result().to_dataframe()
-
-        # テーブルが存在するなら、削除オプションに応じて削除
-        if tablename.shape[0] == 1:
-            if remove_table:
-                client.delete_table(fr"{project_id}.{dataset_name}.{tablename_requirements}", not_found_ok=True)
-                print(fr"DELETE existing table: {project_id}.{dataset_name}.{tablename_requirements}.")
-                tablename = tablename.iloc[0:0]
-
-        # テーブルが無いなら作成
-        if tablename.shape[0] == 0:
-            # テーブルが無いなら作成
-            sql = fr"""
-            create table `{project_id}.{dataset_name}.{tablename_requirements}` (
-            announcement_no int64,
-            requirement_no int64,
-            requirement_type string,
-            requirement_text string,
-            done_judgement bool,
-            createdDate string,
-            updatedDate string
-            )
-            """
-            client.query(sql).result()
-            print(fr"NEWLY CREATED: {project_id}.{dataset_name}.{tablename_requirements}.")
-        else:
-            print(fr"ALREADY EXISTS: {project_id}.{dataset_name}.{tablename_requirements}.")
-
-
-        # 転写処理
-        # BigQueryのような分析基盤は OLAP寄り。
-        # ID管理や逐次更新はOLTP型DB（RDBMS）が得意
-        #
-        # ID ... GENERATE_UUID() で UUID を作る方法はある。
-        # バッチ処理なら連番採番で問題なさそう。同時実行が想定される(例：近い時刻に異なる注文をinsert)場合は問題あるかもしれない。
-        # TODO: 要テスト
-        # 疑問:row_number付与の order by 列は pdf_urlがよいのか？
-        sql = fr"""
-        INSERT INTO `{project_id}.{dataset_name}.{tablename_announcements}` (
+        INSERT INTO `{self.project_id}.{self.dataset_name}.{bid_announcements_tablename}` (
             announcement_no,
             workName,
             userAnnNo,
@@ -638,7 +587,7 @@ class GCPVM:
             updatedDate
             )
         WITH maxval AS (
-            SELECT IFNULL(MAX(announcement_no), 0) AS maxid FROM `{project_id}.{dataset_name}.{tablename_announcements}`
+            SELECT IFNULL(MAX(announcement_no), 0) AS maxid FROM `{self.project_id}.{self.dataset_name}.{bid_announcements_tablename}`
         ), 
         to_insert AS (
         SELECT
@@ -669,8 +618,8 @@ class GCPVM:
             tbl_pre.remarks,
             FORMAT_TIMESTAMP('%Y-%m-%d %H:%M:%S', CURRENT_TIMESTAMP()) AS createdDate,
             FORMAT_TIMESTAMP('%Y-%m-%d %H:%M:%S', CURRENT_TIMESTAMP()) AS updatedDate
-        FROM `{project_id}.{dataset_name}.{tablename_pre}` AS tbl_pre
-        LEFT JOIN `{project_id}.{dataset_name}.{tablename_announcements}` AS tbl
+        FROM `{self.project_id}.{self.dataset_name}.{bid_announcements_pre_tablename}` AS tbl_pre
+        LEFT JOIN `{self.project_id}.{self.dataset_name}.{bid_announcements_tablename}` AS tbl
             ON tbl_pre.pdfurl = tbl.pdfurl
         WHERE tbl.pdfurl IS NULL
         )
@@ -704,319 +653,122 @@ class GCPVM:
         updatedDate
         FROM to_insert, maxval
         """
+        self.client.query(sql).result()
 
-        client.query(sql).result()
+    def updateAnnouncements(self, bid_announcements_tablename, bid_announcements_tablename_for_update):
+        sql = fr"""MERGE `{self.project_id}.{self.dataset_name}.{bid_announcements_tablename}` AS target
+        USING `{self.project_id}.{self.dataset_name}.{bid_announcements_tablename_for_update}` AS source
+        ON target.announcement_no = source.announcement_no
+        when matched AND target.doneocr = FALSE then
+        UPDATE SET
+            target.workplace = source.workplace,
+            target.zipcode = source.zipcode,
+            target.address = source.address,
+            target.department = source.department,
+            target.assigneename = source.assigneename,
+            target.telephone = source.telephone,
+            target.fax = source.fax,
+            target.mail = source.mail,
+            target.docdiststart = source.docdiststart,
+            target.docdistend = source.docdistend,
+            target.submissionstart = source.submissionstart,
+            target.submissionend = source.submissionend,
+            target.bidstartdate = source.bidstartdate,
+            target.doneocr = TRUE
+        """        
+        self.client.query(sql).result()
 
-        # check
-        sql = fr"""
-        SELECT * FROM `{project_id}.{dataset_name}.{tablename_announcements}`
-        """
-        val = client.query(sql).result().to_dataframe()
-
-
-    def step2_ocr(self, ocr_utils):
-
-        client = self.client
-
-        project_id = self.project_id
-        dataset_name = self.dataset_name
-
-        tablename_announcements = self.tablenamesconfig.bid_announcements
-        tmp_tablename_announcements = fr"tmp_{tablename_announcements}"
-        tablename_requirements = self.tablenamesconfig.bid_requirements
-        tmp_tablename_requirements = fr"tmp_{tablename_requirements}"
-        
-
-        # OCR
-        # doneOCRがFalseのものを対象にする。
-        sql = fr"""
-        SELECT * FROM `{project_id}.{dataset_name}.{tablename_announcements}`
-        where doneOCR = FALSE
-        order by announcement_no
-        """
-        df1 = client.query(sql).result().to_dataframe()
-
-
-
-        all_announcements = []
-        all_requirement_texts = []
-        for index, row in df1.iterrows():
-            announcement_no = row["announcement_no"]
-            print(f"Processing OCR for announcement_no={announcement_no}...")
-
-            pdfurl = row["pdfUrl"]
-            if False:
-                announcement_no = int(df1["announcement_no"][11])
-                pdfurl = df1["pdfUrl"][11]
-
-            if not os.path.exists("data/ocr"):
-                os.makedirs("data/ocr", exist_ok=True)
-
-            if not os.path.exists("data/pdf"):
-                os.makedirs("data/pdf", exist_ok=True)
-
-            time.sleep(1)
-            doc_data = ocr_utils.getPDFDataFromUrl(pdfurl)
-            if not os.path.exists(fr"data/pdf/{announcement_no}.pdf"):
-                # 基本的には元の pdf と同じものを保存できる。
-                print(fr"   Save data/pdf/{announcement_no}.pdf.")
-                with open(fr"data/pdf/{announcement_no}.pdf", "wb") as f:
-                    f.write(doc_data)
-
-            try:
-                # ocr for announcements
-                ocr_announcements_file = fr"ocr_announcements_{announcement_no}.json"
-                ocr_announcements_filepath = fr"data/ocr/{ocr_announcements_file}"
-                if not os.path.exists(ocr_announcements_filepath):
-                    print("   Trying ocr(announcements).")
-                    json_value = ocr_utils.getJsonFromDocData(doc_data=doc_data)
-                    json_value["announcement_no"] = announcement_no
-                    with open(ocr_announcements_filepath, "w", encoding="utf-8") as f:
-                        json.dump(json_value, f, ensure_ascii=False, indent=2)
-                else:
-                    print("   Already getting announcements.")
-                    with open(ocr_announcements_filepath, "r", encoding="utf-8") as f:
-                        json_value = json.load(f)
-                new_json = ocr_utils.convertJson(json_value=json_value)
-
-                # ocr for requirements
-                ocr_requirements_file = fr"ocr_requirements_{announcement_no}.json"
-                ocr_requirements_filepath = fr"data/ocr/{ocr_requirements_file}"
-                if not os.path.exists(ocr_requirements_filepath):
-                    print("   Trying ocr(requirements).")
-                    requirement_texts = ocr_utils.getRequirementText(doc_data=doc_data)
-                    requirement_texts["announcement_no"] = announcement_no
-                    with open(ocr_requirements_filepath, "w", encoding="utf-8") as f:
-                        json.dump(requirement_texts, f, ensure_ascii=False, indent=2)
-                else:
-                    print("   Already getting requirements.")
-                    with open(ocr_requirements_filepath, "r", encoding="utf-8") as f:
-                        requirement_texts = json.load(f)
-                dic = ocr_utils.convertRequirementTextDict(requirement_texts=requirement_texts)
-
-                all_announcements.append(new_json)
-                all_requirement_texts.append(pd.DataFrame(dic))
-            except ClientError as e:
-                print(e)
-                break
-
-
-
-        ######################################
-        # まずは bid_announcements を更新。   #
-        ######################################
-
-        df1 = pd.DataFrame(all_announcements)
-        if df1.shape[0] > 0:
-            print(fr"Upload {project_id}.{dataset_name}.{tmp_tablename_announcements}")
-            to_gbq(
-                dataframe=df1, 
-                destination_table=fr"{dataset_name}.{tmp_tablename_announcements}",  # dataset.table 形式
-                project_id=project_id, 
-                if_exists='replace'
-            )
-        
-            sql = fr"""MERGE `{project_id}.{dataset_name}.{tablename_announcements}` AS target
-            USING `{project_id}.{dataset_name}.{tmp_tablename_announcements}` AS source
-            ON target.announcement_no = source.announcement_no
-            when matched AND target.doneocr = FALSE then
-            UPDATE SET
-                target.workplace = source.workplace,
-                target.zipcode = source.zipcode,
-                target.address = source.address,
-                target.department = source.department,
-                target.assigneename = source.assigneename,
-                target.telephone = source.telephone,
-                target.fax = source.fax,
-                target.mail = source.mail,
-                target.docdiststart = source.docdiststart,
-                target.docdistend = source.docdistend,
-                target.submissionstart = source.submissionstart,
-                target.submissionend = source.submissionend,
-                target.bidstartdate = source.bidstartdate,
-                target.doneocr = TRUE
-            """        
-            client.query(sql).result()
-
-        # 中間テーブル削除
-        try:
-            client.get_table(fr"{project_id}.{dataset_name}.{tmp_tablename_announcements}")
-            client.delete_table(fr"{project_id}.{dataset_name}.{tmp_tablename_announcements}", not_found_ok=True)
-        except NotFound:
-            print(fr"Not Found: {project_id}.{dataset_name}.{tmp_tablename_announcements}")
-
-
-
-        ######################################
-        # bid_requirements を更新。           #
-        ######################################
-
-        if all_requirement_texts != []:
-            df2 = pd.concat(all_requirement_texts, ignore_index=True)
-            print(fr"Upload {project_id}.{dataset_name}.{tmp_tablename_requirements}")
-            to_gbq(
-                dataframe=df2, 
-                destination_table=fr"{dataset_name}.{tmp_tablename_requirements}",  # dataset.table 形式
-                project_id=project_id, 
-                if_exists='replace'
-            )
-
-            sql = fr"""MERGE `{project_id}.{dataset_name}.{tablename_requirements}` AS target
-            USING `{project_id}.{dataset_name}.{tmp_tablename_requirements}` AS source
-            ON target.announcement_no = source.announcement_no
-            when not matched then
-            insert (
-                announcement_no,
-                requirement_no,
-                requirement_type,
-                requirement_text,
-                done_judgement,
-                createdDate,
-                updatedDate
-            )
-            values (
-                source.announcement_no,
-                source.requirement_no,
-                source.requirement_type,
-                source.requirement_text,
-                FALSE,
-                source.createdDate,
-                source.updatedDate
-            )
-            """
-            client.query(sql).result()
-
-        # 中間テーブル削除
-        try:
-            client.get_table(fr"{project_id}.{dataset_name}.{tmp_tablename_requirements}")
-            client.delete_table(fr"{project_id}.{dataset_name}.{tmp_tablename_requirements}", not_found_ok=True)
-        except NotFound:
-            print(fr"Not Found: {project_id}.{dataset_name}.{tmp_tablename_requirements}")
-
-
-
-
-    def step3(self, remove_table=False):
-        client = self.client
-
-        project_id = self.project_id
-        dataset_name = self.dataset_name
-
-        tablename_announcements = self.tablenamesconfig.bid_announcements
-        tablename_requirements = self.tablenamesconfig.bid_requirements
-        tablename_company_bid_judgement = self.tablenamesconfig.company_bid_judgement
-
-        tablename_office_master = self.tablenamesconfig.office_master
-
-        tablename_sufficient_requirement_master = self.tablenamesconfig.sufficient_requirements
-        tablename_insufficient_requirement_master = self.tablenamesconfig.insufficient_requirements
-
-
-
-
-
-
-        tablenames = [
-            tablename_company_bid_judgement, 
-            tablename_sufficient_requirement_master,
-            tablename_insufficient_requirement_master
-        ]
-        target_tablename = tablenames[0]
-        for i, target_tablename in enumerate(tablenames):
-
-            sql = fr"""
-            SELECT table_name FROM `{project_id}.{dataset_name}.INFORMATION_SCHEMA.TABLES`
-            WHERE table_name = '{target_tablename}'
-            """
-            tablename = client.query(sql).result().to_dataframe()
-
-            if tablename.shape[0] == 1:
-                if remove_table:
-                    sql = fr"""
-                    drop table {target_tablename}
-                    """
-                    client.delete_table(fr"{project_id}.{dataset_name}.{target_tablename}", not_found_ok=True)
-                    print(fr"DELETE existing table: {target_tablename}.")
-                    tablename = tablename.iloc[0:0]
-
-            if tablename.shape[0] == 0:
-                if target_tablename == tablename_company_bid_judgement:
-                    sql = fr"""
-                    create table `{project_id}.{dataset_name}.{tablename_company_bid_judgement}` (
-                        announcement_no int64,
-                        company_no int64,
-                        office_no int64,
-                        requirement_ineligibility bool,
-                        requirement_grade_item bool,
-                        requirement_location bool,
-                        requirement_experience bool,
-                        requirement_technician bool,
-                        requirement_other bool,
-                        deficit_requirement_message string,
-                        final_status bool,
-                        message string,
-                        remarks string,
-                        createdDate string,
-                        updatedDate string
-                    )
-                    """
-
-                elif target_tablename == tablename_sufficient_requirement_master:
-                    sql = fr"""
-                    create table `{project_id}.{dataset_name}.{tablename_sufficient_requirement_master}` (
-                        announcement_no int64,
-                        requirement_no int64,
-                        company_no int64,
-                        office_no int64,
-                        requirement_type string,
-                        requirement_description string,
-                        createdDate string,
-                        updatedDate string
-                    )
-                    """
-                elif target_tablename == tablename_insufficient_requirement_master:
-                    sql = fr"""
-                    create table `{project_id}.{dataset_name}.{tablename_insufficient_requirement_master}` (
-                        announcement_no int64,
-                        requirement_no int64,
-                        company_no int64,
-                        office_no int64,
-                        requirement_type string,
-                        requirement_description string,
-                        suggestions_for_improvement string,
-                        final_comment string,
-                        createdDate string,
-                        updatedDate string
-                    )
-                    """                
-                else:
-                    raise Exception(fr"Unknown target_tablename={target_tablename}.")
-                
-                client.query(sql).result()
-                print(fr"NEWLY CREATED: {target_tablename}.")
-            else:
-                print(fr"ALREADY EXISTS: {target_tablename}.")
-
-        # office_master テーブルを作成
-        tmp_office_master = pd.read_csv("data/master/office_master.txt",sep="\t")
-        to_gbq(
-            dataframe=tmp_office_master, 
-            destination_table=fr"{dataset_name}.{tablename_office_master}",
-            project_id=fr"{project_id}", 
-            if_exists='replace'
+    def updateRequirements(self, bid_requirements_tablename, bid_requirements_tablename_for_update):
+        sql = fr"""MERGE `{self.project_id}.{self.dataset_name}.{bid_requirements_tablename}` AS target
+        USING `{self.project_id}.{self.dataset_name}.{bid_requirements_tablename_for_update}` AS source
+        ON target.announcement_no = source.announcement_no
+        when not matched then
+        insert (
+            announcement_no,
+            requirement_no,
+            requirement_type,
+            requirement_text,
+            done_judgement,
+            createdDate,
+            updatedDate
         )
+        values (
+            source.announcement_no,
+            source.requirement_no,
+            source.requirement_type,
+            source.requirement_text,
+            FALSE,
+            source.createdDate,
+            source.updatedDate
+        )
+        """
+        self.client.query(sql).result()
 
+    def createCompanyBidJudgements(self, company_bid_judgement_tablename):
+        sql = fr"""
+        create table `{self.project_id}.{self.dataset_name}.{company_bid_judgement_tablename}` (
+            announcement_no int64,
+            company_no int64,
+            office_no int64,
+            requirement_ineligibility bool,
+            requirement_grade_item bool,
+            requirement_location bool,
+            requirement_experience bool,
+            requirement_technician bool,
+            requirement_other bool,
+            deficit_requirement_message string,
+            final_status bool,
+            message string,
+            remarks string,
+            createdDate string,
+            updatedDate string
+        )
+        """
+        self.client.query(sql).result()
 
-        sql = fr"""MERGE `{project_id}.{dataset_name}.{tablename_company_bid_judgement}` AS target
+    def createSufficientRequirements(self, sufficient_requirements_tablename):
+        sql = fr"""
+        create table `{self.project_id}.{self.dataset_name}.{sufficient_requirements_tablename}` (
+            announcement_no int64,
+            requirement_no int64,
+            company_no int64,
+            office_no int64,
+            requirement_type string,
+            requirement_description string,
+            createdDate string,
+            updatedDate string
+        )
+        """
+        self.client.query(sql).result()
+
+    def createInsufficientRequirements(self, insufficient_requirements_tablename):
+        sql = fr"""
+        create table `{self.project_id}.{self.dataset_name}.{insufficient_requirements_tablename}` (
+            announcement_no int64,
+            requirement_no int64,
+            company_no int64,
+            office_no int64,
+            requirement_type string,
+            requirement_description string,
+            suggestions_for_improvement string,
+            final_comment string,
+            createdDate string,
+            updatedDate string
+        )
+        """
+        self.client.query(sql).result()
+
+    def preupdateCompanyBidJudgement(self, company_bid_judgement_tablename, office_master_tablename, bid_announcements_tablename):
+        sql = fr"""MERGE `{self.project_id}.{self.dataset_name}.{company_bid_judgement_tablename}` AS target
         USING (
             select
             a.announcement_no,
             b.company_no,
             b.office_no
             from 
-            `{project_id}.{dataset_name}.{tablename_announcements}` a
+            `{self.project_id}.{self.dataset_name}.{bid_announcements_tablename}` a
             cross join
-            `{project_id}.{dataset_name}.{tablename_office_master}` b
+            `{self.project_id}.{self.dataset_name}.{office_master_tablename}` b
             group by a.announcement_no, b.company_no, b.office_no
         ) AS source
         ON 
@@ -1059,581 +811,184 @@ class GCPVM:
             NULL
         )
         """
-        client.query(sql).result()
+        self.client.query(sql).result()
 
-
-        # check
-        sql = fr"""
-        SELECT * FROM `{project_id}.{dataset_name}.{tablename_company_bid_judgement}` where final_status is NULL
+    def updateCompanyBidJudgement(self, company_bid_judgement_tablename, company_bid_judgement_tablename_for_update):
+        sql = fr"""MERGE `{self.project_id}.{self.dataset_name}.{company_bid_judgement_tablename}` AS target
+        USING `{self.project_id}.{self.dataset_name}.{company_bid_judgement_tablename_for_update}` AS source
+        ON 
+        target.announcement_no = source.announcement_no and
+        target.company_no = source.company_no and
+        target.office_no = source.office_no
+        when matched then
+        UPDATE SET
+            target.requirement_ineligibility = source.requirement_ineligibility,
+            target.requirement_grade_item = source.requirement_grade_item,
+            target.requirement_location = source.requirement_location,
+            target.requirement_experience = source.requirement_experience,
+            target.requirement_technician = source.requirement_technician,
+            target.requirement_other = source.requirement_other,
+            target.deficit_requirement_message = source.deficit_requirement_message,
+            target.final_status = source.final_status,
+            target.message = source.message,
+            target.remarks = source.remarks,
+            target.createdDate = source.createdDate,
+            target.updatedDate = source.updatedDate
         """
-        df0 = client.query(sql).result().to_dataframe()
+        self.client.query(sql).result()
 
-        print(fr"Target of checking requirement : {df0.shape[0]}")
+    def updateSufficientRequirements(self, sufficient_requirements_tablename, sufficient_requirements_tablename_for_update):
+        sql = fr"""MERGE `{self.project_id}.{self.dataset_name}.{sufficient_requirements_tablename}` AS target
+        USING `{self.project_id}.{self.dataset_name}.{sufficient_requirements_tablename_for_update}` AS source
+        ON 
+        target.announcement_no = source.announcement_no and
+        target.requirement_no = source.requirement_no and
+        target.company_no = source.company_no and
+        target.office_no = source.office_no and
+        target.requirement_type = source.requirement_type
+        when not matched then
+        insert (
+            announcement_no,
+            requirement_no,
+            company_no,
+            office_no,
+            requirement_type,
+            requirement_description,
+            createdDate,
+            updatedDate
+        )
+        values (
+            source.announcement_no,
+            source.requirement_no,
+            source.company_no,
+            source.office_no,
+            source.requirement_type,
+            source.requirement_description,
+            source.createdDate,
+            source.updatedDate
+        )
+        """
+        self.client.query(sql).result()
 
-        # 部分的に(chunk_sizeごとに)実行。
-        chunk_size = 1000
-        for start in range(0, len(df0), chunk_size):
-            df = df0.iloc[start:start+chunk_size]
-            result_judgement_list = []
-            result_sufficient_requirements_list = []
-            result_insufficient_requirements_list = []
-            for index, row1 in df.iterrows():
-                announcement_no = row1["announcement_no"]
-                company_no = row1["company_no"]
-                office_no = row1["office_no"]
-                tmp_result_judgement_list = []
-                if False:
-                    announcement_no = 1
-                    company_no = 1
-                    office_no = 1
+    def updateInsufficientRequirements(self, insufficient_requirements_tablename, insufficient_requirements_tablename_for_update):
+        sql = fr"""MERGE `{self.project_id}.{self.dataset_name}.{insufficient_requirements_tablename}` AS target
+        USING `{self.project_id}.{self.dataset_name}.{insufficient_requirements_tablename_for_update}` AS source
+        ON 
+        target.announcement_no = source.announcement_no and
+        target.requirement_no = source.requirement_no and
+        target.company_no = source.company_no and
+        target.office_no = source.office_no and
+        target.requirement_type = source.requirement_type
+        WHEN NOT MATCHED THEN
+        INSERT (
+            announcement_no,
+            requirement_no,
+            company_no,
+            office_no,
+            requirement_type,
+            requirement_description,
+            suggestions_for_improvement,
+            final_comment,
+            createdDate,
+            updatedDate
+        )
+        VALUES (
+            source.announcement_no,
+            source.requirement_no,
+            source.company_no,
+            source.office_no,
+            source.requirement_type,
+            source.requirement_description,
+            source.suggestions_for_improvement,
+            source.final_comment,
+            source.createdDate,
+            source.updatedDate
+        )
+        """
+        self.client.query(sql).result()
 
-                sql = fr"""
-                SELECT * FROM `{project_id}.{dataset_name}.{tablename_requirements}` where announcement_no = {announcement_no}
-                """
-                req_df = client.query(sql).result().to_dataframe()
-                if req_df.shape[0] == 0:
-                    print(fr"announcement_no={announcement_no}: No requirement found. Skip anyway.")
-                    continue
-
-                for jndex, row2 in req_df.iterrows():
-                    if False:
-                        i = 0
-                        row2 = req_df.iloc[i]
-
-                    requirement_type = row2["requirement_type"]
-                    requirement_text = row2["requirement_text"]
-                    requirement_no = row2["requirement_no"]
-
-                    requirementText = requirement_text
-                    companyNo = company_no
-                    officeNo = office_no
-                    
-
-                    if requirement_type == "欠格要件":
-                        val = checkIneligibilityDynamic(
-                            requirementText=requirement_text, 
-                            companyNo=company_no, 
-                            officeNo=office_no,
-                            company_data = pd.read_csv("data/master/company_master.txt",sep="\t"), 
-                            office_registration_authorization_data=pd.read_csv("data/master/office_registration_authorization_master.txt",sep="\t")
-                        )
-                    elif requirement_type == "業種・等級要件":
-                        val = checkGradeAndItemRequirement(
-                            requirementText=requirement_text, 
-                            officeNo=office_no,
-                            licenseData = pd.read_csv("data/master/office_registration_authorization_master.txt",sep="\t", converters={"construction_id": lambda x: str(x)}),
-                            agencyData = pd.read_csv("data/master/agency_master.txt",sep="\t"),
-                            constructionData = pd.read_csv("data/master/construction_master.txt",sep="\t")
-                        )
-                    elif requirement_type == "所在地要件":
-                        val = checkLocationRequirement(
-                            requirementText=requirement_text, 
-                            officeNo=office_no,
-                            agencyData=pd.read_csv("data/master/agency_master.txt",sep="\t"),
-                            officeData = pd.read_csv("data/master/office_master.txt",sep="\t")
-                        )
-
-                    elif requirement_type == "実績要件":
-                        val = checkExperienceRequirement(
-                            requirementText=requirement_text, 
-                            officeNo=office_no,
-                            office_experience_data=pd.read_csv("data/master/office_work_achivements_master.txt",sep="\t"),
-                            agency_data=pd.read_csv("data/master/agency_master.txt",sep="\t"), 
-                            construction_data=pd.read_csv("data/master/construction_master.txt",sep="\t")
-                        )
-                    elif requirement_type == "技術者要件":
-                        val = checkTechnicianRequirement(
-                            requirementText=requirement_text, 
-                            companyNo=company_no, 
-                            officeNo=office_no,
-                            employeeData=pd.read_csv("data/master/employee_master.txt", sep="\t"), 
-                            qualData=pd.read_csv("data/master/employee_qualification_master.txt", sep="\t"), 
-                            qualMasterData=pd.read_csv("data/master/technician_qualification_master.txt", sep="\t"),
-                            expData = pd.read_csv("data/master/employee_experience_master.txt", sep="\t")
-                        )
-                    else:
-                        val = {"is_ok":False, "reason":"その他要件があります。確認してください"}
-
-                    
-                    tmp_result_judgement_list.append({
-                        "requirement_no":requirement_no,
-                        "company_no":company_no,
-                        "office_no":office_no,
-                        "requirementType":requirement_type,
-                        "is_ok":val["is_ok"],
-                        "result":val["reason"]
-                    })
-
-                    if val["is_ok"]:
-                        result_sufficient_requirements_list.append({
-                            "announcement_no":announcement_no,
-                            "requirement_no":requirement_no,
-                            "company_no":company_no,
-                            "office_no":office_no,
-                            "requirement_type":requirement_type,
-                            "requirement_description":val["reason"],
-                            "createdDate":"",
-                            "updatedDate":""
-                        })
-
-                        if False:
-                            sql = fr"""MERGE `{project_id}.{dataset_name}.{tablename_sufficient_requirement_master}` AS target
-                            USING (
-                                select
-                                {announcement_no} as announcement_no,
-                                {requirement_no} as requirement_no,
-                                {company_no} as company_no,
-                                {office_no} as office_no,
-                                '{requirement_type}' as requirement_type,
-                                '{val["reason"]}' as requirement_description,
-                                '' as createdDate,
-                                '' as updatedDate
-                            ) AS source
-                            ON 
-                            target.announcement_no = source.announcement_no and
-                            target.requirement_no = source.requirement_no and
-                            target.company_no = source.company_no and
-                            target.office_no = source.office_no and
-                            target.requirement_type = source.requirement_type
-                            when not matched then
-                            insert (
-                                announcement_no,
-                                requirement_no,
-                                company_no,
-                                office_no,
-                                requirement_type,
-                                requirement_description,
-                                createdDate,
-                                updatedDate
-                            )
-                            values (
-                                source.announcement_no,
-                                source.requirement_no,
-                                source.company_no,
-                                source.office_no,
-                                source.requirement_type,
-                                source.requirement_description,
-                                source.createdDate,
-                                source.updatedDate
-                            )
-                            """
-                    else:
-                        result_insufficient_requirements_list.append({
-                            "announcement_no":announcement_no,
-                            "requirement_no":requirement_no,
-                            "company_no":company_no,
-                            "office_no":office_no,
-                            "requirement_type":requirement_type,
-                            "requirement_description":val["reason"],
-                            "suggestions_for_improvement":"",
-                            "final_comment":"",
-                            "createdDate":"",
-                            "updatedDate":""
-                        })
-                        if False:
-                            sql = fr"""MERGE `{project_id}.{dataset_name}.{tablename_insufficient_requirement_master}` AS target
-                            USING (
-                                select
-                                {announcement_no} as announcement_no,
-                                {requirement_no} as requirement_no,
-                                {company_no} as company_no,
-                                {office_no} as office_no,
-                                '{requirement_type}' as requirement_type,
-                                '{val["reason"]}' as requirement_description,
-                                '' as suggestions_for_improvement,
-                                '' as final_comment,
-                                '' as createdDate,
-                                '' as updatedDate
-                            ) AS source
-                            ON 
-                            target.announcement_no = source.announcement_no and
-                            target.requirement_no = source.requirement_no and
-                            target.company_no = source.company_no and
-                            target.office_no = source.office_no and
-                            target.requirement_type = source.requirement_type
-                            when not matched then
-                            insert (
-                                announcement_no,
-                                requirement_no,
-                                company_no,
-                                office_no,
-                                requirement_type,
-                                requirement_description,
-                                suggestions_for_improvement,
-                                final_comment,
-                                createdDate,
-                                updatedDate
-                            )
-                            values (
-                                source.announcement_no,
-                                source.requirement_no,
-                                source.company_no,
-                                source.office_no,
-                                source.requirement_type,
-                                source.requirement_description,
-                                source.suggestions_for_improvement,
-                                source.final_comment,
-                                source.createdDate,
-                                source.updatedDate
-                            )
-                            """
-
-                    # client.query(sql).result()
-
-                tmp_result_judgement_df = pd.DataFrame(tmp_result_judgement_list)
-
-                def summarize_result(announcement_no, company_no, office_no, tmp_result_df):
-                    checked_requirement = {
-                        "announcement_no":announcement_no,
-                        "company_no":company_no,
-                        "office_no":office_no,
-                        "requirement_ineligibility":True,
-                        "requirement_grade_item":True,
-                        "requirement_location":True,
-                        "requirement_experience":True,
-                        "requirement_technician":True,
-                        "requirement_other":True,
-                        "deficit_requirement_message":"",
-                        "final_status":True,
-                        "message":"",
-                        "remarks":"",
-                        "createdDate":"",
-                        "updatedDate":""
-                    }
-                    requirement_type_map = {
-                        "欠格要件":"requirement_ineligibility",
-                        "業種・等級要件":"requirement_grade_item",
-                        "所在地要件":"requirement_location",
-                        "実績要件":"requirement_experience",
-                        "技術者要件":"requirement_technician"
-                    }
-
-                    is_ok_false = tmp_result_df[~tmp_result_df["is_ok"]]
-
-                    if is_ok_false.shape[0] > 0:
-                        ng_req_types = is_ok_false["requirementType"].unique()
-                        for type_ in ng_req_types:
-                            type_name = requirement_type_map.get(type_, "requirement_other")
-                            checked_requirement[type_name] = False
-                            is_ok_false_type = is_ok_false[is_ok_false["requirementType"] == type_]
-                            result_values = is_ok_false_type["result"].str.replace(rf"{type_}[:：]", "", regex=True).unique()
-                            result_values = "[" + type_ + "]" + "|".join(result_values)
-
-                            if checked_requirement["deficit_requirement_message"] == "":
-                                checked_requirement["deficit_requirement_message"] = result_values
-                            else:
-                                checked_requirement["deficit_requirement_message"] = checked_requirement["deficit_requirement_message"] + " " + result_values
-                        checked_requirement["final_status"] = False
-
-                    return checked_requirement
-
-                result_judgement_list.append(summarize_result(announcement_no=announcement_no, company_no=company_no, office_no=office_no, tmp_result_df=tmp_result_judgement_df))
-
-
-            result_judgement = pd.DataFrame(result_judgement_list)
-            result_insufficient_requirements = pd.DataFrame(result_insufficient_requirements_list)
-            result_sufficient_requirements = pd.DataFrame(result_sufficient_requirements_list)
-
-            if result_judgement.shape[0] > 0:
-                tmp_result_judgement_table = "tmp_result_judgement"
-                print(fr"Upload {project_id}.{dataset_name}.{tmp_result_judgement_table}")
-                to_gbq(
-                    dataframe=result_judgement, 
-                    destination_table=fr"{dataset_name}.{tmp_result_judgement_table}",  # dataset.table 形式
-                    project_id=fr"{project_id}", 
-                    if_exists='replace'
-                )
-                sql = fr"""MERGE `{project_id}.{dataset_name}.{tablename_company_bid_judgement}` AS target
-                USING `{project_id}.{dataset_name}.{tmp_result_judgement_table}` AS source
-                ON 
-                target.announcement_no = source.announcement_no and
-                target.company_no = source.company_no and
-                target.office_no = source.office_no
-                when matched then
-                UPDATE SET
-                    target.requirement_ineligibility = source.requirement_ineligibility,
-                    target.requirement_grade_item = source.requirement_grade_item,
-                    target.requirement_location = source.requirement_location,
-                    target.requirement_experience = source.requirement_experience,
-                    target.requirement_technician = source.requirement_technician,
-                    target.requirement_other = source.requirement_other,
-                    target.deficit_requirement_message = source.deficit_requirement_message,
-                    target.final_status = source.final_status,
-                    target.message = source.message,
-                    target.remarks = source.remarks,
-                    target.createdDate = source.createdDate,
-                    target.updatedDate = source.updatedDate
-                """
-                client.query(sql).result()
-                client.delete_table(fr"{project_id}.{dataset_name}.{tmp_result_judgement_table}", not_found_ok=True)
-
-            if result_insufficient_requirements.shape[0] > 0:
-                tmp_result_insufficient_requirements_master_table = "tmp_result_insufficient_requirements"
-                print(fr"Upload {project_id}.{dataset_name}.{tmp_result_insufficient_requirements_master_table}")
-                to_gbq(
-                    dataframe=result_insufficient_requirements, 
-                    destination_table=fr"{dataset_name}.{tmp_result_insufficient_requirements_master_table}",  # dataset.table 形式
-                    project_id=fr"{project_id}", 
-                    if_exists='replace'
-                )
-                sql = fr"""MERGE `{project_id}.{dataset_name}.{tablename_insufficient_requirement_master}` AS target
-                USING `{project_id}.{dataset_name}.{tmp_result_insufficient_requirements_master_table}` AS source
-                ON 
-                target.announcement_no = source.announcement_no and
-                target.requirement_no = source.requirement_no and
-                target.company_no = source.company_no and
-                target.office_no = source.office_no and
-                target.requirement_type = source.requirement_type
-                WHEN NOT MATCHED THEN
-                INSERT (
-                    announcement_no,
-                    requirement_no,
-                    company_no,
-                    office_no,
-                    requirement_type,
-                    requirement_description,
-                    suggestions_for_improvement,
-                    final_comment,
-                    createdDate,
-                    updatedDate
-                )
-                VALUES (
-                    source.announcement_no,
-                    source.requirement_no,
-                    source.company_no,
-                    source.office_no,
-                    source.requirement_type,
-                    source.requirement_description,
-                    source.suggestions_for_improvement,
-                    source.final_comment,
-                    source.createdDate,
-                    source.updatedDate
-                )
-                """
-                client.query(sql).result()
-                client.delete_table(fr"{project_id}.{dataset_name}.{tmp_result_insufficient_requirements_master_table}", not_found_ok=True)
-
-            if result_sufficient_requirements.shape[0] > 0:
-                tmp_result_sufficient_requirements_master_table = "tmp_result_sufficient_requirements"
-                print(fr"Upload {project_id}.{dataset_name}.{tmp_result_sufficient_requirements_master_table}")
-                to_gbq(
-                    dataframe=result_sufficient_requirements, 
-                    destination_table=fr"{dataset_name}.{tmp_result_sufficient_requirements_master_table}",  # dataset.table 形式
-                    project_id=fr"{project_id}", 
-                    if_exists='replace'
-                )
-                sql = fr"""MERGE `{project_id}.{dataset_name}.{tablename_sufficient_requirement_master}` AS target
-                USING `{project_id}.{dataset_name}.{tmp_result_sufficient_requirements_master_table}` AS source
-                ON 
-                target.announcement_no = source.announcement_no and
-                target.requirement_no = source.requirement_no and
-                target.company_no = source.company_no and
-                target.office_no = source.office_no and
-                target.requirement_type = source.requirement_type
-                when not matched then
-                insert (
-                    announcement_no,
-                    requirement_no,
-                    company_no,
-                    office_no,
-                    requirement_type,
-                    requirement_description,
-                    createdDate,
-                    updatedDate
-                )
-                values (
-                    source.announcement_no,
-                    source.requirement_no,
-                    source.company_no,
-                    source.office_no,
-                    source.requirement_type,
-                    source.requirement_description,
-                    source.createdDate,
-                    source.updatedDate
-                )
-                """
-                client.query(sql).result()
-                client.delete_table(fr"{project_id}.{dataset_name}.{tmp_result_sufficient_requirements_master_table}", not_found_ok=True)
-
-
-class SQLITE3:
-    def __init__(self, bid_announcements_pre_file, google_ai_studio_api_key_filepath=None, sqlite3_db_file_path=None, sql_connector=None, tablenamesconfig=None):
-        self.bid_announcements_pre_file = bid_announcements_pre_file
-        self.google_ai_studio_api_key_filepath = google_ai_studio_api_key_filepath
-
-        self.conn = sql_connector.conn
-        self.cur = sql_connector.cur
-
-        self.tablenamesconfig = tablenamesconfig
-
-    def select_to_table(self, tablename):
-        conn = self.conn
-        cur = self.cur
-        sql = fr"select * from {tablename}"
-        df = pd.read_sql_query(sql, conn)
-        return df
+class DBOperatorSQLITE3(DBOperator):
 
     def any_query(self, sql):
-        conn = self.conn
-        cur = self.cur
-        df = pd.read_sql_query(sql, conn)
+        df = pd.read_sql_query(sql, self.conn)
         return df
 
-    def step0_create_bid_announcements_pre(self, bid_announcements_pre_file=None):
-        if bid_announcements_pre_file is None:
-            bid_announcements_pre_file = self.bid_announcements_pre_file
-
-        conn = self.conn
-        cur = self.cur
-
-        tablename = self.tablenamesconfig.bid_announcements_pre
-        
+    def ifTableExists(self, tablename):
         sql = """
         SELECT name FROM sqlite_master WHERE type='table'
         """
-        df = pd.read_sql_query(sql, conn)
+        df = pd.read_sql_query(sql, self.conn)
         df = df[df["name"] == tablename]
-            
+
         if df.shape[0] == 1:
-            sql = fr"""
-            drop table {tablename}
-            """
-            cur.execute(sql)
-        else:
-            print(fr"TABLE Not exists: {tablename}")
+            return True
+        return False
 
+    def dropTable(self, tablename):
+        self.cur.execute(fr"DROP TABLE IF EXISTS {tablename}")
 
-        # データ用意
-        df = pd.read_csv(bid_announcements_pre_file, sep="\t")
-        print(fr"Upload {tablename}")
-        df.to_sql(tablename, conn, if_exists="replace", index=False)
+    def uploadDataToTable(self, data, tablename):
+        data.to_sql(tablename, self.conn, if_exists="replace", index=False)
 
-        # check
+    def selectToTable(self, tablename, where_clause=""):
+        sql = fr"SELECT * FROM {tablename} {where_clause}"
+        ret = pd.read_sql_query(sql, self.conn)
+        return ret
+
+    def createBidAnnouncements(self, bid_announcements_tablename):
         sql = fr"""
-        SELECT * FROM {tablename}
+        create table {bid_announcements_tablename} (
+        announcement_no integer PRIMARY KEY,
+        workName string,
+        userAnnNo integer,
+        topAgencyNo integer,
+        topAgencyName string,
+        subAgencyNo integer,
+        subAgencyName string,
+        workPlace string,
+        pdfUrl string,
+        zipcode string,
+        address string,
+        department string,
+        assigneeName string,
+        telephone string,
+        fax string,
+        mail string,
+        publishDate string,
+        docDistStart string,
+        docDistEnd string,
+        submissionStart string,
+        submissionEnd string,    
+        bidStartDate string,
+        bidEndDate string,
+        doneOCR bool,
+        remarks string, 
+        createdDate string,
+        updatedDate string
+        )
         """
-        #val = pd.read_sql_query(sql, conn)
+        self.cur.execute(sql)
 
 
-
-    def step1_transfer(self, remove_table=False):
-
-        conn = self.conn
-        cur = self.cur
-
-        tablename_pre = self.tablenamesconfig.bid_announcements_pre
-        tablename_announcements = self.tablenamesconfig.bid_announcements
-        tablename_requirements = self.tablenamesconfig.bid_requirements
-
-
-        # テーブル 'bid_announcements' の存在確認。名前取得で検証。
-        sql = """
-        SELECT name FROM sqlite_master WHERE type='table'
-        """
-        tablename = pd.read_sql_query(sql, conn)
-        tablename = tablename[tablename["name"] == tablename_announcements]
-
-        # テーブルが存在するなら、削除オプションに応じて削除
-        if tablename.shape[0] == 1:
-            if remove_table:
-                sql = fr"""
-                drop table {tablename_announcements}
-                """
-                cur.execute(sql)
-                print(fr"DELETE existing table: {tablename_announcements}.")
-                # テーブル削除したので 0 行になるように変数更新
-                tablename = tablename.iloc[0:0]
-
-        if tablename.shape[0] == 0:
-            # テーブルが無いなら作成
-            sql = fr"""
-            create table {tablename_announcements} (
-            announcement_no integer PRIMARY KEY,
-            workName string,
-            userAnnNo integer,
-            topAgencyNo integer,
-            topAgencyName string,
-            subAgencyNo integer,
-            subAgencyName string,
-            workPlace string,
-            pdfUrl string,
-            zipcode string,
-            address string,
-            department string,
-            assigneeName string,
-            telephone string,
-            fax string,
-            mail string,
-            publishDate string,
-            docDistStart string,
-            docDistEnd string,
-            submissionStart string,
-            submissionEnd string,    
-            bidStartDate string,
-            bidEndDate string,
-            doneOCR bool,
-            remarks string, 
-            createdDate string,
-            updatedDate string
-            )
-            """
-            cur.execute(sql)
-            # client.query(sql).result()
-            print(fr"NEWLY CREATED: {tablename_announcements}.")
-        else:
-            print(fr"ALREADY EXISTS: {tablename_announcements}.")
-
-
-        # 同様に bid_requirements 
-        # テーブル 'bid_requirements' の存在確認。名前取得で検証。
-        sql = """
-        SELECT name FROM sqlite_master WHERE type='table'
-        """
-        tablename = pd.read_sql_query(sql, conn)
-        tablename = tablename[tablename["name"] == tablename_requirements]
-
-        # テーブルが存在するなら、削除オプションに応じて削除
-        if tablename.shape[0] == 1:
-            if remove_table:
-                sql = fr"""
-                drop table {tablename_requirements}
-                """
-                cur.execute(sql)
-                print(fr"DELETE existing table: {tablename_requirements}.")
-                # テーブル削除したので 0 行になるように変数更新
-                tablename = tablename.iloc[0:0]
-
-        if tablename.shape[0] == 0:
-            # テーブルが無いなら作成
-            sql = fr"""
-            create table {tablename_requirements} (
-            requirement_no integer,
-            announcement_no integer,
-            requirement_type string,
-            requirement_text string,
-            done_judgement bool,
-            createdDate string,
-            updatedDate string,
-            UNIQUE(announcement_no, requirement_no, requirement_type)
-            )
-            """
-            cur.execute(sql)
-            # client.query(sql).result()
-            print(fr"NEWLY CREATED: {tablename_requirements}.")
-        else:
-            print(fr"ALREADY EXISTS: {tablename_requirements}.")
-
-
-        # 転写処理
-        # BigQueryのような分析基盤は OLAP寄り。
-        # ID管理や逐次更新はOLTP型DB（RDBMS）が得意
-        #
-        # ID ... GENERATE_UUID() で UUID を作る方法はある。
-        # バッチ処理なら連番採番で問題なさそう。同時実行が想定される(例：近い時刻に異なる注文をinsert)場合は問題あるかもしれない。
-        # TODO: 要テスト
-        # 疑問:row_number付与の order by 列は pdf_urlがよいのか？
+    def createBidRequirements(self, bid_requirements_tablename):
         sql = fr"""
-        INSERT INTO {tablename_announcements} (
+        create table {bid_requirements_tablename} (
+        requirement_no integer,
+        announcement_no integer,
+        requirement_type string,
+        requirement_text string,
+        done_judgement bool,
+        createdDate string,
+        updatedDate string,
+        UNIQUE(announcement_no, requirement_no, requirement_type)
+        )
+        """
+        self.cur.execute(sql)
+
+
+    def transferAnnouncements(self, bid_announcements_tablename, bid_announcements_pre_tablename):
+        sql = fr"""
+        INSERT INTO {bid_announcements_tablename} (
             announcement_no,
             workName,
             userAnnNo,
@@ -1663,7 +1018,7 @@ class SQLITE3:
             updatedDate
             )
         WITH maxval AS (
-            SELECT IFNULL(MAX(announcement_no), 0) AS maxno FROM {tablename_announcements}
+            SELECT IFNULL(MAX(announcement_no), 0) AS maxno FROM {bid_announcements_tablename}
         ), 
         to_insert AS (
         SELECT
@@ -1694,8 +1049,8 @@ class SQLITE3:
             tbl_pre.remarks,
             strftime('%Y-%m-%d %H:%M:%S', CURRENT_TIMESTAMP) AS createdDate,
             strftime('%Y-%m-%d %H:%M:%S', CURRENT_TIMESTAMP) AS updatedDate
-        FROM {tablename_pre} AS tbl_pre
-        LEFT JOIN {tablename_announcements} AS tbl
+        FROM {bid_announcements_pre_tablename} AS tbl_pre
+        LEFT JOIN {bid_announcements_tablename} AS tbl
             ON tbl_pre.pdfurl = tbl.pdfurl
         WHERE tbl.pdfurl IS NULL
         )
@@ -1729,42 +1084,473 @@ class SQLITE3:
         updatedDate
         FROM to_insert, maxval
         """
-
         # FORMAT_TIMESTAMP('%Y-%m-%d %H:%M:%S', CURRENT_TIMESTAMP())
         # -> strftime('%Y-%m-%d %H:%M:%S', CURRENT_TIMESTAMP)
-        cur.execute(sql)
-        #client.query(sql).result()
+        self.cur.execute(sql)
+
+
+    def updateAnnouncements(self, bid_announcements_tablename, bid_announcements_tablename_for_update):
+        sql = fr"""insert into {bid_announcements_tablename} (
+            announcement_no,
+            workName,
+            userAnnNo,
+            topAgencyNo,
+            topAgencyName,
+            subAgencyNo,
+            subAgencyName,
+            workPlace,
+            pdfUrl,
+            zipcode,
+            address,
+            department,
+            assigneeName,
+            telephone,
+            fax,
+            mail,
+            publishDate,
+            docDistStart,
+            docDistEnd,
+            submissionStart,
+            submissionEnd,
+            bidStartDate,
+            bidEndDate,
+            doneOCR,
+            remarks, 
+            createdDate,
+            updatedDate
+        )
+        select 
+        announcement_no,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        workplace,
+        NULL,
+        zipcode,
+        address,
+        department,
+        assigneename,
+        telephone,
+        fax,
+        mail,
+        NULL,
+        docdiststart,
+        docdistend,
+        submissionstart,
+        submissionend,
+        bidstartdate,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL
+        from {bid_announcements_tablename_for_update} source where true
+        ON CONFLICT(announcement_no) DO UPDATE SET
+            announcement_no = {bid_announcements_tablename}.announcement_no,
+            workname = {bid_announcements_tablename}.workname,
+            userAnnNo = {bid_announcements_tablename}.userannno,
+            topAgencyNo = {bid_announcements_tablename}.topagencyno,
+            topAgencyName = {bid_announcements_tablename}.topagencyname,
+            subAgencyNo = {bid_announcements_tablename}.subagencyno,
+            subAgencyName = {bid_announcements_tablename}.subagencyname,
+            workplace = excluded.workplace,
+            pdfUrl = {bid_announcements_tablename}.pdfurl,
+            zipcode = excluded.zipcode,
+            address = excluded.address,
+            department = excluded.department,
+            assigneename = excluded.assigneename,
+            telephone = excluded.telephone,
+            fax = excluded.fax,
+            mail = excluded.mail,
+            publishDate = {bid_announcements_tablename}.publishDate,
+            docdiststart = excluded.docdiststart,
+            docdistend = excluded.docdistend,
+            submissionstart = excluded.submissionstart,
+            submissionend = excluded.submissionend,
+            bidstartdate = excluded.bidstartdate,
+            bidEndDate = {bid_announcements_tablename}.bidenddate,
+            doneocr = TRUE,
+            remarks = {bid_announcements_tablename}.remarks, 
+            createdDate = {bid_announcements_tablename}.createddate,
+            updatedDate = {bid_announcements_tablename}.updateddate
+        """
+        self.cur.execute(sql)
+
+    def updateRequirements(self, bid_requirements_tablename, bid_requirements_tablename_for_update):
+        sql = fr"""insert into {bid_requirements_tablename} (
+            requirement_no,
+            announcement_no,
+            requirement_type,
+            requirement_text,
+            done_judgement,
+            createdDate,
+            updatedDate
+        )
+        select 
+        requirement_no,
+        announcement_no,
+        requirement_type,
+        requirement_text,
+        0,
+        createdDate,
+        updatedDate
+        from {bid_requirements_tablename_for_update} source where true
+        ON CONFLICT(announcement_no, requirement_no, requirement_type) DO UPDATE SET
+            announcement_no = excluded.announcement_no,
+            requirement_no = excluded.requirement_no,
+            requirement_type = excluded.requirement_type,
+            requirement_text = excluded.requirement_text,
+            createdDate = excluded.createddate,
+            updatedDate = excluded.updateddate
+        """
+        self.cur.execute(sql)
+
+
+    def createCompanyBidJudgements(self, company_bid_judgement_tablename):
+        sql = fr"""
+        create table {company_bid_judgement_tablename} (
+            announcement_no integer,
+            company_no integer,
+            office_no integer,
+            requirement_ineligibility bool,
+            requirement_grade_item bool,
+            requirement_location bool,
+            requirement_experience bool,
+            requirement_technician bool,
+            requirement_other bool,
+            deficit_requirement_message string,
+            final_status bool,
+            message string,
+            remarks string,
+            createdDate string,
+            updatedDate string,
+            unique(announcement_no, company_no, office_no)
+        )
+        """
+        self.cur.execute(sql)
+
+    def createSufficientRequirements(self, sufficient_requirements_tablename):
+        sql = fr"""
+        create table {sufficient_requirements_tablename} (
+            announcement_no integer,
+            requirement_no integer,
+            company_no integer,
+            office_no integer,
+            requirement_type string,
+            requirement_description string,
+            createdDate string,
+            updatedDate string,
+            unique(announcement_no, requirement_no, company_no, office_no, requirement_type)
+        )
+        """
+        self.cur.execute(sql)
+
+    def createInsufficientRequirements(self, insufficient_requirements_tablename):
+        sql = fr"""
+        create table {insufficient_requirements_tablename} (
+            announcement_no integer,
+            requirement_no integer,
+            company_no integer,
+            office_no integer,
+            requirement_type string,
+            requirement_description string,
+            suggestions_for_improvement string,
+            final_comment string,
+            createdDate string,
+            updatedDate string,
+            unique(announcement_no, requirement_no, company_no, office_no, requirement_type)
+        )
+        """                
+        self.cur.execute(sql)
+
+    def preupdateCompanyBidJudgement(self, company_bid_judgement_tablename, office_master_tablename, bid_announcements_tablename):
+        sql = fr"""insert into {company_bid_judgement_tablename} (
+            announcement_no,
+            company_no,
+            office_no,
+            requirement_ineligibility,
+            requirement_grade_item,
+            requirement_location,
+            requirement_experience,
+            requirement_technician,
+            requirement_other,
+            deficit_requirement_message,
+            final_status,
+            message,
+            remarks,
+            createdDate,
+            updatedDate
+        )
+        select 
+        a.announcement_no,
+        b.company_no,
+        b.office_no,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL
+        from {bid_announcements_tablename} as a 
+        cross join 
+        {office_master_tablename} as b
+        where true
+        ON CONFLICT(announcement_no, company_no, office_no) DO NOTHING
+        """
+        self.cur.execute(sql)
+
+    def updateCompanyBidJudgement(self, company_bid_judgement_tablename, company_bid_judgement_tablename_for_update):
+        sql = fr"""insert into {company_bid_judgement_tablename} (
+            announcement_no,
+            company_no,
+            office_no,
+            requirement_ineligibility,
+            requirement_grade_item,
+            requirement_location,
+            requirement_experience,
+            requirement_technician,
+            requirement_other,
+            deficit_requirement_message,
+            final_status,
+            message,
+            remarks,
+            createdDate,
+            updatedDate
+        ) 
+        select 
+            announcement_no,
+            company_no,
+            office_no,
+            requirement_ineligibility,
+            requirement_grade_item,
+            requirement_location,
+            requirement_experience,
+            requirement_technician,
+            requirement_other,
+            deficit_requirement_message,
+            final_status,
+            message,
+            remarks,
+            createdDate,
+            updatedDate
+        from {company_bid_judgement_tablename_for_update} where true
+        ON CONFLICT(announcement_no, company_no, office_no) DO UPDATE SET
+            announcement_no = {company_bid_judgement_tablename}.announcement_no,
+            company_no = {company_bid_judgement_tablename}.company_no,
+            office_no = {company_bid_judgement_tablename}.office_no,
+            requirement_ineligibility = excluded.requirement_ineligibility,
+            requirement_grade_item = excluded.requirement_grade_item,
+            requirement_location = excluded.requirement_location,
+            requirement_experience = excluded.requirement_experience,
+            requirement_technician = excluded.requirement_technician,
+            requirement_other = excluded.requirement_other,
+            deficit_requirement_message = excluded.deficit_requirement_message,
+            final_status = excluded.final_status,
+            message = excluded.message,
+            remarks = excluded.remarks,
+            createdDate = excluded.createdDate,
+            updatedDate = excluded.updatedDate
+        """
+        self.cur.execute(sql)
+
+    def updateSufficientRequirements(self, sufficient_requirements_tablename, sufficient_requirements_tablename_for_update):
+        sql = fr"""insert into {sufficient_requirements_tablename} (
+            announcement_no,
+            requirement_no,
+            company_no,
+            office_no,
+            requirement_type,
+            requirement_description,
+            createdDate,
+            updatedDate
+        )
+        select
+            announcement_no,
+            requirement_no,
+            company_no,
+            office_no,
+            requirement_type,
+            requirement_description,
+            createdDate,
+            updatedDate                    
+        from {sufficient_requirements_tablename_for_update} where true
+        ON CONFLICT(announcement_no, requirement_no, company_no, office_no, requirement_type) DO UPDATE SET
+            announcement_no = {sufficient_requirements_tablename}.announcement_no,
+            requirement_no = {sufficient_requirements_tablename}.requirement_no,
+            company_no = {sufficient_requirements_tablename}.company_no,
+            office_no = {sufficient_requirements_tablename}.office_no,
+            requirement_type = excluded.requirement_type,
+            requirement_description = excluded.requirement_description,
+            createdDate = excluded.createdDate,
+            updatedDate = excluded.updatedDate
+        """
+        self.cur.execute(sql)
+
+    def updateInsufficientRequirements(self, insufficient_requirements_tablename, insufficient_requirements_tablename_for_update):
+        sql = fr"""insert into {insufficient_requirements_tablename} (
+            announcement_no,
+            requirement_no,
+            company_no,
+            office_no,
+            requirement_type,
+            requirement_description,
+            suggestions_for_improvement,
+            final_comment,
+            createdDate,
+            updatedDate
+        )
+        select
+            announcement_no,
+            requirement_no,
+            company_no,
+            office_no,
+            requirement_type,
+            requirement_description,
+            suggestions_for_improvement,
+            final_comment,
+            createdDate,
+            updatedDate
+        from {insufficient_requirements_tablename_for_update} where true
+        ON CONFLICT(announcement_no, requirement_no, company_no, office_no, requirement_type) DO UPDATE SET
+            announcement_no = {insufficient_requirements_tablename}.announcement_no,
+            requirement_no = {insufficient_requirements_tablename}.requirement_no,
+            company_no = {insufficient_requirements_tablename}.company_no,
+            office_no = {insufficient_requirements_tablename}.office_no,
+            requirement_type = excluded.requirement_type,
+            requirement_description = excluded.requirement_description,
+            suggestions_for_improvement = excluded.suggestions_for_improvement,
+            final_comment = excluded.final_comment,
+            createdDate = excluded.createdDate,
+            updatedDate = excluded.updatedDate
+        """
+        self.cur.execute(sql)
+
+
+class BidJudgementSan:
+    def __init__(self, bid_announcements_pre_file, tablenamesconfig=None, db_operator=None):
+        self.bid_announcements_pre_file = bid_announcements_pre_file
+        self.tablenamesconfig = tablenamesconfig
+        self.db_operator=db_operator
+
+
+    def step0_create_bid_announcements_pre(self, bid_announcements_pre_file=None):
+        if bid_announcements_pre_file is None:
+            bid_announcements_pre_file = self.bid_announcements_pre_file
+
+        tablename = self.tablenamesconfig.bid_announcements_pre
+        db_operator = self.db_operator
+        
+        if db_operator.ifTableExists(tablename=tablename):
+            db_operator.dropTable(tablename=tablename)
+        else:
+            print(fr"TABLE Not exists: {tablename}")
+
+        # データ用意
+        df = pd.read_csv(bid_announcements_pre_file, sep="\t")
+        df["userAnnNo"] = df["userAnnNo"].astype("Int64")
+        for cname in [
+            "workName",
+            "topAgencyName",
+            "subAgencyName",
+            "publishDate",
+            "docDistEnd",
+            "submissionEnd",
+            "bidEndDate",
+            "remarks",
+            "pdfUrl",
+            "reasonForNG"
+        ]:
+            df[cname] = df[cname].astype("string")
+        
+        print(fr"Upload {tablename}")
+        db_operator.uploadDataToTable(data=df, tablename=tablename)
 
         # check
-        sql = fr"""
-        SELECT * FROM {tablename_announcements}
-        """
-        #val = client.query(sql).result().to_dataframe()
-        #val = pd.read_sql_query(sql, conn)
+        #val = db_operator.selectToTable(tablename=tablename)
+
+
+
+    def step1_transfer(self, remove_table=False):
+
+        tablename_pre = self.tablenamesconfig.bid_announcements_pre
+        tablename_announcements = self.tablenamesconfig.bid_announcements
+        tablename_requirements = self.tablenamesconfig.bid_requirements
+        db_operator = self.db_operator
+
+
+        # テーブル 'bid_announcements' の存在確認。
+        tmpcheck = db_operator.ifTableExists(tablename=tablename_announcements)
+        # テーブルが存在するなら、削除オプションに応じて削除
+        if tmpcheck:
+            if remove_table:
+                db_operator.dropTable(tablename=tablename_announcements)
+                print(fr"DELETE existing table: {tablename_announcements}.")
+                # テーブル削除したのでフラグ更新
+                tmpcheck = False
+
+        if not tmpcheck:
+            # テーブルが無いなら作成
+            db_operator.createBidAnnouncements(bid_announcements_tablename=tablename_announcements)
+            print(fr"NEWLY CREATED: {tablename_announcements}.")
+        else:
+            print(fr"ALREADY EXISTS: {tablename_announcements}.")
+
+
+        # 同様に bid_requirements 
+        # テーブル 'bid_requirements' の存在確認。
+        tmpcheck = db_operator.ifTableExists(tablename=tablename_requirements)
+
+        # テーブルが存在するなら、削除オプションに応じて削除
+        if tmpcheck:
+            if remove_table:
+                db_operator.dropTable(tablename=tablename_requirements)
+                print(fr"DELETE existing table: {tablename_requirements}.")
+                # テーブル削除したのでフラグ更新
+                tmpcheck = False
+
+        if not tmpcheck:
+            # テーブルが無いなら作成
+            db_operator.createBidRequirements(bid_requirements_tablename=tablename_requirements)
+            print(fr"NEWLY CREATED: {tablename_requirements}.")
+        else:
+            print(fr"ALREADY EXISTS: {tablename_requirements}.")
+
+
+        # 転写処理
+        # BigQueryのような分析基盤は OLAP寄り。
+        # ID管理や逐次更新はOLTP型DB（RDBMS）が得意
+        #
+        # ID ... GENERATE_UUID() で UUID を作る方法はある。
+        # バッチ処理なら連番採番で問題なさそう。同時実行が想定される(例：近い時刻に異なる注文をinsert)場合は問題あるかもしれない。
+        # TODO: 要テスト
+        # 疑問:row_number付与の order by 列は pdf_urlがよいのか？
+        db_operator.transferAnnouncements(bid_announcements_tablename=tablename_announcements, bid_announcements_pre_tablename=tablename_pre)
+        # check
+        # val = db_operator.selectToTable(tablename=tablename)
 
 
     def step2_ocr(self, ocr_utils):
-
-        conn = self.conn
-        cur = self.cur
 
         tablename_announcements = self.tablenamesconfig.bid_announcements
         tmp_tablename_announcements = fr"tmp_{tablename_announcements}"
         tablename_requirements = self.tablenamesconfig.bid_requirements
         tmp_tablename_requirements = fr"tmp_{tablename_requirements}"
+        db_operator = self.db_operator
 
         # OCR
         # doneOCRがFalseのものを対象にする。
-        sql = fr"""
-        SELECT * FROM {tablename_announcements}
-        where doneOCR = FALSE
-        """
-        df1 = pd.read_sql_query(sql, conn)
+        df1 = db_operator.selectToTable(tablename=fr"{tablename_announcements}", where_clause="where doneOCR = FALSE order by announcement_no")
         if False:
-            sql = fr"""
-            SELECT * FROM {tablename_announcements}
-            """
-            df1 = pd.read_sql_query(sql, conn)
+            df1 = db_operator.selectToTable(tablename=fr"{tablename_announcements}")
 
         all_announcements = []
         all_requirement_texts = []
@@ -1836,112 +1622,19 @@ class SQLITE3:
         df1 = pd.DataFrame(all_announcements)
         if df1.shape[0] > 0:
             print(fr"Upload {tmp_tablename_announcements}")
-            df1.to_sql(tmp_tablename_announcements, conn, if_exists="replace", index=False)
+            db_operator.uploadDataToTable(data=df1, tablename=tmp_tablename_announcements)
+
             if False:
-                sql = fr"""
-                SELECT * FROM {tmp_tablename_announcements}
-                """
-                val = pd.read_sql_query(sql, conn)
+                val = db_operator.selectToTable(tablename=tmp_tablename_announcements)
                 print(val)
             if False:
-                sql = """
-                SELECT * FROM bid_announcements
-                """
-                val_pre = pd.read_sql_query(sql, conn)
+                val_pre = db_operator.selectToTable(tablename=tablename_announcements)
                 print(val_pre)
 
-            sql = fr"""insert into {tablename_announcements} (
-                announcement_no,
-                workName,
-                userAnnNo,
-                topAgencyNo,
-                topAgencyName,
-                subAgencyNo,
-                subAgencyName,
-                workPlace,
-                pdfUrl,
-                zipcode,
-                address,
-                department,
-                assigneeName,
-                telephone,
-                fax,
-                mail,
-                publishDate,
-                docDistStart,
-                docDistEnd,
-                submissionStart,
-                submissionEnd,
-                bidStartDate,
-                bidEndDate,
-                doneOCR,
-                remarks, 
-                createdDate,
-                updatedDate
-            )
-            select 
-            announcement_no,
-            NULL,
-            NULL,
-            NULL,
-            NULL,
-            NULL,
-            NULL,
-            workplace,
-            NULL,
-            zipcode,
-            address,
-            department,
-            assigneename,
-            telephone,
-            fax,
-            mail,
-            NULL,
-            docdiststart,
-            docdistend,
-            submissionstart,
-            submissionend,
-            bidstartdate,
-            NULL,
-            NULL,
-            NULL,
-            NULL,
-            NULL
-            from {tmp_tablename_announcements} source where true
-            ON CONFLICT(announcement_no) DO UPDATE SET
-                announcement_no = {tablename_announcements}.announcement_no,
-                workname = {tablename_announcements}.workname,
-                userAnnNo = {tablename_announcements}.userannno,
-                topAgencyNo = {tablename_announcements}.topagencyno,
-                topAgencyName = {tablename_announcements}.topagencyname,
-                subAgencyNo = {tablename_announcements}.subagencyno,
-                subAgencyName = {tablename_announcements}.subagencyname,
-                workplace = excluded.workplace,
-                pdfUrl = {tablename_announcements}.pdfurl,
-                zipcode = excluded.zipcode,
-                address = excluded.address,
-                department = excluded.department,
-                assigneename = excluded.assigneename,
-                telephone = excluded.telephone,
-                fax = excluded.fax,
-                mail = excluded.mail,
-                publishDate = {tablename_announcements}.publishDate,
-                docdiststart = excluded.docdiststart,
-                docdistend = excluded.docdistend,
-                submissionstart = excluded.submissionstart,
-                submissionend = excluded.submissionend,
-                bidstartdate = excluded.bidstartdate,
-                bidEndDate = {tablename_announcements}.bidenddate,
-                doneocr = TRUE,
-                remarks = {tablename_announcements}.remarks, 
-                createdDate = {tablename_announcements}.createddate,
-                updatedDate = {tablename_announcements}.updateddate
-            """
-            cur.execute(sql)
+            db_operator.updateAnnouncements(bid_announcements_tablename=tablename_announcements, bid_announcements_tablename_for_update=tmp_tablename_announcements)
 
         # 中間テーブル削除
-        cur.execute(fr"DROP TABLE IF EXISTS {tmp_tablename_announcements}")
-
+        db_operator.dropTable(tablename=tmp_tablename_announcements)
 
         ######################################
         # bid_requirements を更新。           #
@@ -1950,42 +1643,13 @@ class SQLITE3:
         if all_requirement_texts != []:
             df2 = pd.concat(all_requirement_texts, ignore_index=True)
             print(fr"Upload {tmp_tablename_requirements}")
-            df2.to_sql(tmp_tablename_requirements, conn, if_exists="replace", index=False)
+            db_operator.uploadDataToTable(data=df2, tablename=tmp_tablename_requirements)
+            db_operator.updateRequirements(bid_requirements_tablename=tablename_requirements, bid_requirements_tablename_for_update=tmp_tablename_requirements)
 
-
-            sql = fr"""insert into {tablename_requirements} (
-                requirement_no,
-                announcement_no,
-                requirement_type,
-                requirement_text,
-                done_judgement,
-                createdDate,
-                updatedDate
-            )
-            select 
-            requirement_no,
-            announcement_no,
-            requirement_type,
-            requirement_text,
-            0,
-            createdDate,
-            updatedDate
-            from {tmp_tablename_requirements} source where true
-            ON CONFLICT(announcement_no, requirement_no, requirement_type) DO UPDATE SET
-                announcement_no = excluded.announcement_no,
-                requirement_no = excluded.requirement_no,
-                requirement_type = excluded.requirement_type,
-                requirement_text = excluded.requirement_text,
-                createdDate = excluded.createddate,
-                updatedDate = excluded.updateddate
-            """
-            cur.execute(sql)
-
-        cur.execute(fr"DROP TABLE IF EXISTS {tmp_tablename_requirements}")
+        # 中間テーブル削除
+        db_operator.dropTable(tablename=tmp_tablename_requirements)
 
     def step3(self, remove_table=False):
-        conn = self.conn
-        cur = self.cur
 
         tablename_announcements = self.tablenamesconfig.bid_announcements
         tablename_requirements = self.tablenamesconfig.bid_requirements
@@ -1996,6 +1660,7 @@ class SQLITE3:
         tablename_sufficient_requirement_master = self.tablenamesconfig.sufficient_requirements
         tablename_insufficient_requirement_master = self.tablenamesconfig.insufficient_requirements
 
+        db_operator = self.db_operator
 
 
 
@@ -2009,141 +1674,42 @@ class SQLITE3:
         target_tablename = tablenames[0]
         for i, target_tablename in enumerate(tablenames):
 
-            sql = """
-            SELECT name FROM sqlite_master WHERE type='table'
-            """
-            tablename = pd.read_sql_query(sql, conn)
-            tablename = tablename[tablename["name"] == target_tablename]
+            tmpcheck = db_operator.ifTableExists(tablename = target_tablename)
 
-            if tablename.shape[0] == 1:
+            if tmpcheck:
                 if remove_table:
-                    sql = fr"""
-                    drop table {target_tablename}
-                    """
-                    cur.execute(sql)
+                    db_operator.dropTable(tablename=target_tablename)
                     print(fr"DELETE existing table: {target_tablename}.")
-                    tablename = tablename.iloc[0:0]
+                    tmpcheck = False
 
-            if tablename.shape[0] == 0:
+            if not tmpcheck:
                 if target_tablename == tablename_company_bid_judgement:
-                    sql = fr"""
-                    create table {target_tablename} (
-                        announcement_no integer,
-                        company_no integer,
-                        office_no integer,
-                        requirement_ineligibility bool,
-                        requirement_grade_item bool,
-                        requirement_location bool,
-                        requirement_experience bool,
-                        requirement_technician bool,
-                        requirement_other bool,
-                        deficit_requirement_message string,
-                        final_status bool,
-                        message string,
-                        remarks string,
-                        createdDate string,
-                        updatedDate string,
-                        unique(announcement_no, company_no, office_no)
-                    )
-                    """
+                    db_operator.createCompanyBidJudgements(company_bid_judgement_tablename=tablename_company_bid_judgement)
                 elif target_tablename == tablename_sufficient_requirement_master:
-                    sql = fr"""
-                    create table {target_tablename} (
-                        announcement_no integer,
-                        requirement_no integer,
-                        company_no integer,
-                        office_no integer,
-                        requirement_type string,
-                        requirement_description string,
-                        createdDate string,
-                        updatedDate string,
-                        unique(announcement_no, requirement_no, company_no, office_no, requirement_type)
-                    )
-                    """
+                    db_operator.createSufficientRequirements(sufficient_requirements_tablename=tablename_sufficient_requirement_master)
                 elif target_tablename == tablename_insufficient_requirement_master:
-                    sql = fr"""
-                    create table {target_tablename} (
-                        announcement_no integer,
-                        requirement_no integer,
-                        company_no integer,
-                        office_no integer,
-                        requirement_type string,
-                        requirement_description string,
-                        suggestions_for_improvement string,
-                        final_comment string,
-                        createdDate string,
-                        updatedDate string,
-                        unique(announcement_no, requirement_no, company_no, office_no, requirement_type)
-                    )
-                    """                
+                    db_operator.createInsufficientRequirements(insufficient_requirements_tablename=tablename_insufficient_requirement_master)
                 else:
                     raise Exception(fr"Unknown target_tablename={target_tablename}.")
-                
-                cur.execute(sql)
                 print(fr"NEWLY CREATED: {target_tablename}.")
             else:
                 print(fr"ALREADY EXISTS: {target_tablename}.")
 
+
         # office_master テーブルを作成
         tmp_office_master = pd.read_csv("data/master/office_master.txt",sep="\t")
         print(fr"Upload {tablename_office_master}")
-        tmp_office_master.to_sql(
-            name=tablename_office_master, 
-            con = conn, 
-            if_exists="replace", 
-            index=False
+        db_operator.uploadDataToTable(data=tmp_office_master, tablename=tablename_office_master)
+
+
+        db_operator.preupdateCompanyBidJudgement(
+            company_bid_judgement_tablename=tablename_company_bid_judgement, 
+            office_master_tablename=tablename_office_master, 
+            bid_announcements_tablename=tablename_announcements
         )
-
-
-        sql = fr"""insert into {tablename_company_bid_judgement} (
-            announcement_no,
-            company_no,
-            office_no,
-            requirement_ineligibility,
-            requirement_grade_item,
-            requirement_location,
-            requirement_experience,
-            requirement_technician,
-            requirement_other,
-            deficit_requirement_message,
-            final_status,
-            message,
-            remarks,
-            createdDate,
-            updatedDate
-        )
-        select 
-        a.announcement_no,
-        b.company_no,
-        b.office_no,
-        NULL,
-        NULL,
-        NULL,
-        NULL,
-        NULL,
-        NULL,
-        NULL,
-        NULL,
-        NULL,
-        NULL,
-        NULL,
-        NULL
-        from {tablename_announcements} as a 
-        cross join 
-        {tablename_office_master} as b
-        where true
-        ON CONFLICT(announcement_no, company_no, office_no) DO NOTHING
-        """
-        cur.execute(sql)
-
 
         # check
-        sql = fr"""
-        SELECT * FROM {tablename_company_bid_judgement} where final_status is NULL
-        """
-        #val = client.query(sql).result().to_dataframe()
-        df0 = pd.read_sql_query(sql, conn)
-
+        df0 = db_operator.selectToTable(tablename=fr"{tablename_company_bid_judgement}", where_clause="where final_status is NULL")
         print(fr"Target of checking requirement : {df0.shape[0]}")
 
         # 部分的に(chunk_sizeごとに)実行。
@@ -2163,11 +1729,7 @@ class SQLITE3:
                     company_no = int(df["company_no"][0])
                     office_no = int(df["office_no"][0])
 
-                sql = fr"""
-                SELECT * FROM {tablename_requirements} where announcement_no = {announcement_no}
-                """
-
-                req_df = pd.read_sql_query(sql, conn)
+                req_df = db_operator.selectToTable(tablename=fr"{tablename_requirements}", where_clause=fr"where announcement_no = {announcement_no}")
                 if req_df.shape[0] == 0:
                     print(fr"announcement_no={announcement_no}: No requirement found. Skip anyway.")
                     continue
@@ -2239,7 +1801,6 @@ class SQLITE3:
                         "result":val["reason"]
                     })
 
-
                     if val["is_ok"]:
                         result_sufficient_requirements_list.append({
                             "announcement_no":announcement_no,
@@ -2251,37 +1812,6 @@ class SQLITE3:
                             "createdDate":"",
                             "updatedDate":""
                         })
-
-                        if False:
-                            sql = fr"""insert into {tablename_sufficient_requirement_master} (
-                                announcement_no,
-                                requirement_no,
-                                company_no,
-                                office_no,
-                                requirement_type,
-                                requirement_description,
-                                createdDate,
-                                updatedDate
-                            ) values (
-                                {announcement_no},
-                                {requirement_no},
-                                {company_no},
-                                {office_no},
-                                '{requirement_type}',
-                                '{val["reason"]}',
-                                '',
-                                ''
-                            )
-                            ON CONFLICT(announcement_no, requirement_no, company_no, office_no, requirement_type) DO UPDATE SET
-                                announcement_no = announcement_no,
-                                requirement_no = requirement_no,
-                                company_no = company_no,
-                                office_no = office_no,
-                                requirement_type = excluded.requirement_type,
-                                requirement_description = excluded.requirement_description,
-                                createdDate = excluded.createdDate,
-                                updatedDate = excluded.updatedDate
-                            """
                     else:
                         result_insufficient_requirements_list.append({
                             "announcement_no":announcement_no,
@@ -2295,45 +1825,6 @@ class SQLITE3:
                             "createdDate":"",
                             "updatedDate":""
                         })
-                        if False:
-                            sql = fr"""insert into {tablename_insufficient_requirement_master} (
-                                announcement_no,
-                                requirement_no,
-                                company_no,
-                                office_no,
-                                requirement_type,
-                                requirement_description,
-                                suggestions_for_improvement,
-                                final_comment,
-                                createdDate,
-                                updatedDate
-                            ) values (
-                                {announcement_no},
-                                {requirement_no},
-                                {company_no},
-                                {office_no},
-                                '{requirement_type}',
-                                '{val["reason"]}',
-                                '',
-                                '',
-                                '',
-                                ''
-                            )
-                            ON CONFLICT(announcement_no, requirement_no, company_no, office_no, requirement_type) DO UPDATE SET
-                                announcement_no = announcement_no,
-                                requirement_no = requirement_no,
-                                company_no = company_no,
-                                office_no = office_no,
-                                requirement_type = excluded.requirement_type,
-                                requirement_description = excluded.requirement_description,
-                                suggestions_for_improvement = excluded.suggestions_for_improvement,
-                                final_comment = excluded.final_comment,
-                                createdDate = excluded.createdDate,
-                                updatedDate = excluded.updatedDate
-                            """
-
-                    # cur.execute(sql)
-
 
                 tmp_result_judgement_df = pd.DataFrame(tmp_result_judgement_list)
 
@@ -2384,7 +1875,6 @@ class SQLITE3:
 
                 result_judgement_list.append(summarize_result(announcement_no=announcement_no, company_no=company_no, office_no=office_no, tmp_result_df=tmp_result_judgement_df))
 
-
             result_judgement = pd.DataFrame(result_judgement_list)
             result_insufficient_requirements = pd.DataFrame(result_insufficient_requirements_list)
             result_sufficient_requirements = pd.DataFrame(result_sufficient_requirements_list)
@@ -2392,140 +1882,32 @@ class SQLITE3:
             if result_judgement.shape[0] > 0:
                 tmp_result_judgement_table = "tmp_result_judgement"
                 print(fr"Upload {tmp_result_judgement_table}")
-                result_judgement.to_sql(tmp_result_judgement_table, conn, if_exists="replace", index=False)
-                sql = fr"""insert into {tablename_company_bid_judgement} (
-                    announcement_no,
-                    company_no,
-                    office_no,
-                    requirement_ineligibility,
-                    requirement_grade_item,
-                    requirement_location,
-                    requirement_experience,
-                    requirement_technician,
-                    requirement_other,
-                    deficit_requirement_message,
-                    final_status,
-                    message,
-                    remarks,
-                    createdDate,
-                    updatedDate
-                ) 
-                select 
-                    announcement_no,
-                    company_no,
-                    office_no,
-                    requirement_ineligibility,
-                    requirement_grade_item,
-                    requirement_location,
-                    requirement_experience,
-                    requirement_technician,
-                    requirement_other,
-                    deficit_requirement_message,
-                    final_status,
-                    message,
-                    remarks,
-                    createdDate,
-                    updatedDate
-                from {tmp_result_judgement_table} where true
-                ON CONFLICT(announcement_no, company_no, office_no) DO UPDATE SET
-                    announcement_no = {tablename_company_bid_judgement}.announcement_no,
-                    company_no = {tablename_company_bid_judgement}.company_no,
-                    office_no = {tablename_company_bid_judgement}.office_no,
-                    requirement_ineligibility = excluded.requirement_ineligibility,
-                    requirement_grade_item = excluded.requirement_grade_item,
-                    requirement_location = excluded.requirement_location,
-                    requirement_experience = excluded.requirement_experience,
-                    requirement_technician = excluded.requirement_technician,
-                    requirement_other = excluded.requirement_other,
-                    deficit_requirement_message = excluded.deficit_requirement_message,
-                    final_status = excluded.final_status,
-                    message = excluded.message,
-                    remarks = excluded.remarks,
-                    createdDate = excluded.createdDate,
-                    updatedDate = excluded.updatedDate
-                """
-                cur.execute(sql)
-                cur.execute(fr"DROP TABLE IF EXISTS {tmp_result_judgement_table}")
+                db_operator.uploadDataToTable(data=result_judgement, tablename=tmp_result_judgement_table)
+                db_operator.updateCompanyBidJudgement(
+                    company_bid_judgement_tablename=tablename_company_bid_judgement, 
+                    company_bid_judgement_tablename_for_update=tmp_result_judgement_table
+                )
+                db_operator.dropTable(tablename=tmp_result_judgement_table)
 
             if result_insufficient_requirements.shape[0] > 0:
                 tmp_result_insufficient_requirements_master_table = "tmp_result_insufficient_requirements"
                 print(fr"Upload {tmp_result_insufficient_requirements_master_table}")
-                result_insufficient_requirements.to_sql(tmp_result_insufficient_requirements_master_table, conn, if_exists="replace", index=False)
-                sql = fr"""insert into {tablename_insufficient_requirement_master} (
-                    announcement_no,
-                    requirement_no,
-                    company_no,
-                    office_no,
-                    requirement_type,
-                    requirement_description,
-                    suggestions_for_improvement,
-                    final_comment,
-                    createdDate,
-                    updatedDate
+                db_operator.uploadDataToTable(data=result_insufficient_requirements, tablename=tmp_result_insufficient_requirements_master_table)
+                db_operator.updateInsufficientRequirements(
+                    insufficient_requirements_tablename=tablename_insufficient_requirement_master, 
+                    insufficient_requirements_tablename_for_update=tmp_result_insufficient_requirements_master_table
                 )
-                select
-                    announcement_no,
-                    requirement_no,
-                    company_no,
-                    office_no,
-                    requirement_type,
-                    requirement_description,
-                    suggestions_for_improvement,
-                    final_comment,
-                    createdDate,
-                    updatedDate
-                from {tmp_result_insufficient_requirements_master_table} where true
-                ON CONFLICT(announcement_no, requirement_no, company_no, office_no, requirement_type) DO UPDATE SET
-                    announcement_no = {tablename_insufficient_requirement_master}.announcement_no,
-                    requirement_no = {tablename_insufficient_requirement_master}.requirement_no,
-                    company_no = {tablename_insufficient_requirement_master}.company_no,
-                    office_no = {tablename_insufficient_requirement_master}.office_no,
-                    requirement_type = excluded.requirement_type,
-                    requirement_description = excluded.requirement_description,
-                    suggestions_for_improvement = excluded.suggestions_for_improvement,
-                    final_comment = excluded.final_comment,
-                    createdDate = excluded.createdDate,
-                    updatedDate = excluded.updatedDate
-                """
-                cur.execute(sql)
-                cur.execute(fr"DROP TABLE IF EXISTS {tmp_result_insufficient_requirements_master_table}")
+                db_operator.dropTable(tablename=tmp_result_insufficient_requirements_master_table)
 
             if result_sufficient_requirements.shape[0] > 0:
                 tmp_result_sufficient_requirements_master_table = "tmp_result_sufficient_requirements"
                 print(fr"Upload {tmp_result_sufficient_requirements_master_table}")
-                result_sufficient_requirements.to_sql(tmp_result_sufficient_requirements_master_table, conn, if_exists="replace", index=False)
-                sql = fr"""insert into {tablename_sufficient_requirement_master} (
-                    announcement_no,
-                    requirement_no,
-                    company_no,
-                    office_no,
-                    requirement_type,
-                    requirement_description,
-                    createdDate,
-                    updatedDate
+                db_operator.uploadDataToTable(data=result_sufficient_requirements, tablename=tmp_result_sufficient_requirements_master_table)
+                db_operator.updateSufficientRequirements(
+                    sufficient_requirements_tablename=tablename_sufficient_requirement_master, 
+                    sufficient_requirements_tablename_for_update=tmp_result_sufficient_requirements_master_table
                 )
-                select
-                    announcement_no,
-                    requirement_no,
-                    company_no,
-                    office_no,
-                    requirement_type,
-                    requirement_description,
-                    createdDate,
-                    updatedDate                    
-                from {tmp_result_sufficient_requirements_master_table} where true
-                ON CONFLICT(announcement_no, requirement_no, company_no, office_no, requirement_type) DO UPDATE SET
-                    announcement_no = {tablename_sufficient_requirement_master}.announcement_no,
-                    requirement_no = {tablename_sufficient_requirement_master}.requirement_no,
-                    company_no = {tablename_sufficient_requirement_master}.company_no,
-                    office_no = {tablename_sufficient_requirement_master}.office_no,
-                    requirement_type = excluded.requirement_type,
-                    requirement_description = excluded.requirement_description,
-                    createdDate = excluded.createdDate,
-                    updatedDate = excluded.updatedDate
-                """
-                cur.execute(sql)
-                cur.execute(fr"DROP TABLE IF EXISTS {tmp_result_sufficient_requirements_master_table}")
+                db_operator.dropTable(tablename=tmp_result_sufficient_requirements_master_table)
 
 
 
@@ -2584,33 +1966,25 @@ if __name__ == "__main__":
         bid_announcements_pre_file = "data/bid_announcements_pre/bid_announcements_pre_1.txt"
         print(fr"Set bid_announcements_pre_file = {bid_announcements_pre_file}")
 
-    
-    sql_connector = SQLConnector(
-        sqlite3_db_file_path=sqlite3_db_file_path,
-        bigquery_location=bigquery_location,
-        bigquery_project_id=bigquery_project_id,
-        bigquery_dataset_name=bigquery_dataset_name
-    )
-    master = Master()
-
     if use_gcp_vm:
-        obj = GCPVM(
-            bid_announcements_pre_file=bid_announcements_pre_file,
-            google_ai_studio_api_key_filepath=google_ai_studio_api_key_filepath,
-            sql_connector=sql_connector,
-            tablenamesconfig=TablenamesConfig
+        db_operator = DBOperatorGCPVM(
+            bigquery_location=bigquery_location, 
+            bigquery_project_id=bigquery_project_id, 
+            bigquery_dataset_name=bigquery_dataset_name
         )
     else:
-        obj = SQLITE3(
-            bid_announcements_pre_file=bid_announcements_pre_file,
-            google_ai_studio_api_key_filepath=google_ai_studio_api_key_filepath,
-            sql_connector=sql_connector,
-            tablenamesconfig=TablenamesConfig
+        db_operator = DBOperatorSQLITE3(
+            sqlite3_db_file_path=sqlite3_db_file_path
         )
+
+    obj = BidJudgementSan(
+        bid_announcements_pre_file=bid_announcements_pre_file, 
+        tablenamesconfig=TablenamesConfig, 
+        db_operator=db_operator
+    )
 
     if stop_processing:
         exit(1)
-
 
     obj.step0_create_bid_announcements_pre(bid_announcements_pre_file=bid_announcements_pre_file)
     obj.step1_transfer(remove_table=step1_transfer_remove_table)
@@ -2618,19 +1992,14 @@ if __name__ == "__main__":
     obj.step3(remove_table=step3_remove_table)
 
 
-    # obj.select_to_table(tablename="bid_announcements_pre")
-    # obj.select_to_table(tablename="bid_announcements")
-    # obj.select_to_table(tablename="bid_requirements")
-    # obj.select_to_table(tablename="sufficient_requirements")
-    # obj.select_to_table(tablename="insufficient_requirements")
-    # obj.select_to_table(tablename="company_bid_judgement")
-    # obj.any_query(sql = "SELECT name FROM sqlite_master WHERE type='table'")
+    # db_operator.selectToTable(tablename="bid_announcements_pre")
+    # db_operator.selectToTable(tablename="bid_announcements")
+    # db_operator.selectToTable(tablename="bid_requirements")
+    # db_operator.any_query(sql=fr"select requirement_type, count(*) as N from bid_requirements group by requirement_type order by N desc")
+    # db_operator.selectToTable(tablename="sufficient_requirements")
+    # db_operator.selectToTable(tablename="insufficient_requirements")
+    # db_operator.selectToTable(tablename="company_bid_judgement")
+    # db_operator.any_query(sql = "SELECT name FROM sqlite_master WHERE type='table'")
 
-    # obj.select_to_table(tablename="vocal-raceway-473509-f1.October_20251004.bid_announcements_pre")
-    # obj.select_to_table(tablename="vocal-raceway-473509-f1.October_20251004.bid_announcements")
-    # obj.select_to_table(tablename="vocal-raceway-473509-f1.October_20251004.bid_requirements")
-    # obj.select_to_table(tablename="vocal-raceway-473509-f1.October_20251004.sufficient_requirements")
-    # obj.select_to_table(tablename="vocal-raceway-473509-f1.October_20251004.insufficient_requirements")
-    # obj.select_to_table(tablename="vocal-raceway-473509-f1.October_20251004.company_bid_judgement")
-    # obj.any_query(sql = fr"SELECT table_name FROM `{bigquery_project_id}.{bigquery_dataset_name}.INFORMATION_SCHEMA.TABLES`")
-
+    # db_operator.any_query(sql = fr"SELECT table_name FROM `{bigquery_project_id}.{bigquery_dataset_name}.INFORMATION_SCHEMA.TABLES`")
+    # db_operator.any_query(sql=fr"select requirement_type, count(*) as N from `{bigquery_project_id}.{bigquery_dataset_name}.bid_requirements` group by requirement_type order by N desc")
