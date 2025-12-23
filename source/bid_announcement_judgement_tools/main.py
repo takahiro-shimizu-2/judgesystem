@@ -1992,6 +1992,11 @@ if __name__ == "__main__":
     obj.step2_ocr(ocr_utils = OCRutils(google_ai_studio_api_key_filepath=google_ai_studio_api_key_filepath))
     obj.step3(remove_table=step3_remove_table)
 
+    master = Master()
+    company_master = master.getCompanyMaster()
+    office_master = master.getOfficeMaster()
+    db_operator.uploadDataToTable(data=office_master, tablename="office_master")
+    db_operator.uploadDataToTable(data=company_master, tablename="company_master")
 
     # db_operator.selectToTable(tablename="bid_announcements_pre")
     # db_operator.selectToTable(tablename="bid_announcements")
