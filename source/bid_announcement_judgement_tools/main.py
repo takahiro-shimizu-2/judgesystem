@@ -1,19 +1,20 @@
 #coding: utf-8
 
-import pandas as pd
-import numpy as np
 import sqlite3  # sqlite3使わない想定でもimport
 import os
 import argparse
-from google import genai # For OCR
-from google.genai.errors import ClientError
-from google.genai import types
-import httpx
 import re
 import json
 import time
 from dataclasses import dataclass
 from abc import ABC, abstractmethod
+
+import pandas as pd
+import numpy as np
+from google import genai # For OCR
+from google.genai.errors import ClientError
+from google.genai import types
+import httpx
 
 try:
     from google.cloud import bigquery
