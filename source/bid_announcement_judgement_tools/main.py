@@ -1,5 +1,67 @@
 #coding: utf-8
 
+"""
+処理概要：
+
+- 判定前公告一覧表を入力として受け取る。
+- 公告マスターや要件マスターを作成する。
+- 公告pdfから公告・要件情報を抽出する。
+- 企業 x 拠点 x 要件の組み合わせごとに要件判定を行い、判定結果を企業公告マスターにまとめる。
+
+処理のステップ：
+
+- step0 : 判定前公告一覧表アップロード  
+- step1 : 転写処理
+- step2 : OCR処理
+- step3 : 要件判定
+
+Usage example:
+
+    python source/bid_announcement_judgement_tools/main.py --bid_announcements_pre_file data/bid_announcements_pre/all.txt --google_ai_studio_api_key_filepath data/sec/google_ai_studio_api_key.txt --bigquery_location "LOCATION" --bigquery_project_id PROJECT_ID --bigquery_dataset_name DATASET_NAME --use_gcp_vm  --step1_transfer_remove_table --step3_remove_table
+
+Arguments:
+
+- --use_gcp_vm: (フラグ引数) 
+
+  GCP VM で動作させる場合に指定する。指定した場合、データベースを操作するオブジェクトとして、DBOperatorGCPVMを使う。指定しない場合、DBOperatorSQLITE3 を使う。
+
+- --bid_announcements_pre_file: (パラメータ引数) 
+
+  判定前公告一覧表のファイルパス。
+
+- --google_ai_studio_api_key_filepath: (パラメータ引数) 
+
+  OCRのための、google ai studio gemini api キーを記載したファイルパス。
+
+- --stop_processing: (フラグ引数) 
+
+  指定した場合、変数を設定するが一連の処理は行わず exit する。
+
+- --sqlite3_db_file_path: (パラメータ引数) 
+
+  SQLITE3 のデータベースファイルパス。
+
+- --bigquery_location: (パラメータ引数) 
+
+  google cloud platform の bigquery の location。
+
+- --bigquery_project_id: (パラメータ引数) 
+
+  google cloud platform の project_id。
+
+- --bigquery_dataset_name: (パラメータ引数) 
+  
+  google cloud platform の bigquery の dataset_name。
+
+- --step1_transfer_remove_table: (フラグ引数) 
+
+  step1の転写処理で、公告マスターと要件マスターを削除するかどうか。
+
+- --step3_remove_table: (フラグ引数) 
+
+  step3の要件判定処理で、企業公告マスター・充足要件マスター・不足要件マスターを削除するかどうか。
+"""
+
 import sqlite3  # sqlite3使わない想定でもimport
 import os
 import argparse
@@ -30,7 +92,6 @@ try:
 except Exception as e:
     print(e)
 
-
 try:
     from source.bid_announcement_judgement_tools.requirements.ineligibility import checkIneligibilityDynamic
     from source.bid_announcement_judgement_tools.requirements.experience import checkExperienceRequirement
@@ -46,7 +107,33 @@ except ModuleNotFoundError:
 
 
 class Master:
-    # 状態を持ってないので、master を集めたクラスを作る必要は無い？
+    """
+    Masterクラス。
+
+    Attributes:
+
+    - agency_master:
+
+    - company_master:
+
+    - construction_master:
+
+    - employee_master:
+
+    - employee_qualification_master:
+
+    - employee_experience_master:
+
+    - office_master:
+
+    - office_registration_authorization_master:
+
+    - office_work_achivements_master:
+
+    - technician_qualification_master:
+
+    Notes: Master を集めたクラスを作る必要は無いかもしれない(状態を持ってないので)。
+    """
 
     def __init__(self):
 
@@ -113,6 +200,10 @@ class Master:
 
 @dataclass(frozen=True)
 class TablenamesConfig:
+    """
+    テーブル名を保持。
+    """
+
     bid_announcements_pre: str = "bid_announcements_pre"
     bid_announcements: str = "bid_announcements"
     bid_requirements: str = "bid_requirements"
@@ -123,7 +214,27 @@ class TablenamesConfig:
 
 
 class OCRutils:
+    """
+    OCRを行うクラス。
+
+    Attributes:
+
+    - client
+
+      gemini とやりとりするための genai の client
+
+    """
+
     def __init__(self, google_ai_studio_api_key_filepath=None):
+        """ 
+        google ai studio の api キーが記載されたファイルパスを受け取り、genai の client を設定する。
+
+        Args:
+
+        - google_ai_studio_api_key_filepath
+
+          OCRのための、google ai studio gemini api キーを記載したファイルパス。
+        """
 
         # google ai studio の api キー
         if google_ai_studio_api_key_filepath is None:
@@ -139,11 +250,33 @@ class OCRutils:
             self.client = None
 
     def getPDFDataFromUrl(self, pdfurl):
+        """ 
+        pdfurl を受け取りデータを読み込む。
+
+        Args:
+
+        - pdfurl
+
+          公告url
+        """
+
         # Retrieve and encode the PDF byte
         doc_data = httpx.get(pdfurl).content
         return doc_data
 
     def getJsonFromDocData(self, doc_data):
+        """ 
+        公告データ doc_data を受け取り、gemini に渡して、公告情報を json ライクな形式で受け取る。
+
+        gemini 用プロンプトはハードコードされている。
+
+        Args:
+
+        - doc_data
+
+          公告データ
+        """
+
         client = self.client
 
         prompt = """
@@ -210,6 +343,16 @@ class OCRutils:
         return dict1
 
     def convertJson(self, json_value):
+        """ 
+        公告データから取得した json ライクな公告情報を整形して json とする。
+
+        Args:
+
+        - json_value
+
+          json ライクな公告データ
+        """
+
         def _modifyDate(datestr):
             m = re.search(r"令和\s*(\d+)年\s*(\d+)月\s*(\d+)日", datestr)
             if m:
@@ -249,6 +392,18 @@ class OCRutils:
 
 
     def getRequirementText(self, doc_data):
+        """ 
+        公告データ doc_data を受け取り、gemini に渡して、公告の要件文を json ライクな形式で受け取る。
+
+        gemini 用プロンプトはハードコードされている。
+
+        Args:
+
+        - doc_data
+
+          公告データ
+        """
+
         client = self.client
 
         prompt = """
@@ -332,6 +487,16 @@ class OCRutils:
         return dict1
 
     def convertRequirementTextDict(self, requirement_texts):
+        """ 
+        公告データから取得した json ライクな公告情報を整形して json とする。
+
+        Args:
+
+        - requirement_texts
+
+          json ライクな要件文
+        """
+
         # requirement_texts = {"announcement_no":1, "資格・条件":["(2)令和07・08・09年度防衛省競争参加資格(全省庁統一資格)の「役務の提供等」において、開札時までに「C」又は「D」の等級に格付けされ北海道地域の競争参加を希望する者であること(会社更生法(平成14年法律第154号)に基づき更生手続開始の申立てがなされている者又は民事再生法(平成11年法律第225号)に基づき再生手続開始の申立てがなされている者については、手続開始の決定後、再度級別の格付けを受けていること。)。"]}
         announcement_no = requirement_texts["announcement_no"]
         announcement_no_list = []
@@ -390,7 +555,55 @@ class OCRutils:
 
 
 class DBOperator:
+    """
+    データベースを操作するクラス。
+
+    本クラスは抽象クラスとし、継承によってデータベースごとに対応した sql を実行するようにする。
+
+    これにより、異なるデータベースで動かす必要がある場合、そのデータベースに対応したクラスを作成し、対応する sql を書くことで、データベース操作以外の処理を書き直すことなくデータベース移植ができる。
+
+    Attributes:
+
+    - sqlite3_db_file_path
+
+      sqlite3 のデータベースファイルパス
+
+    - bigquery_location
+
+      google cloud platform の bigquery の location。
+
+    - bigquery_project_id
+
+      google cloud platform の project_id。
+
+    - bigquery_dataset_name
+  
+      google cloud platform の bigquery の dataset_name。
+    """
+
     def __init__(self, sqlite3_db_file_path=None, bigquery_location=None, bigquery_project_id=None, bigquery_dataset_name=None):
+        """ 
+        google ai studio の api キーが記載されたファイルパスを受け取り、genai の client を設定する。
+
+        Args:
+
+        - sqlite3_db_file_path
+
+          sqlite3 のデータベースファイルパス
+
+        - bigquery_location
+
+          google cloud platform の bigquery の location。
+
+        - bigquery_project_id
+
+          google cloud platform の project_id。
+
+        - bigquery_dataset_name
+    
+          google cloud platform の bigquery の dataset_name。
+        """
+
         self.sqlite3_db_file_path = sqlite3_db_file_path
         try:
             # isolation_level=None で autocommit モード (変更のたびに conn.commit() を呼び出す必要がなくなる)
@@ -476,6 +689,9 @@ class DBOperator:
         raise NotImplementedError
 
 class DBOperatorGCPVM(DBOperator):
+    """
+    google bigquery を操作するクラス。
+    """
 
     def any_query(self, sql):
         df = self.client.query(sql).result().to_dataframe()
@@ -909,6 +1125,9 @@ class DBOperatorGCPVM(DBOperator):
         self.client.query(sql).result()
 
 class DBOperatorSQLITE3(DBOperator):
+    """
+    sqlite3 を操作するクラス。
+    """
 
     def any_query(self, sql):
         df = pd.read_sql_query(sql, self.conn)
@@ -1437,6 +1656,42 @@ class DBOperatorSQLITE3(DBOperator):
 
 
 class BidJudgementSan:
+    """
+    以下のステップを踏み、公告判定処理を行う。
+
+    - step0 : 判定前公告表アップロード
+    - step1 : 転写処理
+
+      公告マスターが無ければ公告マスターを作成する。要件マスターが無ければ要件マスターを作成する。
+        
+      判定前公告を公告マスターにコピーする。
+
+    - step2 : OCR処理
+    
+      公告pdfに対してOCRを行い、公告マスターと要件マスターを更新する。
+
+    - step3 : 要件判定処理
+    
+      企業 x 拠点 x 要件の全組み合わせに対して要件判定し結果を企業公告判定マスターに格納する。
+
+      また、充足要件マスターと不足要件マスターを作成する。
+
+    Attributes:
+
+    - bid_announcements_pre_file: 
+    
+      判定前公告一覧表のローカルファイル。
+
+    - tablenamesconfig:
+    
+      TablenamesConfig オブジェクト。
+
+    - db_operator:
+
+      データベースを操作するためのオブジェクト。
+
+    """
+
     def __init__(self, bid_announcements_pre_file, tablenamesconfig=None, db_operator=None):
         self.bid_announcements_pre_file = bid_announcements_pre_file
         self.tablenamesconfig = tablenamesconfig
@@ -1444,6 +1699,22 @@ class BidJudgementSan:
 
 
     def step0_create_bid_announcements_pre(self, bid_announcements_pre_file=None):
+        """
+        step0 : 判定前公告表アップロード
+
+        判定前公告表をデータフレームとして読み込み、アップロードする。
+
+        表の列は型変換する。
+
+        Attributes:
+
+        - bid_announcements_pre_file=None: 
+        
+          判定前公告表のファイルパス。
+                
+          None なら、自身のbid_announcements_pre_fileを参照して表を読み込む。
+        """
+
         if bid_announcements_pre_file is None:
             bid_announcements_pre_file = self.bid_announcements_pre_file
 
@@ -1481,6 +1752,21 @@ class BidJudgementSan:
 
 
     def step1_transfer(self, remove_table=False):
+        """
+        step1 : 転写処理
+
+        公告マスターが無ければ公告マスターを作成する。要件マスターが無ければ要件マスターを作成する。
+
+        引数 remove_table に応じて、事前に公告マスター・要件マスターを削除する。
+        
+        判定前公告を公告マスターにコピーする。
+
+        Args:
+
+        - remove_table=False: 
+        
+          処理前に、公告マスター・要件マスターを削除するかどうか。
+        """
 
         tablename_pre = self.tablenamesconfig.bid_announcements_pre
         tablename_announcements = self.tablenamesconfig.bid_announcements
@@ -1540,6 +1826,27 @@ class BidJudgementSan:
 
 
     def step2_ocr(self, ocr_utils):
+        """
+        step2 : OCR処理
+    
+        公告pdfに対してOCRを行い、公告マスターと要件マスターを更新する。
+
+        OCRは、公告マスターのうち、OCRをしていない公告(doneOCR=False)に対して行う。
+
+        公告対象の pdf を data/pdf 以下に、{announcement_no}.pdf で保存する。
+
+        OCR結果を、data/ocr 以下に、ocr_announcements_{announcement_no}.json, ocr_requirements_{announcement_no}.json として保存する。
+
+        OCR処理は ocr_utils に行わせる。
+
+        annoucements, requirements に対する OCR結果をデータフレームにまとめ、いったんデータベースに中間テーブルとしてアップロードし、公告マスターと要件マスターを更新する。更新後、中間テーブルは削除する。
+
+        Args:
+
+        - ocr_utils: 
+        
+          OCRを行うオブジェクト。
+        """
 
         tablename_announcements = self.tablenamesconfig.bid_announcements
         tmp_tablename_announcements = fr"tmp_{tablename_announcements}"
@@ -1651,6 +1958,23 @@ class BidJudgementSan:
         db_operator.dropTable(tablename=tmp_tablename_requirements)
 
     def step3(self, remove_table=False):
+        """
+        step3 : 要件判定処理
+    
+        企業 x 拠点 x 要件の全組み合わせに対して要件判定し結果を企業公告判定マスターに格納する。
+
+        また、充足要件マスターと不足要件マスターを作成する。
+
+        要件判定の対象は、企業公告判定マスターのうち、最終判定結果が記載されていない企業 x 拠点 x 要件のレコードが対象。
+
+        (企業 x 拠点 x 要件) の3つ組 1000 件ごとに要件判定処理を実行し、企業公告判定マスター・充足要件マスター・不足要件マスターを更新するための結果を得る。この結果を中間テーブルとしてアップロードし、各マスターを更新する。更新が終わったら中間テーブルを削除する。
+
+        Args:
+
+        - remove_table: 
+        
+          処理の前に、企業公告判定マスター・充足要件マスター・不足要件マスターを削除するかどうか。
+        """
 
         tablename_announcements = self.tablenamesconfig.bid_announcements
         tablename_requirements = self.tablenamesconfig.bid_requirements

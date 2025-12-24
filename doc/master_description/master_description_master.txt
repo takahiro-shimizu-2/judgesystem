@@ -1,0 +1,127 @@
+master_name	master_name_jp	項目No	項目名	項目名(日本語)	意味・説明	データ型・フォーマット	区分	入力必須項目	制約・備考
+agency_master	発注者機関マスター	1	agency_no	発注機関連番	発注機関をユニークに識別する数値主キー (AUTO_INCREMENT想定)	数値(連番)	PK		ユニーク/変更不可
+agency_master	発注者機関マスター	2	agency_name	発注機関名称	例：「防衛省」「北海道防衛局」「法務省秋田法務局」など	文字列	NORMAL		
+agency_master	発注者機関マスター	3	parent_agency_no	上位発注機関連番	大カテゴリーの場合はNULL。階層構造を表現するための親agency_no	数値(連番)	FK		FK→M_AGENCY.agency_no (Null可)
+agency_master	発注者機関マスター	4	agency_level	発注機関階層レベル	0=中央省庁, 1=地方局, 2=さらに下位…	数値	NORMAL		
+agency_master	発注者機関マスター	5	sort_order	ソート順	発注機関を画面表示するときの並び制御や階層順序を管理	数値	NORMAL		NULL可
+agency_master	発注者機関マスター	6	agency_area	管轄地域	例：「北海道/東北/近畿中部/○○法務局」など自由に設定。	文字列	NORMAL		
+agency_master	発注者機関マスター	7	official_site_url	公式サイトURL	発注機関の公式サイト (あれば)	文字列	NORMAL		
+agency_master	発注者機関マスター	8	remarks	備考	自由記述メモ	文字列	NORMAL		
+agency_master	発注者機関マスター	9	created_at	データ作成日時	レコード作成時刻	日時	NORMAL		自動設定
+agency_master	発注者機関マスター	10	updated_at	更新日時	レコード更新時刻	日時	NORMAL		自動更新
+company_master	企業マスター	1	company_no	企業連番	ユニークな主キー (企業を一意に識別)	数値(連番)	PK		変更不可
+company_master	企業マスター	2	company_name	会社名	企業名称	文字列	NORMAL		Not Null
+company_master	企業マスター	3	company_name_kana	会社名カナ	企業名のフリガナ	文字列	NORMAL		
+company_master	企業マスター	4	corporate_number	法人番号	法人番号(あれば)	文字列	NORMAL		ユニークでなくても可
+company_master	企業マスター	5	establishment_date	設立年月日	企業の設立日	日付	NORMAL		
+company_master	企業マスター	6	address_headquarter	本社所在地	本社住所	文字列	NORMAL		
+company_master	企業マスター	7	capital_amount	資本金	資本金の金額	数値	NORMAL		0以上
+company_master	企業マスター	8	main_business	主たる事業	主な事業内容	文字列	NORMAL		
+company_master	企業マスター	9	phone_main	代表電話番号	本社代表電話	文字列	NORMAL		
+company_master	企業マスター	10	representative_name	代表者氏名	代表取締役など	文字列	NORMAL		
+company_master	企業マスター	11	article70_flg	70条該当フラグ	予決令70条に該当(破産/暴力団等含む)	真偽値(Boolean)	NORMAL		デフォルト false
+company_master	企業マスター	12	article71_flg	71条該当フラグ	予決令71条に該当	真偽値(Boolean)	NORMAL		デフォルト false
+company_master	企業マスター	13	bankrupt_flg	破産フラグ	破産・倒産申請中かどうか	真偽値(Boolean)	NORMAL		デフォルト false
+company_master	企業マスター	14	rehabilitation_flg	更生手続フラグ	会社更生法/民事再生法の手続開始有無	真偽値(Boolean)	NORMAL		デフォルト false
+company_master	企業マスター	15	rehabilitation_start_date	更生手続開始日	更生手続開始(申請)日	日付	NORMAL		NULL可
+company_master	企業マスター	16	reobtained_license_date	更生後再取得日	更生法等終了後の再取得日	日付	NORMAL		NULL可
+company_master	企業マスター	17	violent_relation_flg	暴力団関係フラグ	暴力団関係企業かどうか	真偽値(Boolean)	NORMAL		デフォルト false
+company_master	企業マスター	18	legal_incapable_flg	成年被後見人フラグ	成年被後見人/被保佐人等	真偽値(Boolean)	NORMAL		デフォルト false
+company_master	企業マスター	19	foreign_restricted_flg	外国法的制約フラグ	外国法等で契約不可・安保理決議対象など	真偽値(Boolean)	NORMAL		デフォルト false
+company_master	企業マスター	20	terrorist_org_flg	破壊的団体フラグ	破防法上の破壊的団体	真偽値(Boolean)	NORMAL		デフォルト false
+company_master	企業マスター	21	is_social_insurance_paid	社会保険等滞納無フラグ	保険料等の滞納が無いか	真偽値(Boolean)	NORMAL		デフォルト false
+company_master	企業マスター	22	information_security_cert_flg	情報保全体制フラグ	情報保全体制が必要な発注(防衛省など)でNGになるかの管理	真偽値(Boolean)	NORMAL		デフォルト false
+company_master	企業マスター	23	is_suspended_by_BOJ	日銀取引停止フラグ	日銀取引停止措置を受けているか	真偽値(Boolean)	NORMAL		デフォルト false
+company_master	企業マスター	24	remarks	備考	自由記述メモ	文字列	NORMAL		
+company_master	企業マスター	25	created_at	データ作成日時	レコード作成日時	日時	NORMAL		自動設定
+company_master	企業マスター	26	updated_at	更新日時	レコード更新日時	日時	NORMAL		自動更新
+construction_master	営業品目マスター	1	construction_no	工事種別連番	工事(営業)品目をユニークに識別する数値主キー (AUTO_INCREMENT想定)	数値(連番)	PK		ユニーク/変更不可
+construction_master	営業品目マスター	2	construction_name	工事種別名称	例：土木一式工事 / 建築一式工事 / 管工事 など	文字列	NORMAL		
+construction_master	営業品目マスター	3	category_segment	カテゴリ区分	全省庁統一 / 防衛省 / 法務省 / etc.	文字列	NORMAL		
+construction_master	営業品目マスター	4	official_code	公式コード	101,201,301など官公庁付与コード	文字列	NORMAL		必要に応じてNULL可
+construction_master	営業品目マスター	5	parent_construction_no	上位工事種別連番	親工事種別がある場合はそのconstruction_no (NULLの場合トップ階層)	数値(連番)	FK		FK→M_CONSTRUCTION_TYPE.construction_no (Null可)
+construction_master	営業品目マスター	6	construction_level	工事種別レベル	0=トップ,1=中カテゴリ,2=下位…	数値	NORMAL		
+construction_master	営業品目マスター	7	sort_order	ソート順	階層表示や画面表示の並び順を制御するために使用	数値	NORMAL		NULL可。大きいほど下or小さいほど上など運用ルール次第
+construction_master	営業品目マスター	8	remarks	備考	自由記述メモ	文字列	NORMAL		
+construction_master	営業品目マスター	9	created_at	データ作成日時	レコード作成時刻	日時	NORMAL		自動設定
+construction_master	営業品目マスター	10	updated_at	更新日時	レコード更新時刻	日時	NORMAL		自動更新
+employee_master	従業員マスター	1	employee_no	従業員連番	従業員をユニークに識別する数値主キー	数値(連番)	PK		ユニーク/変更不可
+employee_master	従業員マスター	2	company_no	会社連番	所属企業(M_COMPANY)	数値(連番)	FK		FK→M_COMPANY.company_no
+employee_master	従業員マスター	3	office_no	拠点連番	主たる所属拠点(M_OFFICE) (NULL可)	数値(連番)	FK		FK→M_OFFICE.office_no(Null可)
+employee_master	従業員マスター	4	employee_name	従業員氏名	従業員(技術者)のフルネーム	文字列	NORMAL		Not Null
+employee_master	従業員マスター	5	birthdate	生年月日	従業員の誕生日	日付	NORMAL		
+employee_master	従業員マスター	6	is_retired_flg	退職フラグ	退職済みかどうか	真偽値(Boolean)	NORMAL		デフォルトfalse
+employee_master	従業員マスター	7	contact_info	連絡先	メール/電話番号など	文字列	NORMAL		
+employee_master	従業員マスター	8	created_at	データ作成日時	レコード作成時刻	日時	NORMAL		自動設定
+employee_master	従業員マスター	9	updated_at	更新日時	レコード更新時刻	日時	NORMAL		自動更新
+employee_qualification_master	従業員資格マスター	1	employee_qual_no	従業員資格連番	従業員×資格レコードの数値主キー	数値(連番)	PK		ユニーク/変更不可
+employee_qualification_master	従業員資格マスター	2	employee_no	従業員連番	どの従業員(M_EMPLOYEE)か	数値(連番)	FK		FK→M_EMPLOYEE.employee_no
+employee_qualification_master	従業員資格マスター	3	qualification_no	資格連番	どの資格(M_QUALIFICATION)か	数値(連番)	FK		FK→M_QUALIFICATION.qualification_no
+employee_qualification_master	従業員資格マスター	4	obtained_date	取得日	資格を取得した日	日付	NORMAL		
+employee_qualification_master	従業員資格マスター	5	license_number	資格証番号	資格証明書の番号	文字列	NORMAL		
+employee_qualification_master	従業員資格マスター	6	is_active_flg	有効フラグ	資格が現時点で有効か	真偽値(Boolean)	NORMAL		デフォルトtrue
+employee_qualification_master	従業員資格マスター	7	revocation_date	剥奪日	剥奪/取り消しされた日(あれば)	日付	NORMAL		null可
+employee_qualification_master	従業員資格マスター	8	remarks	備考	補足メモ	文字列	NORMAL		
+employee_qualification_master	従業員資格マスター	9	created_at	データ作成日時	レコード作成時刻	日時	NORMAL		自動設定
+employee_qualification_master	従業員資格マスター	10	updated_at	更新日時	レコード更新時刻	日時	NORMAL		自動更新
+employee_experience_master	従業員工事経験マスター	1	employee_experience_no	従業員工事連番	従業員工事経験レコードをユニークに識別する主キー	数値(連番)	PK		ユニーク/変更不可
+employee_experience_master	従業員工事経験マスター	2	employee_no	従業員連番	どの従業員(M_EMPLOYEE)か	数値(連番)	FK		FK→M_EMPLOYEE.employee_no
+employee_experience_master	従業員工事経験マスター	3	project_name	工事名称	担当した工事の名称	文字列	NORMAL		
+employee_experience_master	従業員工事経験マスター	4	role_position	担当役割	監理技術者 / 主任技術者 / 補佐 など	文字列	NORMAL		
+employee_experience_master	従業員工事経験マスター	5	start_date	着手日	工事に着手した日	日付	NORMAL		
+employee_experience_master	従業員工事経験マスター	6	end_date	完了日	工事が完了した日	日付	NORMAL		
+employee_experience_master	従業員工事経験マスター	7	agency_no	発注機関連番	どの発注機関(M_AGENCY)か	数値(連番)	FK		FK→M_AGENCY.agency_no
+employee_experience_master	従業員工事経験マスター	8	construction_no	工事種別連番	どの工事種別(M_CONSTRUCTION_TYPE)か	数値(連番)	FK		FK→M_CONSTRUCTION_TYPE.construction_no
+employee_experience_master	従業員工事経験マスター	9	is_original_contractor_flg	元請フラグ	元請(=true)/下請(=false)	真偽値(Boolean)	NORMAL		デフォルトfalse
+employee_experience_master	従業員工事経験マスター	10	final_score	工事成績点	発注機関からの評価点	数値	NORMAL		0以上
+employee_experience_master	従業員工事経験マスター	11	remarks	備考	補足メモ	文字列	NORMAL		
+employee_experience_master	従業員工事経験マスター	12	created_at	データ作成日時	レコード作成時刻	日時	NORMAL		自動設定
+employee_experience_master	従業員工事経験マスター	13	updated_at	更新日時	レコード更新時刻	日時	NORMAL		自動更新
+office_master	拠点マスター	1	office_no	拠点連番	拠点のユニーク主キー	数値(連番)	PK		変更不可
+office_master	拠点マスター	2	company_no	企業連番	どの企業(M_COMPANY)に属する拠点か	数値(連番)	FK		FK→M_COMPANY.company_no
+office_master	拠点マスター	3	office_name	拠点名	拠点名称	文字列	NORMAL		Not Null
+office_master	拠点マスター	4	office_type	拠点種別	本社/支社/営業所	文字列	NORMAL		本社/支社/営業所
+office_master	拠点マスター	5	address_office	拠点所在地	拠点の住所	文字列	NORMAL		
+office_master	拠点マスター	6	phone_office	拠点電話番号	拠点の代表電話	文字列	NORMAL		
+office_master	拠点マスター	7	region_prefecture	所在都道府県	都道府県名のみ抜き出し	文字列	NORMAL		
+office_master	拠点マスター	8	created_at	データ作成日時	レコード作成時刻	日時	NORMAL		自動設定
+office_master	拠点マスター	9	updated_at	更新日時	レコード更新時刻	日時	NORMAL		自動更新
+office_registration_authorization_master	拠点登録許可マスター	1	office_license_no	拠点登録連番	拠点登録(許可)をユニークに識別する数値主キー	数値(連番)	PK		ユニーク/変更不可
+office_registration_authorization_master	拠点登録許可マスター	2	office_no	拠点連番	どの拠点(M_OFFICE)が対象か	数値(連番)	FK		FK→M_OFFICE.office_no
+office_registration_authorization_master	拠点登録許可マスター	3	agency_no	発注機関連番	どの発注機関(M_AGENCY)か	数値(連番)	FK		FK→M_AGENCY.agency_no
+office_registration_authorization_master	拠点登録許可マスター	4	construction_no	工事種別連番	どの工事種別(M_CONSTRUCTION_TYPE)か	数値(連番)	FK		FK→M_CONSTRUCTION_TYPE.construction_no
+office_registration_authorization_master	拠点登録許可マスター	5	license_grade	等級	A/B/C/D 等級	文字列	NORMAL		NULL可
+office_registration_authorization_master	拠点登録許可マスター	6	license_score	登録スコア	数値で表す点数	数値	NORMAL		0以上
+office_registration_authorization_master	拠点登録許可マスター	7	license_status	登録ステータス	有効 / 失効 / 指名停止中 etc.	文字列	NORMAL		
+office_registration_authorization_master	拠点登録許可マスター	8	register_date	登録(許可)日	発注機関での許可を取得した日	日付	NORMAL		
+office_registration_authorization_master	拠点登録許可マスター	9	expire_date	有効期限	許可の有効期限(ある場合)	日付	NORMAL		null可
+office_registration_authorization_master	拠点登録許可マスター	10	is_suspended_flg	指名停止フラグ	指名停止中かどうか	真偽値(Boolean)	NORMAL		デフォルトfalse
+office_registration_authorization_master	拠点登録許可マスター	11	remarks	備考	補足メモ	文字列	NORMAL		
+office_registration_authorization_master	拠点登録許可マスター	12	created_at	データ作成日時	レコード作成時刻	日時	NORMAL		自動設定
+office_registration_authorization_master	拠点登録許可マスター	13	updated_at	更新日時	レコード更新時刻	日時	NORMAL		自動更新
+office_work_achivements_master	拠点工事実績マスター	1	office_experience_no	拠点実績連番	拠点の工事実績レコードをユニークに識別する主キー	数値(連番)	PK, ユニーク/変更不可		-
+office_work_achivements_master	拠点工事実績マスター	2	office_no	拠点連番	どの拠点(M_OFFICE)か	数値(連番)	FK → M_OFFICE.office_no		-
+office_work_achivements_master	拠点工事実績マスター	3	agency_no	発注機関連番	どの発注機関(M_AGENCY)が発注した工事か	数値(連番)	FK → M_AGENCY.agency_no		-
+office_work_achivements_master	拠点工事実績マスター	4	construction_no	工事種別連番	どの工事種別(M_CONSTRUCTION_TYPE)か	数値(連番)	FK → M_CONSTRUCTION_TYPE.construction_no		-
+office_work_achivements_master	拠点工事実績マスター	5	project_name	工事件名	工事名称	文字列	NORMAL		-
+office_work_achivements_master	拠点工事実績マスター	6	contractor_layer	請負階層	元請け・一次請け・二次請け・三次請け のいずれか	文字列	NOT NULL, 値は「元請け」「一次請け」「二次請け」「三次請け」のみ		-
+office_work_achivements_master	拠点工事実績マスター	7	start_date	着工日	工事の開始日	日付	NORMAL		-
+office_work_achivements_master	拠点工事実績マスター	8	completion_date	完成・引渡し日(工事完了日)	元請けの場合は完成・引渡し日、一次請け以下の場合は工事完了日	日付	NORMAL		-
+office_work_achivements_master	拠点工事実績マスター	9	final_score	工事成績点	発注機関の工事成績評点	数値	0以上		0
+office_work_achivements_master	拠点工事実績マスター	10	total_amount	契約金額	契約金額 (税抜/税込は運用ルールによる)	数値	NORMAL		0
+office_work_achivements_master	拠点工事実績マスター	11	is_jv_flg	JVフラグ	JV(共同企業体)かどうか	真偽値(Boolean)	NORMAL, デフォルト: false		FALSE
+office_work_achivements_master	拠点工事実績マスター	12	jv_ratio	JV出資比率	JVの場合における出資比率	数値	JVの場合のみ必須		-
+office_work_achivements_master	拠点工事実績マスター	13	remarks	備考	補足メモ	文字列	NORMAL		-
+office_work_achivements_master	拠点工事実績マスター	14	created_at	データ作成日時	レコード作成時刻	日時	NORMAL, 自動設定		現在時刻
+office_work_achivements_master	拠点工事実績マスター	15	updated_at	更新日時	レコード更新時刻	日時	NORMAL, 自動更新		現在時刻
+technician_qualification_master	技術者資格マスター	1	資格連番	資格連番	資格をユニークに識別するための通し番号。	整数 (AUTO_INCREMENT)	PK		NOT NULL / 一意制約
+technician_qualification_master	技術者資格マスター	2	資格名称	資格名称	資格の正式名称を保存。	文字列 (例: VARCHAR(100))	必須		NOT NULL
+technician_qualification_master	技術者資格マスター	3	種別	種別	資格名称の細分類（例：土木、鋼構造物塗装、1種など）。	文字列 (例: VARCHAR(50))	任意		NULL可
+technician_qualification_master	技術者資格マスター	4	資格カテゴリ	資格カテゴリ	資格の大分類（例：建設業法（技術検定）、監理技術者資格、その他 など）。	文字列 (例: VARCHAR(100))	任意		NULL可（必要に応じて設定）
+technician_qualification_master	技術者資格マスター	5	発行団体	発行団体	資格証を発行する機関・団体。	文字列 (例: VARCHAR(100))	任意		NULL可
+technician_qualification_master	技術者資格マスター	6	上位資格連番	上位資格連番	親資格がある場合、その資格連番を記載。複数の場合は「7,8,9」のようにカンマ区切りで管理も可。	文字列 (例: VARCHAR(50))	任意		NULL可 / FK相当（同テーブル参照）
+technician_qualification_master	技術者資格マスター	7	資格レベル	資格レベル	資格の階層深度を示す目安(0=トップ、1=子、2=孫 など)。	整数	任意		NULL可
+technician_qualification_master	技術者資格マスター	8	ソート順	ソート順	資格一覧や階層表示の順序管理に使用。	整数	任意		NULL可（大きい数が下に並ぶ など運用ルール次第）
+technician_qualification_master	技術者資格マスター	9	備考	備考	補足メモや自由入力欄。	文字列 (例: VARCHAR(200))	任意		NULL可
+technician_qualification_master	技術者資格マスター	10	データ作成日時	データ作成日時	レコード作成時の登録日時を保持。INSERT時にシステムが自動付与する想定。	日時 (YYYY-MM-DD HH:MM:SS)	任意		デフォルト現在時刻 / INSERT時に自動設定
+technician_qualification_master	技術者資格マスター	11	更新日時	更新日時	レコード更新時の更新日時を保持。UPDATE時にシステムが自動更新する想定。	日時 (YYYY-MM-DD HH:MM:SS)	任意		デフォルト現在時刻 / UPDATE時に自動更新

@@ -1,0 +1,84 @@
+master_name	master_name_jp	項目No	項目名	項目名(日本語)	意味・説明	データ型・フォーマット	区分	入力必須項目	制約・備考
+bid_announcements_pre	判定前公告一覧テーブル	2	project_name	工事名	入札対象の工事名称	文字列	NORMAL		Not Null
+bid_announcements_pre	判定前公告一覧テーブル	3	announcement_no_user	公告番号	発注機関が各公告に付与している番号	文字列	NORMAL		
+bid_announcements_pre	判定前公告一覧テーブル	4	ministry_name	省庁名（最上位発注機関）	省庁名など最上位の発注機関名	文字列	NORMAL		Not Null
+bid_announcements_pre	判定前公告一覧テーブル	5	issuing_org_name	実発注機関名	実際に発注を行う機関の名称	文字列	NORMAL		Not Null
+bid_announcements_pre	判定前公告一覧テーブル	6	publish_date	公告掲載日（公告日）	公告が掲載された日付	日付	NORMAL		
+bid_announcements_pre	判定前公告一覧テーブル	7	doc_distribution_end	入札説明書交付終了日	入札説明書の交付締切日時（書面交付やダウンロード期限など）	日付	NORMAL		
+bid_announcements_pre	判定前公告一覧テーブル	8	application_deadline	申請書等提出期限（受付期限）	競争参加資格確認申請書等の提出期限	日付	NORMAL		
+bid_announcements_pre	判定前公告一覧テーブル	9	opening_date	入札日（開札日）	開札予定日	日付	NORMAL		
+bid_announcements_pre	判定前公告一覧テーブル	10	pdf_url	PDF URL	公告PDFのURL	文字列	NORMAL		
+bid_announcements_pre	判定前公告一覧テーブル	11	ocr_executed_flg	OCR実行フラグ	OCRを実行済みかどうか	真偽値(Boolean)	NORMAL		デフォルトfalseなど運用可
+bid_announcements_pre	判定前公告一覧テーブル	12	remarks	備考	ユーザーが入力する任意の補足情報	文字列	NORMAL		
+bid_announcements_pre	判定前公告一覧テーブル	13	reason_not_transferred	転写不可理由	まだ正式な入札公告マスター（T_BID_ANNOUNCEMENT）へ転写できない理由などをメモ	文字列	NORMAL		
+bid_announcements_pre	判定前公告一覧テーブル	14	created_at	データ作成日時	レコード作成時刻	日時	NORMAL		システム自動設定
+bid_announcements_pre	判定前公告一覧テーブル	15	updated_at	更新日時	レコード更新時刻	日時	NORMAL		システム自動更新
+bid_announcements	入札公告マスター	1	announcement_no	入札公告連番	入札公告を一意に識別する自動連番（システム内部用ID）	数値（連番）	PK		PK、ユニーク／変更不可
+bid_announcements	入札公告マスター	2	project_name	工事名	入札公告の件名	文字列	NORMAL		Not Null
+bid_announcements	入札公告マスター	3	announcement_no_user	公告番号	発注機関が各公告に付与している番号	文字列	NORMAL		
+bid_announcements	入札公告マスター	4	parent_agency_no	発注機関連番（省庁）	最上位発注機関としての M_AGENCY.agency_no (中央省庁など)	数値(連番)	FK		FK→M_AGENCY.agency_no (省庁レベルの場合のID)
+bid_announcements	入札公告マスター	5	ministry_name	省庁名（最上位発注機関）	例：「防衛省」「法務省」など。タイムスタンプ的に判定前公告一覧テーブルから転写。	文字列	NORMAL		Not Null
+bid_announcements	入札公告マスター	6	agency_no	発注機関連番（実発注）	実際に発注する機関の M_AGENCY.agency_no	数値(連番)	FK		FK→M_AGENCY.agency_no
+bid_announcements	入札公告マスター	7	issuing_org_name	実発注機関名	入力された発注者機関名。タイムスタンプ的に判定前公告一覧テーブルから転写。	文字列	NORMAL		
+bid_announcements	入札公告マスター	8	place_of_construction	工事場所	施工現場の所在地	文字列	NORMAL		Not Null
+bid_announcements	入札公告マスター	9	pdf_url	公告PDF URL	入力されたPDFのURL	文字列	NORMAL		有効なURL形式
+bid_announcements	入札公告マスター	10	postal_code_dept	郵便番号（担当部局）	発注機関内の入札手続担当部署の郵便番号	文字列	NORMAL		NULL可
+bid_announcements	入札公告マスター	11	address_dept	住所（担当部局）	発注機関内の入札手続担当部署の住所	文字列	NORMAL		
+bid_announcements	入札公告マスター	12	department_name_dept	部署名（担当部局）	発注機関内の入札手続担当部署名	文字列	NORMAL		
+bid_announcements	入札公告マスター	13	person_in_charge	担当者名（担当部局）	発注機関内の入札手続担当者の氏名	文字列	NORMAL		
+bid_announcements	入札公告マスター	14	phone_dept	電話番号（担当部局）	発注機関内の入札手続担当部署の電話番号	文字列	NORMAL		
+bid_announcements	入札公告マスター	15	fax_dept	FAX（担当部局）	発注機関内の入札手続担当部署のFAX番号	文字列	NORMAL		
+bid_announcements	入札公告マスター	16	email_dept	メールアドレス（担当部局）	発注機関内の入札手続担当部署の連絡用メールアドレス	文字列	NORMAL		
+bid_announcements	入札公告マスター	17	publish_date	公告掲載日（公告日）	公告日	日付	NORMAL		Not Null
+bid_announcements	入札公告マスター	18	doc_distribution_start	入札説明書交付開始日	入札説明書等の交付開始日	日付	NORMAL		NULL可
+bid_announcements	入札公告マスター	19	doc_distribution_end	入札説明書交付終了日	入札説明書等の交付終了日	日付	NORMAL		NULL可
+bid_announcements	入札公告マスター	20	doc_application_start	申請書類提出開始日	競争参加資格確認申請書提出の開始日	日付	NORMAL		NULL可
+bid_announcements	入札公告マスター	21	application_deadline	申請書類提出終了日（受付期限）	競争参加資格確認申請書提出の締切日	日付	NORMAL		Not Null
+bid_announcements	入札公告マスター	22	bid_submission_start	入札書提出開始日	入札書提出の開始日	日付	NORMAL		NULL可
+bid_announcements	入札公告マスター	23	opening_date	入札書提出終了日（入札日・開札日）	入札書提出の最終日（兼 開札日）	日付	NORMAL		Not Null
+bid_announcements	入札公告マスター	24	ocr_executed_flg	OCR実施済みフラグ	外部OCRが完了しているかどうか (false=未実行/true=実行済)	真偽値(Boolean)	NORMAL		デフォルトfalse
+bid_announcements	入札公告マスター	25	additional_remarks	備考	ユーザー入力の任意情報	文字列	NORMAL		
+bid_announcements	入札公告マスター	26	created_at	作成日時	レコード作成時刻（システム自動設定）	日時	NORMAL		自動設定
+bid_announcements	入札公告マスター	27	updated_at	更新日時	レコード更新時刻（システム自動更新）	日時	NORMAL		自動更新
+bid_requirements	公告要件マスター	1	requirement_no	公告要件連番	入札公告要件レコードをユニークに識別する主キー	数値(連番)	PK		ユニーク/変更不可
+bid_requirements	公告要件マスター	2	announcement_no	入札公告連番	どの入札公告(T_BID_ANNOUNCEMENT)か	数値(連番)	FK		FK→T_BID_ANNOUNCEMENT.announcement_no
+bid_requirements	公告要件マスター	3	requirement_type	要件種別	暴力団排除 / 等級D以上 / 会社更生手続中でない etc.	文字列	NORMAL		
+bid_requirements	公告要件マスター	4	requirement_text	要件本文	OCRやLLMで抽出した公告文言	文字列	NORMAL		
+bid_requirements	公告要件マスター	5	evaluation_executed_flg	判定実施フラグ	要件判定実施済みか否か	真偽値(Boolean)	NORMAL		デフォルトfalse
+bid_requirements	公告要件マスター	6	created_at	データ作成日時	レコード作成時刻	日時	NORMAL		自動設定
+bid_requirements	公告要件マスター	7	updated_at	更新日時	レコード更新時刻	日時	NORMAL		自動更新
+company_bid_judgement	企業公告判定マスター	1	evaluation_no	判定連番	企業×公告×拠点ごとの判定結果をユニークに識別する自動連番 (AUTO_INCREMENT想定)	数値(連番)	PK		ユニーク / 変更不可
+company_bid_judgement	企業公告判定マスター	2	announcement_no	入札公告連番	どの入札公告(T_BID_ANNOUNCEMENT)に対する判定か	数値(連番)	FK		FK→T_BID_ANNOUNCEMENT.announcement_no
+company_bid_judgement	企業公告判定マスター	3	company_no	企業連番	どの企業(M_COMPANY)に対する判定か	数値(連番)	FK		FK→M_COMPANY.company_no
+company_bid_judgement	企業公告判定マスター	4	office_no	拠点連番	どの拠点(M_OFFICE)で判定したか(拠点単位の判定が必要な場合)	数値(連番)	FK		FK→M_OFFICE.office_no (NULL可でも可)
+company_bid_judgement	企業公告判定マスター	5	eval_ineligibility	欠格要件	(A)欠格要件を満たしているか (○or×)	文字列	NORMAL		"""○"" or ""×"" or """""
+company_bid_judgement	企業公告判定マスター	6	eval_grade	等級要件	(B)等級要件を満たしているか (○or×)	文字列	NORMAL		"""○"" or ""×"" or """""
+company_bid_judgement	企業公告判定マスター	7	eval_location	地域要件	(C)所在地要件を満たしているか (○or×)	文字列	NORMAL		"""○"" or ""×"" or """""
+company_bid_judgement	企業公告判定マスター	8	eval_record	実績要件	(D)実績要件を満たしているか (○or×)	文字列	NORMAL		"""○"" or ""×"" or """""
+company_bid_judgement	企業公告判定マスター	9	eval_tech	技術者要件	(E)技術者要件を満たしているか (○or×)	文字列	NORMAL		"""○"" or ""×"" or """""
+company_bid_judgement	企業公告判定マスター	10	eval_other	その他要件	(F)その他要件(JV含む)を満たしているか (○or×)	文字列	NORMAL		"""○"" or ""×"" or """""
+company_bid_judgement	企業公告判定マスター	11	shortage_summary	不足要件メッセージまとめ	NGの要件をまとめて改行区切りなどで1セルに格納	文字列	NORMAL		OKの場合は空欄可。NGの場合、例えば [欠格]～\n[等級]～\n... のようにまとめる
+company_bid_judgement	企業公告判定マスター	12	evaluation_status	最終ステータス	すべて○ならOK / 1つでも×があればNG等	文字列	NORMAL		"""ALL CREAR"" or ""NG""."
+company_bid_judgement	企業公告判定マスター	13	message_summary	メッセージ要約	LLMが生成した判定内容サマリ(任意)	文字列	NORMAL		
+company_bid_judgement	企業公告判定マスター	14	note_consultant	コンサル追記	コンサルタントが追記するメモ	文字列	NORMAL		
+company_bid_judgement	企業公告判定マスター	15	remarks	備考	ユーザーが入力する任意の補足情報	文字列	NORMAL		
+company_bid_judgement	企業公告判定マスター	16	created_at	データ作成日時	レコード作成時刻	日時	NORMAL		システム自動設定
+company_bid_judgement	企業公告判定マスター	17	updated_at	更新日時	レコード更新時刻	日時	NORMAL		システム自動更新
+sufficient_requirements	充足要件リストマスター	1	sufficiency_detail_no	充足要件連番	充足要件リストの1件をユニークに識別する自動連番 (AUTO_INCREMENT想定)	数値(連番)	PK		ユニーク / 変更不可
+sufficient_requirements	充足要件リストマスター	2	evaluation_no	判定連番	どの判定 (T_BID_EVALUATION) に対して OKになった要件か	数値(連番)	FK		FK→T_BID_EVALUATION.evaluation_no
+sufficient_requirements	充足要件リストマスター	3	announcement_no	入札公告連番	どの公告(T_BID_ANNOUNCEMENT)か。evaluation_noから導出可能だが、検索しやすいよう保持	数値(連番)	FK		FK→T_BID_ANNOUNCEMENT.announcement_no (重複保持が便利な場合)
+sufficient_requirements	充足要件リストマスター	4	company_no	企業連番	どの企業(M_COMPANY)が充足したか	数値(連番)	FK		FK→M_COMPANY.company_no (evaluation_noからも導けるが、直接保持すると検索が容易)
+sufficient_requirements	充足要件リストマスター	5	office_no	拠点連番	どの拠点(M_OFFICE)が要件を満たしたか(拠点単位の要件でない場合はNULL可)	数値(連番)	FK		FK→M_OFFICE.office_no(Null可)。evaluation_noや要件タイプなどに応じて無い場合もあり得る
+sufficient_requirements	充足要件リストマスター	6	requirement_no	公告要件連番	どの公告要件(T_BID_REQUIREMENT)をクリアしているか (NULL可: 直接要件に紐づかないOKがあれば)	数値(連番)	FK		FK→T_BID_REQUIREMENT.requirement_no(Null可)
+sufficient_requirements	充足要件リストマスター	7	requirement_type	要件種別	「欠格要件」「等級要件」「所在地要件」「実績要件」「技術者要件」「その他要件」など	文字列	NORMAL		T_BID_REQUIREMENT.requirement_typeに準じる。これを保持することで検索や表示がスムーズ
+sufficient_requirements	充足要件リストマスター	8	sufficiency_description	充足内容説明	要件をOKと判定した具体的な理由・根拠 (例：「C等級保有でD等級以上を満たす」「1級施工管理技士が在籍」など)	文字列	NORMAL		NGの場合に使うshortage_descriptionのOK版に相当
+sufficient_requirements	充足要件リストマスター	9	created_at	データ作成日時	レコード作成日時	日時	NORMAL		システムで自動設定するなど
+sufficient_requirements	充足要件リストマスター	10	updated_at	更新日時	レコード更新日時	日時	NORMAL		システムで自動更新
+insufficient_requirements	不足要件リストマスター	1	shortage_detail_no	不足要件連番	不足要件レコードをユニークに識別する数値主キー	数値(連番)	PK		ユニーク/変更不可
+insufficient_requirements	不足要件リストマスター	2	evaluation_no	判定連番	どの判定(T_BID_EVALUATION)に対する不足要件か	数値(連番)	FK		FK→T_BID_EVALUATION.evaluation_no
+insufficient_requirements	不足要件リストマスター	3	requirement_no	公告要件連番	どの公告要件(T_BID_REQUIREMENT)が未達成か(NULL可)	数値(連番)	FK		FK→T_BID_REQUIREMENT.requirement_no(Null可)
+insufficient_requirements	不足要件リストマスター	4	shortage_description	不足内容説明	不足している点の具体的な説明(例：「等級D以上必要だがE等級…」など)	文字列	NORMAL		
+insufficient_requirements	不足要件リストマスター	5	improvement_advice	改善アドバイス	LLM等で生成された改善策メッセージ	文字列	NORMAL		
+insufficient_requirements	不足要件リストマスター	6	final_check_comment	コンサル最終確認コメント	コンサルタントが最終修正したコメント	文字列	NORMAL		
+insufficient_requirements	不足要件リストマスター	7	created_at	データ作成日時	レコード作成時刻	日時	NORMAL		自動設定
+insufficient_requirements	不足要件リストマスター	8	updated_at	更新日時	レコード更新時刻	日時	NORMAL		自動更新
