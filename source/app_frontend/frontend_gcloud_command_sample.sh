@@ -5,7 +5,7 @@
 set -e # 失敗したら止める
 
 if [[ $# -eq 0 ]]; then
-  echo "引数がありません。--url などを指定してください。"
+  echo "引数がありません。--urlを指定してください。"
   exit 1
 fi
 
@@ -14,6 +14,10 @@ URL=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --url)
+      if [[ $# -lt 2 ]]; then
+        echo "Error: --url requires a value"
+        exit 1
+      fi
       URL="$2"
       shift 2
       ;;
