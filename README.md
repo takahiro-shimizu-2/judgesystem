@@ -122,7 +122,7 @@ Google Cloud Platform(GCP) を用いてwebアプリをデプロイします。(G
 1. source/app_frontend を cloud shell にコピーする。(レポジトリをクローンするか、zip 圧縮してアップロードするなどすればよい)
 2. app_frontend に移動し、`chmod u+x frontend_gcloud_command_sample.sh` で実行権限を付与。
 3. `git clone https://github.com/takahiro-shimizu-2/judgesystem_ui_only.git app` で app に frontend ソースを clone。githubユーザー名とパスワード(githubアクセストークン)が要求される。
-4. `./frontend_gcloud_command_sample.sh --url backendのurl` で実行。backendのurlを --url 引数に与える。
+4. `./frontend_gcloud_command_sample.sh --url backendのurl` で実行。backendのurlを --url 引数に与える。末bにスラッシュはつけない。
   - app_relpacement_files にあるファイルで、app の一部を置換。
   - mockData.ts の fetch 先 url を更新。
   - frontendをデプロイ。

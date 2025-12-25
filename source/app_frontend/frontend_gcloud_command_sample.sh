@@ -41,8 +41,6 @@ sed -i "s|/api/result|$URL/api/result|g" app/src/data/mockData.ts
 
 echo "Replaced mockData url."
 
-exit 0 
-
 
 # Settings
 # プロジェクトIDを環境変数にセット
