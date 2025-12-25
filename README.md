@@ -113,14 +113,13 @@ Google Cloud Platform(GCP) を用いてwebアプリをデプロイします。(G
 ※cors設定のため、frontend の url を指定する箇所があります。frontend のアプリをデプロイしないとわからないため、後で同様の操作を実行します。
 
 1. source/app_backend を cloud shell にコピーする。(レポジトリをクローンするか、zip 圧縮してアップロードするなどすればよい)
-2. app_backend に移動し、`chmod u+x backend_gcloud_command_sample.sh` で実行権限を付与。
-3. `./backend_gcloud_command_sample.sh` で実行。backendがデプロイされる。
-4. 3. でデプロイしたbackendのurlをメモする。フロントエンドのデプロイの際に使用する。
+2. app_backend に移動し、`./backend_gcloud_command_sample.sh` で実行。backendがデプロイされる。
+3. 2. でデプロイしたbackendのurlをメモする。フロントエンドのデプロイの際に使用する。
 
 #### フロントエンドのデプロイ
 
 1. source/app_frontend を cloud shell にコピーする。(レポジトリをクローンするか、zip 圧縮してアップロードするなどすればよい)
-2. app_frontend に移動し、`chmod u+x frontend_gcloud_command_sample.sh` で実行権限を付与。
+2. app_frontend に移動する。
 3. `git clone https://github.com/takahiro-shimizu-2/judgesystem_ui_only.git app` で app に frontend ソースを clone。githubユーザー名とパスワード(githubアクセストークン)が要求される。
 4. `./frontend_gcloud_command_sample.sh --url backendのurl` で実行。backendのurlを --url 引数に与える。末bにスラッシュはつけない。
   - app_relpacement_files にあるファイルで、app の一部を置換。
