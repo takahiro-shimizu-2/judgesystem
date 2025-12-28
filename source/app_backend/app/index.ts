@@ -3,9 +3,29 @@ import { BigQuery } from "@google-cloud/bigquery";
 import cors from "cors";
 
 const app = express();
+
+//app.use(cors({
+//  origin: "https://frontend-xxxxx.a.run.app"
+//}));
+
+// fetch はシンプルだがバックエンドが返すレスポンスが JSON の場合、ブラウザは以下の判断をする。
+//「この API は JSON を返す」
+//「Content-Type: application/json を扱う」
+// → CORS の “simple request” の条件から外れる
+// → プリフライト（OPTIONS）を送る
+// つまり、フロント側が何も指定していなくても、
+// バックエンドが JSON を返すだけでプリフライトが発生することがある。
+//  origin: のみの指定だと Access-Control-Allow-Headers  が返らず cors エラー。
+
 app.use(cors({
-  origin: "https://frontend-xxxxx.a.run.app"
+  origin: "https://frontend-xxxxx.a.run.app",
+  methods: ["GET", "HEAD", "PUT", "PATCH", "POST", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"],
+  credentials: true
 }));
+
+app.options("*", cors());
+
 
 const bigquery = new BigQuery();
 
@@ -24,7 +44,7 @@ app.get("/api/result", async (req, res) => {
   }
   
   // 外側の `` は javascript のテンプレート文字列。${limit} で limit を参照する。
-  const prefix = "vocal-raceway-473509-f1.October_20251004."
+  const prefix = "PROJECT_ID.DATASET_NAME."
   const query = `
 select 
 t1.announcement_no,
@@ -181,7 +201,7 @@ limit ${limit}
           deadline: bidEndDate ? bidEndDate : "1900-01-01",
           estimatedAmountMin: 180000000,
           estimatedAmountMax: 580000000,
-          pdfUrl: `https://storage.googleapis.com/example-example-pdf/pdf/${announcement_no}.pdf`
+          pdfUrl: `PDFURL/${announcement_no}.pdf`
         },
         requirements: []
       };

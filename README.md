@@ -28,6 +28,7 @@
 sudo apt update
 sudo apt install git
 sudo apt install unzip
+sudo apt install dos2unix
 ```
 
 ### レポジトリのクローン
@@ -110,26 +111,33 @@ pdoc で作成できます。作成ファイルはレポジトリには登録し
 
 ## webアプリのデプロイ
 
-Google Cloud Platform(GCP) を用いてwebアプリをデプロイします。(GCP環境構築については省略)
+Google Cloud Platform(GCP) を用いてwebアプリをデプロイします。
 
 ### デプロイのための操作
 
-(スクリプトの内容などは割愛します)
+- 初回実行の際は、以下の API を有効化する必要があります。
+  - artifact registry API の有効化：cloud shell から `gcloud services enable artifactregistry.googleapis.com` を実行。
+  - Cloud Build API の有効化：cloud shell から `gcloud services enable cloudbuild.googleapis.com` を実行。
+  - Cloud Run の API の有効化：gcloud services enable run.googleapis.com
 
 #### バックエンドのデプロイ1
 
 ※cors設定のため、frontend の url を指定する箇所があります。frontend のアプリをデプロイしないとわからないため、後で同様の操作を実行します。
 
 1. source/app_backend を cloud shell にコピーする。(レポジトリをクローンするか、zip 圧縮してアップロードするなどすればよい)
-2. app_backend に移動し、`./backend_gcloud_command_sample.sh` で実行。backendがデプロイされる。
-3. 2 でデプロイしたbackendのurlをメモする。フロントエンドのデプロイの際に使用する。
+2. `dos2unix backend_gcloud_command_sample.sh` を実行する(改行コードが LF で無い状況に対応する)。
+3. 必要であれば `chmod u+x backend_gcloud_command_sample.sh` で実行権限を付与する。
+4. app_backend に移動し、`./backend_gcloud_command_sample.sh --project_id project_id --dataset_name dataset_name --pdfurl pdfurl` で実行。project_id は GCP のプロジェクトID。dataset_name は bigquery のデータセット名。pdfurl は pdf が保存されたパス(末尾にスラッシュはつけない。google cloud storage想定)。backendがデプロイされる。
+5. 3 でデプロイしたbackendのurlをメモする。フロントエンドのデプロイの際に使用する。
 
 #### フロントエンドのデプロイ
 
 1. source/app_frontend を cloud shell にコピーする。(レポジトリをクローンするか、zip 圧縮してアップロードするなどすればよい)
 2. app_frontend に移動する。
 3. `git clone https://github.com/takahiro-shimizu-2/judgesystem_ui_only.git app` で app に frontend ソースを clone。githubユーザー名とパスワード(githubアクセストークン)が要求される。
-4. `./frontend_gcloud_command_sample.sh --url backendのurl` で実行。backendのurlを --url 引数に与える。末尾にスラッシュはつけない。
+4. `dos2unix frontend_gcloud_command_sample.sh` を実行する(改行コードが LF で無い状況に対応する)。
+5. 必要であれば `chmod u+x frontend_gcloud_command_sample.sh` で実行権限を付与する。
+6. `./frontend_gcloud_command_sample.sh --url backendのurl` で実行。backendのurlを --url 引数に与える。末尾にスラッシュはつけない。
    - app_relpacement_files にあるファイルで、app の一部を置換。
    - mockData.ts の fetch 先 url を更新。
    - frontendをデプロイ。
@@ -137,8 +145,6 @@ Google Cloud Platform(GCP) を用いてwebアプリをデプロイします。(G
 
 #### バックエンドのデプロイ2
 
-1. app_backend に移動し、`chmod u+x backend_gcloud_command_sample.sh` で実行権限を付与。
-2. `./backend_gcloud_command_sample.sh --url frontendのurl` で実行。frontendのurlを --url 引数に与える。
+1. `./backend_gcloud_command_sample.sh --project_id project_id --dataset_name dataset_name --pdfurl pdfurl --frontend_url frontendのurl` で実行。frontendのurlを --url 引数に与える。
    - app/index.ts の cors 先の url を変更する。
    - backendがデプロイされる。
-

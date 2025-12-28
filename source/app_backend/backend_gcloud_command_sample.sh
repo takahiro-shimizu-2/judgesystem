@@ -5,16 +5,43 @@
 set -e # 失敗したら止める
 
 
-URL=""
+frontend_url=""
+project_id=""
+dataset_name=""
+pdfurl=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --url)
+    --frontend_url)
       if [[ $# -lt 2 ]]; then
-        echo "Error: --url requires a value"
-	exit 1
+        echo "Error: --frontend_url requires a value"
+        exit 1
       fi
-      URL="$2"
+      frontend_url="$2"
+      shift 2
+      ;;
+    --project_id)
+      if [[ $# -lt 2 ]]; then
+        echo "Error: --project_id requires a value"
+        exit 1
+      fi
+      project_id="$2"
+      shift 2
+      ;;
+    --dataset_name)
+      if [[ $# -lt 2 ]]; then
+        echo "Error: --dataset_name requires a value"
+        exit 1
+      fi
+      dataset_name="$2"
+      shift 2
+      ;;
+    --pdfurl)
+      if [[ $# -lt 2 ]]; then
+        echo "Error: --pdfurl requires a value"
+        exit 1
+      fi
+      pdfurl="$2"
       shift 2
       ;;
     --help)
@@ -28,19 +55,47 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-echo "URL: $URL"
+echo "frontend_url: $frontend_url"
+echo "Project ID: $project_id"
+echo "Dataset Name: $dataset_name"
+echo "pdfurl: $pdfurl"
 
 
-if [[ -n "$URL" ]]; then
+if [[ -n "$frontend_url" ]]; then
   if grep -q "https://frontend-xxxxx\.a\.run\.app" app/index.ts; then
-    sed -i "s|https://frontend-xxxxx\.a\.run\.app|$URL|g" app/index.ts
+    sed -i "s|https://frontend-xxxxx\.a\.run\.app|$frontend_url|g" app/index.ts
     echo "Replaced app/index.ts"
   else
     echo "No replacement target found."
   fi
 fi
 
+if [[ -n "$project_id" ]]; then
+  if grep -q "PROJECT_ID" app/index.ts; then
+    sed -i "s|PROJECT_ID|$project_id|g" app/index.ts
+    echo "Replaced app/index.ts"
+  else
+    echo "No replacement target found."
+  fi
+fi
 
+if [[ -n "$dataset_name" ]]; then
+  if grep -q "DATASET_NAME" app/index.ts; then
+    sed -i "s|DATASET_NAME|$dataset_name|g" app/index.ts
+    echo "Replaced app/index.ts"
+  else
+    echo "No replacement target found."
+  fi
+fi
+
+if [[ -n "$pdfurl" ]]; then
+  if grep -q "PDFURL" app/index.ts; then
+    sed -i "s|PDFURL|$pdfurl|g" app/index.ts
+    echo "Replaced app/index.ts"
+  else
+    echo "No replacement target found."
+  fi
+fi
 
 # Settings
 # プロジェクトIDを環境変数にセット
