@@ -22,6 +22,14 @@
 
 ## 環境構築
 
+### 最低限のパッケージインストール
+
+```
+sudo apt update
+sudo apt install git
+sudo apt install unzip
+```
+
 ### レポジトリのクローン
 
 ```
