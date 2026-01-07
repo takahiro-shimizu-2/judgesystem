@@ -76,7 +76,10 @@ import numpy as np
 from google import genai # For OCR
 from google.genai.errors import ClientError
 from google.genai import types
+# import google.generativeai as genai
+
 import httpx
+import requests
 
 try:
     from google.cloud import bigquery
@@ -261,7 +264,11 @@ class OCRutils:
         """
 
         # Retrieve and encode the PDF byte
-        doc_data = httpx.get(pdfurl).content
+        # doc_data = httpx.get(pdfurl).content
+        # httpx は HTTP/2 周りで、(無言で)落ちることがある？
+        r = requests.get(pdfurl)
+        doc_data = r.content
+
         return doc_data
 
     def getJsonFromDocData(self, doc_data):
@@ -677,6 +684,10 @@ class DBOperator:
         raise NotImplementedError
 
     @abstractmethod
+    def preselectCompanyBidJudgement(self, company_bid_judgement_tablename, office_master_tablename, bid_announcements_tablename):
+        raise NotImplementedError
+
+    @abstractmethod
     def updateCompanyBidJudgement(self, company_bid_judgement_tablename, company_bid_judgement_tablename_for_update):
         raise NotImplementedError
 
@@ -898,7 +909,10 @@ class DBOperatorGCPVM(DBOperator):
     def updateRequirements(self, bid_requirements_tablename, bid_requirements_tablename_for_update):
         sql = fr"""MERGE `{self.project_id}.{self.dataset_name}.{bid_requirements_tablename}` AS target
         USING `{self.project_id}.{self.dataset_name}.{bid_requirements_tablename_for_update}` AS source
-        ON target.announcement_no = source.announcement_no
+        ON 
+        target.announcement_no = source.announcement_no 
+        and target.requirement_no = source.requirement_no
+        and target.requirement_type = source.requirement_type
         when not matched then
         insert (
             announcement_no,
@@ -924,6 +938,7 @@ class DBOperatorGCPVM(DBOperator):
     def createCompanyBidJudgements(self, company_bid_judgement_tablename):
         sql = fr"""
         create table `{self.project_id}.{self.dataset_name}.{company_bid_judgement_tablename}` (
+            evaluation_no int64,
             announcement_no int64,
             company_no int64,
             office_no int64,
@@ -946,6 +961,8 @@ class DBOperatorGCPVM(DBOperator):
     def createSufficientRequirements(self, sufficient_requirements_tablename):
         sql = fr"""
         create table `{self.project_id}.{self.dataset_name}.{sufficient_requirements_tablename}` (
+            sufficiency_detail_no int64,
+            evaluation_no int64,
             announcement_no int64,
             requirement_no int64,
             company_no int64,
@@ -961,6 +978,8 @@ class DBOperatorGCPVM(DBOperator):
     def createInsufficientRequirements(self, insufficient_requirements_tablename):
         sql = fr"""
         create table `{self.project_id}.{self.dataset_name}.{insufficient_requirements_tablename}` (
+            shortage_detail_no int64,
+            evaluation_no int64,
             announcement_no int64,
             requirement_no int64,
             company_no int64,
@@ -994,6 +1013,7 @@ class DBOperatorGCPVM(DBOperator):
         target.office_no = source.office_no
         when not matched then
         insert (
+            evaluation_no,
             announcement_no,
             company_no,
             office_no,
@@ -1011,6 +1031,7 @@ class DBOperatorGCPVM(DBOperator):
             updatedDate
         )
         values (
+            NULL,
             source.announcement_no,
             source.company_no,
             source.office_no,
@@ -1030,27 +1051,80 @@ class DBOperatorGCPVM(DBOperator):
         """
         self.client.query(sql).result()
 
+    def preselectCompanyBidJudgement(self, company_bid_judgement_tablename, office_master_tablename, bid_announcements_tablename):
+        sql = fr"""
+        select
+        x.announcement_no,
+        x.company_no,
+        x.office_no
+        from 
+        (
+            select 
+            a.announcement_no,
+            b.company_no,
+            b.office_no
+            from {bid_announcements_tablename} as a 
+            cross join 
+            {office_master_tablename} as b
+        ) x
+        left outer join {company_bid_judgement_tablename} y
+        ON 
+        x.announcement_no = y.announcement_no
+        and x.company_no = y.company_no
+        and x.office_no = y.office_no
+        where y.announcement_no is null
+        """
+        df = self.client.query(sql).result().to_dataframe()
+        return df
+
+
     def updateCompanyBidJudgement(self, company_bid_judgement_tablename, company_bid_judgement_tablename_for_update):
         sql = fr"""MERGE `{self.project_id}.{self.dataset_name}.{company_bid_judgement_tablename}` AS target
         USING `{self.project_id}.{self.dataset_name}.{company_bid_judgement_tablename_for_update}` AS source
         ON 
+        target.evaluation_no = source.evaluation_no and
         target.announcement_no = source.announcement_no and
         target.company_no = source.company_no and
         target.office_no = source.office_no
-        when matched then
-        UPDATE SET
-            target.requirement_ineligibility = source.requirement_ineligibility,
-            target.requirement_grade_item = source.requirement_grade_item,
-            target.requirement_location = source.requirement_location,
-            target.requirement_experience = source.requirement_experience,
-            target.requirement_technician = source.requirement_technician,
-            target.requirement_other = source.requirement_other,
-            target.deficit_requirement_message = source.deficit_requirement_message,
-            target.final_status = source.final_status,
-            target.message = source.message,
-            target.remarks = source.remarks,
-            target.createdDate = source.createdDate,
-            target.updatedDate = source.updatedDate
+        when not matched then
+        INSERT (
+            evaluation_no,
+            announcement_no,
+            company_no,
+            office_no,
+            requirement_ineligibility,
+            requirement_grade_item,
+            requirement_location,
+            requirement_experience,
+            requirement_technician,
+            requirement_other,
+            deficit_requirement_message,
+            final_status,
+            message,
+            remarks,
+            createdDate,
+            updatedDate
+        )
+        VALUES (
+            source.evaluation_no,
+            source.announcement_no,
+            source.company_no,
+            source.office_no,
+            source.requirement_ineligibility,
+            source.requirement_grade_item,
+            source.requirement_location,
+            source.requirement_experience,
+            source.requirement_technician,
+            source.requirement_other,
+            source.deficit_requirement_message,
+            source.final_status,
+            source.message,
+            source.remarks,
+            source.createdDate,
+            source.updatedDate
+        )
+        WHEN MATCHED THEN
+            DO NOTHING
         """
         self.client.query(sql).result()
 
@@ -1058,6 +1132,8 @@ class DBOperatorGCPVM(DBOperator):
         sql = fr"""MERGE `{self.project_id}.{self.dataset_name}.{sufficient_requirements_tablename}` AS target
         USING `{self.project_id}.{self.dataset_name}.{sufficient_requirements_tablename_for_update}` AS source
         ON 
+        target.sufficiency_detail_no = source.sufficiency_detail_no and
+        target.evaluation_no = source.evaluation_no and
         target.announcement_no = source.announcement_no and
         target.requirement_no = source.requirement_no and
         target.company_no = source.company_no and
@@ -1084,6 +1160,8 @@ class DBOperatorGCPVM(DBOperator):
             source.createdDate,
             source.updatedDate
         )
+        WHEN MATCHED THEN
+            DO NOTHING
         """
         self.client.query(sql).result()
 
@@ -1091,6 +1169,8 @@ class DBOperatorGCPVM(DBOperator):
         sql = fr"""MERGE `{self.project_id}.{self.dataset_name}.{insufficient_requirements_tablename}` AS target
         USING `{self.project_id}.{self.dataset_name}.{insufficient_requirements_tablename_for_update}` AS source
         ON 
+        target.shortage_detail_no = source.shortage_detail_no and
+        target.evaluation_no = source.evaluation_no and
         target.announcement_no = source.announcement_no and
         target.requirement_no = source.requirement_no and
         target.company_no = source.company_no and
@@ -1098,6 +1178,7 @@ class DBOperatorGCPVM(DBOperator):
         target.requirement_type = source.requirement_type
         WHEN NOT MATCHED THEN
         INSERT (
+            shortage_detail_no,
             announcement_no,
             requirement_no,
             company_no,
@@ -1110,6 +1191,7 @@ class DBOperatorGCPVM(DBOperator):
             updatedDate
         )
         VALUES (
+            source.shortage_detail_no,
             source.announcement_no,
             source.requirement_no,
             source.company_no,
@@ -1121,6 +1203,8 @@ class DBOperatorGCPVM(DBOperator):
             source.createdDate,
             source.updatedDate
         )
+        WHEN MATCHED THEN
+            DO NOTHING
         """
         self.client.query(sql).result()
 
@@ -1432,6 +1516,7 @@ class DBOperatorSQLITE3(DBOperator):
     def createCompanyBidJudgements(self, company_bid_judgement_tablename):
         sql = fr"""
         create table {company_bid_judgement_tablename} (
+            evaluation_no integer,
             announcement_no integer,
             company_no integer,
             office_no integer,
@@ -1447,7 +1532,7 @@ class DBOperatorSQLITE3(DBOperator):
             remarks string,
             createdDate string,
             updatedDate string,
-            unique(announcement_no, company_no, office_no)
+            unique(evaluation_no, announcement_no, company_no, office_no)
         )
         """
         self.cur.execute(sql)
@@ -1455,6 +1540,8 @@ class DBOperatorSQLITE3(DBOperator):
     def createSufficientRequirements(self, sufficient_requirements_tablename):
         sql = fr"""
         create table {sufficient_requirements_tablename} (
+            sufficiency_detail_no integer,
+            evaluation_no integer,
             announcement_no integer,
             requirement_no integer,
             company_no integer,
@@ -1463,7 +1550,7 @@ class DBOperatorSQLITE3(DBOperator):
             requirement_description string,
             createdDate string,
             updatedDate string,
-            unique(announcement_no, requirement_no, company_no, office_no, requirement_type)
+            unique(sufficiency_detail_no, evaluation_no, announcement_no, requirement_no, company_no, office_no, requirement_type)
         )
         """
         self.cur.execute(sql)
@@ -1471,6 +1558,8 @@ class DBOperatorSQLITE3(DBOperator):
     def createInsufficientRequirements(self, insufficient_requirements_tablename):
         sql = fr"""
         create table {insufficient_requirements_tablename} (
+            shortage_detail_no integer,
+            evaluation_no integer,
             announcement_no integer,
             requirement_no integer,
             company_no integer,
@@ -1481,13 +1570,14 @@ class DBOperatorSQLITE3(DBOperator):
             final_comment string,
             createdDate string,
             updatedDate string,
-            unique(announcement_no, requirement_no, company_no, office_no, requirement_type)
+            unique(shortage_detail_no, evaluation_no, announcement_no, requirement_no, company_no, office_no, requirement_type)
         )
         """                
         self.cur.execute(sql)
 
     def preupdateCompanyBidJudgement(self, company_bid_judgement_tablename, office_master_tablename, bid_announcements_tablename):
         sql = fr"""insert into {company_bid_judgement_tablename} (
+            evaluation_no, 
             announcement_no,
             company_no,
             office_no,
@@ -1505,6 +1595,7 @@ class DBOperatorSQLITE3(DBOperator):
             updatedDate
         )
         select 
+        NULL,
         a.announcement_no,
         b.company_no,
         b.office_no,
@@ -1524,12 +1615,39 @@ class DBOperatorSQLITE3(DBOperator):
         cross join 
         {office_master_tablename} as b
         where true
-        ON CONFLICT(announcement_no, company_no, office_no) DO NOTHING
+        ON CONFLICT(evaluation_no, announcement_no, company_no, office_no) DO NOTHING
         """
         self.cur.execute(sql)
 
+    def preselectCompanyBidJudgement(self, company_bid_judgement_tablename, office_master_tablename, bid_announcements_tablename):
+        sql = fr"""
+        select
+        x.announcement_no,
+        x.company_no,
+        x.office_no
+        from 
+        (
+            select 
+            a.announcement_no,
+            b.company_no,
+            b.office_no
+            from {bid_announcements_tablename} as a 
+            cross join 
+            {office_master_tablename} as b
+        ) x
+        left outer join {company_bid_judgement_tablename} y
+        ON 
+        x.announcement_no = y.announcement_no
+        and x.company_no = y.company_no
+        and x.office_no = y.office_no
+        where y.announcement_no is null
+        """
+        ret = pd.read_sql_query(sql, self.conn)
+        return ret
+
     def updateCompanyBidJudgement(self, company_bid_judgement_tablename, company_bid_judgement_tablename_for_update):
         sql = fr"""insert into {company_bid_judgement_tablename} (
+            evaluation_no,
             announcement_no,
             company_no,
             office_no,
@@ -1547,6 +1665,7 @@ class DBOperatorSQLITE3(DBOperator):
             updatedDate
         ) 
         select 
+            evaluation_no,
             announcement_no,
             company_no,
             office_no,
@@ -1563,27 +1682,15 @@ class DBOperatorSQLITE3(DBOperator):
             createdDate,
             updatedDate
         from {company_bid_judgement_tablename_for_update} where true
-        ON CONFLICT(announcement_no, company_no, office_no) DO UPDATE SET
-            announcement_no = {company_bid_judgement_tablename}.announcement_no,
-            company_no = {company_bid_judgement_tablename}.company_no,
-            office_no = {company_bid_judgement_tablename}.office_no,
-            requirement_ineligibility = excluded.requirement_ineligibility,
-            requirement_grade_item = excluded.requirement_grade_item,
-            requirement_location = excluded.requirement_location,
-            requirement_experience = excluded.requirement_experience,
-            requirement_technician = excluded.requirement_technician,
-            requirement_other = excluded.requirement_other,
-            deficit_requirement_message = excluded.deficit_requirement_message,
-            final_status = excluded.final_status,
-            message = excluded.message,
-            remarks = excluded.remarks,
-            createdDate = excluded.createdDate,
-            updatedDate = excluded.updatedDate
+        ON CONFLICT(evaluation_no, announcement_no, company_no, office_no) 
+        DO NOTHING
         """
         self.cur.execute(sql)
 
     def updateSufficientRequirements(self, sufficient_requirements_tablename, sufficient_requirements_tablename_for_update):
         sql = fr"""insert into {sufficient_requirements_tablename} (
+            sufficiency_detail_no,
+            evaluation_no,
             announcement_no,
             requirement_no,
             company_no,
@@ -1594,6 +1701,8 @@ class DBOperatorSQLITE3(DBOperator):
             updatedDate
         )
         select
+            sufficiency_detail_no,
+            evaluation_no,
             announcement_no,
             requirement_no,
             company_no,
@@ -1603,7 +1712,10 @@ class DBOperatorSQLITE3(DBOperator):
             createdDate,
             updatedDate                    
         from {sufficient_requirements_tablename_for_update} where true
-        ON CONFLICT(announcement_no, requirement_no, company_no, office_no, requirement_type) DO UPDATE SET
+        ON CONFLICT(sufficiency_detail_no, evaluation_no, announcement_no, requirement_no, company_no, office_no, requirement_type) 
+        DO UPDATE SET
+            sufficiency_detail_no = {sufficient_requirements_tablename}.sufficiency_detail_no,
+            evaluation_no = {sufficient_requirements_tablename}.evaluation_no,
             announcement_no = {sufficient_requirements_tablename}.announcement_no,
             requirement_no = {sufficient_requirements_tablename}.requirement_no,
             company_no = {sufficient_requirements_tablename}.company_no,
@@ -1617,6 +1729,8 @@ class DBOperatorSQLITE3(DBOperator):
 
     def updateInsufficientRequirements(self, insufficient_requirements_tablename, insufficient_requirements_tablename_for_update):
         sql = fr"""insert into {insufficient_requirements_tablename} (
+            shortage_detail_no,
+            evaluation_no,
             announcement_no,
             requirement_no,
             company_no,
@@ -1629,6 +1743,8 @@ class DBOperatorSQLITE3(DBOperator):
             updatedDate
         )
         select
+            shortage_detail_no,
+            evaluation_no,
             announcement_no,
             requirement_no,
             company_no,
@@ -1640,7 +1756,10 @@ class DBOperatorSQLITE3(DBOperator):
             createdDate,
             updatedDate
         from {insufficient_requirements_tablename_for_update} where true
-        ON CONFLICT(announcement_no, requirement_no, company_no, office_no, requirement_type) DO UPDATE SET
+        ON CONFLICT(shortage_detail_no, evaluation_no, announcement_no, requirement_no, company_no, office_no, requirement_type) 
+        DO UPDATE SET
+            shortage_detail_no = {insufficient_requirements_tablename}.shortage_detail_no,
+            evaluation_no = {insufficient_requirements_tablename}.evaluation_no,
             announcement_no = {insufficient_requirements_tablename}.announcement_no,
             requirement_no = {insufficient_requirements_tablename}.requirement_no,
             company_no = {insufficient_requirements_tablename}.company_no,
@@ -1950,6 +2069,14 @@ class BidJudgementSan:
 
         if all_requirement_texts != []:
             df2 = pd.concat(all_requirement_texts, ignore_index=True)
+            max_requirement_no = db_operator.any_query(sql = fr"SELECT max(requirement_no) FROM {tablename_requirements}")
+            if max_requirement_no.iloc[0,0] is None:
+                max_requirement_no = 0
+            else:
+                max_requirement_no = max_requirement_no.iloc[0,0]
+            current_requirement_no = max_requirement_no + 1
+            df2["requirement_no"] = range(current_requirement_no, current_requirement_no + df2.shape[0])
+
             print(fr"Upload {tmp_tablename_requirements}")
             db_operator.uploadDataToTable(data=df2, tablename=tmp_tablename_requirements)
             db_operator.updateRequirements(bid_requirements_tablename=tablename_requirements, bid_requirements_tablename_for_update=tmp_tablename_requirements)
@@ -2026,17 +2153,41 @@ class BidJudgementSan:
         print(fr"Upload {tablename_office_master}")
         db_operator.uploadDataToTable(data=tmp_office_master, tablename=tablename_office_master)
 
-
-        db_operator.preupdateCompanyBidJudgement(
+        if False:
+            db_operator.preupdateCompanyBidJudgement(
+                company_bid_judgement_tablename=tablename_company_bid_judgement, 
+                office_master_tablename=tablename_office_master, 
+                bid_announcements_tablename=tablename_announcements
+            )
+        df0 = db_operator.preselectCompanyBidJudgement(
             company_bid_judgement_tablename=tablename_company_bid_judgement, 
             office_master_tablename=tablename_office_master, 
             bid_announcements_tablename=tablename_announcements
         )
-
-        # check
-        df0 = db_operator.selectToTable(tablename=fr"{tablename_company_bid_judgement}", where_clause="where final_status is NULL")
+        # df0 = db_operator.selectToTable(tablename=fr"{tablename_company_bid_judgement}", where_clause="where final_status is NULL")
         print(fr"Target of checking requirement : {df0.shape[0]}")
 
+        max_evaluation_no = db_operator.any_query(sql = fr"SELECT max(evaluation_no) FROM {tablename_company_bid_judgement}")
+        if max_evaluation_no.iloc[0,0] is None:
+            max_evaluation_no = 0
+        else:
+            max_evaluation_no = max_evaluation_no.iloc[0,0]
+        current_evaluation_no = max_evaluation_no + 1
+
+        max_sufficiency_detail_no = db_operator.any_query(sql = fr"SELECT max(sufficiency_detail_no) FROM {tablename_sufficient_requirement_master}")
+        if max_sufficiency_detail_no.iloc[0,0] is None:
+            max_sufficiency_detail_no = 0
+        else:
+            max_sufficiency_detail_no = max_sufficiency_detail_no.iloc[0,0]
+        current_sufficiency_detail_no = max_sufficiency_detail_no + 1
+
+        max_shortage_detail_no = db_operator.any_query(sql = fr"SELECT max(shortage_detail_no) FROM {tablename_insufficient_requirement_master}")
+        if max_shortage_detail_no.iloc[0,0] is None:
+            max_shortage_detail_no = 0
+        else:
+            max_shortage_detail_no = max_shortage_detail_no.iloc[0,0]
+        current_shortage_detail_no = max_shortage_detail_no + 1
+        
         # 部分的に(chunk_sizeごとに)実行。
         chunk_size = 1000
         for start in range(0, len(df0), chunk_size):
@@ -2118,6 +2269,7 @@ class BidJudgementSan:
                         val = {"is_ok":False, "reason":"その他要件があります。確認してください"}
                     
                     tmp_result_judgement_list.append({
+                        "evaluation_no":current_evaluation_no,
                         "requirement_no":requirement_no,
                         "company_no":company_no,
                         "office_no":office_no,
@@ -2128,6 +2280,8 @@ class BidJudgementSan:
 
                     if val["is_ok"]:
                         result_sufficient_requirements_list.append({
+                            "sufficiency_detail_no":current_sufficiency_detail_no,
+                            "evaluation_no":current_evaluation_no,
                             "announcement_no":announcement_no,
                             "requirement_no":requirement_no,
                             "company_no":company_no,
@@ -2137,8 +2291,11 @@ class BidJudgementSan:
                             "createdDate":"",
                             "updatedDate":""
                         })
+                        current_sufficiency_detail_no += 1
                     else:
                         result_insufficient_requirements_list.append({
+                            "shortage_detail_no":current_shortage_detail_no,
+                            "evaluation_no":current_evaluation_no,
                             "announcement_no":announcement_no,
                             "requirement_no":requirement_no,
                             "company_no":company_no,
@@ -2150,11 +2307,12 @@ class BidJudgementSan:
                             "createdDate":"",
                             "updatedDate":""
                         })
+                        current_shortage_detail_no += 1
 
                 tmp_result_judgement_df = pd.DataFrame(tmp_result_judgement_list)
-
-                def summarize_result(announcement_no, company_no, office_no, tmp_result_df):
+                def summarize_result(evaluation_no, announcement_no, company_no, office_no, tmp_result_df):
                     checked_requirement = {
+                        "evaluation_no":evaluation_no,
                         "announcement_no":announcement_no,
                         "company_no":company_no,
                         "office_no":office_no,
@@ -2198,7 +2356,8 @@ class BidJudgementSan:
 
                     return checked_requirement
 
-                result_judgement_list.append(summarize_result(announcement_no=announcement_no, company_no=company_no, office_no=office_no, tmp_result_df=tmp_result_judgement_df))
+                result_judgement_list.append(summarize_result(evaluation_no=current_evaluation_no, announcement_no=announcement_no, company_no=company_no, office_no=office_no, tmp_result_df=tmp_result_judgement_df))
+                current_evaluation_no += 1
 
             result_judgement = pd.DataFrame(result_judgement_list)
             result_insufficient_requirements = pd.DataFrame(result_insufficient_requirements_list)
@@ -2206,6 +2365,8 @@ class BidJudgementSan:
 
             if result_judgement.shape[0] > 0:
                 tmp_result_judgement_table = "tmp_result_judgement"
+                #max_evaluation_no = db_operator.any_query(sql = fr"SELECT max(evaluation_no) FROM {tablename_company_bid_judgement}")
+
                 print(fr"Upload {tmp_result_judgement_table}")
                 db_operator.uploadDataToTable(data=result_judgement, tablename=tmp_result_judgement_table)
                 db_operator.updateCompanyBidJudgement(
