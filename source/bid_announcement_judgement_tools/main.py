@@ -668,6 +668,10 @@ class DBOperator:
         raise NotImplementedError
 
     @abstractmethod
+    def getMaxOfColumn(self, tablename, column_name):
+        raise NotImplementedError
+
+    @abstractmethod
     def createCompanyBidJudgements(self, company_bid_judgement_tablename):
         raise NotImplementedError
 
@@ -934,6 +938,12 @@ class DBOperatorGCPVM(DBOperator):
         )
         """
         self.client.query(sql).result()
+
+    def getMaxOfColumn(self, tablename, column_name):
+        sql = fr"SELECT max({column_name}) FROM `{self.project_id}.{self.dataset_name}.{tablename}`"
+        df = self.client.query(sql).result().to_dataframe()
+        return df
+
 
     def createCompanyBidJudgements(self, company_bid_judgement_tablename):
         sql = fr"""
@@ -1512,6 +1522,10 @@ class DBOperatorSQLITE3(DBOperator):
         """
         self.cur.execute(sql)
 
+    def getMaxOfColumn(self, tablename, column_name):
+        sql = fr"SELECT max({column_name}) FROM {tablename}"
+        ret = pd.read_sql_query(sql, self.conn)
+        return ret
 
     def createCompanyBidJudgements(self, company_bid_judgement_tablename):
         sql = fr"""
@@ -2069,8 +2083,8 @@ class BidJudgementSan:
 
         if all_requirement_texts != []:
             df2 = pd.concat(all_requirement_texts, ignore_index=True)
-            max_requirement_no = db_operator.any_query(sql = fr"SELECT max(requirement_no) FROM {tablename_requirements}")
-            if max_requirement_no.iloc[0,0] is None:
+            max_requirement_no = db_operator.getMaxOfColumn(tablename=tablename_requirements,column_name="requiremet_no")
+            if max_requirement_no.iloc[0,0] is None or pd.isna(max_requirement_no.iloc[0,0]):
                 max_requirement_no = 0
             else:
                 max_requirement_no = max_requirement_no.iloc[0,0]
@@ -2167,22 +2181,22 @@ class BidJudgementSan:
         # df0 = db_operator.selectToTable(tablename=fr"{tablename_company_bid_judgement}", where_clause="where final_status is NULL")
         print(fr"Target of checking requirement : {df0.shape[0]}")
 
-        max_evaluation_no = db_operator.any_query(sql = fr"SELECT max(evaluation_no) FROM {tablename_company_bid_judgement}")
-        if max_evaluation_no.iloc[0,0] is None:
+        max_evaluation_no = db_operator.getMaxOfColumn(tablename=tablename_company_bid_judgement,column_name="evaluation_no")
+        if max_evaluation_no.iloc[0,0] is None or pd.isna(max_evaluation_no.iloc[0,0]):
             max_evaluation_no = 0
         else:
             max_evaluation_no = max_evaluation_no.iloc[0,0]
         current_evaluation_no = max_evaluation_no + 1
 
-        max_sufficiency_detail_no = db_operator.any_query(sql = fr"SELECT max(sufficiency_detail_no) FROM {tablename_sufficient_requirement_master}")
-        if max_sufficiency_detail_no.iloc[0,0] is None:
+        max_sufficiency_detail_no = db_operator.getMaxOfColumn(tablename=tablename_sufficient_requirement_master,column_name="sufficiency_detail_no")
+        if max_sufficiency_detail_no.iloc[0,0] is None or pd.isna(max_sufficiency_detail_no.iloc[0,0]):
             max_sufficiency_detail_no = 0
         else:
             max_sufficiency_detail_no = max_sufficiency_detail_no.iloc[0,0]
         current_sufficiency_detail_no = max_sufficiency_detail_no + 1
 
-        max_shortage_detail_no = db_operator.any_query(sql = fr"SELECT max(shortage_detail_no) FROM {tablename_insufficient_requirement_master}")
-        if max_shortage_detail_no.iloc[0,0] is None:
+        max_shortage_detail_no = db_operator.getMaxOfColumn(tablename=tablename_insufficient_requirement_master,column_name="shortage_detail_no")
+        if max_shortage_detail_no.iloc[0,0] is None or pd.isna(max_shortage_detail_no.iloc[0,0]):
             max_shortage_detail_no = 0
         else:
             max_shortage_detail_no = max_shortage_detail_no.iloc[0,0]
