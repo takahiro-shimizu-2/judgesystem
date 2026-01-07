@@ -1133,8 +1133,6 @@ class DBOperatorGCPVM(DBOperator):
             source.createdDate,
             source.updatedDate
         )
-        WHEN MATCHED THEN
-            DO NOTHING
         """
         self.client.query(sql).result()
 
@@ -1170,8 +1168,6 @@ class DBOperatorGCPVM(DBOperator):
             source.createdDate,
             source.updatedDate
         )
-        WHEN MATCHED THEN
-            DO NOTHING
         """
         self.client.query(sql).result()
 
@@ -1213,8 +1209,6 @@ class DBOperatorGCPVM(DBOperator):
             source.createdDate,
             source.updatedDate
         )
-        WHEN MATCHED THEN
-            DO NOTHING
         """
         self.client.query(sql).result()
 
