@@ -2083,7 +2083,7 @@ class BidJudgementSan:
 
         if all_requirement_texts != []:
             df2 = pd.concat(all_requirement_texts, ignore_index=True)
-            max_requirement_no = db_operator.getMaxOfColumn(tablename=tablename_requirements,column_name="requiremet_no")
+            max_requirement_no = db_operator.getMaxOfColumn(tablename=tablename_requirements,column_name="requirement_no")
             if max_requirement_no.iloc[0,0] is None or pd.isna(max_requirement_no.iloc[0,0]):
                 max_requirement_no = 0
             else:
