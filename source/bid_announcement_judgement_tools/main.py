@@ -1149,6 +1149,8 @@ class DBOperatorGCPVM(DBOperator):
         target.requirement_type = source.requirement_type
         when not matched then
         insert (
+            sufficiency_detail_no,
+            evaluation_no,
             announcement_no,
             requirement_no,
             company_no,
@@ -1159,6 +1161,8 @@ class DBOperatorGCPVM(DBOperator):
             updatedDate
         )
         values (
+            source.sufficiency_detail_no,
+            source.evaluation_no,
             source.announcement_no,
             source.requirement_no,
             source.company_no,
@@ -1185,6 +1189,7 @@ class DBOperatorGCPVM(DBOperator):
         WHEN NOT MATCHED THEN
         INSERT (
             shortage_detail_no,
+            evaluation_no,
             announcement_no,
             requirement_no,
             company_no,
@@ -1198,6 +1203,7 @@ class DBOperatorGCPVM(DBOperator):
         )
         VALUES (
             source.shortage_detail_no,
+            source.evaluation_no,
             source.announcement_no,
             source.requirement_no,
             source.company_no,
