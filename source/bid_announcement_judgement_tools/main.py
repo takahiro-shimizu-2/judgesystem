@@ -1073,11 +1073,11 @@ class DBOperatorGCPVM(DBOperator):
             a.announcement_no,
             b.company_no,
             b.office_no
-            from {bid_announcements_tablename} as a 
+            from `{self.project_id}.{self.dataset_name}.{bid_announcements_tablename}` as a 
             cross join 
-            {office_master_tablename} as b
+            `{self.project_id}.{self.dataset_name}.{office_master_tablename}` as b
         ) x
-        left outer join {company_bid_judgement_tablename} y
+        left outer join `{self.project_id}.{self.dataset_name}.{company_bid_judgement_tablename}` y
         ON 
         x.announcement_no = y.announcement_no
         and x.company_no = y.company_no
