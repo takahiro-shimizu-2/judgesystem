@@ -13,6 +13,8 @@ import pandas as pd
 import numpy as np
 from ftfy import fix_encoding
 from ftfy.badness import badness
+from PyPDF2 import PdfReader
+import pdfplumber
 
 if False:
     # want to remove quote...
@@ -122,8 +124,8 @@ if __name__ == "__main__":
     parser.add_argument("--input_list2", default="data/リスト_防衛省入札_2.txt")
     parser.add_argument("--output_dir_base", default="output")
     parser.add_argument("--topAgencyName", default="防衛省")
-    parser.add_argument("--skip_listup", action="store_true")
-    parser.add_argument("--skip_url_requests", action="store_true")
+    parser.add_argument("--skip_listup", action="store_false", help="disable option")
+    parser.add_argument("--skip_url_requests", action="store_false", help="disable option")
 
     args = parser.parse_args()
     input_list1 = args.input_list1
@@ -137,6 +139,7 @@ if __name__ == "__main__":
     output_dir_pdf_base = fr"{output_dir_base}/pdf"
     os.makedirs(output_dir1, exist_ok=True)
     output_file_each_list_all = fr"{output_dir_base}/_all.txt"
+    output_file_each_list_all_v2 = fr"{output_dir_base}/_all_v2.txt"
     output_save_path = fr"{output_dir_base}/save_path.txt"
 
     pdf_requests_skip_urls = [
@@ -313,8 +316,37 @@ if __name__ == "__main__":
     result_df["is_saved"] = is_saved
     result_df.to_csv(output_file_each_list_all, sep="\t", index=False)
 
-    with open(output_save_path, "w", encoding="utf-8") as f:
-        _ = f.write("save_path\n")
-        for a in save_path_list:
-            a2 = str(a).replace("\\","/")
-            _ = f.write(a2 + "\n")
+    result_df["save_path"] = [str(p) for p in save_path_list]
+    # 公告が、結果なのか判定。
+    # 最初のページだけ見る。
+    if True:
+        pdf_types = ["N_A" for i in range(result_df.shape[0])]
+        for i, path in enumerate(result_df["save_path"]):
+            if False:
+                i = 10560
+                i = 10561
+                path = result_df["save_path"].iloc[i]
+
+            # print(fr"{i}/{result_df.shape[0]}")
+            if i % 100 == 0:
+                print(fr"{i}/{result_df.shape[0]}")
+                # aaa=0
+            if not os.path.exists(path):
+                pdf_types[i] = "ファイル無し"
+                continue
+
+            with pdfplumber.open(path) as pdf:
+                for page in pdf.pages:
+                    tmptext = page.extract_text()
+                    tmptext = re.sub(r"\s+", "", tmptext)
+                    if tmptext.find("入札公告") >= 0:
+                        pdf_types[i] = "入札公告"
+                    elif tmptext.find("入札結果") >= 0:
+                        pdf_types[i] = "入札結果"
+                    else:
+                        pdf_types[i] = "その他"
+                    break
+
+    result_df["pdf_types"] = pdf_types
+    result_df.to_csv(output_file_each_list_all_v2, sep="\t", index=False)
+
