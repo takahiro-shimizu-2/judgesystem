@@ -490,7 +490,10 @@ class OCRutils:
         text=response.text
         #json_text = extract_json(text=response.text)
         text2 = text.replace('\n', '').replace('```json', '').replace("```","")
-        dict1 = json.loads(text2)
+        try:
+            dict1 = json.loads(text2)
+        except json.decoder.JSONDecodeError:
+            dict1 = json.loads('{"資格・条件" : ["' + text2 + '"]}')
         return dict1
 
     def convertRequirementTextDict(self, requirement_texts):
@@ -2001,8 +2004,9 @@ class BidJudgementSan:
 
             pdfurl = row["pdfUrl"]
             if False:
-                announcement_no = int(df1["announcement_no"][11])
-                pdfurl = df1["pdfUrl"][11]
+                i = 66
+                announcement_no = int(df1["announcement_no"][i])
+                pdfurl = df1["pdfUrl"][i]
 
             if not os.path.exists("data/ocr"):
                 os.makedirs("data/ocr", exist_ok=True)
@@ -2421,9 +2425,9 @@ if __name__ == "__main__":
     # 
     # sqlite3想定
     # python source/bid_announcement_judgement_tools/main.py --bid_announcements_pre_file data/bid_announcements_pre/bid_announcements_pre_1.txt --google_ai_studio_api_key_filepath data/sec/google_ai_studio_api_key.txt --sqlite3_db_file_path data/example.db
-    # python source/bid_announcement_judgement_tools/main.py --bid_announcements_pre_file data/bid_announcements_pre/all.txt --google_ai_studio_api_key_filepath data/sec/google_ai_studio_api_key.txt --sqlite3_db_file_path data/example.db
-    # python source/bid_announcement_judgement_tools/main.py --bid_announcements_pre_file data/bid_announcements_pre/all.txt --google_ai_studio_api_key_filepath data/sec/google_ai_studio_api_key.txt --sqlite3_db_file_path data/example.db --step1_transfer_remove_table --step3_remove_table
-    # python -i source/bid_announcement_judgement_tools/main.py --stop_processing
+    # python source/bid_announcement_judgement_tools/main.py --bid_announcements_pre_file data/bid_announcements_pre/all.txt --google_ai_studio_api_key_filepath data/sec/google_ai_studio_api_key_mizu.txt --sqlite3_db_file_path data/example.db
+    # python source/bid_announcement_judgement_tools/main.py --bid_announcements_pre_file data/bid_announcements_pre/all.txt --google_ai_studio_api_key_filepath data/sec/google_ai_studio_api_key_mizu.txt --sqlite3_db_file_path data/example.db --step1_transfer_remove_table --step3_remove_table
+    # python -i source/bid_announcement_judgement_tools/main.py --sqlite3_db_file_path data/example.db --stop_processing
 
     parser = argparse.ArgumentParser(description="")
     parser.add_argument("--use_gcp_vm", action="store_true")
