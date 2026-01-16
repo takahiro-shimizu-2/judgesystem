@@ -493,7 +493,9 @@ class OCRutils:
         try:
             dict1 = json.loads(text2)
         except json.decoder.JSONDecodeError:
+            text2 = text2.replace('"',"'")
             dict1 = json.loads('{"資格・条件" : ["' + text2 + '"]}')
+        
         return dict1
 
     def convertRequirementTextDict(self, requirement_texts):
