@@ -35,17 +35,6 @@ done
 echo $URL
 
 
-# 現状のfrontendファイルを置換
-cp app_replacement_files/index.ts app/src/types/index.ts
-cp app_replacement_files/mockData_mod_appget.ts app/src/data/mockData.ts
-
-echo "Copied relpacement files."
-
-sed -i "s|/api/result|$URL/api/result|g" app/src/data/mockData.ts
-
-echo "Replaced mockData url."
-
-
 # Settings
 # プロジェクトIDを環境変数にセット
 PROJECT_ID=$(gcloud config get-value project)
@@ -54,9 +43,9 @@ LOCATION=asia-northeast1
 # プロジェクト設定
 gcloud config set project $PROJECT_ID
 # リポジトリ名
-REPO_NAME=bidapp-frontend
+REPO_NAME=bidapp-frontend-for-test
 # イメージ名
-IMAGE_NAME=bidapp-frontend
+IMAGE_NAME=bidapp-frontend-for-test
 # タグ名
 TAG_NAME=v1
 

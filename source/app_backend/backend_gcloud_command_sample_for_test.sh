@@ -105,9 +105,9 @@ LOCATION=asia-northeast1
 # プロジェクト設定
 gcloud config set project $PROJECT_ID
 # リポジトリ名
-REPO_NAME=bidapp-backend
+REPO_NAME=bidapp-backend-for-test
 # イメージ名
-IMAGE_NAME=bidapp-backend
+IMAGE_NAME=bidapp-backend-for-test
 # タグ名
 TAG_NAME=v1
 
