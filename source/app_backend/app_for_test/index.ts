@@ -11,7 +11,7 @@ const app = express();
 // fetch はシンプルだがバックエンドが返すレスポンスが JSON の場合、ブラウザは以下の判断をする。
 //「この API は JSON を返す」
 //「Content-Type: application/json を扱う」
-// → CORS の “simple request” の条件から外れる
+// → CORS の "simple request" の条件から外れる
 // → プリフライト（OPTIONS）を送る
 // つまり、フロント側が何も指定していなくても、
 // バックエンドが JSON を返すだけでプリフライトが発生することがある。
@@ -34,7 +34,9 @@ app.get("/", (req, res) => {
   res.send("Backend API is running");
 });
 
-app.get("/api/result", async (req, res) => {
+
+
+app.get("/api/evaluations", async (req, res) => {
   // クエリ文字列から limit を取得
   const limit = Number(req.query.limit) || 10;
 
@@ -47,65 +49,44 @@ app.get("/api/result", async (req, res) => {
   const prefix = "PROJECT_ID.DATASET_NAME."
   const query = `
 select 
-t1.announcement_no,
-t1.company_no,
-t1.office_no,
-t1.final_status,
-t1.updatedDate,
-
-t2.workName,
-t2.topAgencyName,
-t2.workPlace,
-t2.pdfUrl,
-t2.zipcode,
-t2.address,
-t2.department,
-t2.assigneeName,
-t2.telephone,
-t2.fax,
-t2.mail,
-t2.publishDate,
-t2.docDistStart,
-t2.docDistEnd,
-t2.submissionStart,
-t2.submissionEnd,
-t2.bidStartDate,
-t2.bidEndDate,
-
-t3.requirement_no,
-t3.requirement_type,
-t3.requirement_description,
-t3.isMet,
-
-t4.company_name,
-t4.company_address,
-
-t5.office_name,
-t5.office_address
-
-from ${prefix}company_bid_judgement t1
-inner join
-${prefix}bid_announcements t2
-on 
-t1.announcement_no = t2.announcement_no
-inner join
-(
-   select announcement_no, office_no, requirement_no, requirement_type, requirement_description, true as isMet from ${prefix}sufficient_requirements
-   union all
-   select announcement_no, office_no, requirement_no, requirement_type, requirement_description, false as isMet from ${prefix}insufficient_requirements
-) t3
-on 
-t1.announcement_no = t3.announcement_no
-and t1.office_no = t3.office_no
-inner join
-${prefix}company_master t4
-on
-t1.company_no = t4.company_no
-inner join
-${prefix}office_master t5
-on
-t1.office_no = t5.office_no
-limit ${limit}
+1 as id,
+1 as evaluationNo,
+1 as announcement_id,
+1 as announcement_ordererId,
+'dummy' as announcement_title,
+'土木工事' as announcement_category,
+'dummy' as announcement_organization,
+'dummy' as announcement_workLocation,
+'dummy' as announcement_department,
+'dummy' as announcement_publishDate,
+'dummy' as announcement_explanationStartDate,
+'dummy' as announcement_explanationEndDate,
+'dummy' as announcement_applicationStartDate,
+'dummy' as announcement_applicationEndDate,
+'dummy' as announcement_bidStartDate,
+'dummy' as announcement_bidEndDate,
+'dummy' as announcement_deadline,
+10000 as announcement_estimatedAmountMin,
+20000 as announcement_estimatedAmountMax,
+'https://example.com/' as announcement_pdfUrl,
+1 as company_id,
+'dummy' as company_name,
+'dummy' as company_address,
+'A' as company_grade,
+1 as company_priority,
+1 as branch_id,
+'dummy' as branch_name,
+'dummy' as branch_address,
+1 as requirements_id,
+'dummy' as requirements_category,
+'dummy' as requirements_name,
+'all_met' as requirements_isMet,
+'dummy' as requirements_reason,
+'dummy' as requirements_evidence,
+'all_met' as status,
+'not_started' as workStatus,
+'judgement' as currentStep,
+'dummy' as evaluatedAt
   `;
   
   
@@ -113,50 +94,45 @@ limit ${limit}
 
   // frontend用に整形
   const transformed = rows.reduce((acc, row) => {
-  
-    const announcement_no = row.announcement_no
-    const company_no = row.company_no
-    const office_no = row.office_no
-    const final_status = row.final_status
-    const updatedDate = row.updatedDate
+    id: row.id,
+    evaluationNo: row.evaluationNo,
+    announcement_id: row.announcement_id,
+    announcement_ordererId: row.announcement_ordererId,
+    announcement_title: row.announcement_title,
+    announcement_category: row.announcement_category,
+    announcement_organization: row.announcement_organization,
+    announcement_workLocation: row.announcement_workLocation,
+    announcement_department: row.announcement_department,
+    announcement_publishDate: row.announcement_publishDate,
+    announcement_explanationStartDate: row.announcement_explanationStartDate,
+    announcement_explanationEndDate: row.announcement_explanationEndDate,
+    announcement_applicationStartDate: row.announcement_applicationStartDate,
+    announcement_applicationEndDate: row.announcement_applicationEndDate,
+    announcement_bidStartDate: row.announcement_bidStartDate,
+    announcement_bidEndDate: row.announcement_bidEndDate,
+    announcement_deadline: row.announcement_deadline,
+    announcement_estimatedAmountMin: row.announcement_estimatedAmountMin,
+    announcement_estimatedAmountMax: row.announcement_estimatedAmountMax,
+    announcement_pdfUrl: row.announcement_pdfUrl,
+    company_id: row.company_id,
+    company_name: row.company_name,
+    company_address: row.company_address,
+    company_grade: row.company_grade,
+    company_priority: row.company_priority,
+    branch_id: row.branch_id,
+    branch_name: row.branch_name,
+    branch_address: row.branch_address,
+    requirements_id: row.requirements_id,
+    requirements_category: row.requirements_category,
+    requirements_name: row.requirements_name,
+    requirements_isMet: row.requirements_isMet,
+    requirements_reason: row.requirements_reason,
+    requirements_evidence: row.requirements_evidence,
+    status: row.status,
+    workStatus: row.workStatus,
+    currentStep: row.currentStep,
+    evaluatedAt: row.evaluatedAt,
     
-    const workName = row.workName
-    //const userAnnNo = row.userAnnNo
-    //const topAgencyNo = row.topAgencyNo
-    const topAgencyName = row.topAgencyName
-    //const subAgencyNo = row.subAgencyNo
-    //const subAgencyName = row.subAgencyName
-    const workPlace = row.workPlace
-    const pdfUrl = row.pdfUrl
-    const zipcode = row.zipcode
-    const address = row.address
-    const department = row.department
-    const assigneeName = row.assigneeName
-    const telephone = row.telephone
-    const fax = row.fax
-    const mail = row.mail
-    const publishDate = row.publishDate
-    const docDistStart = row.docDistStart
-    const docDistEnd = row.docDistEnd
-    const submissionStart = row.submissionStart
-    const submissionEnd = row.submissionEnd
-    const bidStartDate = row.bidStartDate
-    const bidEndDate = row.bidEndDate
-    //const doneOCR = row.doneOCR
-    //const remarks = row.remarks
-    //const createdDate = row.createdDate
-    //const updatedDate = row.updaedDate
-    
-    const requirement_no = row.requirement_no
-    const requirement_type = row.requirement_type
-    const requirement_description = row.requirement_description
-    const isMet = row.isMet
-    
-    const company_name = row.company_name
-    const company_address = row.company_address
-    
-    const office_name = row.office_name
-    const office_address = row.office_address
     
     if(!acc[announcement_no]){
       acc[announcement_no] = {
@@ -165,55 +141,51 @@ limit ${limit}
         evaluatedAt: updatedDate ? updatedDate : "1900-01-01",
         status: final_status ? "all_met" : "unmet",
         company: {
-          id: `comp-${company_no}`,
+          id: `com-${company_id}`,
           name: company_name,
           address: company_address,
-          grade: 'A',
-          priority: 5
+          grade: company_grade,
+          priority: company_priority
         },
         branch: {
-          id: `branch-${office_no}`,
-          name: office_name,
-          address: office_address
+          id: `brn-${office_no}`,
+          name: branch_name,
+          address: branch_address
         },
         announcement: {
-          id: `ann-${announcement_no}`,
-          title: workName,
-          category: "工事",
-          organization: topAgencyName,
-          workLocation: workPlace,
-          department: {
-              postalCode: zipcode,
-              address: address,
-              name: department,
-              contactPerson: assigneeName,
-              phone: telephone,
-              fax: fax,
-              email: mail
-          },
-          publishDate: publishDate ? publishDate : "1900-01-01",
-          explanationStartDate: docDistStart ? docDistStart : "1900-01-01",
-          explanationEndDate: docDistEnd ? docDistEnd : "1900-01-01",
-          applicationStartDate: submissionStart ? submissionStart : "1900-01-01",
-          applicationEndDate: submissionEnd ? submissionEnd : "1900-01-01",
-          bidStartDate: bidStartDate ? bidStartDate : "1900-01-01",
-          bidEndDate: bidEndDate ? bidEndDate : "1900-01-01",
-          deadline: bidEndDate ? bidEndDate : "1900-01-01",
-          estimatedAmountMin: 180000000,
-          estimatedAmountMax: 580000000,
-          pdfUrl: `PDFURL/${announcement_no}.pdf`
+          id: `ann-${announcement_id}`,
+          title: announcement_title,
+          category: announcement_category,
+          organization: announcement_organization,
+          workLocation: announcement_workLocation,
+          department: announcement_department,
+          publishDate: row.announcement_publishDate,
+          explanationStartDate: row.announcement_explanationStartDate,
+          explanationEndDate: row.announcement_explanationEndDate,
+          applicationStartDate: row.announcement_applicationStartDate,
+          applicationEndDate: row.announcement_applicationEndDate,
+          bidStartDate: row.announcement_bidStartDate,
+          bidEndDate: row.announcement_bidEndDate,
+          deadline: row.announcement_deadline,
+          estimatedAmountMin: row.announcement_estimatedAmountMin,
+          estimatedAmountMax: row.announcement_estimatedAmountMax,
+          pdfUrl: row.announcement_pdfUrl,
         },
-        requirements: []
+        requirements: [],
+        status: row.status,
+        workStatus: row.workStatus,
+        currentStep: row.currentStep,
+        evaluatedAt: row.evaluatedAt
       };
     }
     
     acc[announcement_no].requirements.push({
-      id: `req-${requirement_no}`,
-      category: requirement_type,
-      name: requirement_description,
-      isMet: isMet,
-      reason: "dummy",
-      evidence: "dummy"
+      id: `req-${row.requirement_id}`,
+      category: row.requirement_category,
+      name: row.requirement_name,
+      isMet: row.requirements_isMet,
+      reason: row.requirements_reason,
+      evidence: row.requirements_evidence
     });
     
     return acc;
