@@ -62,8 +62,8 @@ echo "pdfurl: $pdfurl"
 
 
 if [[ -n "$frontend_url" ]]; then
-  if grep -q "https://frontend-xxxxx\.a\.run\.app" app/index.ts; then
-    sed -i "s|https://frontend-xxxxx\.a\.run\.app|$frontend_url|g" app/index.ts
+  if grep -q "https://frontend-xxxxx\.a\.run\.app" app_for_test/index.ts; then
+    sed -i "s|https://frontend-xxxxx\.a\.run\.app|$frontend_url|g" app_for_test/index.ts
     echo "Replaced app/index.ts"
   else
     echo "No replacement target found."
@@ -71,27 +71,27 @@ if [[ -n "$frontend_url" ]]; then
 fi
 
 if [[ -n "$project_id" ]]; then
-  if grep -q "PROJECT_ID" app/index.ts; then
-    sed -i "s|PROJECT_ID|$project_id|g" app/index.ts
-    echo "Replaced app/index.ts"
+  if grep -q "PROJECT_ID" app_for_test/index.ts; then
+    sed -i "s|PROJECT_ID|$project_id|g" app_for_test/index.ts
+    echo "Replaced app_for_test/index.ts"
   else
     echo "No replacement target found."
   fi
 fi
 
 if [[ -n "$dataset_name" ]]; then
-  if grep -q "DATASET_NAME" app/index.ts; then
-    sed -i "s|DATASET_NAME|$dataset_name|g" app/index.ts
-    echo "Replaced app/index.ts"
+  if grep -q "DATASET_NAME" app_for_test/index.ts; then
+    sed -i "s|DATASET_NAME|$dataset_name|g" app_for_test/index.ts
+    echo "Replaced app_for_test/index.ts"
   else
     echo "No replacement target found."
   fi
 fi
 
 if [[ -n "$pdfurl" ]]; then
-  if grep -q "PDFURL" app/index.ts; then
-    sed -i "s|PDFURL|$pdfurl|g" app/index.ts
-    echo "Replaced app/index.ts"
+  if grep -q "PDFURL" app_for_test/index.ts; then
+    sed -i "s|PDFURL|$pdfurl|g" app_for_test/index.ts
+    echo "Replaced app_for_test/index.ts"
   else
     echo "No replacement target found."
   fi

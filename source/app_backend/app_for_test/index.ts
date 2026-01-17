@@ -94,52 +94,50 @@ select
 
   // frontend用に整形
   const transformed = rows.reduce((acc, row) => {
-    id: row.id,
-    evaluationNo: row.evaluationNo,
-    announcement_id: row.announcement_id,
-    announcement_ordererId: row.announcement_ordererId,
-    announcement_title: row.announcement_title,
-    announcement_category: row.announcement_category,
-    announcement_organization: row.announcement_organization,
-    announcement_workLocation: row.announcement_workLocation,
-    announcement_department: row.announcement_department,
-    announcement_publishDate: row.announcement_publishDate,
-    announcement_explanationStartDate: row.announcement_explanationStartDate,
-    announcement_explanationEndDate: row.announcement_explanationEndDate,
-    announcement_applicationStartDate: row.announcement_applicationStartDate,
-    announcement_applicationEndDate: row.announcement_applicationEndDate,
-    announcement_bidStartDate: row.announcement_bidStartDate,
-    announcement_bidEndDate: row.announcement_bidEndDate,
-    announcement_deadline: row.announcement_deadline,
-    announcement_estimatedAmountMin: row.announcement_estimatedAmountMin,
-    announcement_estimatedAmountMax: row.announcement_estimatedAmountMax,
-    announcement_pdfUrl: row.announcement_pdfUrl,
-    company_id: row.company_id,
-    company_name: row.company_name,
-    company_address: row.company_address,
-    company_grade: row.company_grade,
-    company_priority: row.company_priority,
-    branch_id: row.branch_id,
-    branch_name: row.branch_name,
-    branch_address: row.branch_address,
-    requirements_id: row.requirements_id,
-    requirements_category: row.requirements_category,
-    requirements_name: row.requirements_name,
-    requirements_isMet: row.requirements_isMet,
-    requirements_reason: row.requirements_reason,
-    requirements_evidence: row.requirements_evidence,
-    status: row.status,
-    workStatus: row.workStatus,
-    currentStep: row.currentStep,
-    evaluatedAt: row.evaluatedAt,
+    const id = row.id
+    const evaluationNo = row.evaluationNo
+    const announcement_id = row.announcement_id
+    const announcement_ordererId = row.announcement_ordererId
+    const announcement_title = row.announcement_title
+    const announcement_category = row.announcement_category
+    const announcement_organization = row.announcement_organization
+    const announcement_workLocation = row.announcement_workLocation
+    const announcement_department = row.announcement_department
+    const announcement_publishDate = row.announcement_publishDate
+    const announcement_explanationStartDate = row.announcement_explanationStartDate
+    const announcement_explanationEndDate = row.announcement_explanationEndDate
+    const announcement_applicationStartDate = row.announcement_applicationStartDate
+    const announcement_applicationEndDate = row.announcement_applicationEndDate
+    const announcement_bidStartDate = row.announcement_bidStartDate
+    const announcement_bidEndDate = row.announcement_bidEndDate
+    const announcement_deadline = row.announcement_deadline
+    const announcement_estimatedAmountMin = row.announcement_estimatedAmountMin
+    const announcement_estimatedAmountMax = row.announcement_estimatedAmountMax
+    const announcement_pdfUrl = row.announcement_pdfUrl
+    const company_id = row.company_id
+    const company_name = row.company_name
+    const company_address = row.company_address
+    const company_grade = row.company_grade
+    const company_priority = row.company_priority
+    const branch_id = row.branch_id
+    const branch_name = row.branch_name
+    const branch_address = row.branch_address
+    const requirements_id = row.requirements_id
+    const requirements_category = row.requirements_category
+    const requirements_name = row.requirements_name
+    const requirements_isMet = row.requirements_isMet
+    const requirements_reason = row.requirements_reason
+    const requirements_evidence = row.requirements_evidence
+    const status = row.status
+    const workStatus = row.workStatus
+    const currentStep = row.currentStep
+    const evaluatedAt = row.evaluatedAt
     
     
-    if(!acc[announcement_no]){
-      acc[announcement_no] = {
-        id: String(announcement_no),
-        evaluationNo: String(announcement_no).padStart(8,'0'),
-        evaluatedAt: updatedDate ? updatedDate : "1900-01-01",
-        status: final_status ? "all_met" : "unmet",
+    if(!acc[announcement_id]){
+      acc[announcement_id] = {
+        id: String(announcement_id),
+        evaluationNo: String(evaluationNo).padStart(8,'0'),
         company: {
           id: `com-${company_id}`,
           name: company_name,
@@ -148,7 +146,7 @@ select
           priority: company_priority
         },
         branch: {
-          id: `brn-${office_no}`,
+          id: `brn-${branch_id}`,
           name: branch_name,
           address: branch_address
         },
@@ -159,33 +157,33 @@ select
           organization: announcement_organization,
           workLocation: announcement_workLocation,
           department: announcement_department,
-          publishDate: row.announcement_publishDate,
-          explanationStartDate: row.announcement_explanationStartDate,
-          explanationEndDate: row.announcement_explanationEndDate,
-          applicationStartDate: row.announcement_applicationStartDate,
-          applicationEndDate: row.announcement_applicationEndDate,
-          bidStartDate: row.announcement_bidStartDate,
-          bidEndDate: row.announcement_bidEndDate,
-          deadline: row.announcement_deadline,
-          estimatedAmountMin: row.announcement_estimatedAmountMin,
-          estimatedAmountMax: row.announcement_estimatedAmountMax,
-          pdfUrl: row.announcement_pdfUrl,
+          publishDate: announcement_publishDate,
+          explanationStartDate: announcement_explanationStartDate,
+          explanationEndDate: announcement_explanationEndDate,
+          applicationStartDate: announcement_applicationStartDate,
+          applicationEndDate: announcement_applicationEndDate,
+          bidStartDate: announcement_bidStartDate,
+          bidEndDate: announcement_bidEndDate,
+          deadline: announcement_deadline,
+          estimatedAmountMin: announcement_estimatedAmountMin,
+          estimatedAmountMax: announcement_estimatedAmountMax,
+          pdfUrl: announcement_pdfUrl,
         },
         requirements: [],
-        status: row.status,
-        workStatus: row.workStatus,
-        currentStep: row.currentStep,
-        evaluatedAt: row.evaluatedAt
+        status: status,
+        workStatus: workStatus,
+        currentStep: currentStep,
+        evaluatedAt: evaluatedAt
       };
     }
     
-    acc[announcement_no].requirements.push({
-      id: `req-${row.requirement_id}`,
-      category: row.requirement_category,
-      name: row.requirement_name,
-      isMet: row.requirements_isMet,
-      reason: row.requirements_reason,
-      evidence: row.requirements_evidence
+    acc[announcement_id].requirements.push({
+      id: `req-${requirements_id}`,
+      category: requirements_category,
+      name: requirements_name,
+      isMet: requirements_isMet,
+      reason: requirements_reason,
+      evidence: requirements_evidence
     });
     
     return acc;
