@@ -35,6 +35,26 @@ done
 echo $URL
 
 
+
+# 現状のfrontendファイルを置換
+cp app_replacement_files_for_test/announcements.ts app_for_test/src/data/announcements.ts
+cp app_replacement_files_for_test/companies.ts app_for_test/src/data/companies.ts
+cp app_replacement_files_for_test/evaluations.ts app_for_test/src/data/evaluations.ts
+cp app_replacement_files_for_test/index.ts app_for_test/src/data/index.ts
+cp app_replacement_files_for_test/orderers.ts app_for_test/src/data/orderers.ts
+cp app_replacement_files_for_test/partners.ts app_for_test/src/data/partners.ts
+
+echo "Copied relpacement files."
+
+
+sed -i "s|/api/announcements|$URL/api/announcements|g" app_for_test/src/data/announcements.ts
+sed -i "s|/api/companies|$URL/api/companies|g"         app_for_test/src/data/companies.ts
+sed -i "s|/api/evaluations|$URL/api/evaluations|g"     app_for_test/src/data/evaluations.ts
+sed -i "s|/api/orderers|$URL/api/orderers|g"           app_for_test/src/data/orderers.ts
+sed -i "s|/api/partners|$URL/api/partners|g"           app_for_test/src/data/partners.ts
+
+
+
 # Settings
 # プロジェクトIDを環境変数にセット
 PROJECT_ID=$(gcloud config get-value project)
