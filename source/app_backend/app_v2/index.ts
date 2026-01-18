@@ -50,30 +50,30 @@ app.get("/api/announcements", async (req, res) => {
   const prefix = "PROJECT_ID.DATASET_NAME."
   const query = `
 select
-1 as id,
+anno.announcement_no as id,
 1 as \`no\`,
 1 as ordererId,
-'dummy' as title,
-'土木工事' as category,
-'dummy' as organization,
-'dummy' as workLocation,
+anno.workName  as title,
+'dummy_cat' as category,
+anno.topAgencyName as organization,
+anno.workPlace as workLocation,
 
-'dummy' as department_postalcode,
-'dummy' as department_address,
-'dummy' as department_name,
-'dummy' as department_contactPerson,
-'dummy' as department_phone,
-'dummy' as department_fax,
-'dummy' as department_email,
+anno.zipcode as department_postalcode,
+anno.address as department_address,
+anno.department as department_name,
+anno.assigneeName as department_contactPerson,
+anno.telephone as department_phone,
+anno.fax as department_fax,
+anno.mail as department_email,
 
-'dummy' as publishDate,
-'dummy' as explanationStartDate,
-'dummy' as explanationEndDate,
-'dummy' as applicationStartDate,
-'dummy' as applicationEndDate,
-'dummy' as bidStartDate,
-'dummy' as bidEndDate,
-'dummy' as deadline,
+anno.publishDate as publishDate,
+anno.docDistStart as explanationStartDate,
+anno.docDistEnd as explanationEndDate,
+anno.submissionStart as applicationStartDate,
+anno.submissionEnd as applicationEndDate,
+anno.bidStartDate as bidStartDate,
+anno.bidEndDate as bidEndDate,
+'dummy_deadline' as deadline,
 
 1 as estimatedAmountMin,
 1000 as estimatedAmountMax,
@@ -82,8 +82,11 @@ select
 
 10 as actualAmount,
 1 as winningCompanyId,
-'dummy' as winningCompanyName
+'dummy_wincomp' as winningCompanyName
+from ${prefix}bid_announcements anno
   `;
+
+
   
   try{
     const [rows] = await bigquery.query({ query });
@@ -188,44 +191,69 @@ app.get("/api/evaluations", async (req, res) => {
   const prefix = "PROJECT_ID.DATASET_NAME."
   const query = `
 select 
-1 as id,
-1 as evaluationNo,
-1 as announcement_id,
-1 as announcement_ordererId,
-'dummy' as announcement_title,
-'土木工事' as announcement_category,
-'dummy' as announcement_organization,
-'dummy' as announcement_workLocation,
-'dummy' as announcement_department,
-'dummy' as announcement_publishDate,
-'dummy' as announcement_explanationStartDate,
-'dummy' as announcement_explanationEndDate,
-'dummy' as announcement_applicationStartDate,
-'dummy' as announcement_applicationEndDate,
-'dummy' as announcement_bidStartDate,
-'dummy' as announcement_bidEndDate,
-'dummy' as announcement_deadline,
+eval.evaluation_no as id,
+eval.evaluation_no as evaluationNo,
+eval.announcement_no as announcement_id,
+coalesce(anno.ordererId, 1) as announcement_ordererId,
+coalesce(anno.workName, "dummytitle") as announcement_title,
+coalesce(anno.category, "dummycat") as announcement_category,
+coalesce(anno.topAgencyName, "dummy_org") as announcement_organization,
+coalesce(anno.workPlace, "workloc") as announcement_workLocation,
+coalesce(anno.department, "department") as announcement_department,
+coalesce(anno.publishDate, "publishDate") as announcement_publishDate,
+coalesce(anno.docDistStart, "expStartDate") as announcement_explanationStartDate,
+coalesce(anno.docDistEnd, "expEndDate") as announcement_explanationEndDate,
+coalesce(anno.submissionStart, "appStartDate") as announcement_applicationStartDate,
+coalesce(anno.submissionEnd, "appEndDate") as announcement_applicationEndDate,
+coalesce(anno.bidStartDate, "dummy") as announcement_bidStartDate,
+coalesce(anno.bidEndDate, "dummy") as announcement_bidEndDate,
+coalesce(anno.bidEndDate, "dummy") as announcement_deadline,
 10000 as announcement_estimatedAmountMin,
 20000 as announcement_estimatedAmountMax,
-'https://example.com/' as announcement_pdfUrl,
-1 as company_id,
-'dummy' as company_name,
-'dummy' as company_address,
-'A' as company_grade,
-1 as company_priority,
-1 as branch_id,
-'dummy' as branch_name,
-'dummy' as branch_address,
-1 as requirements_id,
-'dummy' as requirements_category,
-'dummy' as requirements_name,
-'all_met' as requirements_isMet,
-'dummy' as requirements_reason,
-'dummy' as requirements_evidence,
-'all_met' as status,
+coalesce(anno.pdfUrl, 'https://example.com/') as announcement_pdfUrl,
+
+eval.company_no as company_id,
+comp.company_name as company_name,
+comp.company_address as company_address,
+coalesce(comp.grade, 'A') as company_grade,
+coalesce(comp.priority, 1) as company_priority,
+eval.office_no as branch_id,
+branch.office_name as branch_name,
+branch.office_address as branch_address,
+
+req2.requirement_no as requirements_id,
+req2.requirement_type as requirements_category,
+req1.requirement_text as requirements_name,
+req2.isMet as requirements_isMet,
+req2.requirement_description as requirements_reason,
+coalesce(req2.evidence, "dummy_evidence") as requirements_evidence,
+eval.final_status as status,
 'not_started' as workStatus,
 'judgement' as currentStep,
-'dummy' as evaluatedAt
+eval.updatedDate as evaluatedAt
+
+from ${prefix}company_bid_judgement eval
+
+inner join ${prefix}bid_announcements anno
+on eval.announcement_no = anno.announcement_no
+
+inner join ${prefix}company_master comp
+on eval.company_no = comp.company_no
+
+inner join ${prefix}office_master branch
+on eval.office_no = branch.office_no
+
+inner join ${prefix}bid_requirements req1
+on eval.announcement_no = req1.announcement_no
+
+inner join
+(
+   select announcement_no, office_no, requirement_no, requirement_type, requirement_description, true as isMet from ${prefix}sufficient_requirements
+   union all
+   select announcement_no, office_no, requirement_no, requirement_type, requirement_description, false as isMet from ${prefix}insufficient_requirements
+) req2
+on 
+eval.announcement_no = req2.announcement_no and eval.office_no = req2.office_no
   `;
   
   try{
@@ -351,21 +379,25 @@ app.get("/api/companies", async (req, res) => {
   const prefix = "PROJECT_ID.DATASET_NAME."
   const query = `
 select 
-1 as id,
+comp.company_no as id,
 1 as \`no\`,
-'dummy' as name,
-'dummy' as address,
+comp.company_name as name,
+comp.company_address as address,
 'A' as grade,
 1 as priority,
-'dummy' as phone,
+comp.telephone as phone,
 'dummy' as email,
-'dummy' as representative,
-'dummy' as established,
+comp.name_of_representative as representative,
+comp.establishment_date as established,
 1 as capital,
 100 as employeeCount,
-'dummy' as branches_name,
-'dummy' as branches_address,
+branch.office_name as branches_name,
+branch.office_address as branches_address,
 'dummy' as certifications
+
+from ${prefix}company_master comp
+left outer join ${prefix}office_master branch
+on comp.company_no = branch.company_no
 `;
   
   try{
