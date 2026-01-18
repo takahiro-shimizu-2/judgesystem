@@ -36,7 +36,7 @@ echo $URL
 
 
 
-# 現状のfrontendファイルを置換
+# frontendファイルを置換
 cp app_replacement_files_for_test/announcements.ts app_for_test/src/data/announcements.ts
 cp app_replacement_files_for_test/companies.ts app_for_test/src/data/companies.ts
 cp app_replacement_files_for_test/evaluations.ts app_for_test/src/data/evaluations.ts

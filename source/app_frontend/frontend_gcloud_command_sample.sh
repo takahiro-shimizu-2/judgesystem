@@ -35,13 +35,22 @@ done
 echo $URL
 
 
-# 現状のfrontendファイルを置換
-cp app_replacement_files/index.ts app/src/types/index.ts
-cp app_replacement_files/mockData_mod_appget.ts app/src/data/mockData.ts
+# frontendファイルを置換
+cp app_replacement_files_v2/announcements.ts app/src/data/announcements.ts
+cp app_replacement_files_v2/companies.ts     app/src/data/companies.ts
+cp app_replacement_files_v2/evaluations.ts   app/src/data/evaluations.ts
+cp app_replacement_files_v2/index.ts         app/src/data/index.ts
+cp app_replacement_files_v2/orderers.ts      app/src/data/orderers.ts
+cp app_replacement_files_v2/partners.ts      app/src/data/partners.ts
 
 echo "Copied relpacement files."
 
-sed -i "s|/api/result|$URL/api/result|g" app/src/data/mockData.ts
+
+sed -i "s|/api/announcements|$URL/api/announcements|g" app/src/data/announcements.ts
+sed -i "s|/api/companies|$URL/api/companies|g"         app/src/data/companies.ts
+sed -i "s|/api/evaluations|$URL/api/evaluations|g"     app/src/data/evaluations.ts
+sed -i "s|/api/orderers|$URL/api/orderers|g"           app/src/data/orderers.ts
+sed -i "s|/api/partners|$URL/api/partners|g"           app/src/data/partners.ts
 
 echo "Replaced mockData url."
 
