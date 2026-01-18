@@ -227,7 +227,7 @@ coalesce(req1.requirement_text, 'dummy') as requirements_name,
 coalesce(req2.isMet, FALSE) as requirements_isMet,
 coalesce(req2.requirement_description, 'dummy') as requirements_reason,
 'dummy_evidence' as requirements_evidence,
-coalesce(eval.final_status, FALSE) as status,
+case when coalesce(eval.final_status, FALSE) then 'all_met' else 'unmet' end as status,
 'not_started' as workStatus,
 'judgement' as currentStep,
 coalesce(eval.updatedDate, 'dummy') as evaluatedAt
