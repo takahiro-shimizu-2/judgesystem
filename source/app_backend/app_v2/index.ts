@@ -169,7 +169,7 @@ from ${prefix}bid_announcements anno
   } catch(err){
     console.error("ERROR in /api/announcements:", err);
     res.status(500).json({ error: "Internal Server Error" });
-    //res.status(500).json({ error: "Internal Server Error", detail: err.message, stack: err.stack });  }
+    //res.status(500).json({ error: "Internal Server Error", detail: err.message, stack: err.stack });
   }
 });
 
@@ -359,7 +359,7 @@ eval.announcement_no = req2.announcement_no and eval.office_no = req2.office_no
   } catch(err){
     console.error("ERROR in /api/evaluations:", err);
     res.status(500).json({ error: "Internal Server Error" });
-    //res.status(500).json({ error: "Internal Server Error", detail: err.message, stack: err.stack });  }
+    //res.status(500).json({ error: "Internal Server Error", detail: err.message, stack: err.stack });
   }
 });
 
@@ -533,7 +533,7 @@ select
   } catch(err){
     console.error("ERROR in /api/orderers:", err);
     res.status(500).json({ error: "Internal Server Error" });
-    //res.status(500).json({ error: "Internal Server Error", detail: err.message, stack: err.stack });  }
+    //res.status(500).json({ error: "Internal Server Error", detail: err.message, stack: err.stack });
   }
 });
 
