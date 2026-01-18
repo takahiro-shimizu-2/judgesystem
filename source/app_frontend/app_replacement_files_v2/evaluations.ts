@@ -5,16 +5,11 @@
  */
 import type {
   BidEvaluation,
-  RequirementResult,
-  RequirementCategory,
   WorkStatus,
   EvaluationStatus,
-  SimilarCase,
-  Company,
-  Branch
+  SimilarCase
 } from '../types';
 import { mockCompanies } from './companies';
-import { mockAnnouncements } from './announcements';
 
 const generateEvaluations = async (): Promise<BidEvaluation[]> => {
   const res = await fetch("/api/evaluations");
