@@ -49,123 +49,81 @@ app.get("/api/announcements", async (req, res) => {
   // 外側の `` は javascript のテンプレート文字列。${limit} で limit を参照する。
   const prefix = "PROJECT_ID.DATASET_NAME."
   const query = `
+with base as (
+  select
+  anno.announcement_no as id,
+  1 as \`no\`,
+  1 as ordererId,
+  coalesce(anno.workName, 'dummytitle') as title,
+  'dummy_cat' as category,
+  coalesce(anno.topAgencyName, 'dummy') as organization,
+  coalesce(anno.workPlace, 'dummy') as workLocation,
+
+  coalesce(anno.zipcode, 'dummy') as department_postalcode,
+  coalesce(anno.address, 'dummy') as department_address,
+  coalesce(anno.department, 'dummy') as department_name,
+  coalesce(anno.assigneeName, 'dummy') as department_contactPerson,
+  coalesce(anno.telephone, 'dummy') as department_phone,
+  coalesce(anno.fax, 'dummy') as department_fax,
+  coalesce(anno.mail, 'dummy') as department_email,
+
+  coalesce(anno.publishDate, 'dummy') as publishDate,
+  coalesce(anno.docDistStart, 'dummy') as explanationStartDate,
+  coalesce(anno.docDistEnd, 'dummy') as explanationEndDate,
+  coalesce(anno.submissionStart, 'dummy') as applicationStartDate,
+  coalesce(anno.submissionEnd, 'dummy') as applicationEndDate,
+  coalesce(anno.bidStartDate, 'dummy') as bidStartDate,
+  coalesce(anno.bidEndDate, 'dummy') as bidEndDate,
+  'dummy_deadline' as deadline,
+
+  1 as estimatedAmountMin,
+  1000 as estimatedAmountMax,
+
+  'closed' as status,
+
+  10 as actualAmount,
+  1 as winningCompanyId,
+  'dummy_wincomp' as winningCompanyName
+  from ${prefix}bid_announcements anno
+) 
 select
-anno.announcement_no as id,
-1 as \`no\`,
-1 as ordererId,
-coalesce(anno.workName, 'dummytitle') as title,
-'dummy_cat' as category,
-coalesce(anno.topAgencyName, 'dummy') as organization,
-coalesce(anno.workPlace, 'dummy') as workLocation,
-
-coalesce(anno.zipcode, 'dummy') as department_postalcode,
-coalesce(anno.address, 'dummy') as department_address,
-coalesce(anno.department, 'dummy') as department_name,
-coalesce(anno.assigneeName, 'dummy') as department_contactPerson,
-coalesce(anno.telephone, 'dummy') as department_phone,
-coalesce(anno.fax, 'dummy') as department_fax,
-coalesce(anno.mail, 'dummy') as department_email,
-
-coalesce(anno.publishDate, 'dummy') as publishDate,
-coalesce(anno.docDistStart, 'dummy') as explanationStartDate,
-coalesce(anno.docDistEnd, 'dummy') as explanationEndDate,
-coalesce(anno.submissionStart, 'dummy') as applicationStartDate,
-coalesce(anno.submissionEnd, 'dummy') as applicationEndDate,
-coalesce(anno.bidStartDate, 'dummy') as bidStartDate,
-coalesce(anno.bidEndDate, 'dummy') as bidEndDate,
-'dummy_deadline' as deadline,
-
-1 as estimatedAmountMin,
-1000 as estimatedAmountMax,
-
-'closed' as status,
-
-10 as actualAmount,
-1 as winningCompanyId,
-'dummy_wincomp' as winningCompanyName
-from ${prefix}bid_announcements anno
+FORMAT('ann-%d', id) as id,
+\`no\`,
+ordererId,
+title,
+category,
+organization,
+workLocation,
+struct(
+  department_postalcode as postalCode,
+  department_address as address,
+  department_name as name,
+  department_contactPerson as contactPerson,
+  department_phone as phone,
+  department_fax as fax,
+  department_email as email
+) as department,
+publishDate,
+explanationStartDate,
+explanationEndDate,
+applicationStartDate,
+applicationEndDate,
+bidStartDate,
+bidEndDate,
+deadline,
+estimatedAmountMin,
+estimatedAmountMax,
+status,
+actualAmount,
+winningCompanyId,
+winningCompanyName
+from base
   `;
 
 
-  
   try{
     const [rows] = await bigquery.query({ query });
-
-    const transformed = rows.reduce((acc, row) => {
-      const id = row.id
-      const no = row.no
-      const ordererId = row.ordererId
-      const title = row.title
-      const category = row.category
-      const organization = row.organization
-      const workLocation = row.workLocation
-
-      const department_postalcode = row.department_postalcode
-      const department_address = row.department_address
-      const department_name = row.department_name
-      const department_contactPerson = row.department_contactPerson
-      const department_phone = row.department_phone
-      const department_fax = row.department_fax
-      const department_email = row.department_email
-
-      const publishDate = row.publishDate
-      const explanationStartDate = row.explanationStartDate
-      const explanationEndDate = row.explanationEndDate
-      const applicationStartDate = row.applicationStartDate
-      const applicationEndDate = row.applicationEndDate
-      const bidStartDate = row.bidStartDate
-      const bidEndDate = row.bidEndDate
-      const deadline = row.deadline
-
-      const estimatedAmountMin = row.estimatedAmountMin
-      const estimatedAmountMax = row.estimatedAmountMax
-
-      const status = row.status
-
-      const actualAmount = row.actualAmount
-      const winningCompanyId = row.winningCompanyId
-      const winningCompanyName = row.winningCompanyName
-      
-      if(!acc[id]){
-        acc[id] = {
-          id: `ann-${id}`,
-          no: no,
-          ordererId: ordererId,
-          title,
-          category: category,
-          organization: organization,
-          workLocation: workLocation,
-          department: {
-            postalCode: department_postalcode,
-            address: department_address,
-            name: department_name,
-            contactPerson: department_contactPerson,
-            phone: department_phone,
-            fax: department_fax, 
-            email: department_email
-          },
-          publishDate: publishDate,
-          explanationStartDate: explanationStartDate,
-          explanationEndDate: explanationEndDate,
-          applicationStartDate: applicationStartDate,
-          applicationEndDate: applicationEndDate,
-          bidStartDate: bidStartDate,
-          bidEndDate: bidEndDate,
-          deadline: deadline,
-          estimatedAmountMin: estimatedAmountMin,
-          estimatedAmountMax: estimatedAmountMax,
-          status: status,
-          actualAmount: actualAmount,
-          winningCompanyId: winningCompanyId,
-          winningCompanyName: winningCompanyName
-        };
-      }
-      
-      
-      return acc;
-    }, {});
-
-    res.json(Object.values(transformed));
+    res.json(rows);
   } catch(err){
     console.error("ERROR in /api/announcements:", err);
     res.status(500).json({ error: "Internal Server Error" });
@@ -246,11 +204,11 @@ WITH base AS (
   req1.requirement_no = req2.requirement_no and eval.office_no = req2.office_no
 )
 SELECT
-  evaluation_no AS id,
-  evaluation_no AS evaluationNo,
+  cast(evaluation_no as string) AS id,
+  LPAD(CAST(evaluation_no AS STRING), 8, '0') AS evaluationNo,
   struct(
-    announcement_no AS id,
-    1 AS ordererId,
+    concat('ann-', announcement_no) AS id,
+    concat('ord-', 1) AS ordererId,
     workName AS title,
     'dummycat' AS category,
     topAgencyName AS organization,
@@ -277,20 +235,20 @@ SELECT
     pdfUrl AS pdfUrl
   ) AS announcement,
   struct(
-    company_no AS id,
+    concat('com-', company_no) AS id,
     company_name as name,
     company_address as address,
     'A' AS grade,
     1 AS priority
   ) AS company,
   struct(
-    office_no AS id,
+    concat('brn-', office_no) AS id,
     office_name AS name,
     office_address AS address
   ) AS branch,
   array_agg(
     struct(
-      requirement_no AS id,
+      concat('req-', requirement_no) AS id,
       requirement_type AS category,
       requirement_text AS name,
       isMet AS isMet,
