@@ -1,0 +1,14 @@
+// イメージ
+
+import { mockAnnouncements } from './data/announcements';
+import { mockCompanies } from './data/companies';
+import { mockBidEvaluations } from './data/evaluations';
+import { mockOrderers } from './data/orderers';
+import { mockPartners } from './data/partners';
+
+
+  console.log(mockAnnouncements);
+  console.log(mockCompanies);
+  console.log(mockBidEvaluations);
+  console.log(mockOrderers);
+  console.log(mockPartners);
