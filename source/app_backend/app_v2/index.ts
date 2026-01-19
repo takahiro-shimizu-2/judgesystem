@@ -176,7 +176,6 @@ from ${prefix}bid_announcements anno
 
 
 
-
 app.get("/api/evaluations", async (req, res) => {
   console.log("GET /api/evaluations hit");
   // クエリ文字列から limit を取得
@@ -190,172 +189,148 @@ app.get("/api/evaluations", async (req, res) => {
   // 外側の `` は javascript のテンプレート文字列。${limit} で limit を参照する。
   const prefix = "PROJECT_ID.DATASET_NAME."
   const query = `
-select 
-eval.evaluation_no as id,
-eval.evaluation_no as evaluationNo,
-eval.announcement_no as announcement_id,
-1 as announcement_ordererId,
-coalesce(anno.workName, 'dummytitle') as announcement_title,
-'dummycat' as announcement_category,
-coalesce(anno.topAgencyName, 'dummy_org') as announcement_organization,
-coalesce(anno.workPlace, 'workloc') as announcement_workLocation,
-coalesce(anno.department, 'department') as announcement_department,
-coalesce(anno.publishDate, 'publishDate') as announcement_publishDate,
-coalesce(anno.docDistStart, 'expStartDate') as announcement_explanationStartDate,
-coalesce(anno.docDistEnd, 'expEndDate') as announcement_explanationEndDate,
-coalesce(anno.submissionStart, 'appStartDate') as announcement_applicationStartDate,
-coalesce(anno.submissionEnd, 'appEndDate') as announcement_applicationEndDate,
-coalesce(anno.bidStartDate, 'dummy') as announcement_bidStartDate,
-coalesce(anno.bidEndDate, 'dummy') as announcement_bidEndDate,
-coalesce(anno.bidEndDate, 'dummy') as announcement_deadline,
-10000 as announcement_estimatedAmountMin,
-20000 as announcement_estimatedAmountMax,
-coalesce(anno.pdfUrl, 'https://example.com/') as announcement_pdfUrl,
+WITH base AS (
+  SELECT
+    eval.evaluation_no,
+    eval.announcement_no,
+    coalesce(anno.workName, 'dummytitle') AS workName,
+    coalesce(anno.topAgencyName, 'dummy_org') AS topAgencyName,
+    coalesce(anno.workPlace, 'workloc') AS workPlace,
+    coalesce(anno.department, 'department') AS department,
+    coalesce(anno.publishDate, 'publishDate') AS publishDate,
+    coalesce(anno.docDistStart, 'expStartDate') AS docDistStart,
+    coalesce(anno.docDistEnd, 'expEndDate') AS docDistEnd,
+    coalesce(anno.submissionStart, 'appStartDate') AS submissionStart,
+    coalesce(anno.submissionEnd, 'appEndDate') AS submissionEnd,
+    coalesce(anno.bidStartDate, 'dummy') AS bidStartDate,
+    coalesce(anno.bidEndDate, 'dummy') AS bidEndDate,
+    coalesce(anno.pdfUrl, 'https://example.com/') AS pdfUrl,
+    eval.company_no,
+    coalesce(comp.company_name, 'dummy') AS company_name,
+    coalesce(comp.company_address, 'dummy') AS company_address,
+    eval.office_no,
+    branch.office_name,
+    branch.office_address,
+    req1.requirement_no,
+    req1.requirement_text,
+    req2.requirement_type,
+    req2.requirement_description,
+    req2.isMet,
+    eval.final_status,
+    eval.updatedDate
+  from ${prefix}company_bid_judgement eval
 
-eval.company_no as company_id,
-coalesce(comp.company_name, 'dummy') as company_name,
-coalesce(comp.company_address, 'dummy') as company_address,
-'A' as company_grade,
-1 as company_priority,
-eval.office_no as branch_id,
-coalesce(branch.office_name, 'dummy') as branch_name,
-coalesce(branch.office_address, 'dummy') as branch_address,
+  inner join ${prefix}bid_announcements anno
+  on eval.announcement_no = anno.announcement_no
 
-req2.requirement_no as requirements_id,
-coalesce(req2.requirement_type, 'dummy') as requirements_category,
-coalesce(req1.requirement_text, 'dummy') as requirements_name,
-coalesce(req2.isMet, FALSE) as requirements_isMet,
-coalesce(req2.requirement_description, 'dummy') as requirements_reason,
-'dummy_evidence' as requirements_evidence,
-case when coalesce(eval.final_status, FALSE) then 'all_met' else 'unmet' end as status,
-'not_started' as workStatus,
-'judgement' as currentStep,
-coalesce(eval.updatedDate, 'dummy') as evaluatedAt
+  inner join ${prefix}company_master comp
+  on eval.company_no = comp.company_no
 
-from ${prefix}company_bid_judgement eval
+  inner join ${prefix}office_master branch
+  on eval.office_no = branch.office_no
 
-inner join ${prefix}bid_announcements anno
-on eval.announcement_no = anno.announcement_no
+  inner join ${prefix}bid_requirements req1
+  on eval.announcement_no = req1.announcement_no
 
-inner join ${prefix}company_master comp
-on eval.company_no = comp.company_no
-
-inner join ${prefix}office_master branch
-on eval.office_no = branch.office_no
-
-inner join ${prefix}bid_requirements req1
-on eval.announcement_no = req1.announcement_no
-
-inner join
-(
-   select announcement_no, office_no, requirement_no, requirement_type, requirement_description, true as isMet from ${prefix}sufficient_requirements
-   union all
-   select announcement_no, office_no, requirement_no, requirement_type, requirement_description, false as isMet from ${prefix}insufficient_requirements
-) req2
-on 
-eval.announcement_no = req2.announcement_no and eval.office_no = req2.office_no
+  inner join
+  (
+     select 
+     announcement_no, office_no, requirement_no, requirement_type, requirement_description, true as isMet 
+     from ${prefix}sufficient_requirements
+     union all
+     select 
+     announcement_no, office_no, requirement_no, requirement_type, requirement_description, false as isMet 
+     from ${prefix}insufficient_requirements
+  ) req2
+  on 
+  req1.requirement_no = req2.requirement_no and eval.office_no = req2.office_no
+)
+SELECT
+  evaluation_no AS id,
+  evaluation_no AS evaluationNo,
+  struct(
+    announcement_no AS id,
+    1 AS ordererId,
+    workName AS title,
+    'dummycat' AS category,
+    topAgencyName AS organization,
+    workPlace AS workLocation,
+    struct(
+      '999-9999' as postalCode,
+      '北極' as address,
+      department as name,
+      'あいうえお' as contactPerson,
+      '99-9999-9999' as phone,
+      '99-9999-9999' as fax,
+      'kikaku@example.go.jp' as email
+    ) as department,
+    publishDate AS publishDate,
+    docDistStart AS explanationStartDate,
+    docDistEnd AS explanationEndDate,
+    submissionStart AS applicationStartDate,
+    submissionEnd AS applicationEndDate,
+    bidStartDate AS bidStartDate,
+    bidEndDate AS bidEndDate,
+    bidEndDate AS deadline,
+    10000 AS estimatedAmountMin,
+    20000 AS estimatedAmountMax,
+    pdfUrl AS pdfUrl
+  ) AS announcement,
+  struct(
+    company_no AS id,
+    company_name as name,
+    company_address as address,
+    'A' AS grade,
+    1 AS priority
+  ) AS company,
+  struct(
+    office_no AS id,
+    office_name AS name,
+    office_address AS address
+  ) AS branch,
+  array_agg(
+    struct(
+      requirement_no AS id,
+      requirement_type AS category,
+      requirement_text AS name,
+      isMet AS isMet,
+      requirement_description AS reason,
+      'dummy_evidence' AS evidence
+    )
+  ) AS requirements,
+  CASE WHEN coalesce(final_status, FALSE) THEN 'all_met' ELSE 'unmet' END AS status,
+  'not_started' AS workStatus,
+  'judgement' AS currentStep,
+  coalesce(updatedDate, 'dummy') AS evaluatedAt
+FROM base
+GROUP BY
+  evaluation_no,
+  announcement_no,
+  workName,
+  topAgencyName,
+  workPlace,
+  department,
+  publishDate,
+  docDistStart,
+  docDistEnd,
+  submissionStart,
+  submissionEnd,
+  bidStartDate,
+  bidEndDate,
+  pdfUrl,
+  company_no,
+  company_name,
+  company_address,
+  office_no, 
+  office_name, 
+  office_address, 
+  final_status,
+  updatedDate
   `;
-  
+
   try{
     const [rows] = await bigquery.query({ query });
-
-    const transformed = rows.reduce((acc, row) => {
-      const id = row.id
-      const evaluationNo = row.evaluationNo
-      const announcement_id = row.announcement_id
-      const announcement_ordererId = row.announcement_ordererId
-      const announcement_title = row.announcement_title
-      const announcement_category = row.announcement_category
-      const announcement_organization = row.announcement_organization
-      const announcement_workLocation = row.announcement_workLocation
-      const announcement_department = row.announcement_department
-      const announcement_publishDate = row.announcement_publishDate
-      const announcement_explanationStartDate = row.announcement_explanationStartDate
-      const announcement_explanationEndDate = row.announcement_explanationEndDate
-      const announcement_applicationStartDate = row.announcement_applicationStartDate
-      const announcement_applicationEndDate = row.announcement_applicationEndDate
-      const announcement_bidStartDate = row.announcement_bidStartDate
-      const announcement_bidEndDate = row.announcement_bidEndDate
-      const announcement_deadline = row.announcement_deadline
-      const announcement_estimatedAmountMin = row.announcement_estimatedAmountMin
-      const announcement_estimatedAmountMax = row.announcement_estimatedAmountMax
-      const announcement_pdfUrl = row.announcement_pdfUrl
-      const company_id = row.company_id
-      const company_name = row.company_name
-      const company_address = row.company_address
-      const company_grade = row.company_grade
-      const company_priority = row.company_priority
-      const branch_id = row.branch_id
-      const branch_name = row.branch_name
-      const branch_address = row.branch_address
-      const requirements_id = row.requirements_id
-      const requirements_category = row.requirements_category
-      const requirements_name = row.requirements_name
-      const requirements_isMet = row.requirements_isMet
-      const requirements_reason = row.requirements_reason
-      const requirements_evidence = row.requirements_evidence
-      const status = row.status
-      const workStatus = row.workStatus
-      const currentStep = row.currentStep
-      const evaluatedAt = row.evaluatedAt
-      
-      
-      if(!acc[announcement_id]){
-        acc[announcement_id] = {
-          id: String(announcement_id),
-          evaluationNo: String(evaluationNo).padStart(8,'0'),
-          company: {
-            id: `com-${company_id}`,
-            name: company_name,
-            address: company_address,
-            grade: company_grade,
-            priority: company_priority
-          },
-          branch: {
-            id: `brn-${branch_id}`,
-            name: branch_name,
-            address: branch_address
-          },
-          announcement: {
-            id: `ann-${announcement_id}`,
-            title: announcement_title,
-            category: announcement_category,
-            organization: announcement_organization,
-            workLocation: announcement_workLocation,
-            department: announcement_department,
-            publishDate: announcement_publishDate,
-            explanationStartDate: announcement_explanationStartDate,
-            explanationEndDate: announcement_explanationEndDate,
-            applicationStartDate: announcement_applicationStartDate,
-            applicationEndDate: announcement_applicationEndDate,
-            bidStartDate: announcement_bidStartDate,
-            bidEndDate: announcement_bidEndDate,
-            deadline: announcement_deadline,
-            estimatedAmountMin: announcement_estimatedAmountMin,
-            estimatedAmountMax: announcement_estimatedAmountMax,
-            pdfUrl: announcement_pdfUrl,
-          },
-          requirements: [],
-          status: status,
-          workStatus: workStatus,
-          currentStep: currentStep,
-          evaluatedAt: evaluatedAt
-        };
-      }
-      
-      acc[announcement_id].requirements.push({
-        id: `req-${requirements_id}`,
-        category: requirements_category,
-        name: requirements_name,
-        isMet: requirements_isMet,
-        reason: requirements_reason,
-        evidence: requirements_evidence
-      });
-      
-      return acc;
-    }, {});
-
-    res.json(Object.values(transformed));
+    res.json(rows);
   } catch(err){
     console.error("ERROR in /api/evaluations:", err);
     res.status(500).json({ error: "Internal Server Error" });
