@@ -7,6 +7,7 @@ import type { Orderer } from '../types/orderer';
 const generateOrderers = async (): Promise<Orderer[]> => {
   const res = await fetch("/api/orderers");
   const data = await res.json();
+  //console.log("API response:", data);
   return data;
 }
 

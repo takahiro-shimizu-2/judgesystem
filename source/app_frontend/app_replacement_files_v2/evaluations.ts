@@ -14,6 +14,7 @@ import { mockCompanies } from './companies';
 const generateEvaluations = async (): Promise<BidEvaluation[]> => {
   const res = await fetch("/api/evaluations");
   const data = await res.json();
+  //console.log("API response:", data);
   return data;
 }
 

@@ -16,6 +16,7 @@ import type {
 const generatePartners = async (): Promise<PartnerListItem[]> => {
   const res = await fetch("/api/partners");
   const data = await res.json();
+  //console.log("API response:", data);
   return data;
 }
 

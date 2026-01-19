@@ -12,6 +12,7 @@ import type { AnnouncementWithStatus } from '../types';
 const generateAnnouncements = async (): Promise<AnnouncementWithStatus[]> => {
   const res = await fetch("/api/announcements");
   const data = await res.json();
+  //console.log("API response:", data);
   return data;
 }
 

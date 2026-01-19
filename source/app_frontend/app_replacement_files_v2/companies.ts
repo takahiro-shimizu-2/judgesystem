@@ -26,6 +26,7 @@ interface CompanyWithDetails {
 const generateCompanies = async (): Promise<CompanyWithDetails[]> => {
   const res = await fetch("/api/companies");
   const data = await res.json();
+  //console.log("API response:", data);
   return data;
 }
 
