@@ -5,6 +5,7 @@ import { mockCompanies } from './data/companies';
 import { mockBidEvaluations } from './data/evaluations';
 import { mockOrderers } from './data/orderers';
 import { mockPartners } from './data/partners';
+import { mockStaff } from './data/staff';
 
 
   console.log(mockAnnouncements);
@@ -12,3 +13,4 @@ import { mockPartners } from './data/partners';
   console.log(mockBidEvaluations);
   console.log(mockOrderers);
   console.log(mockPartners);
+  console.log(mockStaff);
