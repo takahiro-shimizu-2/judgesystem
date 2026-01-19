@@ -311,76 +311,71 @@ app.get("/api/companies", async (req, res) => {
   // 外側の `` は javascript のテンプレート文字列。${limit} で limit を参照する。
   const prefix = "PROJECT_ID.DATASET_NAME."
   const query = `
-select 
-comp.company_no as id,
-1 as \`no\`,
-coalesce(comp.company_name, 'dummy') as name,
-coalesce(comp.company_address, 'dummy') as address,
-'A' as grade,
-1 as priority,
-coalesce(comp.telephone, 'dummy') as phone,
-'dummy' as email,
-coalesce(comp.name_of_representative, 'dummy') as representative,
-coalesce(comp.establishment_date, 'dummy') as established,
-1 as capital,
-100 as employeeCount,
-coalesce(branch.office_name, 'dummy') as branches_name,
-coalesce(branch.office_address, 'dummy') as branches_address,
-'dummy' as certifications
+WITH base AS (
+  select 
+  comp.company_no as id,
+  1 as \`no\`,
+  coalesce(comp.company_name, 'dummy') as name,
+  coalesce(comp.company_address, 'dummy') as address,
+  'A' as grade,
+  1 as priority,
+  coalesce(comp.telephone, 'dummy') as phone,
+  'dummy' as email,
+  coalesce(comp.name_of_representative, 'dummy') as representative,
+  coalesce(comp.establishment_date, 'dummy') as established,
+  1 as capital,
+  100 as employeeCount,
+  coalesce(branch.office_name, 'dummy') as branches_name,
+  coalesce(branch.office_address, 'dummy') as branches_address,
+  'dummy' as certifications
 
-from ${prefix}company_master comp
-left outer join ${prefix}office_master branch
-on comp.company_no = branch.company_no
+  from ${prefix}company_master comp
+  left outer join ${prefix}office_master branch
+  on comp.company_no = branch.company_no
+)
+select
+concat('com-', id) as id,
+\`no\`,
+name,
+address,
+grade,
+priority,
+phone,
+email,
+representative,
+established,
+capital,
+employeeCount,
+array_agg(
+  struct(
+    branches_name as name,
+    branches_address as address
+  )
+) AS branches,
+array_agg(
+  struct(
+    certifications
+  )
+) as certifications
+from base
+group by
+id,
+\`no\`,
+name,
+address,
+grade,
+priority,
+phone,
+email,
+representative,
+established,
+capital,
+employeeCount
 `;
   
   try{
     const [rows] = await bigquery.query({ query });
-
-    const transformed = rows.reduce((acc, row) => {
-      const id = row.id
-      const no = row.no
-      const name = row.name
-      const address = row.address
-      const grade = row.grade
-      const priority = row.priority
-      const phone = row.phone
-      const email = row.email
-      const representative = row.representative
-      const established = row.established
-      const capital = row.capital
-      const employeeCount = row.employeeCount
-      const branches_name = row.branches_name
-      const branches_address = row.branches_address
-      const certifications = row.certifications
-      
-      if(!acc[id]){
-        acc[id] = {
-          id: `com-${id}`,
-          no: no,
-          name: name,
-          address: address,
-          grade: grade,
-          priority: priority,
-          phone: phone,
-          email: email,
-          representative: representative,
-          established: established,
-          capital: capital,
-          branches: [],
-          certifications: []
-        };
-      }
-      
-      acc[id].branches.push({
-        name: branches_name,
-        address: branches_address
-      });
-      acc[id].certifications.push(certifications);
-      
-      return acc;
-    }, {});
-
-    res.json(Object.values(transformed));
+    res.json(rows);
   } catch(err){
     console.error("ERROR in /api/companies:", err);
     res.status(500).json({ error: "Internal Server Error" });
