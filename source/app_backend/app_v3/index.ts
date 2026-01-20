@@ -502,159 +502,136 @@ app.get("/api/partners", async (req, res) => {
   // 外側の `` は javascript のテンプレート文字列。${limit} で limit を参照する。
   const prefix = "PROJECT_ID.DATASET_NAME."
   const query = `
-WITH base AS (
-  SELECT 
-    1 AS id,
-    1 AS \`no\`,
-    'dummy' AS name,
-
-    'dummy' AS postalCode,
-    'dummy' AS address,
-    'dummy' AS phone,
-    'dummy' AS fax,
-    'dummy' AS email,
-    'https://example.com/' AS url,
-    10 AS surveyCount,
-    10 AS rating,
-    10 AS resultCount,
-    
-    'dummy' AS categories, 
-
-    1 AS pastProjects_evaluationId,
-    1 AS pastProjects_announcementId,
-    1 AS pastProjects_announcementNo,
-    'dummy' AS pastProjects_announcementTitle,
-    'dummy' AS pastProjects_branchName,
-    'all_met' AS pastProjects_workStatus,
-    'unavailable' AS pastProjects_evaluationStatus,
-    1 AS pastProjects_priority,
-    'open_competitive' AS pastProjects_bidType,
-    '土木工事' AS pastProjects_category,
-    '北極' AS pastProjects_prefecture,
-    'dummy' AS pastProjects_publishDate,
-    'dummy' AS pastProjects_deadline,
-    'dummy' AS pastProjects_evaluatedAt,
-    'dummy' AS pastProjects_organization,
-
-    'dummy' AS representative, 
-    'dummy' AS established, 
-    1 AS capital, 
-    1 AS employeeCount, 
-    'dummy' AS branches_name,
-    'dummy' AS branches_address,
-
-    '役務の提供等' AS qualifications_unified_mainCategory, 
-    '調査・研究' AS qualifications_unified_category, 
-    '関東・甲信越' AS qualifications_unified_region, 
-    '1200' AS qualifications_unified_value, 
-    'C' AS qualifications_unified_grade, 
-
-    '経済産業省' AS qualifications_orderers_ordererName, 
-    '大工' AS qualifications_orderers_items_category, 
-    '関東・甲信越' AS qualifications_orderers_items_region, 
-    '600' AS qualifications_orderers_items_value, 
-    'C' AS qualifications_orderers_items_grade
-)
-
--- items を先に作る（集計のネストを避ける）
-, orderer_items AS (
+WITH
+-- 1) categories を partner_id ごとに集約
+categories AS (
   SELECT
-    qualifications_orderers_ordererName AS ordererName,
+    partner_id,
+    ARRAY_AGG(categories) AS categories
+  FROM ${prefix}partners_categories
+  GROUP BY partner_id
+),
+
+-- 2) past projects を partner_id ごとに集約
+past_projects AS (
+  SELECT
+    partner_id,
     ARRAY_AGG(
       STRUCT(
-        qualifications_orderers_items_category AS category,
-        qualifications_orderers_items_region AS region,
-        qualifications_orderers_items_value AS value,
-        qualifications_orderers_items_grade AS grade
+        cast(evaluationId as string) as evaluationId,
+        announcementId,
+        cast(announcementNo as int64) as announcementNo,
+        announcementTitle,
+        branchName,
+        workStatus,
+        evaluationStatus,
+        cast(priority as int64) as priority,
+        bidType,
+        category,
+        prefecture,
+        publishDate,
+        deadline,
+        evaluatedAt,
+        organization
+      )
+    ) AS pastProjects
+  FROM ${prefix}partners_past_projects
+  GROUP BY partner_id
+),
+
+-- 3) branches を partner_id ごとに集約
+branches AS (
+  SELECT
+    partner_id,
+    ARRAY_AGG(
+      STRUCT(
+        name,
+        address
+      )
+    ) AS branches
+  FROM ${prefix}partners_branches
+  GROUP BY partner_id
+),
+
+-- 4) unified qualifications を partner_id ごとに集約
+qual_unified AS (
+  SELECT
+    partner_id,
+    ARRAY_AGG(
+      STRUCT(
+        mainCategory,
+        category,
+        region,
+        cast(value as string) as value,
+        grade
+      )
+    ) AS unified
+  FROM ${prefix}partners_qualifications_unified
+  GROUP BY partner_id
+),
+
+-- 5) orderer items を ordererName ごとに集約
+orderer_items AS (
+  SELECT
+    partner_id,
+    ordererName,
+    ARRAY_AGG(
+      STRUCT(
+        category,
+        region,
+        cast(value as string) as value,
+        grade
       )
     ) AS items
-  FROM base
-  GROUP BY qualifications_orderers_ordererName
-)
+  FROM ${prefix}partners_qualifications_orderer_items
+  GROUP BY partner_id, ordererName
+),
 
-SELECT
-  CONCAT('ptn-', id) AS id,
-  \`no\`,
-  name,
-  postalCode,
-  address,
-  phone,
-  fax,
-  email,
-  url,
-  surveyCount,
-  rating,
-  resultCount,
-
-  -- categories は文字列配列として返す
-  ARRAY_AGG(categories) AS categories,
-
-  ARRAY_AGG(
-    STRUCT(
-      pastProjects_evaluationId AS evaluationId,
-      pastProjects_announcementId AS announcementId,
-      pastProjects_announcementNo AS announcementNo,
-      pastProjects_announcementTitle AS announcementTitle,
-      pastProjects_branchName AS branchName,
-      pastProjects_workStatus AS workStatus,
-      pastProjects_evaluationStatus AS evaluationStatus,
-      pastProjects_priority AS priority,
-      pastProjects_bidType AS bidType,
-      pastProjects_category AS category,
-      pastProjects_prefecture AS prefecture,
-      pastProjects_publishDate AS publishDate,
-      pastProjects_deadline AS deadline,
-      pastProjects_evaluatedAt AS evaluatedAt,
-      pastProjects_organization AS organization
-    )
-  ) AS pastProjects,
-
-  representative, 
-  established, 
-  capital, 
-  employeeCount, 
-
-  ARRAY_AGG(
-    STRUCT(
-      branches_name AS name,
-      branches_address AS address
-    )
-  ) AS branches,
-
-  STRUCT(
-    -- unified は 1 要素の配列
+-- 6) orderers を partner_id ごとに集約
+orderers AS (
+  SELECT
+    partner_id,
     ARRAY_AGG(
       STRUCT(
-        qualifications_unified_mainCategory AS mainCategory,
-        qualifications_unified_category AS category,
-        qualifications_unified_region AS region,
-        qualifications_unified_value AS value,
-        qualifications_unified_grade AS grade
+        ordererName,
+        items
       )
-    ) AS unified,
+    ) AS orderers
+  FROM orderer_items
+  GROUP BY partner_id
+)
 
-    -- orderers は別 CTE で items を作ってからまとめる
-    (SELECT ARRAY_AGG(STRUCT(ordererName, items)) FROM orderer_items) AS orderers
+-- 7) 最終結合（爆発しない）
+SELECT
+  pm.partner_id AS id,
+  pm.no,
+  pm.name,
+  pm.postalCode,
+  pm.address,
+  pm.phone,
+  pm.fax,
+  pm.email,
+  pm.url,
+  pm.surveyCount,
+  cast(pm.rating as int64) as rating,
+  pm.resultCount,
+  c.categories,
+  pp.pastProjects,
+  pm.representative,
+  pm.established,
+  pm.capital,
+  pm.employeeCount,
+  b.branches,
+  STRUCT(
+    qu.unified,
+    o.orderers
   ) AS qualifications
-
-FROM base
-GROUP BY
-  id,
-  \`no\`,
-  name,
-  postalCode,
-  address,
-  phone,
-  fax,
-  email,
-  url,
-  surveyCount,
-  rating,
-  resultCount,
-  representative, 
-  established, 
-  capital, 
-  employeeCount;
+FROM ${prefix}partners_master pm
+LEFT JOIN categories c USING (partner_id)
+LEFT JOIN past_projects pp USING (partner_id)
+LEFT JOIN branches b USING (partner_id)
+LEFT JOIN qual_unified qu USING (partner_id)
+LEFT JOIN orderers o USING (partner_id);
 `;
 
 
