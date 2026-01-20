@@ -2533,6 +2533,23 @@ if __name__ == "__main__":
     db_operator.uploadDataToTable(data=office_master, tablename="office_master")
     db_operator.uploadDataToTable(data=company_master, tablename="company_master")
 
+    partners_master = master.getPartnersMaster()
+    partners_branches = master.getPartnersBranches()
+    partners_categories = master.getPartnersCategories()
+    partners_past_projects = master.getPartnersPastProjects()
+    partners_qualifications_orderer_items = master.getPartnersQualificationsOrdererItems()
+    partners_qualifications_orderers = master.getPartnersQualificationsOrderers()
+    partners_qualifications_unified = master.getPartnersQualificationsUnified()
+
+    db_operator.uploadDataToTable(data=partners_master, tablename="partners_master")
+    db_operator.uploadDataToTable(data=partners_branches, tablename="partners_branches")
+    db_operator.uploadDataToTable(data=partners_categories, tablename="partners_categories")
+    db_operator.uploadDataToTable(data=partners_past_projects, tablename="partners_past_projects")
+    db_operator.uploadDataToTable(data=partners_qualifications_orderer_items, tablename="partners_qualifications_orderer_items")
+    db_operator.uploadDataToTable(data=partners_qualifications_orderers, tablename="partners_qualifications_orderers")
+    db_operator.uploadDataToTable(data=partners_qualifications_unified, tablename="partners_qualifications_unified")
+
+
     # db_operator.selectToTable(tablename="bid_announcements_pre")
     # db_operator.selectToTable(tablename="bid_announcements")
     # db_operator.selectToTable(tablename="bid_requirements")
