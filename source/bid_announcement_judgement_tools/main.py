@@ -150,7 +150,15 @@ class Master:
             "office_master":"data/master/office_master.txt",
             "office_registration_authorization_master":"data/master/office_registration_authorization_master.txt",
             "office_work_achivements_master":"data/master/office_work_achivements_master.txt",
-            "technician_qualification_master":"data/master/technician_qualification_master.txt"
+            "technician_qualification_master":"data/master/technician_qualification_master.txt",
+            
+            "partners_master":"data/master/partners_master.txt",
+            "partners_branches":"data/master/partners_branches.txt",
+            "partners_categories":"data/master/partners_categories.txt",
+            "partners_past_projects":"data/master/partners_past_projects.txt",
+            "partners_qualifications_orderer_items":"data/master/partners_qualifications_orderer_items.txt",
+            "partners_qualifications_orderers":"data/master/partners_qualifications_orderers.txt",
+            "partners_qualifications_unified":"data/master/partners_qualifications_unified.txt"
         }
 
         for key, val in master_dict.items():
@@ -185,6 +193,28 @@ class Master:
     
     def getTechnicianQualificationMaster(self):
         return pd.read_csv(self.technician_qualification_master, sep="\t")
+
+
+    def getPartnersMaster(self):
+        return pd.read_csv(self.partners_master, sep="\t")
+
+    def getPartnersBranches(self):
+        return pd.read_csv(self.partners_branches, sep="\t")
+
+    def getPartnersCategories(self):
+        return pd.read_csv(self.partners_categories, sep="\t")
+
+    def getPartnersPastProjects(self):
+        return pd.read_csv(self.partners_past_projects, sep="\t")
+
+    def getPartnersQualificationsOrdererItems(self):
+        return pd.read_csv(self.partners_qualifications_orderer_items, sep="\t")
+
+    def getPartnersQualificationsOrderers(self):
+        return pd.read_csv(self.partners_qualifications_orderers, sep="\t")
+
+    def getPartnersQualificationsUnified(self):
+        return pd.read_csv(self.partners_qualifications_unified, sep="\t")
 
     @staticmethod
     def test():
