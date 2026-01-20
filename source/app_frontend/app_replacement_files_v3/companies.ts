@@ -30,8 +30,11 @@ const generateCompanies = async (): Promise<CompanyWithDetails[]> => {
   return data;
 }
 
+
 // エクスポート
-export const mockCompanies: CompanyWithDetails[] = generateCompanies();
+//export const mockCompanies: CompanyWithDetails[] = generateCompanies();
+export const mockCompanies: CompanyWithDetails[] = await generateCompanies();
+
 
 // ヘルパー関数
 export const findCompanyById = (id: string): CompanyWithDetails | undefined =>
