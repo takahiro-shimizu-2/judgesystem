@@ -455,9 +455,7 @@ phone,
 fax,
 email,
 array_agg(
-  struct(
-    departments
-  )
+  departments
 ) as departments,
 announcementCount,
 awardCount,
