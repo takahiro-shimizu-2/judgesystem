@@ -2127,6 +2127,9 @@ class BidJudgementSan:
             current_requirement_no = max_requirement_no + 1
             df2["requirement_no"] = range(current_requirement_no, current_requirement_no + df2.shape[0])
 
+            df2["announcement_no"] = df2["announcement_no"].astype("Int64")
+            df2["requirement_no"] = df2["requirement_no"].astype("Int64")
+
             print(fr"Upload {tmp_tablename_requirements}")
             db_operator.uploadDataToTable(data=df2, tablename=tmp_tablename_requirements)
             db_operator.updateRequirements(bid_requirements_tablename=tablename_requirements, bid_requirements_tablename_for_update=tmp_tablename_requirements)
