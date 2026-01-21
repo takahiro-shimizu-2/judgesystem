@@ -49,75 +49,149 @@ app.get("/api/announcements", async (req, res) => {
   // 外側の `` は javascript のテンプレート文字列。${limit} で limit を参照する。
   const prefix = "PROJECT_ID.DATASET_NAME."
   const query = `
-with base as (
-  select
-  anno.announcement_no as id,
-  1 as \`no\`,
-  1 as ordererId,
-  coalesce(anno.workName, 'dummytitle') as title,
-  'dummy_cat' as category,
-  coalesce(anno.topAgencyName, 'dummy') as organization,
-  coalesce(anno.workPlace, 'dummy') as workLocation,
+WITH
+-- 1) competing companies を announcement_id ごとに集約
+competing_companies AS (
+  SELECT
+    announcement_id,
+    company_name,
+    isWinner
+  FROM ${prefix}announcements_competing_companies_master
+),
 
-  coalesce(anno.zipcode, 'dummy') as department_postalcode,
-  coalesce(anno.address, 'dummy') as department_address,
-  coalesce(anno.department, 'dummy') as department_name,
-  coalesce(anno.assigneeName, 'dummy') as department_contactPerson,
-  coalesce(anno.telephone, 'dummy') as department_phone,
-  coalesce(anno.fax, 'dummy') as department_fax,
-  coalesce(anno.mail, 'dummy') as department_email,
+-- 2) competing company bids を announcement_id ごとに集約
+competing_company_bids AS (
+  SELECT
+    announcement_id,
+    company_name,
+    bid_amount,
+    bid_order
+  FROM ${prefix}announcements_competing_company_bids_master
+),
 
-  coalesce(anno.publishDate, 'dummy') as publishDate,
-  coalesce(anno.docDistStart, 'dummy') as explanationStartDate,
-  coalesce(anno.docDistEnd, 'dummy') as explanationEndDate,
-  coalesce(anno.submissionStart, 'dummy') as applicationStartDate,
-  coalesce(anno.submissionEnd, 'dummy') as applicationEndDate,
-  coalesce(anno.bidStartDate, 'dummy') as bidStartDate,
-  coalesce(anno.bidEndDate, 'dummy') as bidEndDate,
-  'dummy_deadline' as deadline,
+-- 3) 会社ごとに bidAmounts をまとめる
+merged_companies AS (
+  SELECT
+    cc.announcement_id,
+    cc.company_name AS name,
+    cc.isWinner,
+    ARRAY_AGG(b.bid_amount ORDER BY b.bid_order) AS bidAmounts
+  FROM competing_companies cc
+  LEFT JOIN competing_company_bids b
+    ON cc.announcement_id = b.announcement_id
+   AND cc.company_name = b.company_name
+  GROUP BY cc.announcement_id, name, isWinner
+),
 
-  1 as estimatedAmountMin,
-  1000 as estimatedAmountMax,
+-- 4) documents を announcement_id ごとに集約
+documents AS (
+  SELECT
+    announcement_id,
+    ARRAY_AGG(
+      STRUCT(
+        concat('doc-ann-', announcement_id, '-', document_id) as id,
+        type,
+        title,
+        fileFormat,
+        pageCount,
+        extractedAt,
+        url,
+        content
+      )
+    ) AS documents
+  FROM ${prefix}announcements_documents_master
+  GROUP BY announcement_id
+),
 
-  'closed' as status,
+-- ★ 5) department を事前に作る（重要）
+base AS (
+  SELECT
+    a.announcement_no,
+    a.workName,
+    a.userAnnNo,
+    a.topAgencyNo,
+    a.topAgencyName,
+    a.subAgencyNo,
+    a.subAgencyName,
+    a.workPlace,
+    a.pdfUrl,
+    STRUCT(
+      COALESCE(a.zipcode, 'dummy') AS postalCode,
+      COALESCE(a.address, 'dummy') AS address,
+      COALESCE(a.department, 'dummy') AS name,
+      COALESCE(a.assigneeName, 'dummy') AS contactPerson,
+      COALESCE(a.telephone, 'dummy') AS phone,
+      COALESCE(a.fax, 'dummy') AS fax,
+      COALESCE(a.mail, 'dummy') AS email
+    ) AS department,
+    a.publishDate,
+    a.docDistStart,
+    a.docDistEnd,
+    a.submissionStart,
+    a.submissionEnd,
+    a.bidStartDate,
+    a.bidEndDate,
+    a.doneOCR,
+    a.remarks,
+    a.createdDate,
+    a.updatedDate
+  FROM ${prefix}bid_announcements a
+)
 
-  10 as actualAmount,
-  1 as winningCompanyId,
-  'dummy_wincomp' as winningCompanyName
-  from ${prefix}bid_announcements anno
-) 
-select
-FORMAT('ann-%d', id) as id,
-\`no\`,
-ordererId,
-title,
-category,
-organization,
-workLocation,
-struct(
-  department_postalcode as postalCode,
-  department_address as address,
-  department_name as name,
-  department_contactPerson as contactPerson,
-  department_phone as phone,
-  department_fax as fax,
-  department_email as email
-) as department,
-publishDate,
-explanationStartDate,
-explanationEndDate,
-applicationStartDate,
-applicationEndDate,
-bidStartDate,
-bidEndDate,
-deadline,
-estimatedAmountMin,
-estimatedAmountMax,
-status,
-actualAmount,
-winningCompanyId,
-winningCompanyName
-from base
+-- 6) 最終結合
+SELECT
+  concat('ann-', b.announcement_no) AS id,
+  b.announcement_no AS \`no\`,
+  concat('ord-', 1) AS ordererId,
+
+  COALESCE(b.workName, 'dummytitle') AS title,
+  'dummy_cat' AS category,
+  COALESCE(b.topAgencyName, 'dummy') AS organization,
+  COALESCE(b.workPlace, 'dummy') AS workLocation,
+
+  b.department,
+
+  COALESCE(b.publishDate, 'dummy') AS publishDate,
+  COALESCE(b.docDistStart, 'dummy') AS explanationStartDate,
+  COALESCE(b.docDistEnd, 'dummy') AS explanationEndDate,
+  COALESCE(b.submissionStart, 'dummy') AS applicationStartDate,
+  COALESCE(b.submissionEnd, 'dummy') AS applicationEndDate,
+  COALESCE(b.bidStartDate, 'dummy') AS bidStartDate,
+  COALESCE(b.bidEndDate, 'dummy') AS bidEndDate,
+  'dummy_deadline' AS deadline,
+
+  1 AS estimatedAmountMin,
+  1000 AS estimatedAmountMax,
+
+  'closed' AS status,
+
+  10 AS actualAmount,
+  concat('com-', 1) AS winningCompanyId,
+  'dummy_wincomp' AS winningCompanyName,
+
+  ARRAY_AGG(
+    STRUCT(
+      mc.name,
+      mc.isWinner,
+      mc.bidAmounts
+    )
+  ) AS competingCompanies,
+
+  d.documents
+
+FROM base b
+LEFT JOIN merged_companies mc
+  ON mc.announcement_id = b.announcement_no
+LEFT JOIN documents d
+  ON d.announcement_id = b.announcement_no
+
+GROUP BY
+  id, \`no\`, ordererId, title, category, organization, workLocation,
+  b.department,
+  publishDate, explanationStartDate, explanationEndDate,
+  applicationStartDate, applicationEndDate, bidStartDate, bidEndDate,
+  deadline, estimatedAmountMin, estimatedAmountMax, status,
+  actualAmount, winningCompanyId, winningCompanyName, documents;
   `;
 
 
@@ -345,7 +419,7 @@ app.get("/api/companies", async (req, res) => {
 WITH base AS (
   select 
   comp.company_no as id,
-  1 as \`no\`,
+  comp.company_no as \`no\`,
   coalesce(comp.company_name, 'dummy') as name,
   coalesce(comp.company_address, 'dummy') as address,
   'A' as grade,
