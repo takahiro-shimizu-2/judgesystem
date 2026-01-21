@@ -142,6 +142,12 @@ class Master:
 
         master_dict = {
             "agency_master":"data/master/agency_master.txt",
+
+            "announcements_competing_companies_master":"data/master/announcements_competing_companies_master.txt",
+            "announcements_competing_company_bids_master":"data/master/announcements_competing_company_bids_master.txt",
+            "announcements_documents_master":"data/master/announcements_documents_master.txt",
+
+
             "company_master":"data/master/company_master.txt",
             "construction_master":"data/master/construction_master.txt",
             "employee_master":"data/master/employee_master.txt",
@@ -167,6 +173,19 @@ class Master:
     def getAgencyMaster(self):
         return pd.read_csv(self.agency_master, sep="\t")
     
+
+
+    def getAnnouncementsCompetingCompaniesMaster(self):
+        return pd.read_csv(self.announcements_competing_companies_master, sep="\t")
+
+    def getAnnouncementsCompetingCompanyBidsMaster(self):
+        return pd.read_csv(self.announcements_competing_company_bids_master, sep="\t")
+
+    def getAnnouncementsDocumentsMaster(self):
+        return pd.read_csv(self.announcements_documents_master, sep="\t")
+
+
+
     def getCompanyMaster(self):
         return pd.read_csv(self.company_master, sep="\t")
     
@@ -2551,6 +2570,15 @@ if __name__ == "__main__":
     db_operator.uploadDataToTable(data=partners_qualifications_orderer_items, tablename="partners_qualifications_orderer_items")
     db_operator.uploadDataToTable(data=partners_qualifications_orderers, tablename="partners_qualifications_orderers")
     db_operator.uploadDataToTable(data=partners_qualifications_unified, tablename="partners_qualifications_unified")
+
+
+    announcements_competing_companies_master = master.getAnnouncementsCompetingCompaniesMaster()
+    announcements_competing_company_bids_master = master.getAnnouncementsCompetingCompanyBidsMaster()
+    announcements_documents_master = master.getAnnouncementsDocumentsMaster()
+
+    db_operator.uploadDataToTable(data=announcements_competing_companies_master, tablename="announcements_competing_companies_master")
+    db_operator.uploadDataToTable(data=announcements_competing_company_bids_master, tablename="announcements_competing_company_bids_master")
+    db_operator.uploadDataToTable(data=announcements_documents_master, tablename="announcements_documents_master")
 
 
     # db_operator.selectToTable(tablename="bid_announcements_pre")

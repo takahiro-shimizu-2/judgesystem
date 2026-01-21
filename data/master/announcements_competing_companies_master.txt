@@ -1,0 +1,4 @@
+announcement_id	company_name	isWinner
+1	鹿島建設株式会社	True
+1	大成建設株式会社	False
+1	大林組	False
