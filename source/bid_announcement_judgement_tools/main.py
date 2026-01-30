@@ -68,6 +68,7 @@ import argparse
 import re
 import json
 import time
+from datetime import datetime
 from dataclasses import dataclass
 from abc import ABC, abstractmethod
 
@@ -409,11 +410,29 @@ class OCRutils:
           json ライクな公告データ
         """
 
-        def _modifyDate(datestr):
+        def _modifyDate(datestr, handle_same_year=None):
+            datestr = datestr.replace("令和元年", "令和1年")
+            if "同年" in datestr:
+                datestr = datestr.replace("同年", fr"{handle_same_year}年")
+
             m = re.search(r"令和\s*(\d+)年\s*(\d+)月\s*(\d+)日", datestr)
             if m:
                 return fr"{int(m.group(1))+2018:04}-{int(m.group(2)):02}-{int(m.group(3)):02}"
+            
+            m = re.search(r"(\d{4})年\s*(\d+)月\s*(\d+)日", datestr)
+            if m:
+                return fr"{int(m.group(1))}-{int(m.group(2)):02}-{int(m.group(3)):02}"
             return datestr
+
+        def extract_year(s: str) -> str:
+            if not s:
+                return ""
+            try:
+                dt = datetime.strptime(s, "%Y-%m-%d")
+                return str(dt.year)
+            except ValueError:
+                return ""
+
 
         new_json = {}
         new_json["announcement_no"] = json_value.get("announcement_no")
@@ -431,18 +450,18 @@ class OCRutils:
 
         tmp_json = json_value.get("入札説明書の交付期間", None)
         if isinstance(tmp_json, dict):
-            new_json["docdiststart"] = _modifyDate(tmp_json.get("開始日", None))
-            new_json["docdistend"] = _modifyDate(tmp_json.get("終了日", None))
+            new_json["docdiststart"] = _modifyDate(datestr=tmp_json.get("開始日", None))
+            new_json["docdistend"] = _modifyDate(datestr=tmp_json.get("終了日", None), handle_same_year=extract_year(new_json["docdiststart"]))
 
         tmp_json = json_value.get("申請書及び競争参加資格確認資料の提出期限", None)
         if isinstance(tmp_json, dict):
-            new_json["submissionstart"] = _modifyDate(tmp_json.get("開始日", None))
-            new_json["submissionend"] = _modifyDate(tmp_json.get("終了日", None))
+            new_json["submissionstart"] = _modifyDate(datestr=tmp_json.get("開始日", None))
+            new_json["submissionend"] = _modifyDate(datestr=tmp_json.get("終了日", None), handle_same_year=extract_year(new_json["submissionstart"]))
 
         tmp_json = json_value.get("入札書の提出期間", None)
         if isinstance(tmp_json, dict):
-            new_json["bidstartdate"] = _modifyDate(tmp_json.get("開始日", None))
-            new_json["bidenddate"] = _modifyDate(tmp_json.get("終了日", None))
+            new_json["bidstartdate"] = _modifyDate(datestr=tmp_json.get("開始日", None))
+            new_json["bidenddate"] = _modifyDate(datestr=tmp_json.get("終了日", None), handle_same_year=extract_year(new_json["bidstartdate"]))
 
         return new_json
 
@@ -600,8 +619,8 @@ class OCRutils:
                     requirement_no_list.append(i)
                     requirement_type_list.append(req_type)
                     requirement_text_list.append(text)
-                    createdDate_list.append("")
-                    updatedDate_list.append("")
+                    createdDate_list.append(datetime.now())
+                    updatedDate_list.append(datetime.now())
                     has_other_req = False
 
         new_dict = {
@@ -2007,12 +2026,15 @@ class BidJudgementSan:
         # バッチ処理なら連番採番で問題なさそう。同時実行が想定される(例：近い時刻に異なる注文をinsert)場合は問題あるかもしれない。
         # TODO: 要テスト
         # 疑問:row_number付与の order by 列は pdf_urlがよいのか？
-        db_operator.transferAnnouncements(bid_announcements_tablename=tablename_announcements, bid_announcements_pre_tablename=tablename_pre)
+        db_operator.transferAnnouncements(
+            bid_announcements_tablename=tablename_announcements, 
+            bid_announcements_pre_tablename=tablename_pre
+        )
         # check
         # val = db_operator.selectToTable(tablename=tablename)
 
 
-    def step2_ocr(self, ocr_utils):
+    def step2_ocr(self, ocr_utils, condition_doneOCR):
         """
         step2 : OCR処理
     
@@ -2042,14 +2064,19 @@ class BidJudgementSan:
         db_operator = self.db_operator
 
         # OCR
-        # doneOCRがFalseのものを対象にする。
-        df1 = db_operator.selectToTable(tablename=fr"{tablename_announcements}", where_clause="where doneOCR = FALSE order by announcement_no")
-        if False:
+        if condition_doneOCR == "FALSE":
+            df1 = db_operator.selectToTable(tablename=fr"{tablename_announcements}", where_clause="where doneOCR = FALSE order by announcement_no")
+        elif condition_doneOCR == "TRUE":
+            df1 = db_operator.selectToTable(tablename=fr"{tablename_announcements}", where_clause="where doneOCR = TRUE order by announcement_no")
+        elif condition_doneOCR == "all":
             df1 = db_operator.selectToTable(tablename=fr"{tablename_announcements}")
+        else:
+            raise ValueError(fr"Unknown condition_doneOCR = {condition_doneOCR}")
 
         all_announcements = []
         all_requirement_texts = []
         for index, row in df1.iterrows():
+            # row = df1.loc[index]
             announcement_no = row["announcement_no"]
             print(f"Processing OCR for announcement_no={announcement_no}...")
 
@@ -2066,19 +2093,24 @@ class BidJudgementSan:
                 os.makedirs("data/pdf", exist_ok=True)
 
             time.sleep(1)
-            doc_data = ocr_utils.getPDFDataFromUrl(pdfurl)
-            if not os.path.exists(fr"data/pdf/{announcement_no}.pdf"):
-                # 基本的には元の pdf と同じものを保存できる。
-                print(fr"   Save data/pdf/{announcement_no}.pdf.")
-                with open(fr"data/pdf/{announcement_no}.pdf", "wb") as f:
-                    f.write(doc_data)
 
             try:
+                doc_data = None
                 # ocr for announcements
                 ocr_announcements_file = fr"ocr_announcements_{announcement_no}.json"
                 ocr_announcements_filepath = fr"data/ocr/{ocr_announcements_file}"
                 if not os.path.exists(ocr_announcements_filepath):
                     print("   Trying ocr(announcements).")
+                    
+                    doc_data = ocr_utils.getPDFDataFromUrl(pdfurl)
+                    if not os.path.exists(fr"data/pdf/{announcement_no}.pdf"):
+                        # 基本的には元の pdf と同じものを保存できる。
+                        print(fr"   Save data/pdf/{announcement_no}.pdf.")
+                        with open(fr"data/pdf/{announcement_no}.pdf", "wb") as f:
+                            f.write(doc_data)
+                    else:
+                        print(fr"   Already saved data/pdf/{announcement_no}.pdf.")
+
                     json_value = ocr_utils.getJsonFromDocData(doc_data=doc_data)
                     json_value["announcement_no"] = announcement_no
                     with open(ocr_announcements_filepath, "w", encoding="utf-8") as f:
@@ -2094,6 +2126,17 @@ class BidJudgementSan:
                 ocr_requirements_filepath = fr"data/ocr/{ocr_requirements_file}"
                 if not os.path.exists(ocr_requirements_filepath):
                     print("   Trying ocr(requirements).")
+
+                    if doc_data is None:
+                        doc_data = ocr_utils.getPDFDataFromUrl(pdfurl)
+                        if not os.path.exists(fr"data/pdf/{announcement_no}.pdf"):
+                            # 基本的には元の pdf と同じものを保存できる。
+                            print(fr"   Save data/pdf/{announcement_no}.pdf.")
+                            with open(fr"data/pdf/{announcement_no}.pdf", "wb") as f:
+                                f.write(doc_data)
+                        else:
+                            print(fr"   Already saved data/pdf/{announcement_no}.pdf.")
+
                     requirement_texts = ocr_utils.getRequirementText(doc_data=doc_data)
                     requirement_texts["announcement_no"] = announcement_no
                     with open(ocr_requirements_filepath, "w", encoding="utf-8") as f:
@@ -2360,8 +2403,8 @@ class BidJudgementSan:
                             "office_no":office_no,
                             "requirement_type":requirement_type,
                             "requirement_description":val["reason"],
-                            "createdDate":"",
-                            "updatedDate":""
+                            "createdDate":datetime.now(),
+                            "updatedDate":datetime.now()
                         })
                         current_sufficiency_detail_no += 1
                     else:
@@ -2376,8 +2419,8 @@ class BidJudgementSan:
                             "requirement_description":val["reason"],
                             "suggestions_for_improvement":"",
                             "final_comment":"",
-                            "createdDate":"",
-                            "updatedDate":""
+                            "createdDate":datetime.now(),
+                            "updatedDate":datetime.now()
                         })
                         current_shortage_detail_no += 1
 
@@ -2398,8 +2441,8 @@ class BidJudgementSan:
                         "final_status":True,
                         "message":"",
                         "remarks":"",
-                        "createdDate":"",
-                        "updatedDate":""
+                        "createdDate":datetime.now(),
+                        "updatedDate":datetime.now()
                     }
                     requirement_type_map = {
                         "欠格要件":"requirement_ineligibility",
@@ -2498,6 +2541,8 @@ if __name__ == "__main__":
     parser.add_argument("--step1_transfer_remove_table", action="store_true")
     parser.add_argument("--step3_remove_table", action="store_true")
 
+    parser.add_argument("--condition_doneOCR", default="FALSE")
+
     try:
         args = parser.parse_args()
         bid_announcements_pre_file = args.bid_announcements_pre_file
@@ -2512,6 +2557,8 @@ if __name__ == "__main__":
 
         step1_transfer_remove_table = args.step1_transfer_remove_table
         step3_remove_table = args.step3_remove_table
+
+        condition_doneOCR = args.condition_doneOCR
     except:
         bid_announcements_pre_file = "data/bid_announcements_pre/bid_announcements_pre_1.txt"
         use_bigquery = False
@@ -2520,6 +2567,7 @@ if __name__ == "__main__":
         step1_transfer_remove_table = False
         step3_remove_table = False
 
+        condition_doneOCR = "FALSE"
     if bid_announcements_pre_file is None:
         bid_announcements_pre_file = "data/bid_announcements_pre/bid_announcements_pre_1.txt"
         print(fr"Set bid_announcements_pre_file = {bid_announcements_pre_file}")
@@ -2546,7 +2594,10 @@ if __name__ == "__main__":
 
     obj.step0_create_bid_announcements_pre(bid_announcements_pre_file=bid_announcements_pre_file)
     obj.step1_transfer(remove_table=step1_transfer_remove_table)
-    obj.step2_ocr(ocr_utils = OCRutils(google_ai_studio_api_key_filepath=google_ai_studio_api_key_filepath))
+    obj.step2_ocr(
+        ocr_utils = OCRutils(google_ai_studio_api_key_filepath=google_ai_studio_api_key_filepath), 
+        condition_doneOCR=condition_doneOCR
+    )
     obj.step3(remove_table=step3_remove_table)
 
     master = Master()
