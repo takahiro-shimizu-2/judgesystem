@@ -16,6 +16,11 @@ from ftfy.badness import badness
 from PyPDF2 import PdfReader
 import pdfplumber
 
+from google import genai # For OCR
+from google.genai.errors import ClientError
+from google.genai import types
+import json
+
 if False:
     # want to remove quote...
     df = pd.read_csv("防衛省_陸上自衛隊_80.txt",sep="\t")
@@ -35,12 +40,15 @@ def listup_bid_pdf_url(
     target_url,
     topAgencyName,
     subAgencyName,
-    output_file
+    output_file,
+    let_gemini_handle_url=[],
+    return_encode_info=False
     ):
     # output_dir = "output"
     os.makedirs(output_dir, exist_ok=True)
 
-    # baseurl = str(Path(target_url).parent) # これだと / が \\ になってしまうのでNG。
+    # pdf リンクを絶対パスにするため target_url の dirname を baseurl とする。
+    # baseurl = str(Path(target_url).parent) で処理しようとしていたが、これだと / が \\ になってしまうのでNG。
     baseurl = os.path.dirname(target_url)
 
     headers = {
@@ -57,6 +65,14 @@ def listup_bid_pdf_url(
         response = requests.head(target_url, allow_redirects=True)
         if response.url.startswith("https://tinyurl.com"):
             print("tinyurlのリダイレクトページが引き続きtinyurlでした。処理を終了します")
+            if return_encode_info:
+                encode_info = {
+                    "target_url": target_url,
+                    "charset":None,
+                    "charset_guess":None,
+                    "is_page_exists":False
+                }
+                return encode_info
             return None
         response = requests.get(url=response.url, headers=headers)
         # baseurl 修正。
@@ -65,27 +81,127 @@ def listup_bid_pdf_url(
         response = requests.get(url=target_url, headers=headers)
     else:
         print("文字列の先頭がhttpsではありません。処理を終了します。")
+        if return_encode_info:
+            encode_info = {
+                "target_url": target_url,
+                "charset":None,
+                "charset_guess":None,
+                "is_page_exists":False
+            }
+            return encode_info
         return None
 
     # response.encoding
-    response.encoding = "utf-8"
+    # response.encoding = "utf-8"
+    # response.encoding = "shift_jis" # または "cp932"
+    # response.encoding = response.apparent_encoding
     soup = BeautifulSoup(response.text, "html.parser")
 
-    # 元々は、すべての table 要素を取得しようとしていたが、
-    # そもそもtableにまとまっているのかすら不明なのでやめた。
-    # tables = soup.find_all("table")
-    links = soup.find_all("a")
-    href_list = []
-    for link in links:
-        href = link.get("href")
-        if href is not None and href.startswith("https://"):
-            href_to_append = href
+    # encoding 判定
+    # <meta> タグを探す
+    charset = None
+    meta = soup.find("meta", attrs={"charset": True})
+    if meta:
+        charset = meta["charset"]
+    else:
+        meta = soup.find("meta", attrs={"http-equiv": "Content-Type"})
+        if meta and "charset=" in meta.get("content", ""):
+            charset = meta["content"]
         else:
-            href_to_append = fr'{baseurl}/{href}'
+            print("HTML 内に charset 情報が見つからない")
+    
+    charset_dict = {
+        "shift_jis":["cp932","shift-jis","shift_jis"],
+        "utf-8":["utf-8"]
+    }
+    charset_guess = None
+    if charset is not None:
+        for key, value in charset_dict.items():
+            for v in value:
+                if re.search(v, charset, flags=re.IGNORECASE):
+                    charset_guess = key
+                    break
 
-        if href is not None and href.endswith(".pdf"):
-            href_list.append([
-                link.text, 
+    encode_info = {
+        "target_url": target_url,
+        "charset":charset,
+        "charset_guess":charset_guess,
+        "is_page_exists":True
+    }
+    if return_encode_info:
+        return encode_info
+    
+    if charset_guess is not None:
+        response.encoding = charset_guess
+    else:
+        # htmlソースから判定できなかったなら、ありそうなenc_listの中から文字化け具合のscoreを見て小さいものを設定。
+        enc_list = list(set([i.lower() for i in [response.encoding, response.apparent_encoding, "shift_jis","utf-8"]]))
+        score_list = []
+        for i, enc in enumerate(enc_list):
+            response.encoding = enc
+            soup = BeautifulSoup(response.text, "html.parser")
+            score = badness(response.text)
+            score_list.append(score)
+        charset_guess = enc_list[score_list.index(min(score_list))]
+        response.encoding = charset_guess
+
+    # encoding を設定して再度 Beautifulsoup を実行。
+    soup = BeautifulSoup(response.text, "html.parser")
+
+
+    if target_url in let_gemini_handle_url:
+        print(fr"listup_bid_pdf_url : Let gemini handle the url {target_url}")
+
+        google_ai_studio_api_key_filepath = "../../data/sec/google_ai_studio_api_key_mizu.txt"
+        with open(google_ai_studio_api_key_filepath,"r") as f:
+            key = f.read()
+
+        client = genai.Client(api_key=key)
+        prompt = """
+        Goal: Extract announcement pdf links.
+
+        Steps:
+        Please extract the PDF links from the <a> tags and summarize them in JSON format.
+
+        Notes:
+        If the following condition is met, please group one or more PDFs into a list for each key. 
+        Condition 1: The <tr> tag in the table contains multiple PDFs.
+
+        Output Structure:
+        Please output the JSON with numbered entries. Use the text of the <a> tag as the key. If multiple PDFs are associated, use the texts of the <a> tags concatenated with '/' as the key.
+
+        ```json
+        {
+            "the_text_of_the_a_tag_1": [
+                "pdf link1"
+            ],
+            "the_text_of_the_a_tag_2": [
+                "pdf link1",
+                "pdf link2",
+                ...
+            ]
+            ...
+        }
+        ```
+        """
+
+        gemini_response = client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=[
+                response.text,
+                prompt
+            ]
+        )
+        # print(response.text)
+        text=gemini_response.text
+        text2 = text.replace('\n', '').replace('```json', '').replace("```","")
+        json_data = json.loads(text2)
+
+        df = pd.DataFrame(
+            [(
+                target_url,
+                idx,
+                k, 
                 "", 
                 topAgencyName,
                 subAgencyName,
@@ -94,25 +210,75 @@ def listup_bid_pdf_url(
                 "",
                 "",
                 "",
-                href_to_append,
+                v if v is not None and v.startswith("https://") else f"{baseurl}/{v}",
                 False,
                 ""
-            ])
+         ) for idx, (k, values) in enumerate(json_data.items()) for v in values],
+            columns=[
+                "target_url",
+                "idx",
+                "workName", 
+                "userAnnNo",
+                "topAgencyName",
+                "subAgencyName",
+                "publishDate",
+                "docDistEnd",
+                "submissionEnd",
+                "bidEndDate",
+                "remarks",
+                "pdfUrl",
+                "transferFlag",
+                "reasonForNG"
+            ]
+        )
+    else:
+        print(fr"listup_bid_pdf_url : Don't let gemini handle the url {target_url}")
+        # 元々は、すべての table 要素を取得しようとしていたが、
+        # そもそもtableにまとまっているのかすら不明なのでやめた。
+        # tables = soup.find_all("table")
+        links = soup.find_all("a")
+        href_list = []
+        for idx, link in enumerate(links):
+            href = link.get("href")
+            if href is not None and href.startswith("https://"):
+                href_to_append = href
+            else:
+                href_to_append = fr'{baseurl}/{href}'
 
-    df = pd.DataFrame(href_list, columns=[
-        "workName", 
-        "userAnnNo",
-        "topAgencyName",
-        "subAgencyName",
-        "publishDate",
-        "docDistEnd",
-        "submissionEnd",
-        "bidEndDate",
-        "remarks",
-        "pdfUrl",
-        "transferFlag",
-        "reasonForNG"
-    ])
+            if href is not None and href.endswith(".pdf"):
+                href_list.append([
+                    target_url,
+                    idx,
+                    link.text, 
+                    "", 
+                    topAgencyName,
+                    subAgencyName,
+                    "",
+                    "",
+                    "",
+                    "",
+                    "",
+                    href_to_append,
+                    False,
+                    ""
+                ])
+
+        df = pd.DataFrame(href_list, columns=[
+            "target_url",
+            "idx",
+            "workName", 
+            "userAnnNo",
+            "topAgencyName",
+            "subAgencyName",
+            "publishDate",
+            "docDistEnd",
+            "submissionEnd",
+            "bidEndDate",
+            "remarks",
+            "pdfUrl",
+            "transferFlag",
+            "reasonForNG"
+        ])
     df.to_csv(fr"{output_dir}/{output_file}", index=False, sep="\t")
     print(fr"Saved {output_dir}/{output_file}.")
     return None
@@ -122,10 +288,12 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="")
     parser.add_argument("--input_list1", default="data/リスト_防衛省入札_1.txt")
     parser.add_argument("--input_list2", default="data/リスト_防衛省入札_2.txt")
-    parser.add_argument("--output_dir_base", default="output")
+    parser.add_argument("--output_dir_base", default="output_v2")
     parser.add_argument("--topAgencyName", default="防衛省")
     parser.add_argument("--skip_listup", action="store_false", help="disable option")
     parser.add_argument("--skip_url_requests", action="store_false", help="disable option")
+    parser.add_argument("--return_encode_info", action="store_true")
+    parser.add_argument("--stop_processing", action="store_true")
 
     args = parser.parse_args()
     input_list1 = args.input_list1
@@ -134,12 +302,17 @@ if __name__ == "__main__":
     topAgencyName = args.topAgencyName
     skip_listup = args.skip_listup
     skip_url_requests = args.skip_url_requests
+    stop_processing = args.stop_processing
+    return_encode_info = args.return_encode_info
+    if stop_processing:
+        exit(1)
 
     output_dir1 = fr"{output_dir_base}/each_list"
     output_dir_pdf_base = fr"{output_dir_base}/pdf"
     os.makedirs(output_dir1, exist_ok=True)
-    output_file_each_list_all = fr"{output_dir_base}/_all.txt"
+    output_file_each_list_all_v1 = fr"{output_dir_base}/_all_v1.txt"
     output_file_each_list_all_v2 = fr"{output_dir_base}/_all_v2.txt"
+    output_file_each_list_all_v3 = fr"{output_dir_base}/_all_v3.txt"
     output_save_path = fr"{output_dir_base}/save_path.txt"
 
     pdf_requests_skip_urls = [
@@ -153,17 +326,22 @@ if __name__ == "__main__":
     # df = pd.read_csv(input_list2, sep="\t")    
 
     # exit(1)
+    encode_info_list = []
 
     if not skip_listup:
-        for target_index in df["index"]:
+        for i, target_index in enumerate(df["index"]):
             if False:
                 target_index = 4
                 subAgencyName = df["Unnamed: 0"][target_index]
                 target_url = BeautifulSoup(df["入札公告（現在募集中）"][target_index], "html.parser").a["href"]
+
             subAgencyName = df["Unnamed: 0"][target_index]
             target_url = BeautifulSoup(df["入札公告（現在募集中）"][target_index], "html.parser").a["href"]
 
             output_file = fr"{topAgencyName}_{subAgencyName}_{target_index}.txt"
+
+            #if i not in [372, 374, 373, 356, 401, 400, 358, 409, 410, 398, 397]:
+            #    continue
 
             #if os.path.exists(fr"{output_dir1}/{output_file}"):
             #    print(fr"Skip: {output_dir1}/{output_file} already exists.")
@@ -172,15 +350,25 @@ if __name__ == "__main__":
                 print("文字列の先頭がhttpsではありません。処理を終了します。")
                 continue
 
-            time.sleep(5)
-            listup_bid_pdf_url(
-                output_dir=output_dir1,
-                target_url=target_url,
-                topAgencyName=topAgencyName,
-                subAgencyName=subAgencyName,
-                output_file=output_file
-            )
+            time.sleep(2)
+            try:
+                dummy = listup_bid_pdf_url(
+                    output_dir=output_dir1,
+                    target_url=target_url,
+                    topAgencyName=topAgencyName,
+                    subAgencyName=subAgencyName,
+                    output_file=output_file, 
+                    let_gemini_handle_url=["https://www.mod.go.jp/j/budget/chotatsu/naikyoku/consul/gyomu.html"],
+                    return_encode_info = return_encode_info
+                )
+                encode_info_list.append(dummy)
+            except Exception as e:
+                print(e)
 
+    if return_encode_info:
+        encode_info_df = pd.DataFrame(encode_info_list)
+        encode_info_df[encode_info_df["charset_guess"].isna()]
+        encode_info_df[["charset", "charset_guess"]].apply(pd.value_counts)
 
     fs = glob.glob(fr"{output_dir1}/*.txt")
     fs = [f for f in fs if f.find("_bak.txt") == -1 and Path(f).name != "_all.txt"]
@@ -197,6 +385,11 @@ if __name__ == "__main__":
             blank_df.loc[0] = None
             d1 = blank_df
         else:
+            # 型を調整
+            d1["workName"] = d1["workName"].astype(str)
+            d1["idx"] = d1["idx"].astype("Int64")
+
+
             score = np.mean([badness(i) for i in d1["workName"] if isinstance(i,str)])
             if score > 1:
                 d1["workName"] = "xxxx"
@@ -211,15 +404,23 @@ if __name__ == "__main__":
                 d1[cname] = d1[cname].str.replace('"', "", regex=False)
 
         target_url = BeautifulSoup(input_df[input_df["index"] == int(Path(file).stem.split("_")[2])]["入札公告（現在募集中）"].iloc[0], "html.parser").a["href"]
-        d1.insert(0,"base_url", target_url)
+        #d1.insert(0,"base_url", target_url)
         d1.insert(0,"index", int(Path(file).stem.split("_")[2]))
         return d1
     file_for_blank = fs[0]
     result_df_list = [my_read_csv(file=i,file_for_blank=file_for_blank,input_df=df) for i in fs]
+    if False:
+        for i in fs:
+            file=i
+            input_df=df
+            tmpres = my_read_csv(file=file,file_for_blank=file_for_blank,input_df=df)
 
     result_df = pd.concat(result_df_list, ignore_index=True)
     result_df["is_saved"] = None
-    result_df.to_csv(output_file_each_list_all, sep="\t", index=False)
+    result_df.to_csv(output_file_each_list_all_v1, sep="\t", index=False)
+    if False:
+        result_df = pd.read_csv(output_file_each_list_all_v1, sep="\t")
+        result_df[result_df["workName"]=="xxxx"]["index"].value_counts()
 
     # exit(1)
 
@@ -314,7 +515,7 @@ if __name__ == "__main__":
         else:
             is_saved.append(False)
     result_df["is_saved"] = is_saved
-    result_df.to_csv(output_file_each_list_all, sep="\t", index=False)
+    result_df.to_csv(output_file_each_list_all_v2, sep="\t", index=False)
 
     result_df["save_path"] = [str(p) for p in save_path_list]
     # 公告が、結果なのか判定。
@@ -348,5 +549,5 @@ if __name__ == "__main__":
                     break
 
     result_df["pdf_types"] = pdf_types
-    result_df.to_csv(output_file_each_list_all_v2, sep="\t", index=False)
+    result_df.to_csv(output_file_each_list_all_v3, sep="\t", index=False)
 
