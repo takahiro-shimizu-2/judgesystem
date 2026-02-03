@@ -41,6 +41,7 @@ def listup_bid_pdf_url(
     topAgencyName,
     subAgencyName,
     output_file,
+    google_ai_studio_api_key_filepath,
     let_gemini_handle_url=[],
     return_encode_info=False
     ):
@@ -152,7 +153,6 @@ def listup_bid_pdf_url(
     if target_url in let_gemini_handle_url:
         print(fr"listup_bid_pdf_url : Let gemini handle the url {target_url}")
 
-        google_ai_studio_api_key_filepath = "../../data/sec/google_ai_studio_api_key_mizu.txt"
         with open(google_ai_studio_api_key_filepath,"r") as f:
             key = f.read()
 
@@ -233,9 +233,10 @@ def listup_bid_pdf_url(
         )
     else:
         print(fr"listup_bid_pdf_url : Don't let gemini handle the url {target_url}")
-        # 元々は、すべての table 要素を取得しようとしていたが、
-        # そもそもtableにまとまっているのかすら不明なのでやめた。
         # tables = soup.find_all("table")
+        # ↑元々は、すべての table 要素を取得しようとしていたが、
+        # そもそもtableにまとまっているのかすら不明なのでやめた。
+
         links = soup.find_all("a")
         href_list = []
         for idx, link in enumerate(links):
@@ -290,8 +291,9 @@ if __name__ == "__main__":
     parser.add_argument("--input_list2", default="data/リスト_防衛省入札_2.txt")
     parser.add_argument("--output_dir_base", default="output_v2")
     parser.add_argument("--topAgencyName", default="防衛省")
-    parser.add_argument("--skip_listup", action="store_false", help="disable option")
-    parser.add_argument("--skip_url_requests", action="store_false", help="disable option")
+    parser.add_argument("--google_ai_studio_api_key_filepath", default="data/sec/google_ai_studio_api_key_mizu.txt")
+    parser.add_argument("--do_listup", action="store_true")
+    parser.add_argument("--do_url_requests", action="store_true")
     parser.add_argument("--return_encode_info", action="store_true")
     parser.add_argument("--stop_processing", action="store_true")
 
@@ -300,8 +302,9 @@ if __name__ == "__main__":
     input_list2 = args.input_list2
     output_dir_base = args.output_dir_base
     topAgencyName = args.topAgencyName
-    skip_listup = args.skip_listup
-    skip_url_requests = args.skip_url_requests
+    google_ai_studio_api_key_filepath = args.google_ai_studio_api_key_filepath
+    do_listup = args.do_listup
+    do_url_requests = args.do_url_requests
     stop_processing = args.stop_processing
     return_encode_info = args.return_encode_info
     if stop_processing:
@@ -321,14 +324,13 @@ if __name__ == "__main__":
         "https://www.mod.go.jp/gsdf/neae/koukoku"
     ]
 
-
     df = convert_input_list(input_list=input_list1, output_list=input_list2)
     # df = pd.read_csv(input_list2, sep="\t")    
 
     # exit(1)
     encode_info_list = []
 
-    if not skip_listup:
+    if do_listup:
         for i, target_index in enumerate(df["index"]):
             if False:
                 target_index = 4
@@ -358,6 +360,7 @@ if __name__ == "__main__":
                     topAgencyName=topAgencyName,
                     subAgencyName=subAgencyName,
                     output_file=output_file, 
+                    google_ai_studio_api_key_filepath=    google_ai_studio_api_key_filepath,
                     let_gemini_handle_url=["https://www.mod.go.jp/j/budget/chotatsu/naikyoku/consul/gyomu.html"],
                     return_encode_info = return_encode_info
                 )
@@ -424,6 +427,8 @@ if __name__ == "__main__":
 
     # exit(1)
 
+
+    # pdf 保存処理
     save_path_list = []
     for i, row in result_df.iterrows():
         index_value = row["index"]
@@ -472,7 +477,7 @@ if __name__ == "__main__":
         save_path = Path(output_file_pdf)
 
         save_path_list.append(save_path)
-        if skip_url_requests:
+        if not do_url_requests:
             continue
 
         if os.path.exists(output_file_pdf):
@@ -518,9 +523,8 @@ if __name__ == "__main__":
     result_df.to_csv(output_file_each_list_all_v2, sep="\t", index=False)
 
     result_df["save_path"] = [str(p) for p in save_path_list]
-    # 公告が、結果なのか判定。
-    # 最初のページだけ見る。
-    if True:
+
+    if False:
         pdf_types = ["N_A" for i in range(result_df.shape[0])]
         for i, path in enumerate(result_df["save_path"]):
             if False:
@@ -548,6 +552,6 @@ if __name__ == "__main__":
                         pdf_types[i] = "その他"
                     break
 
-    result_df["pdf_types"] = pdf_types
-    result_df.to_csv(output_file_each_list_all_v3, sep="\t", index=False)
+        result_df["pdf_types"] = pdf_types
+        result_df.to_csv(output_file_each_list_all_v3, sep="\t", index=False)
 
