@@ -20,11 +20,23 @@ const app = express();
 app.use(cors({
   origin: "https://frontend-xxxxx.a.run.app",
   methods: ["GET", "HEAD", "PUT", "PATCH", "POST", "DELETE", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization"],
-  credentials: true
+  allowedHeaders: ["*"], // 全部許可に変更 // ["Content-Type", "Authorization"],
+  credentials: false //ひとまずfalse. ログインとか考えると true にする必要があるかもしれない。
 }));
 
+// credentials: false
 app.options("*", cors());
+
+// credentials: true なら以下が必要？(未確認)
+//app.options("*", (req, res) => {
+//  res.set("Access-Control-Allow-Origin", "https://frontend-xxxxx.a.run.app");
+//  res.set("Access-Control-Allow-Methods", "GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS");
+//  res.set("Access-Control-Allow-Headers", "Content-Type, Authorization");
+//  res.set("Access-Control-Allow-Credentials", "true");
+//  res.status(204).send("");
+//});
+
+
 
 
 const bigquery = new BigQuery();
@@ -52,6 +64,7 @@ app.get("/api/announcements", async (req, res) => {
 
   try{
     const [rows] = await bigquery.query({ query });
+    res.set("Cache-Control", "public, max-age=86400");
     res.json(rows);
 
     // Cache-Control でとりあえずキャッシュ。
@@ -59,7 +72,6 @@ app.get("/api/announcements", async (req, res) => {
     //    同じ URL（パス＋クエリパラメータ）であること
     //    TTL（max-age）がまだ切れていないこと
     // max-age は秒。ひとまず1日。24 * 60 * 60
-    res.set("Cache-Control", "public, max-age=86400");
     
   } catch(err){
     console.error("ERROR in /api/announcements:", err);
@@ -87,8 +99,8 @@ app.get("/api/evaluations", async (req, res) => {
 
   try{
     const [rows] = await bigquery.query({ query });
-    res.json(rows);
     res.set("Cache-Control", "public, max-age=86400");
+    res.json(rows);
   } catch(err){
     console.error("ERROR in /api/evaluations:", err);
     res.status(500).json({ error: "Internal Server Error" });
@@ -114,8 +126,8 @@ app.get("/api/companies", async (req, res) => {
   
   try{
     const [rows] = await bigquery.query({ query });
-    res.json(rows);
     res.set("Cache-Control", "public, max-age=86400");
+    res.json(rows);
   } catch(err){
     console.error("ERROR in /api/companies:", err);
     res.status(500).json({ error: "Internal Server Error" });
@@ -141,8 +153,8 @@ app.get("/api/orderers", async (req, res) => {
   
   try{
     const [rows] = await bigquery.query({ query });
-    res.json(rows);
     res.set("Cache-Control", "public, max-age=86400");
+    res.json(rows);
   } catch(err){
     console.error("ERROR in /api/orderers:", err);
     res.status(500).json({ error: "Internal Server Error" });
@@ -168,8 +180,8 @@ app.get("/api/partners", async (req, res) => {
 
   try{
     const [rows] = await bigquery.query({ query });
-    res.json(rows);
     res.set("Cache-Control", "public, max-age=86400");
+    res.json(rows);
   } catch(err){
     console.error("ERROR in /api/partners:", err);
     res.status(500).json({ error: "Internal Server Error" });
