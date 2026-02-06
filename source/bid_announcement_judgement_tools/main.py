@@ -1055,21 +1055,21 @@ class DBOperatorGCPVM(DBOperator):
             ad.announcement_id,
             MAX(IF(ad.document_id = 1, ad.title, NULL)) AS workName,
 
-            MAX(IF(ad.document_id = 1, ad.url, NULL)) AS pdfUrl,
-            MAX(IF(ad.document_id = 1, ad.type, NULL)) AS pdfUrl_type,
-            MAX(IF(ad.document_id = 2, ad.url, NULL)) AS pdfUrl2,
-            MAX(IF(ad.document_id = 2, ad.type, NULL)) AS pdfUrl2_type,
-            MAX(IF(ad.document_id = 3, ad.url, NULL)) AS pdfUrl3,
-            MAX(IF(ad.document_id = 3, ad.type, NULL)) AS pdfUrl3_type,
-            MAX(IF(ad.document_id = 4, ad.url, NULL)) AS pdfUrl4,
-            MAX(IF(ad.document_id = 4, ad.type, NULL)) AS pdfUrl4_type,
-            MAX(IF(ad.document_id = 5, ad.url, NULL)) AS pdfUrl5,
-            MAX(IF(ad.document_id = 5, ad.type, NULL)) AS pdfUrl5_type,
+            MAX(IF(ad.document_id = 1, cast(ad.url as string), NULL)) AS pdfUrl,
+            MAX(IF(ad.document_id = 1, cast(ad.type as string), NULL)) AS pdfUrl_type,
+            MAX(IF(ad.document_id = 2, cast(ad.url as string), NULL)) AS pdfUrl2,
+            MAX(IF(ad.document_id = 2, cast(ad.type as string), NULL)) AS pdfUrl2_type,
+            MAX(IF(ad.document_id = 3, cast(ad.url as string), NULL)) AS pdfUrl3,
+            MAX(IF(ad.document_id = 3, cast(ad.type as string), NULL)) AS pdfUrl3_type,
+            MAX(IF(ad.document_id = 4, cast(ad.url as string), NULL)) AS pdfUrl4,
+            MAX(IF(ad.document_id = 4, cast(ad.type as string), NULL)) AS pdfUrl4_type,
+            MAX(IF(ad.document_id = 5, cast(ad.url as string), NULL)) AS pdfUrl5,
+            MAX(IF(ad.document_id = 5, cast(ad.type as string), NULL)) AS pdfUrl5_type,
 
-            0 AS doneOCR,
+            FALSE AS doneOCR,
 
-            CURRENT_TIMESTAMP() AS createdDate,
-            CURRENT_TIMESTAMP() AS updatedDate
+            FORMAT_TIMESTAMP('%Y-%m-%d %H:%M:%S', CURRENT_TIMESTAMP()) AS createdDate,
+            FORMAT_TIMESTAMP('%Y-%m-%d %H:%M:%S', CURRENT_TIMESTAMP()) AS updatedDate
         FROM `{self.project_id}.{self.dataset_name}.{bid_announcements_documents_tablename}` ad
         WHERE NOT EXISTS (
             SELECT 1
@@ -1127,8 +1127,8 @@ class DBOperatorGCPVM(DBOperator):
             source.requirement_type,
             source.requirement_text,
             FALSE,
-            source.createdDate,
-            source.updatedDate
+            FORMAT_TIMESTAMP('%Y-%m-%d %H:%M:%S', source.createdDate),
+            FORMAT_TIMESTAMP('%Y-%m-%d %H:%M:%S', source.updatedDate)
         )
         """
         self.client.query(sql).result()
@@ -1324,8 +1324,8 @@ class DBOperatorGCPVM(DBOperator):
             source.final_status,
             source.message,
             source.remarks,
-            source.createdDate,
-            source.updatedDate
+            FORMAT_TIMESTAMP('%Y-%m-%d %H:%M:%S', source.createdDate),
+            FORMAT_TIMESTAMP('%Y-%m-%d %H:%M:%S', source.updatedDate)
         )
         """
         self.client.query(sql).result()
@@ -1363,8 +1363,8 @@ class DBOperatorGCPVM(DBOperator):
             source.office_no,
             source.requirement_type,
             source.requirement_description,
-            source.createdDate,
-            source.updatedDate
+            FORMAT_TIMESTAMP('%Y-%m-%d %H:%M:%S', source.createdDate),
+            FORMAT_TIMESTAMP('%Y-%m-%d %H:%M:%S', source.updatedDate)
         )
         """
         self.client.query(sql).result()
@@ -1406,8 +1406,8 @@ class DBOperatorGCPVM(DBOperator):
             source.requirement_description,
             source.suggestions_for_improvement,
             source.final_comment,
-            source.createdDate,
-            source.updatedDate
+            FORMAT_TIMESTAMP('%Y-%m-%d %H:%M:%S', source.createdDate),
+            FORMAT_TIMESTAMP('%Y-%m-%d %H:%M:%S', source.updatedDate)
         )
         """
         self.client.query(sql).result()
