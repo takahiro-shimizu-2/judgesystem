@@ -146,8 +146,6 @@ class Master:
 
             "announcements_competing_companies_master":"data/master/announcements_competing_companies_master.txt",
             "announcements_competing_company_bids_master":"data/master/announcements_competing_company_bids_master.txt",
-            "announcements_documents_master":"data/master/announcements_documents_master.txt",
-
 
             "company_master":"data/master/company_master.txt",
             "construction_master":"data/master/construction_master.txt",
@@ -183,6 +181,7 @@ class Master:
         return pd.read_csv(self.announcements_competing_company_bids_master, sep="\t")
 
     def getAnnouncementsDocumentsMaster(self):
+        raise NotImplementedError
         return pd.read_csv(self.announcements_documents_master, sep="\t")
 
 
@@ -264,6 +263,7 @@ class TablenamesConfig:
     sufficient_requirements: str = "sufficient_requirements"
     insufficient_requirements: str = "insufficient_requirements"
     office_master: str = "office_master"
+    bid_announcements_document_table:str = "announcements_documents_master"
 
 
 class OCRutils:
@@ -713,7 +713,7 @@ class DBOperator:
         raise NotImplementedError
 
     @abstractmethod
-    def uploadDataToTable(self, data, tablename):
+    def uploadDataToTable(self, data, tablename, chunksize=1):
         raise NotImplementedError
 
     @abstractmethod
@@ -723,13 +723,21 @@ class DBOperator:
     @abstractmethod
     def createBidAnnouncements(self, bid_announcements_tablename):
         raise NotImplementedError
-    
+
+    @abstractmethod
+    def createBidAnnouncementsV2(self, bid_announcements_tablename):
+        raise NotImplementedError
+
     @abstractmethod
     def createBidRequirements(self, bid_requirements_tablename):
         raise NotImplementedError
 
     @abstractmethod
     def transferAnnouncements(self, bid_announcements_tablename, bid_announcements_pre_tablename):
+        raise NotImplementedError
+
+    @abstractmethod
+    def transferAnnouncementsV2(self, bid_announcements_tablename, bid_announcements_documents_tablename):
         raise NotImplementedError
 
     @abstractmethod
@@ -818,7 +826,7 @@ class DBOperatorGCPVM(DBOperator):
     def dropTable(self, tablename):
         self.client.delete_table(fr"{self.project_id}.{self.dataset_name}.{tablename}", not_found_ok=True)
 
-    def uploadDataToTable(self, data, tablename):
+    def uploadDataToTable(self, data, tablename, chunksize=1):
         to_gbq(
             dataframe=data, 
             destination_table=fr"{self.dataset_name}.{tablename}",  # dataset.table 形式
@@ -843,6 +851,52 @@ class DBOperatorGCPVM(DBOperator):
         subAgencyName string,
         workPlace string,
         pdfUrl string,
+        zipcode string,
+        address string,
+        department string,
+        assigneeName string,
+        telephone string,
+        fax string,
+        mail string,
+        publishDate string,
+        docDistStart string,
+        docDistEnd string,
+        submissionStart string,
+        submissionEnd string,    
+        bidStartDate string,
+        bidEndDate string,
+        doneOCR bool,
+        remarks string, 
+        createdDate string,
+        updatedDate string
+        )
+        """
+        self.client.query(sql).result()
+
+    def createBidAnnouncementsV2(self, bid_announcements_tablename):
+        sql = fr"""
+        create table `{self.project_id}.{self.dataset_name}.{bid_announcements_tablename}` (
+        announcement_no int64,
+        workName string,
+        userAnnNo int64,
+        topAgencyNo int64,
+        topAgencyName string,
+        subAgencyNo int64,
+        subAgencyName string,
+        workPlace string,
+
+        pdfUrl string,
+        pdfUrl2 string,
+        pdfUrl3 string,
+        pdfUrl4 string,
+        pdfUrl5 string,
+
+        pdfUrl_type string,
+        pdfUrl2_type string,
+        pdfUrl3_type string,
+        pdfUrl4_type string,
+        pdfUrl5_type string,
+        
         zipcode string,
         address string,
         department string,
@@ -979,6 +1033,53 @@ class DBOperatorGCPVM(DBOperator):
         FROM to_insert, maxval
         """
         self.client.query(sql).result()
+
+
+    def transferAnnouncementsV2(self, bid_announcements_tablename, bid_announcements_documents_tablename):
+        sql = fr"""
+        INSERT INTO `{self.project_id}.{self.dataset_name}.{bid_announcements_tablename}` (
+            announcement_no,
+            workName,
+
+            pdfUrl, pdfUrl_type,
+            pdfUrl2, pdfUrl2_type,
+            pdfUrl3, pdfUrl3_type,
+            pdfUrl4, pdfUrl4_type,
+            pdfUrl5, pdfUrl5_type,
+
+            doneOCR,
+            createdDate,
+            updatedDate
+        )
+        SELECT
+            ad.announcement_id,
+            MAX(IF(ad.document_id = 1, ad.title, NULL)) AS workName,
+
+            MAX(IF(ad.document_id = 1, ad.url, NULL)) AS pdfUrl,
+            MAX(IF(ad.document_id = 1, ad.type, NULL)) AS pdfUrl_type,
+            MAX(IF(ad.document_id = 2, ad.url, NULL)) AS pdfUrl2,
+            MAX(IF(ad.document_id = 2, ad.type, NULL)) AS pdfUrl2_type,
+            MAX(IF(ad.document_id = 3, ad.url, NULL)) AS pdfUrl3,
+            MAX(IF(ad.document_id = 3, ad.type, NULL)) AS pdfUrl3_type,
+            MAX(IF(ad.document_id = 4, ad.url, NULL)) AS pdfUrl4,
+            MAX(IF(ad.document_id = 4, ad.type, NULL)) AS pdfUrl4_type,
+            MAX(IF(ad.document_id = 5, ad.url, NULL)) AS pdfUrl5,
+            MAX(IF(ad.document_id = 5, ad.type, NULL)) AS pdfUrl5_type,
+
+            0 AS doneOCR,
+
+            CURRENT_TIMESTAMP() AS createdDate,
+            CURRENT_TIMESTAMP() AS updatedDate
+        FROM `{self.project_id}.{self.dataset_name}.{bid_announcements_documents_tablename}` ad
+        WHERE NOT EXISTS (
+            SELECT 1
+            FROM `{self.project_id}.{self.dataset_name}.{bid_announcements_tablename}` b
+            WHERE b.announcement_no = ad.announcement_id
+        )
+        GROUP BY ad.announcement_id
+        """        
+        self.client.query(sql).result()
+
 
     def updateAnnouncements(self, bid_announcements_tablename, bid_announcements_tablename_for_update):
         sql = fr"""MERGE `{self.project_id}.{self.dataset_name}.{bid_announcements_tablename}` AS target
@@ -1816,8 +1917,8 @@ class DBOperatorSQLITE3(DBOperator):
     def dropTable(self, tablename):
         self.cur.execute(fr"DROP TABLE IF EXISTS {tablename}")
 
-    def uploadDataToTable(self, data, tablename):
-        data.to_sql(tablename, self.conn, if_exists="replace", index=False)
+    def uploadDataToTable(self, data, tablename, chunksize=1):
+        data.to_sql(tablename, self.conn, if_exists="replace", index=False, chunksize=chunksize)
 
     def selectToTable(self, tablename, where_clause=""):
         sql = fr"SELECT * FROM {tablename} {where_clause}"
@@ -1836,6 +1937,52 @@ class DBOperatorSQLITE3(DBOperator):
         subAgencyName string,
         workPlace string,
         pdfUrl string,
+        zipcode string,
+        address string,
+        department string,
+        assigneeName string,
+        telephone string,
+        fax string,
+        mail string,
+        publishDate string,
+        docDistStart string,
+        docDistEnd string,
+        submissionStart string,
+        submissionEnd string,    
+        bidStartDate string,
+        bidEndDate string,
+        doneOCR bool,
+        remarks string, 
+        createdDate string,
+        updatedDate string
+        )
+        """
+        self.cur.execute(sql)
+
+    def createBidAnnouncementsV2(self, bid_announcements_tablename):
+        sql = fr"""
+        create table {bid_announcements_tablename} (
+        announcement_no integer PRIMARY KEY,
+        workName string,
+        userAnnNo integer,
+        topAgencyNo integer,
+        topAgencyName string,
+        subAgencyNo integer,
+        subAgencyName string,
+        workPlace string,
+
+        pdfUrl string,
+        pdfUrl2 string,
+        pdfUrl3 string,
+        pdfUrl4 string,
+        pdfUrl5 string,
+
+        pdfUrl_type string,
+        pdfUrl2_type string,
+        pdfUrl3_type string,
+        pdfUrl4_type string,
+        pdfUrl5_type string,
+
         zipcode string,
         address string,
         department string,
@@ -1975,6 +2122,52 @@ class DBOperatorSQLITE3(DBOperator):
         """
         # FORMAT_TIMESTAMP('%Y-%m-%d %H:%M:%S', CURRENT_TIMESTAMP())
         # -> strftime('%Y-%m-%d %H:%M:%S', CURRENT_TIMESTAMP)
+        self.cur.execute(sql)
+
+
+    def transferAnnouncementsV2(self, bid_announcements_tablename, bid_announcements_documents_tablename):
+        sql = fr"""
+        INSERT INTO {bid_announcements_tablename} (
+            announcement_no,
+            workName,
+
+            pdfUrl, pdfUrl_type,
+            pdfUrl2, pdfUrl2_type,
+            pdfUrl3, pdfUrl3_type,
+            pdfUrl4, pdfUrl4_type,
+            pdfUrl5, pdfUrl5_type,
+
+            doneOCR,
+            createdDate,
+            updatedDate
+        )
+        SELECT
+            ad.announcement_id,
+            MAX(CASE WHEN ad.document_id = 1 THEN ad.title END) AS workName,
+
+            MAX(CASE WHEN ad.document_id = 1 THEN ad.url END) AS pdfUrl,
+            MAX(CASE WHEN ad.document_id = 1 THEN ad.type END) AS pdfUrl_type,
+            MAX(CASE WHEN ad.document_id = 2 THEN ad.url END) AS pdfUrl2,
+            MAX(CASE WHEN ad.document_id = 2 THEN ad.type END) AS pdfUrl2_type,
+            MAX(CASE WHEN ad.document_id = 3 THEN ad.url END) AS pdfUrl3,
+            MAX(CASE WHEN ad.document_id = 3 THEN ad.type END) AS pdfUrl3_type,
+            MAX(CASE WHEN ad.document_id = 4 THEN ad.url END) AS pdfUrl4,
+            MAX(CASE WHEN ad.document_id = 4 THEN ad.type END) AS pdfUrl4_type,
+            MAX(CASE WHEN ad.document_id = 5 THEN ad.url END) AS pdfUrl5,
+            MAX(CASE WHEN ad.document_id = 5 THEN ad.type END) AS pdfUrl5_type,
+
+            0 as doneOCR,
+
+            CURRENT_TIMESTAMP,
+            CURRENT_TIMESTAMP
+        FROM {bid_announcements_documents_tablename} ad
+        WHERE NOT EXISTS (
+            SELECT 1
+            FROM {bid_announcements_tablename} b
+            WHERE b.announcement_no = ad.announcement_id
+        )
+        GROUP BY ad.announcement_id
+        """
         self.cur.execute(sql)
 
 
@@ -2550,6 +2743,86 @@ class BidJudgementSan:
         # val = db_operator.selectToTable(tablename=tablename)
 
 
+    def step1_transfer_v2(self, remove_table=False):
+        """
+        step1 : 転写処理
+
+        公告マスターが無ければ公告マスターを作成する。要件マスターが無ければ要件マスターを作成する。
+
+        引数 remove_table に応じて、事前に公告マスター・要件マスターを削除する。
+        
+        判定前公告を公告マスターにコピーする。
+
+        Args:
+
+        - remove_table=False: 
+        
+          処理前に、公告マスター・要件マスターを削除するかどうか。
+        """
+
+        tablename_pre = self.tablenamesconfig.bid_announcements_pre
+        tablename_announcements = self.tablenamesconfig.bid_announcements
+        tablename_requirements = self.tablenamesconfig.bid_requirements
+        tablename_bid_announcements_document_table = self.tablenamesconfig.bid_announcements_document_table
+
+        db_operator = self.db_operator
+
+
+        # テーブル 'bid_announcements' の存在確認。
+        tmpcheck = db_operator.ifTableExists(tablename=tablename_announcements)
+        # テーブルが存在するなら、削除オプションに応じて削除
+        if tmpcheck:
+            if remove_table:
+                db_operator.dropTable(tablename=tablename_announcements)
+                print(fr"DELETE existing table: {tablename_announcements}.")
+                # テーブル削除したのでフラグ更新
+                tmpcheck = False
+
+        if not tmpcheck:
+            # テーブルが無いなら作成
+            db_operator.createBidAnnouncementsV2(bid_announcements_tablename=tablename_announcements)
+            print(fr"NEWLY CREATED: {tablename_announcements}.")
+        else:
+            print(fr"ALREADY EXISTS: {tablename_announcements}.")
+
+
+        # 同様に bid_requirements 
+        # テーブル 'bid_requirements' の存在確認。
+        tmpcheck = db_operator.ifTableExists(tablename=tablename_requirements)
+
+        # テーブルが存在するなら、削除オプションに応じて削除
+        if tmpcheck:
+            if remove_table:
+                db_operator.dropTable(tablename=tablename_requirements)
+                print(fr"DELETE existing table: {tablename_requirements}.")
+                # テーブル削除したのでフラグ更新
+                tmpcheck = False
+
+        if not tmpcheck:
+            # テーブルが無いなら作成
+            db_operator.createBidRequirements(bid_requirements_tablename=tablename_requirements)
+            print(fr"NEWLY CREATED: {tablename_requirements}.")
+        else:
+            print(fr"ALREADY EXISTS: {tablename_requirements}.")
+
+
+
+        df_new = pd.read_csv("source/check_html/use_claude/announcements_document.txt",sep="\t")
+        df_new.head(6)
+        col = "announcement_id"
+        df_new = df_new[df_new[col] <= 100004]
+        df_new.head(6)
+        db_operator.uploadDataToTable(data=df_new, tablename=tablename_bid_announcements_document_table, chunksize=5000)
+
+
+        db_operator.transferAnnouncementsV2(
+            bid_announcements_tablename=tablename_announcements, 
+            bid_announcements_documents_tablename=tablename_bid_announcements_document_table
+        )
+        # check
+        # val = db_operator.selectToTable(tablename=tablename)
+
+
     def step2_ocr(self, ocr_utils, condition_doneOCR):
         """
         step2 : OCR処理
@@ -3108,8 +3381,9 @@ if __name__ == "__main__":
     if stop_processing:
         exit(1)
 
-    obj.step0_create_bid_announcements_pre(bid_announcements_pre_file=bid_announcements_pre_file)
-    obj.step1_transfer(remove_table=step1_transfer_remove_table)
+    # obj.step0_create_bid_announcements_pre(bid_announcements_pre_file=bid_announcements_pre_file)
+    # obj.step1_transfer(remove_table=step1_transfer_remove_table)
+    obj.step1_transfer_v2(remove_table=step1_transfer_remove_table)
     obj.step2_ocr(
         ocr_utils = OCRutils(google_ai_studio_api_key_filepath=google_ai_studio_api_key_filepath), 
         condition_doneOCR=condition_doneOCR
@@ -3130,22 +3404,29 @@ if __name__ == "__main__":
     partners_qualifications_orderers = master.getPartnersQualificationsOrderers()
     partners_qualifications_unified = master.getPartnersQualificationsUnified()
 
-    db_operator.uploadDataToTable(data=partners_master, tablename="partners_master")
-    db_operator.uploadDataToTable(data=partners_branches, tablename="partners_branches")
-    db_operator.uploadDataToTable(data=partners_categories, tablename="partners_categories")
-    db_operator.uploadDataToTable(data=partners_past_projects, tablename="partners_past_projects")
-    db_operator.uploadDataToTable(data=partners_qualifications_orderer_items, tablename="partners_qualifications_orderer_items")
-    db_operator.uploadDataToTable(data=partners_qualifications_orderers, tablename="partners_qualifications_orderers")
-    db_operator.uploadDataToTable(data=partners_qualifications_unified, tablename="partners_qualifications_unified")
-
+    if not db_operator.ifTableExists(tablename="partners_master"):
+        db_operator.uploadDataToTable(data=partners_master, tablename="partners_master")
+    if not db_operator.ifTableExists(tablename="partners_branches"):
+        db_operator.uploadDataToTable(data=partners_branches, tablename="partners_branches")
+    if not db_operator.ifTableExists(tablename="partners_categories"):
+        db_operator.uploadDataToTable(data=partners_categories, tablename="partners_categories")
+    if not db_operator.ifTableExists(tablename="partners_past_projects"):
+        db_operator.uploadDataToTable(data=partners_past_projects, tablename="partners_past_projects")
+    if not db_operator.ifTableExists(tablename="partners_qualifications_orderer_items"):
+        db_operator.uploadDataToTable(data=partners_qualifications_orderer_items, tablename="partners_qualifications_orderer_items")
+    if not db_operator.ifTableExists(tablename="partners_qualifications_orderers"):
+        db_operator.uploadDataToTable(data=partners_qualifications_orderers, tablename="partners_qualifications_orderers")
+    if not db_operator.ifTableExists(tablename="partners_qualifications_unified"):
+        db_operator.uploadDataToTable(data=partners_qualifications_unified, tablename="partners_qualifications_unified")
 
     announcements_competing_companies_master = master.getAnnouncementsCompetingCompaniesMaster()
     announcements_competing_company_bids_master = master.getAnnouncementsCompetingCompanyBidsMaster()
-    announcements_documents_master = master.getAnnouncementsDocumentsMaster()
 
     db_operator.uploadDataToTable(data=announcements_competing_companies_master, tablename="announcements_competing_companies_master")
     db_operator.uploadDataToTable(data=announcements_competing_company_bids_master, tablename="announcements_competing_company_bids_master")
-    db_operator.uploadDataToTable(data=announcements_documents_master, tablename="announcements_documents_master")
+
+    # announcements_documents_master = master.getAnnouncementsDocumentsMaster()
+    # db_operator.uploadDataToTable(data=announcements_documents_master, tablename="announcements_documents_master")
 
 
     # db_operator.selectToTable(tablename="bid_announcements_pre")
@@ -3160,6 +3441,7 @@ if __name__ == "__main__":
     # db_operator.any_query(sql = fr"SELECT table_name FROM `{bigquery_project_id}.{bigquery_dataset_name}.INFORMATION_SCHEMA.TABLES`")
     # db_operator.any_query(sql=fr"select requirement_type, count(*) as N from `{bigquery_project_id}.{bigquery_dataset_name}.bid_requirements` group by requirement_type order by N desc")
 
+    # backend 用意する用
     if False:
         db_operator.createBackendAnnouncements(tablename="backend_announcements")
         db_operator.createBackendEvaluations(tablename="backend_evaluations")
@@ -3178,5 +3460,122 @@ if __name__ == "__main__":
         df_backend_companies.shape
         df_backend_orderers.shape
         df_backend_partners.shape
+
+
+    if False:
+        df_new = pd.read_csv("source/check_html/use_claude/announcements_document.txt",sep="\t")
+        col = "announcement_id"
+        df_new = df_new[df_new[col] <= 100004]
+
+        bid_announcements_table = "bid_announcements"
+        bid_announcements_document_table = "announcements_documents_master"
+
+        # anno_doc はひとまず1回アップロードすればよい
+        # db_operator.uploadDataToTable(data=df_new, tablename=bid_announcements_document_table, chunksize=5000)
+        # db_operator.dropTable(tablename=bid_announcements_documents_table)
+
+        db_operator.selectToTable(tablename=bid_announcements_document_table)
+
+        db_operator.dropTable(tablename=bid_announcements_table)
+
+        sql = fr"""
+        create table {bid_announcements_table} (
+        announcement_no integer PRIMARY KEY,
+        workName string,
+        userAnnNo integer,
+        topAgencyNo integer,
+        topAgencyName string,
+        subAgencyNo integer,
+        subAgencyName string,
+        workPlace string,
+
+        pdfUrl string,
+        pdfUrl2 string,
+        pdfUrl3 string,
+        pdfUrl4 string,
+        pdfUrl5 string,
+
+        pdfUrl_type string,
+        pdfUrl2_type string,
+        pdfUrl3_type string,
+        pdfUrl4_type string,
+        pdfUrl5_type string,
+
+        zipcode string,
+        address string,
+        department string,
+        assigneeName string,
+        telephone string,
+        fax string,
+        mail string,
+        publishDate string,
+        docDistStart string,
+        docDistEnd string,
+        submissionStart string,
+        submissionEnd string,    
+        bidStartDate string,
+        bidEndDate string,
+        doneOCR bool,
+        remarks string, 
+        createdDate string,
+        updatedDate string
+        )
+        """
+        db_operator.cur.execute(sql)
+        db_operator.selectToTable(tablename=bid_announcements_table)
+
+
+        sql = fr"""
+        INSERT INTO {bid_announcements_table} (
+            announcement_no,
+            workName,
+
+            pdfUrl, pdfUrl_type,
+            pdfUrl2, pdfUrl2_type,
+            pdfUrl3, pdfUrl3_type,
+            pdfUrl4, pdfUrl4_type,
+            pdfUrl5, pdfUrl5_type,
+
+            doneOCR,
+            createdDate,
+            updatedDate
+        )
+        SELECT
+            ad.announcement_id,
+            MAX(CASE WHEN ad.document_id = 1 THEN ad.title END) AS workName,
+
+            MAX(CASE WHEN ad.document_id = 1 THEN ad.url END) AS pdfUrl,
+            MAX(CASE WHEN ad.document_id = 1 THEN ad.type END) AS pdfUrl_type,
+            MAX(CASE WHEN ad.document_id = 2 THEN ad.url END) AS pdfUrl2,
+            MAX(CASE WHEN ad.document_id = 2 THEN ad.type END) AS pdfUrl2_type,
+            MAX(CASE WHEN ad.document_id = 3 THEN ad.url END) AS pdfUrl3,
+            MAX(CASE WHEN ad.document_id = 3 THEN ad.type END) AS pdfUrl3_type,
+            MAX(CASE WHEN ad.document_id = 4 THEN ad.url END) AS pdfUrl4,
+            MAX(CASE WHEN ad.document_id = 4 THEN ad.type END) AS pdfUrl4_type,
+            MAX(CASE WHEN ad.document_id = 5 THEN ad.url END) AS pdfUrl5,
+            MAX(CASE WHEN ad.document_id = 5 THEN ad.type END) AS pdfUrl5_type,
+
+            0 as doneOCR,
+
+            CURRENT_TIMESTAMP,
+            CURRENT_TIMESTAMP
+        FROM {bid_announcements_document_table} ad
+        WHERE NOT EXISTS (
+            SELECT 1
+            FROM {bid_announcements_table} b
+            WHERE b.announcement_no = ad.announcement_id
+        )
+        GROUP BY ad.announcement_id
+        """
+        db_operator.cur.execute(sql)
+
+        df_tmp = db_operator.selectToTable(tablename=bid_announcements_table)
+        df_tmp.head(5)
+        df_tmp.shape
+        df_tmp.columns
+
+
+
+
 
 
