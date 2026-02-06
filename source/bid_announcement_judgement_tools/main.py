@@ -776,6 +776,26 @@ class DBOperator:
     def updateInsufficientRequirements(self, insufficient_requirements_tablename, insufficient_requirements_tablename_for_update):
         raise NotImplementedError
 
+    @abstractmethod
+    def createBackendAnnouncements(self, tablename):
+        raise NotImplementedError
+
+    @abstractmethod
+    def createBackendEvaluations(self, tablename):
+        raise NotImplementedError
+
+    @abstractmethod
+    def createBackendCompanies(self, tablename):
+        raise NotImplementedError
+
+    @abstractmethod
+    def createBackendOrderers(self, tablename):
+        raise NotImplementedError
+
+    @abstractmethod
+    def createBackendPartners(self, tablename):
+        raise NotImplementedError
+
 class DBOperatorGCPVM(DBOperator):
     """
     google bigquery を操作するクラス。
@@ -1290,6 +1310,484 @@ class DBOperatorGCPVM(DBOperator):
         )
         """
         self.client.query(sql).result()
+
+    def createBackendAnnouncements(self, tablename):
+        sql = fr"""
+        CREATE OR REPLACE TABLE {self.project_id}.{self.dataset_name}.{tablename} AS
+        WITH
+        -- 1) competing companies を announcement_id ごとに集約
+        competing_companies AS (
+        SELECT
+            announcement_id,
+            company_name,
+            isWinner
+        FROM {self.project_id}.{self.dataset_name}.announcements_competing_companies_master
+        ),
+
+        -- 2) competing company bids を announcement_id ごとに集約
+        competing_company_bids AS (
+        SELECT
+            announcement_id,
+            company_name,
+            bid_amount,
+            bid_order
+        FROM {self.project_id}.{self.dataset_name}.announcements_competing_company_bids_master
+        ),
+
+        -- 3) 会社ごとに bidAmounts をまとめる
+        merged_companies AS (
+        SELECT
+            cc.announcement_id,
+            cc.company_name AS name,
+            cc.isWinner,
+            ARRAY_AGG(b.bid_amount ORDER BY b.bid_order) AS bidAmounts
+        FROM competing_companies cc
+        LEFT JOIN competing_company_bids b
+            ON cc.announcement_id = b.announcement_id
+        AND cc.company_name = b.company_name
+        GROUP BY cc.announcement_id, name, isWinner
+        ),
+
+        -- 4) documents を announcement_id ごとに集約
+        documents AS (
+        SELECT
+            announcement_id,
+            ARRAY_AGG(
+            STRUCT(
+                concat('doc-ann-', announcement_id, '-', document_id) as id,
+                type,
+                title,
+                fileFormat,
+                pageCount,
+                extractedAt,
+                url,
+                content
+            )
+            ) AS documents
+        FROM {self.project_id}.{self.dataset_name}.announcements_documents_master
+        GROUP BY announcement_id
+        ),
+
+        -- ★ 5) department を事前に作る（重要）
+        base AS (
+        SELECT
+            a.announcement_no,
+            a.workName,
+            a.userAnnNo,
+            a.topAgencyNo,
+            a.topAgencyName,
+            a.subAgencyNo,
+            a.subAgencyName,
+            a.workPlace,
+            a.pdfUrl,
+            STRUCT(
+            COALESCE(a.zipcode, 'dummy') AS postalCode,
+            COALESCE(a.address, 'dummy') AS address,
+            COALESCE(a.department, 'dummy') AS name,
+            COALESCE(a.assigneeName, 'dummy') AS contactPerson,
+            COALESCE(a.telephone, 'dummy') AS phone,
+            COALESCE(a.fax, 'dummy') AS fax,
+            COALESCE(a.mail, 'dummy') AS email
+            ) AS department,
+            a.publishDate,
+            a.docDistStart,
+            a.docDistEnd,
+            a.submissionStart,
+            a.submissionEnd,
+            a.bidStartDate,
+            a.bidEndDate,
+            a.doneOCR,
+            a.remarks,
+            a.createdDate,
+            a.updatedDate
+        FROM {self.project_id}.{self.dataset_name}.bid_announcements a
+        )
+        SELECT
+        concat('ann-', b.announcement_no) AS id,
+        b.announcement_no AS `no`,
+        concat('ord-', 1) AS ordererId,
+        COALESCE(b.workName, 'dummytitle') AS title,
+        'dummy_cat' AS category,
+        COALESCE(b.topAgencyName, 'dummy') AS organization,
+        COALESCE(b.workPlace, 'dummy') AS workLocation,
+        b.department,
+        COALESCE(b.publishDate, 'dummy') AS publishDate,
+        COALESCE(b.docDistStart, 'dummy') AS explanationStartDate,
+        COALESCE(b.docDistEnd, 'dummy') AS explanationEndDate,
+        COALESCE(b.submissionStart, 'dummy') AS applicationStartDate,
+        COALESCE(b.submissionEnd, 'dummy') AS applicationEndDate,
+        COALESCE(b.bidStartDate, 'dummy') AS bidStartDate,
+        COALESCE(b.bidEndDate, 'dummy') AS bidEndDate,
+        'dummy_deadline' AS deadline,
+        1 AS estimatedAmountMin,
+        1000 AS estimatedAmountMax,
+        'closed' AS status,
+        10 AS actualAmount,
+        concat('com-', 1) AS winningCompanyId,
+        'dummy_wincomp' AS winningCompanyName,
+        ARRAY_AGG(
+            STRUCT(
+            mc.name,
+            mc.isWinner,
+            mc.bidAmounts
+            )
+        ) AS competingCompanies,
+        d.documents
+        FROM base b
+        LEFT JOIN merged_companies mc
+        ON mc.announcement_id = b.announcement_no
+        LEFT JOIN documents d
+        ON d.announcement_id = b.announcement_no
+        GROUP BY
+        id, `no`, ordererId, title, category, organization, workLocation,
+        b.department,
+        publishDate, explanationStartDate, explanationEndDate,
+        applicationStartDate, applicationEndDate, bidStartDate, bidEndDate,
+        deadline, estimatedAmountMin, estimatedAmountMax, status,
+        actualAmount, winningCompanyId, winningCompanyName, documents
+        """
+        self.client.query(sql).result()
+
+    def createBackendEvaluations(self, tablename):
+        sql = fr"""
+        CREATE OR REPLACE TABLE {self.project_id}.{self.dataset_name}.{tablename} AS
+        WITH base AS (
+        SELECT
+            eval.evaluation_no,
+            eval.announcement_no,
+            
+            coalesce(anno.workName, 'dummytitle') AS workName,
+            coalesce(anno.topAgencyName, 'dummy_org') AS topAgencyName,
+            coalesce(anno.workPlace, 'workloc') AS workPlace,
+            coalesce(anno.department, 'department') AS department,
+            coalesce(anno.publishDate, 'publishDate') AS publishDate,
+            coalesce(anno.docDistStart, 'expStartDate') AS docDistStart,
+            coalesce(anno.docDistEnd, 'expEndDate') AS docDistEnd,
+            coalesce(anno.submissionStart, 'appStartDate') AS submissionStart,
+            coalesce(anno.submissionEnd, 'appEndDate') AS submissionEnd,
+            coalesce(anno.bidStartDate, 'dummy') AS bidStartDate,
+            coalesce(anno.bidEndDate, 'dummy') AS bidEndDate,
+            coalesce(anno.pdfUrl, 'https://example.com/') AS pdfUrl,
+            
+            1 as documents_id,
+            'bid_documents' as documents_type,
+            '入札関連書' as documents_title,
+            'pdf' as documents_fileFormat,
+            25 as documents_pageCount,
+            'dummy' as documents_extractedAt,
+            'https://example.com/docs/ann-1/bid_documents.pdf' as documents_url,
+            '入札関連書...' as documents_content,
+            
+            eval.company_no,
+            coalesce(comp.company_name, 'dummy') AS company_name,
+            coalesce(comp.company_address, 'dummy') AS company_address,
+            eval.office_no,
+            branch.office_name,
+            branch.office_address,
+            req1.requirement_no,
+            req1.requirement_text,
+            req2.requirement_type,
+            req2.requirement_description,
+            req2.isMet,
+            eval.final_status,
+            eval.updatedDate
+        from {self.project_id}.{self.dataset_name}.company_bid_judgement eval
+
+        inner join {self.project_id}.{self.dataset_name}.bid_announcements anno
+        on eval.announcement_no = anno.announcement_no
+
+        inner join {self.project_id}.{self.dataset_name}.company_master comp
+        on eval.company_no = comp.company_no
+
+        inner join {self.project_id}.{self.dataset_name}.office_master branch
+        on eval.office_no = branch.office_no
+
+        inner join {self.project_id}.{self.dataset_name}.bid_requirements req1
+        on eval.announcement_no = req1.announcement_no
+
+        inner join
+        (
+            select 
+            announcement_no, office_no, requirement_no, requirement_type, requirement_description, true as isMet 
+            from {self.project_id}.{self.dataset_name}.sufficient_requirements
+            union all
+            select 
+            announcement_no, office_no, requirement_no, requirement_type, requirement_description, false as isMet 
+            from {self.project_id}.{self.dataset_name}.insufficient_requirements
+        ) req2
+        on 
+        req1.requirement_no = req2.requirement_no and eval.office_no = req2.office_no
+        )
+        SELECT
+        cast(evaluation_no as string) AS id,
+        LPAD(CAST(evaluation_no AS STRING), 8, '0') AS evaluationNo,
+        struct(
+            concat('ann-', announcement_no) AS id,
+            concat('ord-', 1) AS ordererId,
+            workName AS title,
+            'dummycat' AS category,
+            topAgencyName AS organization,
+            workPlace AS workLocation,
+            struct(
+            '999-9999' as postalCode,
+            '北極' as address,
+            department as name,
+            'あいうえお' as contactPerson,
+            '99-9999-9999' as phone,
+            '99-9999-9999' as fax,
+            'kikaku@example.go.jp' as email
+            ) as department,
+            publishDate AS publishDate,
+            docDistStart AS explanationStartDate,
+            docDistEnd AS explanationEndDate,
+            submissionStart AS applicationStartDate,
+            submissionEnd AS applicationEndDate,
+            bidStartDate AS bidStartDate,
+            bidEndDate AS bidEndDate,
+            bidEndDate AS deadline,
+            10000 AS estimatedAmountMin,
+            20000 AS estimatedAmountMax,
+            pdfUrl AS pdfUrl,
+            struct(
+            concat('doc-',documents_id) as id,
+            documents_type as type,
+            documents_title as title,
+            documents_fileFormat as fileFormat,
+            documents_pageCount as pageCount,
+            documents_extractedAt as extractedAt,
+            documents_url as url,
+            documents_content as content
+            ) as documents
+        ) AS announcement,
+        struct(
+            concat('com-', company_no) AS id,
+            company_name as name,
+            company_address as address,
+            'A' AS grade,
+            1 AS priority
+        ) AS company,
+        struct(
+            concat('brn-', office_no) AS id,
+            office_name AS name,
+            office_address AS address
+        ) AS branch,
+        array_agg(
+            struct(
+            concat('req-', requirement_no) AS id,
+            requirement_type AS category,
+            requirement_text AS name,
+            isMet AS isMet,
+            requirement_description AS reason,
+            'dummy_evidence' AS evidence
+            )
+        ) AS requirements,
+        CASE WHEN coalesce(final_status, FALSE) THEN 'all_met' ELSE 'unmet' END AS status,
+        'not_started' AS workStatus,
+        'judgement' AS currentStep,
+        coalesce(updatedDate, 'dummy') AS evaluatedAt
+        FROM base
+        GROUP BY
+        evaluation_no,
+        announcement_no,
+        workName,
+        topAgencyName,
+        workPlace,
+        department,
+        publishDate,
+        docDistStart,
+        docDistEnd,
+        submissionStart,
+        submissionEnd,
+        bidStartDate,
+        bidEndDate,
+        pdfUrl,
+        
+        documents_id,
+        documents_type,
+        documents_title,
+        documents_fileFormat,
+        documents_pageCount,
+        documents_extractedAt,
+        documents_url,
+        documents_content,
+        
+        company_no,
+        company_name,
+        company_address,
+        office_no, 
+        office_name, 
+        office_address, 
+        final_status,
+        updatedDate
+        """
+
+    def createBackendCompanies(self, tablename):
+        sql = fr"""
+        CREATE OR REPLACE TABLE {self.project_id}.{self.dataset_name}.{tablename} AS
+        WITH base AS (
+        select 
+        comp.company_no as id,
+        comp.company_no as `no`,
+        coalesce(comp.company_name, 'dummy') as name,
+        coalesce(comp.company_address, 'dummy') as address,
+        'A' as grade,
+        1 as priority,
+        coalesce(comp.telephone, 'dummy') as phone,
+        'dummy' as email,
+        coalesce(comp.name_of_representative, 'dummy') as representative,
+        coalesce(comp.establishment_date, 'dummy') as established,
+        1 as capital,
+        100 as employeeCount,
+        coalesce(branch.office_name, 'dummy') as branches_name,
+        coalesce(branch.office_address, 'dummy') as branches_address,
+        'dummy' as certifications
+
+        from {self.project_id}.{self.dataset_name}.company_master comp
+        left outer join {self.project_id}.{self.dataset_name}.office_master branch
+        on comp.company_no = branch.company_no
+        )
+        select
+        concat('com-', id) as id,
+        `no`,
+        name,
+        address,
+        grade,
+        priority,
+        phone,
+        email,
+        representative,
+        established,
+        capital,
+        employeeCount,
+        array_agg(
+        struct(
+            branches_name as name,
+            branches_address as address
+        )
+        ) AS branches,
+        array_agg(
+        struct(
+            certifications
+        )
+        ) as certifications
+        from base
+        group by
+        id,
+        `no`,
+        name,
+        address,
+        grade,
+        priority,
+        phone,
+        email,
+        representative,
+        established,
+        capital,
+        employeeCount
+        """
+
+    def createBackendOrderers(self, tablename):
+        sql = fr"""
+        CREATE OR REPLACE TABLE {self.project_id}.{self.dataset_name}.{tablename} AS
+        with base as (
+            select 
+            1 as id,
+            1 as `no`,
+            'dummy' as name,
+            'national' as category, 
+            'dummy' as address,
+            'dummy' as phone,
+            'dummy' as fax,
+            'dummy' as email,
+            'dummy' as departments,
+            10 as announcementCount,
+            10 as awardCount,
+            10 as averageAmount,
+            'dummy' as lastAnnouncementDate
+        )
+        select
+        concat('ord-', id) as id,
+        `no`,
+        name,
+        category,
+        address,
+        phone,
+        fax,
+        email,
+        array_agg(
+            departments
+        ) as departments,
+        announcementCount,
+        awardCount,
+        averageAmount,
+        lastAnnouncementDate
+        from base
+        group by
+        id,
+        `no`,
+        name,
+        category,
+        address,
+        phone,
+        fax,
+        email,
+        announcementCount,
+        awardCount,
+        averageAmount,
+        lastAnnouncementDate
+        """
+
+    def createBackendPartners(self, tablename):
+        sql = fr"""
+        CREATE OR REPLACE TABLE {self.project_id}.{self.dataset_name}.{tablename} AS
+        with base as (
+            select 
+            1 as id,
+            1 as `no`,
+            'dummy' as name,
+            'national' as category, 
+            'dummy' as address,
+            'dummy' as phone,
+            'dummy' as fax,
+            'dummy' as email,
+            'dummy' as departments,
+            10 as announcementCount,
+            10 as awardCount,
+            10 as averageAmount,
+            'dummy' as lastAnnouncementDate
+        )
+        select
+        concat('ord-', id) as id,
+        `no`,
+        name,
+        category,
+        address,
+        phone,
+        fax,
+        email,
+        array_agg(
+            departments
+        ) as departments,
+        announcementCount,
+        awardCount,
+        averageAmount,
+        lastAnnouncementDate
+        from base
+        group by
+        id,
+        `no`,
+        name,
+        category,
+        address,
+        phone,
+        fax,
+        email,
+        announcementCount,
+        awardCount,
+        averageAmount,
+        lastAnnouncementDate
+        """
+
 
 class DBOperatorSQLITE3(DBOperator):
     """
@@ -1860,6 +2358,20 @@ class DBOperatorSQLITE3(DBOperator):
         """
         self.cur.execute(sql)
 
+    def createBackendAnnouncements(self, tablename):
+        raise NotImplementedError
+
+    def createBackendEvaluations(self, tablename):
+        raise NotImplementedError
+
+    def createBackendCompanies(self, tablename):
+        raise NotImplementedError
+
+    def createBackendOrderers(self, tablename):
+        raise NotImplementedError
+
+    def createBackendPartners(self, tablename):
+        raise NotImplementedError
 
 class BidJudgementSan:
     """
@@ -2643,3 +3155,11 @@ if __name__ == "__main__":
 
     # db_operator.any_query(sql = fr"SELECT table_name FROM `{bigquery_project_id}.{bigquery_dataset_name}.INFORMATION_SCHEMA.TABLES`")
     # db_operator.any_query(sql=fr"select requirement_type, count(*) as N from `{bigquery_project_id}.{bigquery_dataset_name}.bid_requirements` group by requirement_type order by N desc")
+
+    if False:
+        obj.createBackendAnnouncements(tablename="backend_announcements")
+        obj.createBackendEvaluations(tablename="backend_evaluations")
+        obj.createBackendCompanies(tablename="backend_companies")
+        obj.createBackendOrderers(tablename="backend_orderers")
+        obj.createBackendPartners(tablename="backend_partners")
+
