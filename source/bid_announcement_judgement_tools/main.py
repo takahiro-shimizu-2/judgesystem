@@ -1620,6 +1620,7 @@ class DBOperatorGCPVM(DBOperator):
         final_status,
         updatedDate
         """
+        self.client.query(sql).result()
 
     def createBackendCompanies(self, tablename):
         sql = fr"""
@@ -1685,6 +1686,7 @@ class DBOperatorGCPVM(DBOperator):
         capital,
         employeeCount
         """
+        self.client.query(sql).result()
 
     def createBackendOrderers(self, tablename):
         sql = fr"""
@@ -1736,6 +1738,7 @@ class DBOperatorGCPVM(DBOperator):
         averageAmount,
         lastAnnouncementDate
         """
+        self.client.query(sql).result()
 
     def createBackendPartners(self, tablename):
         sql = fr"""
@@ -1787,6 +1790,7 @@ class DBOperatorGCPVM(DBOperator):
         averageAmount,
         lastAnnouncementDate
         """
+        self.client.query(sql).result()
 
 
 class DBOperatorSQLITE3(DBOperator):
@@ -3157,9 +3161,22 @@ if __name__ == "__main__":
     # db_operator.any_query(sql=fr"select requirement_type, count(*) as N from `{bigquery_project_id}.{bigquery_dataset_name}.bid_requirements` group by requirement_type order by N desc")
 
     if False:
-        obj.createBackendAnnouncements(tablename="backend_announcements")
-        obj.createBackendEvaluations(tablename="backend_evaluations")
-        obj.createBackendCompanies(tablename="backend_companies")
-        obj.createBackendOrderers(tablename="backend_orderers")
-        obj.createBackendPartners(tablename="backend_partners")
+        db_operator.createBackendAnnouncements(tablename="backend_announcements")
+        db_operator.createBackendEvaluations(tablename="backend_evaluations")
+        db_operator.createBackendCompanies(tablename="backend_companies")
+        db_operator.createBackendOrderers(tablename="backend_orderers")
+        db_operator.createBackendPartners(tablename="backend_partners")
+
+        df_backend_announcement = db_operator.selectToTable(tablename="backend_announcements")
+        df_backend_evaluations = db_operator.selectToTable(tablename="backend_evaluations")
+        df_backend_companies = db_operator.selectToTable(tablename="backend_companies")
+        df_backend_orderers = db_operator.selectToTable(tablename="backend_orderers")
+        df_backend_partners = db_operator.selectToTable(tablename="backend_partners")
+
+        df_backend_announcement.shape
+        df_backend_evaluations.shape
+        df_backend_companies.shape
+        df_backend_orderers.shape
+        df_backend_partners.shape
+
 
