@@ -1844,52 +1844,134 @@ class DBOperatorGCPVM(DBOperator):
     def createBackendPartners(self, tablename):
         sql = fr"""
         CREATE OR REPLACE TABLE {self.project_id}.{self.dataset_name}.{tablename} AS
-        with base as (
-            select 
-            1 as id,
-            1 as `no`,
-            'dummy' as name,
-            'national' as category, 
-            'dummy' as address,
-            'dummy' as phone,
-            'dummy' as fax,
-            'dummy' as email,
-            'dummy' as departments,
-            10 as announcementCount,
-            10 as awardCount,
-            10 as averageAmount,
-            'dummy' as lastAnnouncementDate
+        WITH
+        -- 1) categories を partner_id ごとに集約
+        categories AS (
+        SELECT
+            partner_id,
+            ARRAY_AGG(categories) AS categories
+        FROM {self.project_id}.{self.dataset_name}.partners_categories
+        GROUP BY partner_id
+        ),
+
+        -- 2) past projects を partner_id ごとに集約
+        past_projects AS (
+        SELECT
+            partner_id,
+            ARRAY_AGG(
+            STRUCT(
+                cast(evaluationId as string) as evaluationId,
+                announcementId,
+                cast(announcementNo as int64) as announcementNo,
+                announcementTitle,
+                branchName,
+                workStatus,
+                evaluationStatus,
+                cast(priority as int64) as priority,
+                bidType,
+                category,
+                prefecture,
+                publishDate,
+                deadline,
+                evaluatedAt,
+                organization
+            )
+            ) AS pastProjects
+        FROM {self.project_id}.{self.dataset_name}.partners_past_projects
+        GROUP BY partner_id
+        ),
+
+        -- 3) branches を partner_id ごとに集約
+        branches AS (
+        SELECT
+            partner_id,
+            ARRAY_AGG(
+            STRUCT(
+                name,
+                address
+            )
+            ) AS branches
+        FROM {self.project_id}.{self.dataset_name}.partners_branches
+        GROUP BY partner_id
+        ),
+
+        -- 4) unified qualifications を partner_id ごとに集約
+        qual_unified AS (
+        SELECT
+            partner_id,
+            ARRAY_AGG(
+            STRUCT(
+                mainCategory,
+                category,
+                region,
+                cast(value as string) as value,
+                grade
+            )
+            ) AS unified
+        FROM {self.project_id}.{self.dataset_name}.partners_qualifications_unified
+        GROUP BY partner_id
+        ),
+
+        -- 5) orderer items を ordererName ごとに集約
+        orderer_items AS (
+        SELECT
+            partner_id,
+            ordererName,
+            ARRAY_AGG(
+            STRUCT(
+                category,
+                region,
+                cast(value as string) as value,
+                grade
+            )
+            ) AS items
+        FROM {self.project_id}.{self.dataset_name}.partners_qualifications_orderer_items
+        GROUP BY partner_id, ordererName
+        ),
+        -- 6) orderers を partner_id ごとに集約
+        orderers AS (
+        SELECT
+            partner_id,
+            ARRAY_AGG(
+            STRUCT(
+                ordererName,
+                items
+            )
+            ) AS orderers
+        FROM orderer_items
+        GROUP BY partner_id
         )
-        select
-        concat('ord-', id) as id,
-        `no`,
-        name,
-        category,
-        address,
-        phone,
-        fax,
-        email,
-        array_agg(
-            departments
-        ) as departments,
-        announcementCount,
-        awardCount,
-        averageAmount,
-        lastAnnouncementDate
-        from base
-        group by
-        id,
-        `no`,
-        name,
-        category,
-        address,
-        phone,
-        fax,
-        email,
-        announcementCount,
-        awardCount,
-        averageAmount,
-        lastAnnouncementDate
+        -- 7) 最終結合（爆発しない）
+        SELECT
+        pm.partner_id AS id,
+        pm.no,
+        pm.name,
+        pm.postalCode,
+        pm.address,
+        pm.phone,
+        pm.fax,
+        pm.email,
+        pm.url,
+        pm.surveyCount,
+        cast(pm.rating as int64) as rating,
+        pm.resultCount,
+        c.categories,
+        pp.pastProjects,
+        pm.representative,
+        pm.established,
+        pm.capital,
+        pm.employeeCount,
+        b.branches,
+        STRUCT(
+            qu.unified,
+            o.orderers
+        ) AS qualifications
+        FROM {self.project_id}.{self.dataset_name}.partners_master pm
+        LEFT JOIN categories c USING (partner_id)
+        LEFT JOIN past_projects pp USING (partner_id)
+        LEFT JOIN branches b USING (partner_id)
+        LEFT JOIN qual_unified qu USING (partner_id)
+        LEFT JOIN orderers o USING (partner_id)
         """
         self.client.query(sql).result()
 
