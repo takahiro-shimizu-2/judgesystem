@@ -81,6 +81,7 @@ from google.genai import types
 
 import httpx
 import requests
+import ast
 
 try:
     from google.cloud import bigquery
@@ -383,14 +384,15 @@ class OCRutils:
         7. **Data Structure:** Maintain the nested structure shown in the JSON Structure above.  "入札手続等担当部局", "入札説明書の交付期間", "申請書及び競争参加資格確認資料の提出期限" and "入札書の提出期間" are objects containing their respective sub-fields.
         """
         response = client.models.generate_content(
-        model="gemini-2.5-flash",
-        contents=[
-            types.Part.from_bytes(
-                data=doc_data,
-                mime_type='application/pdf',
-            ),
-            prompt
-        ])
+            model="gemini-2.5-flash",
+            contents=[
+                types.Part.from_bytes(
+                    data=doc_data,
+                    mime_type='application/pdf',
+                ),
+                prompt
+            ]
+        )
         # print(response.text)
 
         text=response.text
@@ -411,18 +413,22 @@ class OCRutils:
         """
 
         def _modifyDate(datestr, handle_same_year=None):
-            datestr = datestr.replace("令和元年", "令和1年")
-            if "同年" in datestr:
-                datestr = datestr.replace("同年", fr"{handle_same_year}年")
+            try:
+                datestr = datestr.replace("令和元年", "令和1年")
+                if "同年" in datestr:
+                    datestr = datestr.replace("同年", fr"{handle_same_year}年")
 
-            m = re.search(r"令和\s*(\d+)年\s*(\d+)月\s*(\d+)日", datestr)
-            if m:
-                return fr"{int(m.group(1))+2018:04}-{int(m.group(2)):02}-{int(m.group(3)):02}"
-            
-            m = re.search(r"(\d{4})年\s*(\d+)月\s*(\d+)日", datestr)
-            if m:
-                return fr"{int(m.group(1))}-{int(m.group(2)):02}-{int(m.group(3)):02}"
-            return datestr
+                m = re.search(r"令和\s*(\d+)年\s*(\d+)月\s*(\d+)日", datestr)
+                if m:
+                    return fr"{int(m.group(1))+2018:04}-{int(m.group(2)):02}-{int(m.group(3)):02}"
+                
+                m = re.search(r"(\d{4})年\s*(\d+)月\s*(\d+)日", datestr)
+                if m:
+                    return fr"{int(m.group(1))}-{int(m.group(2)):02}-{int(m.group(3)):02}"
+                return datestr
+            except Exception as e:
+                print(e)
+                return None
 
         def extract_year(s: str) -> str:
             if not s:
@@ -546,14 +552,15 @@ class OCRutils:
         ```
         """
         response = client.models.generate_content(
-        model="gemini-2.5-flash",
-        contents=[
-            types.Part.from_bytes(
-                data=doc_data,
-                mime_type='application/pdf',
-            ),
-            prompt
-        ])
+            model="gemini-2.5-flash",
+            contents=[
+                types.Part.from_bytes(
+                    data=doc_data,
+                    mime_type='application/pdf',
+                ),
+                prompt
+            ]
+        )
         # print(response.text)
         text=response.text
         #json_text = extract_json(text=response.text)
@@ -896,6 +903,12 @@ class DBOperatorGCPVM(DBOperator):
         pdfUrl3_type string,
         pdfUrl4_type string,
         pdfUrl5_type string,
+
+        document_id string,
+        document_id2 string,
+        document_id3 string,
+        document_id4 string,
+        document_id5 string,
         
         zipcode string,
         address string,
@@ -1037,46 +1050,59 @@ class DBOperatorGCPVM(DBOperator):
 
     def transferAnnouncementsV2(self, bid_announcements_tablename, bid_announcements_documents_tablename):
         sql = fr"""
+        WITH ordered AS (
+            SELECT
+                ad.*,
+                ROW_NUMBER() OVER (
+                    PARTITION BY ad.announcement_id
+                    ORDER BY ad.document_id
+                ) AS rn
+            FROM `{self.project_id}.{self.dataset_name}.{bid_announcements_documents_tablename}` ad
+        )
         INSERT INTO `{self.project_id}.{self.dataset_name}.{bid_announcements_tablename}` (
             announcement_no,
             workName,
 
-            pdfUrl, pdfUrl_type,
-            pdfUrl2, pdfUrl2_type,
-            pdfUrl3, pdfUrl3_type,
-            pdfUrl4, pdfUrl4_type,
-            pdfUrl5, pdfUrl5_type,
+            pdfUrl, pdfUrl_type, document_id,
+            pdfUrl2, pdfUrl2_type, document_id2,
+            pdfUrl3, pdfUrl3_type, document_id3,
+            pdfUrl4, pdfUrl4_type, document_id4,
+            pdfUrl5, pdfUrl5_type, document_id5,
 
             doneOCR,
             createdDate,
             updatedDate
         )
         SELECT
-            ad.announcement_id,
-            MAX(IF(ad.document_id = 1, ad.title, NULL)) AS workName,
+            o.announcement_id,
+            MAX(CASE WHEN o.rn = 1 THEN o.title END) AS workName,
 
-            MAX(IF(ad.document_id = 1, cast(ad.url as string), NULL)) AS pdfUrl,
-            MAX(IF(ad.document_id = 1, cast(ad.type as string), NULL)) AS pdfUrl_type,
-            MAX(IF(ad.document_id = 2, cast(ad.url as string), NULL)) AS pdfUrl2,
-            MAX(IF(ad.document_id = 2, cast(ad.type as string), NULL)) AS pdfUrl2_type,
-            MAX(IF(ad.document_id = 3, cast(ad.url as string), NULL)) AS pdfUrl3,
-            MAX(IF(ad.document_id = 3, cast(ad.type as string), NULL)) AS pdfUrl3_type,
-            MAX(IF(ad.document_id = 4, cast(ad.url as string), NULL)) AS pdfUrl4,
-            MAX(IF(ad.document_id = 4, cast(ad.type as string), NULL)) AS pdfUrl4_type,
-            MAX(IF(ad.document_id = 5, cast(ad.url as string), NULL)) AS pdfUrl5,
-            MAX(IF(ad.document_id = 5, cast(ad.type as string), NULL)) AS pdfUrl5_type,
+            MAX(CASE WHEN o.rn = 1 THEN o.url END) AS pdfUrl,
+            MAX(CASE WHEN o.rn = 1 THEN o.type END) AS pdfUrl_type,
+            MAX(CASE WHEN o.rn = 1 THEN o.document_id END) AS document_id,
+            MAX(CASE WHEN o.rn = 2 THEN o.url END) AS pdfUrl2,
+            MAX(CASE WHEN o.rn = 2 THEN o.type END) AS pdfUrl2_type,
+            MAX(CASE WHEN o.rn = 2 THEN o.document_id END) AS document_id2,
+            MAX(CASE WHEN o.rn = 3 THEN o.url END) AS pdfUrl3,
+            MAX(CASE WHEN o.rn = 3 THEN o.type END) AS pdfUrl3_type,
+            MAX(CASE WHEN o.rn = 3 THEN o.document_id END) AS document_id3,
+            MAX(CASE WHEN o.rn = 4 THEN o.url END) AS pdfUrl4,
+            MAX(CASE WHEN o.rn = 4 THEN o.type END) AS pdfUrl4_type,
+            MAX(CASE WHEN o.rn = 4 THEN o.document_id END) AS document_id4,
+            MAX(CASE WHEN o.rn = 5 THEN o.url END) AS pdfUrl5,
+            MAX(CASE WHEN o.rn = 5 THEN o.type END) AS pdfUrl5_type,
+            MAX(CASE WHEN o.rn = 5 THEN o.document_id END) AS document_id5,
 
-            FALSE AS doneOCR,
-
-            FORMAT_TIMESTAMP('%Y-%m-%d %H:%M:%S', CURRENT_TIMESTAMP()) AS createdDate,
-            FORMAT_TIMESTAMP('%Y-%m-%d %H:%M:%S', CURRENT_TIMESTAMP()) AS updatedDate
-        FROM `{self.project_id}.{self.dataset_name}.{bid_announcements_documents_tablename}` ad
+            0 AS doneOCR,
+            CURRENT_TIMESTAMP() AS createdDate,
+            CURRENT_TIMESTAMP() AS updatedDate
+        FROM ordered o
         WHERE NOT EXISTS (
             SELECT 1
             FROM `{self.project_id}.{self.dataset_name}.{bid_announcements_tablename}` b
-            WHERE b.announcement_no = ad.announcement_id
+            WHERE b.announcement_no = o.announcement_id
         )
-        GROUP BY ad.announcement_id
+        GROUP BY o.announcement_id;
         """        
         self.client.query(sql).result()
 
@@ -2065,6 +2091,12 @@ class DBOperatorSQLITE3(DBOperator):
         pdfUrl4_type string,
         pdfUrl5_type string,
 
+        document_id string,
+        document_id2 string,
+        document_id3 string,
+        document_id4 string,
+        document_id5 string,
+
         zipcode string,
         address string,
         department string,
@@ -2209,46 +2241,59 @@ class DBOperatorSQLITE3(DBOperator):
 
     def transferAnnouncementsV2(self, bid_announcements_tablename, bid_announcements_documents_tablename):
         sql = fr"""
+        WITH ordered AS (
+            SELECT
+                ad.*,
+                ROW_NUMBER() OVER (
+                    PARTITION BY ad.announcement_id
+                    ORDER BY ad.document_id
+                ) AS rn
+            FROM {bid_announcements_documents_tablename} ad
+        )
         INSERT INTO {bid_announcements_tablename} (
             announcement_no,
             workName,
 
-            pdfUrl, pdfUrl_type,
-            pdfUrl2, pdfUrl2_type,
-            pdfUrl3, pdfUrl3_type,
-            pdfUrl4, pdfUrl4_type,
-            pdfUrl5, pdfUrl5_type,
+            pdfUrl, pdfUrl_type, document_id,
+            pdfUrl2, pdfUrl2_type, document_id2,
+            pdfUrl3, pdfUrl3_type, document_id3,
+            pdfUrl4, pdfUrl4_type, document_id4,
+            pdfUrl5, pdfUrl5_type, document_id5,
 
             doneOCR,
             createdDate,
             updatedDate
         )
         SELECT
-            ad.announcement_id,
-            MAX(CASE WHEN ad.document_id = 1 THEN ad.title END) AS workName,
+            o.announcement_id,
+            MAX(CASE WHEN o.rn = 1 THEN o.title END) AS workName,
 
-            MAX(CASE WHEN ad.document_id = 1 THEN ad.url END) AS pdfUrl,
-            MAX(CASE WHEN ad.document_id = 1 THEN ad.type END) AS pdfUrl_type,
-            MAX(CASE WHEN ad.document_id = 2 THEN ad.url END) AS pdfUrl2,
-            MAX(CASE WHEN ad.document_id = 2 THEN ad.type END) AS pdfUrl2_type,
-            MAX(CASE WHEN ad.document_id = 3 THEN ad.url END) AS pdfUrl3,
-            MAX(CASE WHEN ad.document_id = 3 THEN ad.type END) AS pdfUrl3_type,
-            MAX(CASE WHEN ad.document_id = 4 THEN ad.url END) AS pdfUrl4,
-            MAX(CASE WHEN ad.document_id = 4 THEN ad.type END) AS pdfUrl4_type,
-            MAX(CASE WHEN ad.document_id = 5 THEN ad.url END) AS pdfUrl5,
-            MAX(CASE WHEN ad.document_id = 5 THEN ad.type END) AS pdfUrl5_type,
+            MAX(CASE WHEN o.rn = 1 THEN o.url END) AS pdfUrl,
+            MAX(CASE WHEN o.rn = 1 THEN o.type END) AS pdfUrl_type,
+            MAX(CASE WHEN o.rn = 1 THEN o.document_id END) AS document_id,
+            MAX(CASE WHEN o.rn = 2 THEN o.url END) AS pdfUrl2,
+            MAX(CASE WHEN o.rn = 2 THEN o.type END) AS pdfUrl2_type,
+            MAX(CASE WHEN o.rn = 2 THEN o.document_id END) AS document_id2,
+            MAX(CASE WHEN o.rn = 3 THEN o.url END) AS pdfUrl3,
+            MAX(CASE WHEN o.rn = 3 THEN o.type END) AS pdfUrl3_type,
+            MAX(CASE WHEN o.rn = 3 THEN o.document_id END) AS document_id3,
+            MAX(CASE WHEN o.rn = 4 THEN o.url END) AS pdfUrl4,
+            MAX(CASE WHEN o.rn = 4 THEN o.type END) AS pdfUrl4_type,
+            MAX(CASE WHEN o.rn = 4 THEN o.document_id END) AS document_id4,
+            MAX(CASE WHEN o.rn = 5 THEN o.url END) AS pdfUrl5,
+            MAX(CASE WHEN o.rn = 5 THEN o.type END) AS pdfUrl5_type,
+            MAX(CASE WHEN o.rn = 5 THEN o.document_id END) AS document_id5,
 
-            0 as doneOCR,
-
+            0 AS doneOCR,
             CURRENT_TIMESTAMP,
             CURRENT_TIMESTAMP
-        FROM {bid_announcements_documents_tablename} ad
+        FROM ordered o
         WHERE NOT EXISTS (
             SELECT 1
             FROM {bid_announcements_tablename} b
-            WHERE b.announcement_no = ad.announcement_id
+            WHERE b.announcement_no = o.announcement_id
         )
-        GROUP BY ad.announcement_id
+        GROUP BY o.announcement_id
         """
         self.cur.execute(sql)
 
@@ -2825,7 +2870,7 @@ class BidJudgementSan:
         # val = db_operator.selectToTable(tablename=tablename)
 
 
-    def step1_transfer_v2(self, remove_table=False):
+    def step1_transfer_v2(self, announcements_documents_file="source/check_html/use_claude/3_source_formatting/output/announcements_document_202602162218_updated.txt.zip", remove_table=False):
         """
         step1 : 転写処理
 
@@ -2842,7 +2887,6 @@ class BidJudgementSan:
           処理前に、公告マスター・要件マスターを削除するかどうか。
         """
 
-        tablename_pre = self.tablenamesconfig.bid_announcements_pre
         tablename_announcements = self.tablenamesconfig.bid_announcements
         tablename_requirements = self.tablenamesconfig.bid_requirements
         tablename_bid_announcements_document_table = self.tablenamesconfig.bid_announcements_document_table
@@ -2889,10 +2933,11 @@ class BidJudgementSan:
 
 
 
-        df_new = pd.read_csv("source/check_html/use_claude/announcements_document.txt",sep="\t")
+        df_new = pd.read_csv(announcements_documents_file,sep="\t")
         df_new.head(6)
         col = "announcement_id"
-        df_new = df_new[df_new[col] <= 100004]
+        df_new = df_new[df_new[col] <= 400000]
+        df_new = df_new[df_new[col] >= 300143]
         df_new.head(6)
         db_operator.uploadDataToTable(data=df_new, tablename=tablename_bid_announcements_document_table, chunksize=5000)
 
@@ -2944,79 +2989,127 @@ class BidJudgementSan:
         else:
             raise ValueError(fr"Unknown condition_doneOCR = {condition_doneOCR}")
 
+        #output_path_ann = "../4_get_documents/output_v3/pdf_txt_all_gemini_ann/ann.txt"
+        #output_path_ann_zip = "../4_get_documents/output_v3/pdf_txt_all_gemini_ann/ann.txt.zip"
+        #output_path_req = "../4_get_documents/output_v3/pdf_txt_all_gemini_req/req.txt"
+        #output_path_req_zip = "../4_get_documents/output_v3/pdf_txt_all_gemini_req/req.txt.zip"
+
+        output_path_ann = "data/ocr/ann.txt"
+        output_path_ann_zip = "data/ocr/ann.txt.zip"
+        output_path_req = "data/ocr/req.txt"
+        output_path_req_zip = "data/ocr/req.txt.zip"
+
+        # 既にファイルがある前提になっていることに注意。
+        if os.path.exists(output_path_ann_zip):
+            df_ann = pd.read_csv(output_path_ann_zip,sep="\t")
+        else:
+            df_ann = pd.read_csv(output_path_ann,sep="\t")
+
+        if os.path.exists(output_path_req_zip):
+            df_req = pd.read_csv(output_path_req_zip,sep="\t")
+        else:
+            df_req = pd.read_csv(output_path_req,sep="\t")
+
+
         all_announcements = []
         all_requirement_texts = []
+        # Processing OCR for announcement_no=300144...
+        # 00003_2025_0204a
         for index, row in df1.iterrows():
             # row = df1.loc[index]
             announcement_no = row["announcement_no"]
             print(f"Processing OCR for announcement_no={announcement_no}...")
 
             pdfurl = row["pdfUrl"]
-            if False:
-                i = 66
-                announcement_no = int(df1["announcement_no"][i])
-                pdfurl = df1["pdfUrl"][i]
-
-            if not os.path.exists("data/ocr"):
-                os.makedirs("data/ocr", exist_ok=True)
-
-            if not os.path.exists("data/pdf"):
-                os.makedirs("data/pdf", exist_ok=True)
+            document_id = row["document_id"]
 
             time.sleep(1)
 
             try:
+                # announcements
                 doc_data = None
-                # ocr for announcements
-                ocr_announcements_file = fr"ocr_announcements_{announcement_no}.json"
-                ocr_announcements_filepath = fr"data/ocr/{ocr_announcements_file}"
-                if not os.path.exists(ocr_announcements_filepath):
-                    print("   Trying ocr(announcements).")
-                    
+                if not document_id in df_ann["document_id"].values:
+                    print(document_id)
+                    time.sleep(0.5)
                     doc_data = ocr_utils.getPDFDataFromUrl(pdfurl)
-                    if not os.path.exists(fr"data/pdf/{announcement_no}.pdf"):
-                        # 基本的には元の pdf と同じものを保存できる。
-                        print(fr"   Save data/pdf/{announcement_no}.pdf.")
-                        with open(fr"data/pdf/{announcement_no}.pdf", "wb") as f:
-                            f.write(doc_data)
-                    else:
-                        print(fr"   Already saved data/pdf/{announcement_no}.pdf.")
-
-                    json_value = ocr_utils.getJsonFromDocData(doc_data=doc_data)
-                    json_value["announcement_no"] = announcement_no
-                    with open(ocr_announcements_filepath, "w", encoding="utf-8") as f:
-                        json.dump(json_value, f, ensure_ascii=False, indent=2)
+                    dict1 = ocr_utils.getJsonFromDocData(doc_data=doc_data)
+                    dict2 = {
+                        "document_id" : document_id,
+                        "工事場所" : dict1["工事場所"],
+                        "入札手続等担当部局___郵便番号" : dict1["入札手続等担当部局"]["郵便番号"],
+                        "入札手続等担当部局___住所" : dict1["入札手続等担当部局"]["住所"],
+                        "入札手続等担当部局___担当部署名" : dict1["入札手続等担当部局"]["担当部署名"],
+                        "入札手続等担当部局___担当者名" : dict1["入札手続等担当部局"]["担当者名"],
+                        "入札手続等担当部局___電話番号" : dict1["入札手続等担当部局"]["電話番号"],
+                        "入札手続等担当部局___FAX番号" : dict1["入札手続等担当部局"]["FAX番号"],
+                        "入札手続等担当部局___メールアドレス" : dict1["入札手続等担当部局"]["メールアドレス"],
+                        "入札説明書の交付期間___開始日" : dict1["入札説明書の交付期間"]["開始日"],
+                        "入札説明書の交付期間___終了日" : dict1["入札説明書の交付期間"]["終了日"],
+                        "申請書及び競争参加資格確認資料の提出期限___開始日" : dict1["申請書及び競争参加資格確認資料の提出期限"]["開始日"],
+                        "申請書及び競争参加資格確認資料の提出期限___終了日" : dict1["申請書及び競争参加資格確認資料の提出期限"]["終了日"],
+                        "入札書の提出期間___開始日" : dict1["入札書の提出期間"]["開始日"],
+                        "入札書の提出期間___終了日" : dict1["入札書の提出期間"]["終了日"]
+                    }
+                    tmpdict2 = pd.DataFrame(dict2, index=[0])
+                    df_ann = pd.concat([df_ann, tmpdict2], axis=0, ignore_index=True)
+                    df_ann.to_csv(output_path_ann, sep="\t", index=False)
+                    df_ann.to_csv(output_path_ann_zip, sep="\t", compression="zip", index=False)
                 else:
-                    print("   Already getting announcements.")
-                    with open(ocr_announcements_filepath, "r", encoding="utf-8") as f:
-                        json_value = json.load(f)
-                new_json = ocr_utils.convertJson(json_value=json_value)
+                    dict2 = df_ann[df_ann["document_id"]==document_id]
+                    dict1 = {
+                        "工事場所": dict2["工事場所"].values[0],
+                        "入札手続等担当部局": {
+                            "郵便番号": dict2["入札手続等担当部局___郵便番号"].values[0],
+                            "住所": dict2["入札手続等担当部局___住所"].values[0],
+                            "担当部署名": dict2["入札手続等担当部局___担当部署名"].values[0],
+                            "担当者名": dict2["入札手続等担当部局___担当者名"].values[0],
+                            "電話番号": dict2["入札手続等担当部局___電話番号"].values[0],
+                            "FAX番号": dict2["入札手続等担当部局___FAX番号"].values[0],
+                            "メールアドレス": dict2["入札手続等担当部局___メールアドレス"].values[0]
+                        },
+                        "入札説明書の交付期間": {
+                            "開始日": dict2["入札説明書の交付期間___開始日"].values[0],
+                            "終了日": dict2["入札説明書の交付期間___終了日"].values[0]
+                        },
+                        "申請書及び競争参加資格確認資料の提出期限": {
+                            "開始日": dict2["申請書及び競争参加資格確認資料の提出期限___開始日"].values[0],
+                            "終了日": dict2["申請書及び競争参加資格確認資料の提出期限___終了日"].values[0]
+                        },
+                        "入札書の提出期間": {
+                            "開始日": dict2["入札書の提出期間___開始日"].values[0],
+                            "終了日": dict2["入札書の提出期間___終了日"].values[0]
+                        }
+                    }
+                dict1["announcement_no"] = announcement_no
+                new_json = ocr_utils.convertJson(json_value=dict1)
 
-                # ocr for requirements
-                ocr_requirements_file = fr"ocr_requirements_{announcement_no}.json"
-                ocr_requirements_filepath = fr"data/ocr/{ocr_requirements_file}"
-                if not os.path.exists(ocr_requirements_filepath):
-                    print("   Trying ocr(requirements).")
 
+                # requirements
+                if not document_id in df_req["document_id"].values:
+                    print(document_id)
                     if doc_data is None:
                         doc_data = ocr_utils.getPDFDataFromUrl(pdfurl)
-                        if not os.path.exists(fr"data/pdf/{announcement_no}.pdf"):
-                            # 基本的には元の pdf と同じものを保存できる。
-                            print(fr"   Save data/pdf/{announcement_no}.pdf.")
-                            with open(fr"data/pdf/{announcement_no}.pdf", "wb") as f:
-                                f.write(doc_data)
-                        else:
-                            print(fr"   Already saved data/pdf/{announcement_no}.pdf.")
 
+                    time.sleep(0.5)
                     requirement_texts = ocr_utils.getRequirementText(doc_data=doc_data)
-                    requirement_texts["announcement_no"] = announcement_no
-                    with open(ocr_requirements_filepath, "w", encoding="utf-8") as f:
-                        json.dump(requirement_texts, f, ensure_ascii=False, indent=2)
+                    dict2 = {
+                        "document_id" : document_id,
+                        "資格・条件" : requirement_texts["資格・条件"]
+                    }
+                    # tmpdict2 = pd.DataFrame(dict2, index=[0])
+                    tmpdict2 = pd.DataFrame([dict2])
+                    df_req = pd.concat([df_req, tmpdict2], axis=0, ignore_index=True)
+                    df_req.to_csv(output_path_req, sep="\t", index=False)
+                    df_req.to_csv(output_path_req_zip, sep="\t", compression="zip", index=False)
                 else:
-                    print("   Already getting requirements.")
-                    with open(ocr_requirements_filepath, "r", encoding="utf-8") as f:
-                        requirement_texts = json.load(f)
+                    dict2 = df_req[df_req["document_id"]==document_id]
+                    requirement_texts = {
+                        "資格・条件": dict2["資格・条件"].apply(ast.literal_eval).values[0]
+                    }
+                requirement_texts["announcement_no"] = announcement_no
                 dic = ocr_utils.convertRequirementTextDict(requirement_texts=requirement_texts)
+
+
 
                 all_announcements.append(new_json)
                 all_requirement_texts.append(pd.DataFrame(dic))
@@ -3032,7 +3125,7 @@ class BidJudgementSan:
         df1 = pd.DataFrame(all_announcements)
         if df1.shape[0] > 0:
             print(fr"Upload {tmp_tablename_announcements}")
-            db_operator.uploadDataToTable(data=df1, tablename=tmp_tablename_announcements)
+            db_operator.uploadDataToTable(data=df1, tablename=tmp_tablename_announcements, chunksize=5000)
 
             if False:
                 val = db_operator.selectToTable(tablename=tmp_tablename_announcements)
@@ -3064,7 +3157,7 @@ class BidJudgementSan:
             df2["requirement_no"] = df2["requirement_no"].astype("Int64")
 
             print(fr"Upload {tmp_tablename_requirements}")
-            db_operator.uploadDataToTable(data=df2, tablename=tmp_tablename_requirements)
+            db_operator.uploadDataToTable(data=df2, tablename=tmp_tablename_requirements, chunksize=5000)
             db_operator.updateRequirements(bid_requirements_tablename=tablename_requirements, bid_requirements_tablename_for_update=tmp_tablename_requirements)
 
         # 中間テーブル削除
@@ -3137,7 +3230,7 @@ class BidJudgementSan:
         # office_master テーブルを作成
         tmp_office_master = pd.read_csv("data/master/office_master.txt",sep="\t")
         print(fr"Upload {tablename_office_master}")
-        db_operator.uploadDataToTable(data=tmp_office_master, tablename=tablename_office_master)
+        db_operator.uploadDataToTable(data=tmp_office_master, tablename=tablename_office_master, chunksize=5000)
 
         if False:
             db_operator.preupdateCompanyBidJudgement(
@@ -3354,7 +3447,7 @@ class BidJudgementSan:
                 #max_evaluation_no = db_operator.any_query(sql = fr"SELECT max(evaluation_no) FROM {tablename_company_bid_judgement}")
 
                 print(fr"Upload {tmp_result_judgement_table}")
-                db_operator.uploadDataToTable(data=result_judgement, tablename=tmp_result_judgement_table)
+                db_operator.uploadDataToTable(data=result_judgement, tablename=tmp_result_judgement_table, chunksize=5000)
                 db_operator.updateCompanyBidJudgement(
                     company_bid_judgement_tablename=tablename_company_bid_judgement, 
                     company_bid_judgement_tablename_for_update=tmp_result_judgement_table
@@ -3364,7 +3457,7 @@ class BidJudgementSan:
             if result_insufficient_requirements.shape[0] > 0:
                 tmp_result_insufficient_requirements_master_table = "tmp_result_insufficient_requirements"
                 print(fr"Upload {tmp_result_insufficient_requirements_master_table}")
-                db_operator.uploadDataToTable(data=result_insufficient_requirements, tablename=tmp_result_insufficient_requirements_master_table)
+                db_operator.uploadDataToTable(data=result_insufficient_requirements, tablename=tmp_result_insufficient_requirements_master_table, chunksize=5000)
                 db_operator.updateInsufficientRequirements(
                     insufficient_requirements_tablename=tablename_insufficient_requirement_master, 
                     insufficient_requirements_tablename_for_update=tmp_result_insufficient_requirements_master_table
@@ -3374,7 +3467,7 @@ class BidJudgementSan:
             if result_sufficient_requirements.shape[0] > 0:
                 tmp_result_sufficient_requirements_master_table = "tmp_result_sufficient_requirements"
                 print(fr"Upload {tmp_result_sufficient_requirements_master_table}")
-                db_operator.uploadDataToTable(data=result_sufficient_requirements, tablename=tmp_result_sufficient_requirements_master_table)
+                db_operator.uploadDataToTable(data=result_sufficient_requirements, tablename=tmp_result_sufficient_requirements_master_table, chunksize=5000)
                 db_operator.updateSufficientRequirements(
                     sufficient_requirements_tablename=tablename_sufficient_requirement_master, 
                     sufficient_requirements_tablename_for_update=tmp_result_sufficient_requirements_master_table
@@ -3475,8 +3568,8 @@ if __name__ == "__main__":
     master = Master()
     company_master = master.getCompanyMaster()
     office_master = master.getOfficeMaster()
-    db_operator.uploadDataToTable(data=office_master, tablename="office_master")
-    db_operator.uploadDataToTable(data=company_master, tablename="company_master")
+    db_operator.uploadDataToTable(data=office_master, tablename="office_master", chunksize=5000)
+    db_operator.uploadDataToTable(data=company_master, tablename="company_master", chunksize=5000)
 
     partners_master = master.getPartnersMaster()
     partners_branches = master.getPartnersBranches()
@@ -3487,25 +3580,25 @@ if __name__ == "__main__":
     partners_qualifications_unified = master.getPartnersQualificationsUnified()
 
     if not db_operator.ifTableExists(tablename="partners_master"):
-        db_operator.uploadDataToTable(data=partners_master, tablename="partners_master")
+        db_operator.uploadDataToTable(data=partners_master, tablename="partners_master", chunksize=5000)
     if not db_operator.ifTableExists(tablename="partners_branches"):
-        db_operator.uploadDataToTable(data=partners_branches, tablename="partners_branches")
+        db_operator.uploadDataToTable(data=partners_branches, tablename="partners_branches", chunksize=5000)
     if not db_operator.ifTableExists(tablename="partners_categories"):
-        db_operator.uploadDataToTable(data=partners_categories, tablename="partners_categories")
+        db_operator.uploadDataToTable(data=partners_categories, tablename="partners_categories", chunksize=5000)
     if not db_operator.ifTableExists(tablename="partners_past_projects"):
-        db_operator.uploadDataToTable(data=partners_past_projects, tablename="partners_past_projects")
+        db_operator.uploadDataToTable(data=partners_past_projects, tablename="partners_past_projects", chunksize=5000)
     if not db_operator.ifTableExists(tablename="partners_qualifications_orderer_items"):
-        db_operator.uploadDataToTable(data=partners_qualifications_orderer_items, tablename="partners_qualifications_orderer_items")
+        db_operator.uploadDataToTable(data=partners_qualifications_orderer_items, tablename="partners_qualifications_orderer_items", chunksize=5000)
     if not db_operator.ifTableExists(tablename="partners_qualifications_orderers"):
-        db_operator.uploadDataToTable(data=partners_qualifications_orderers, tablename="partners_qualifications_orderers")
+        db_operator.uploadDataToTable(data=partners_qualifications_orderers, tablename="partners_qualifications_orderers", chunksize=5000)
     if not db_operator.ifTableExists(tablename="partners_qualifications_unified"):
-        db_operator.uploadDataToTable(data=partners_qualifications_unified, tablename="partners_qualifications_unified")
+        db_operator.uploadDataToTable(data=partners_qualifications_unified, tablename="partners_qualifications_unified", chunksize=5000)
 
     announcements_competing_companies_master = master.getAnnouncementsCompetingCompaniesMaster()
     announcements_competing_company_bids_master = master.getAnnouncementsCompetingCompanyBidsMaster()
 
-    db_operator.uploadDataToTable(data=announcements_competing_companies_master, tablename="announcements_competing_companies_master")
-    db_operator.uploadDataToTable(data=announcements_competing_company_bids_master, tablename="announcements_competing_company_bids_master")
+    db_operator.uploadDataToTable(data=announcements_competing_companies_master, tablename="announcements_competing_companies_master", chunksize=5000)
+    db_operator.uploadDataToTable(data=announcements_competing_company_bids_master, tablename="announcements_competing_company_bids_master", chunksize=5000)
 
     # announcements_documents_master = master.getAnnouncementsDocumentsMaster()
     # db_operator.uploadDataToTable(data=announcements_documents_master, tablename="announcements_documents_master")
