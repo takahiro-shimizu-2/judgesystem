@@ -64,7 +64,7 @@ app.get("/api/announcements", async (req, res) => {
 
   try{
     const [rows] = await bigquery.query({ query });
-    res.set("Cache-Control", "public, max-age=86400");
+    res.set("Cache-Control", "public, max-age=1800");
     res.json(rows);
 
     // Cache-Control でとりあえずキャッシュ。
@@ -99,7 +99,7 @@ app.get("/api/evaluations", async (req, res) => {
 
   try{
     const [rows] = await bigquery.query({ query });
-    res.set("Cache-Control", "public, max-age=86400");
+    res.set("Cache-Control", "public, max-age=1800");
     res.json(rows);
   } catch(err){
     console.error("ERROR in /api/evaluations:", err);
@@ -126,7 +126,7 @@ app.get("/api/companies", async (req, res) => {
   
   try{
     const [rows] = await bigquery.query({ query });
-    res.set("Cache-Control", "public, max-age=86400");
+    res.set("Cache-Control", "public, max-age=1800");
     res.json(rows);
   } catch(err){
     console.error("ERROR in /api/companies:", err);
@@ -153,7 +153,7 @@ app.get("/api/orderers", async (req, res) => {
   
   try{
     const [rows] = await bigquery.query({ query });
-    res.set("Cache-Control", "public, max-age=86400");
+    res.set("Cache-Control", "public, max-age=1800");
     res.json(rows);
   } catch(err){
     console.error("ERROR in /api/orderers:", err);
@@ -180,7 +180,7 @@ app.get("/api/partners", async (req, res) => {
 
   try{
     const [rows] = await bigquery.query({ query });
-    res.set("Cache-Control", "public, max-age=86400");
+    res.set("Cache-Control", "public, max-age=1800");
     res.json(rows);
   } catch(err){
     console.error("ERROR in /api/partners:", err);
