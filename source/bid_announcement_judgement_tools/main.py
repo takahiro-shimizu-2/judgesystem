@@ -1441,95 +1441,100 @@ class DBOperatorGCPVM(DBOperator):
         self.client.query(sql).result()
 
     def createBackendAnnouncements(self, tablename):
+        # announcements_competing_companies_master
+        # announcements_competing_company_bids_master
+        # announcements_documents_master
+        # bid_announcements
+
         sql = fr"""
         CREATE OR REPLACE TABLE {self.project_id}.{self.dataset_name}.{tablename} AS
         WITH
         -- 1) competing companies を announcement_id ごとに集約
         competing_companies AS (
-        SELECT
-            announcement_id,
-            company_name,
-            isWinner
-        FROM {self.project_id}.{self.dataset_name}.announcements_competing_companies_master
+            SELECT
+                announcement_id,
+                company_name,
+                isWinner
+            FROM {self.project_id}.{self.dataset_name}.announcements_competing_companies_master
         ),
 
         -- 2) competing company bids を announcement_id ごとに集約
         competing_company_bids AS (
-        SELECT
-            announcement_id,
-            company_name,
-            bid_amount,
-            bid_order
-        FROM {self.project_id}.{self.dataset_name}.announcements_competing_company_bids_master
+            SELECT
+                announcement_id,
+                company_name,
+                bid_amount,
+                bid_order
+            FROM {self.project_id}.{self.dataset_name}.announcements_competing_company_bids_master
         ),
 
         -- 3) 会社ごとに bidAmounts をまとめる
         merged_companies AS (
-        SELECT
-            cc.announcement_id,
-            cc.company_name AS name,
-            cc.isWinner,
-            ARRAY_AGG(b.bid_amount ORDER BY b.bid_order) AS bidAmounts
-        FROM competing_companies cc
-        LEFT JOIN competing_company_bids b
-            ON cc.announcement_id = b.announcement_id
-        AND cc.company_name = b.company_name
-        GROUP BY cc.announcement_id, name, isWinner
+            SELECT
+                cc.announcement_id,
+                cc.company_name AS name,
+                cc.isWinner,
+                ARRAY_AGG(b.bid_amount ORDER BY b.bid_order) AS bidAmounts
+            FROM competing_companies cc
+            LEFT JOIN competing_company_bids b
+                ON cc.announcement_id = b.announcement_id
+            AND cc.company_name = b.company_name
+            GROUP BY cc.announcement_id, name, isWinner
         ),
 
         -- 4) documents を announcement_id ごとに集約
         documents AS (
-        SELECT
-            announcement_id,
-            ARRAY_AGG(
-                STRUCT(
-                    document_id as id,
-                    type,
-                    title,
-                    fileFormat,
-                    pageCount,
-                    extractedAt,
-                    url,
-                    content
-                )
-            ) AS documents
-        FROM {self.project_id}.{self.dataset_name}.announcements_documents_master
-        GROUP BY announcement_id
+            SELECT
+                announcement_id,
+                ARRAY_AGG(
+                    STRUCT(
+                        document_id as id,
+                        type,
+                        title,
+                        fileFormat,
+                        pageCount,
+                        extractedAt,
+                        url,
+                        content
+                    )
+                ) AS documents
+            FROM {self.project_id}.{self.dataset_name}.announcements_documents_master
+            GROUP BY announcement_id
         ),
 
         -- ★ 5) department を事前に作る（重要）
         base AS (
-        SELECT
-            a.announcement_no,
-            a.workName,
-            a.userAnnNo,
-            a.topAgencyNo,
-            a.topAgencyName,
-            a.subAgencyNo,
-            a.subAgencyName,
-            a.workPlace,
-            a.pdfUrl,
-            STRUCT(
-                COALESCE(a.zipcode, 'dummy') AS postalCode,
-                COALESCE(a.address, 'dummy') AS address,
-                COALESCE(a.department, 'dummy') AS name,
-                COALESCE(a.assigneeName, 'dummy') AS contactPerson,
-                COALESCE(a.telephone, 'dummy') AS phone,
-                COALESCE(a.fax, 'dummy') AS fax,
-                COALESCE(a.mail, 'dummy') AS email
-            ) AS department,
-            a.publishDate,
-            a.docDistStart,
-            a.docDistEnd,
-            a.submissionStart,
-            a.submissionEnd,
-            a.bidStartDate,
-            a.bidEndDate,
-            a.doneOCR,
-            a.remarks,
-            a.createdDate,
-            a.updatedDate
-        FROM {self.project_id}.{self.dataset_name}.bid_announcements a
+            SELECT
+                a.announcement_no,
+                a.workName,
+                a.userAnnNo,
+                a.topAgencyNo,
+                a.topAgencyName,
+                a.subAgencyNo,
+                a.subAgencyName,
+                a.workPlace,
+                a.pdfUrl,
+                STRUCT(
+                    COALESCE(a.zipcode, 'dummy') AS postalCode,
+                    COALESCE(a.address, 'dummy') AS address,
+                    COALESCE(a.department, 'dummy') AS name,
+                    COALESCE(a.assigneeName, 'dummy') AS contactPerson,
+                    COALESCE(a.telephone, 'dummy') AS phone,
+                    COALESCE(a.fax, 'dummy') AS fax,
+                    COALESCE(a.mail, 'dummy') AS email
+                ) AS department,
+                a.publishDate,
+                a.docDistStart,
+                a.docDistEnd,
+                a.submissionStart,
+                a.submissionEnd,
+                a.bidStartDate,
+                a.bidEndDate,
+                a.doneOCR,
+                a.remarks,
+                a.createdDate,
+                a.updatedDate
+            FROM {self.project_id}.{self.dataset_name}.bid_announcements a
         )
         SELECT
         concat('ann-', b.announcement_no) AS id,
@@ -2940,7 +2945,7 @@ class BidJudgementSan:
         df_new.head(6)
         col = "announcement_id"
         df_new = df_new[df_new[col] <= 400000]
-        df_new = df_new[df_new[col] >= 300143]
+        # df_new = df_new[df_new[col] >= 300143]
         df_new.head(6)
         db_operator.uploadDataToTable(data=df_new, tablename=tablename_bid_announcements_document_table, chunksize=5000)
 
