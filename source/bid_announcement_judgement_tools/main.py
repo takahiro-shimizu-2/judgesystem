@@ -1589,7 +1589,6 @@ class DBOperatorGCPVM(DBOperator):
                 a.updatedDate,
                 a.orderer_id
             FROM {self.project_id}.{self.dataset_name}.bid_announcements a
-            left outer join {self.project_id}.{self.dataset_name}.bid_orderer b 
         )
         SELECT
         concat('ann-', b.announcement_no) AS id,
@@ -1657,7 +1656,7 @@ class DBOperatorGCPVM(DBOperator):
             coalesce(anno.bidStartDate, 'dummy') AS bidStartDate,
             coalesce(anno.bidEndDate, 'dummy') AS bidEndDate,
             coalesce(anno.pdfUrl, 'https://example.com/') AS pdfUrl,
-            coalesce(anno.orderer_id, 'unknown') AS orderer_ud,
+            coalesce(anno.orderer_id, 'unknown') AS orderer_id,
             
             1 as documents_id,
             'bid_documents' as documents_type,
