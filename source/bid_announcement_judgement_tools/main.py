@@ -1482,16 +1482,16 @@ class DBOperatorGCPVM(DBOperator):
         SELECT
             announcement_id,
             ARRAY_AGG(
-            STRUCT(
-                document_id as id,
-                type,
-                title,
-                fileFormat,
-                pageCount,
-                extractedAt,
-                url,
-                content
-            )
+                STRUCT(
+                    document_id as id,
+                    type,
+                    title,
+                    fileFormat,
+                    pageCount,
+                    extractedAt,
+                    url,
+                    content
+                )
             ) AS documents
         FROM {self.project_id}.{self.dataset_name}.announcements_documents_master
         GROUP BY announcement_id
@@ -1510,13 +1510,13 @@ class DBOperatorGCPVM(DBOperator):
             a.workPlace,
             a.pdfUrl,
             STRUCT(
-            COALESCE(a.zipcode, 'dummy') AS postalCode,
-            COALESCE(a.address, 'dummy') AS address,
-            COALESCE(a.department, 'dummy') AS name,
-            COALESCE(a.assigneeName, 'dummy') AS contactPerson,
-            COALESCE(a.telephone, 'dummy') AS phone,
-            COALESCE(a.fax, 'dummy') AS fax,
-            COALESCE(a.mail, 'dummy') AS email
+                COALESCE(a.zipcode, 'dummy') AS postalCode,
+                COALESCE(a.address, 'dummy') AS address,
+                COALESCE(a.department, 'dummy') AS name,
+                COALESCE(a.assigneeName, 'dummy') AS contactPerson,
+                COALESCE(a.telephone, 'dummy') AS phone,
+                COALESCE(a.fax, 'dummy') AS fax,
+                COALESCE(a.mail, 'dummy') AS email
             ) AS department,
             a.publishDate,
             a.docDistStart,
@@ -1556,9 +1556,9 @@ class DBOperatorGCPVM(DBOperator):
         'dummy_wincomp' AS winningCompanyName,
         ARRAY_AGG(
             STRUCT(
-            mc.name,
-            mc.isWinner,
-            mc.bidAmounts
+                mc.name,
+                mc.isWinner,
+                mc.bidAmounts
             )
         ) AS competingCompanies,
         d.documents
@@ -1581,7 +1581,7 @@ class DBOperatorGCPVM(DBOperator):
         sql = fr"""
         CREATE OR REPLACE TABLE {self.project_id}.{self.dataset_name}.{tablename} AS
         WITH base AS (
-        SELECT
+            SELECT
             eval.evaluation_no,
             eval.announcement_no,
             
@@ -1620,32 +1620,32 @@ class DBOperatorGCPVM(DBOperator):
             req2.isMet,
             eval.final_status,
             eval.updatedDate
-        from {self.project_id}.{self.dataset_name}.company_bid_judgement eval
+            from {self.project_id}.{self.dataset_name}.company_bid_judgement eval
 
-        inner join {self.project_id}.{self.dataset_name}.bid_announcements anno
-        on eval.announcement_no = anno.announcement_no
+            inner join {self.project_id}.{self.dataset_name}.bid_announcements anno
+            on eval.announcement_no = anno.announcement_no
 
-        inner join {self.project_id}.{self.dataset_name}.company_master comp
-        on eval.company_no = comp.company_no
+            inner join {self.project_id}.{self.dataset_name}.company_master comp
+            on eval.company_no = comp.company_no
 
-        inner join {self.project_id}.{self.dataset_name}.office_master branch
-        on eval.office_no = branch.office_no
+            inner join {self.project_id}.{self.dataset_name}.office_master branch
+            on eval.office_no = branch.office_no
 
-        inner join {self.project_id}.{self.dataset_name}.bid_requirements req1
-        on eval.announcement_no = req1.announcement_no
+            inner join {self.project_id}.{self.dataset_name}.bid_requirements req1
+            on eval.announcement_no = req1.announcement_no
 
-        inner join
-        (
-            select 
-            announcement_no, office_no, requirement_no, requirement_type, requirement_description, true as isMet 
-            from {self.project_id}.{self.dataset_name}.sufficient_requirements
-            union all
-            select 
-            announcement_no, office_no, requirement_no, requirement_type, requirement_description, false as isMet 
-            from {self.project_id}.{self.dataset_name}.insufficient_requirements
-        ) req2
-        on 
-        req1.requirement_no = req2.requirement_no and eval.office_no = req2.office_no
+            inner join
+            (
+                select 
+                announcement_no, office_no, requirement_no, requirement_type, requirement_description, true as isMet 
+                from {self.project_id}.{self.dataset_name}.sufficient_requirements
+                union all
+                select 
+                announcement_no, office_no, requirement_no, requirement_type, requirement_description, false as isMet 
+                from {self.project_id}.{self.dataset_name}.insufficient_requirements
+            ) req2
+            on 
+            req1.requirement_no = req2.requirement_no and eval.office_no = req2.office_no
         )
         SELECT
         cast(evaluation_no as string) AS id,
@@ -1658,13 +1658,13 @@ class DBOperatorGCPVM(DBOperator):
             topAgencyName AS organization,
             workPlace AS workLocation,
             struct(
-            '999-9999' as postalCode,
-            '北極' as address,
-            department as name,
-            'あいうえお' as contactPerson,
-            '99-9999-9999' as phone,
-            '99-9999-9999' as fax,
-            'kikaku@example.go.jp' as email
+                '999-9999' as postalCode,
+                '北極' as address,
+                department as name,
+                'あいうえお' as contactPerson,
+                '99-9999-9999' as phone,
+                '99-9999-9999' as fax,
+                'kikaku@example.go.jp' as email
             ) as department,
             publishDate AS publishDate,
             docDistStart AS explanationStartDate,
@@ -1678,14 +1678,14 @@ class DBOperatorGCPVM(DBOperator):
             20000 AS estimatedAmountMax,
             pdfUrl AS pdfUrl,
             struct(
-            concat('doc-',documents_id) as id,
-            documents_type as type,
-            documents_title as title,
-            documents_fileFormat as fileFormat,
-            documents_pageCount as pageCount,
-            documents_extractedAt as extractedAt,
-            documents_url as url,
-            documents_content as content
+                concat('doc-',documents_id) as id,
+                documents_type as type,
+                documents_title as title,
+                documents_fileFormat as fileFormat,
+                documents_pageCount as pageCount,
+                documents_extractedAt as extractedAt,
+                documents_url as url,
+                documents_content as content
             ) as documents
         ) AS announcement,
         struct(
@@ -1702,12 +1702,12 @@ class DBOperatorGCPVM(DBOperator):
         ) AS branch,
         array_agg(
             struct(
-            concat('req-', requirement_no) AS id,
-            requirement_type AS category,
-            requirement_text AS name,
-            isMet AS isMet,
-            requirement_description AS reason,
-            'dummy_evidence' AS evidence
+                concat('req-', requirement_no) AS id,
+                requirement_type AS category,
+                requirement_text AS name,
+                isMet AS isMet,
+                requirement_description AS reason,
+                'dummy_evidence' AS evidence
             )
         ) AS requirements,
         CASE WHEN coalesce(final_status, FALSE) THEN 'all_met' ELSE 'unmet' END AS status,
@@ -1755,26 +1755,26 @@ class DBOperatorGCPVM(DBOperator):
         sql = fr"""
         CREATE OR REPLACE TABLE {self.project_id}.{self.dataset_name}.{tablename} AS
         WITH base AS (
-        select 
-        comp.company_no as id,
-        comp.company_no as `no`,
-        coalesce(comp.company_name, 'dummy') as name,
-        coalesce(comp.company_address, 'dummy') as address,
-        'A' as grade,
-        1 as priority,
-        coalesce(comp.telephone, 'dummy') as phone,
-        'dummy' as email,
-        coalesce(comp.name_of_representative, 'dummy') as representative,
-        coalesce(comp.establishment_date, 'dummy') as established,
-        1 as capital,
-        100 as employeeCount,
-        coalesce(branch.office_name, 'dummy') as branches_name,
-        coalesce(branch.office_address, 'dummy') as branches_address,
-        'dummy' as certifications
+            select 
+            comp.company_no as id,
+            comp.company_no as `no`,
+            coalesce(comp.company_name, 'dummy') as name,
+            coalesce(comp.company_address, 'dummy') as address,
+            'A' as grade,
+            1 as priority,
+            coalesce(comp.telephone, 'dummy') as phone,
+            'dummy' as email,
+            coalesce(comp.name_of_representative, 'dummy') as representative,
+            coalesce(comp.establishment_date, 'dummy') as established,
+            1 as capital,
+            100 as employeeCount,
+            coalesce(branch.office_name, 'dummy') as branches_name,
+            coalesce(branch.office_address, 'dummy') as branches_address,
+            'dummy' as certifications
 
-        from {self.project_id}.{self.dataset_name}.company_master comp
-        left outer join {self.project_id}.{self.dataset_name}.office_master branch
-        on comp.company_no = branch.company_no
+            from {self.project_id}.{self.dataset_name}.company_master comp
+            left outer join {self.project_id}.{self.dataset_name}.office_master branch
+            on comp.company_no = branch.company_no
         )
         select
         concat('com-', id) as id,
@@ -1790,15 +1790,15 @@ class DBOperatorGCPVM(DBOperator):
         capital,
         employeeCount,
         array_agg(
-        struct(
-            branches_name as name,
-            branches_address as address
-        )
+            struct(
+                branches_name as name,
+                branches_address as address
+            )
         ) AS branches,
         array_agg(
-        struct(
-            certifications
-        )
+            struct(
+                certifications
+            )
         ) as certifications
         from base
         group by
@@ -1853,6 +1853,7 @@ class DBOperatorGCPVM(DBOperator):
         averageAmount,
         lastAnnouncementDate
         from base
+
         group by
         id,
         `no`,
@@ -1875,52 +1876,52 @@ class DBOperatorGCPVM(DBOperator):
         WITH
         -- 1) categories を partner_id ごとに集約
         categories AS (
-        SELECT
+            SELECT
             partner_id,
             ARRAY_AGG(categories) AS categories
-        FROM {self.project_id}.{self.dataset_name}.partners_categories
-        GROUP BY partner_id
+            FROM {self.project_id}.{self.dataset_name}.partners_categories
+            GROUP BY partner_id
         ),
 
         -- 2) past projects を partner_id ごとに集約
         past_projects AS (
-        SELECT
+            SELECT
             partner_id,
             ARRAY_AGG(
-            STRUCT(
-                cast(evaluationId as string) as evaluationId,
-                announcementId,
-                cast(announcementNo as int64) as announcementNo,
-                announcementTitle,
-                branchName,
-                workStatus,
-                evaluationStatus,
-                cast(priority as int64) as priority,
-                bidType,
-                category,
-                prefecture,
-                publishDate,
-                deadline,
-                evaluatedAt,
-                organization
-            )
+                STRUCT(
+                    cast(evaluationId as string) as evaluationId,
+                    announcementId,
+                    cast(announcementNo as int64) as announcementNo,
+                    announcementTitle,
+                    branchName,
+                    workStatus,
+                    evaluationStatus,
+                    cast(priority as int64) as priority,
+                    bidType,
+                    category,
+                    prefecture,
+                    publishDate,
+                    deadline,
+                    evaluatedAt,
+                    organization
+                )
             ) AS pastProjects
-        FROM {self.project_id}.{self.dataset_name}.partners_past_projects
-        GROUP BY partner_id
+            FROM {self.project_id}.{self.dataset_name}.partners_past_projects
+            GROUP BY partner_id
         ),
 
         -- 3) branches を partner_id ごとに集約
         branches AS (
-        SELECT
+            SELECT
             partner_id,
             ARRAY_AGG(
-            STRUCT(
-                name,
-                address
-            )
+                STRUCT(
+                    name,
+                    address
+                )
             ) AS branches
-        FROM {self.project_id}.{self.dataset_name}.partners_branches
-        GROUP BY partner_id
+            FROM {self.project_id}.{self.dataset_name}.partners_branches
+            GROUP BY partner_id
         ),
 
         -- 4) unified qualifications を partner_id ごとに集約
@@ -1928,46 +1929,46 @@ class DBOperatorGCPVM(DBOperator):
         SELECT
             partner_id,
             ARRAY_AGG(
-            STRUCT(
-                mainCategory,
-                category,
-                region,
-                cast(value as string) as value,
-                grade
-            )
+                STRUCT(
+                    mainCategory,
+                    category,
+                    region,
+                    cast(value as string) as value,
+                    grade
+                )
             ) AS unified
-        FROM {self.project_id}.{self.dataset_name}.partners_qualifications_unified
-        GROUP BY partner_id
+            FROM {self.project_id}.{self.dataset_name}.partners_qualifications_unified
+            GROUP BY partner_id
         ),
 
         -- 5) orderer items を ordererName ごとに集約
         orderer_items AS (
-        SELECT
+            SELECT
             partner_id,
             ordererName,
             ARRAY_AGG(
-            STRUCT(
-                category,
-                region,
-                cast(value as string) as value,
-                grade
-            )
+                STRUCT(
+                    category,
+                    region,
+                    cast(value as string) as value,
+                    grade
+                )
             ) AS items
-        FROM {self.project_id}.{self.dataset_name}.partners_qualifications_orderer_items
-        GROUP BY partner_id, ordererName
+            FROM {self.project_id}.{self.dataset_name}.partners_qualifications_orderer_items
+            GROUP BY partner_id, ordererName
         ),
         -- 6) orderers を partner_id ごとに集約
         orderers AS (
-        SELECT
+            SELECT
             partner_id,
             ARRAY_AGG(
-            STRUCT(
-                ordererName,
-                items
-            )
+                STRUCT(
+                    ordererName,
+                    items
+                )
             ) AS orderers
-        FROM orderer_items
-        GROUP BY partner_id
+            FROM orderer_items
+            GROUP BY partner_id
         )
         -- 7) 最終結合（爆発しない）
         SELECT
