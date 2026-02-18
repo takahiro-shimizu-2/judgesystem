@@ -1557,13 +1557,16 @@ class DBOperatorGCPVM(DBOperator):
         base AS (
             SELECT
                 a.announcement_no,
+
                 a.workName,
+
                 a.userAnnNo,
                 a.topAgencyNo,
                 a.topAgencyName,
                 a.subAgencyNo,
                 a.subAgencyName,
                 a.workPlace,
+
                 a.pdfUrl,
 
                 STRUCT(
@@ -1583,6 +1586,7 @@ class DBOperatorGCPVM(DBOperator):
                 a.submissionEnd,
                 a.bidStartDate,
                 a.bidEndDate,
+
                 a.doneOCR,
                 a.remarks,
                 a.createdDate,
@@ -1595,10 +1599,13 @@ class DBOperatorGCPVM(DBOperator):
         b.announcement_no AS `no`,
         b.orderer_id AS ordererId,
         COALESCE(b.workName, 'dummytitle') AS title,
-        'dummy_cat' AS category,
+
         COALESCE(b.topAgencyName, 'dummy') AS organization,
+        'dummy_cat' AS category,
         COALESCE(b.workPlace, 'dummy') AS workLocation,
+
         b.department,
+
         COALESCE(b.publishDate, 'dummy') AS publishDate,
         COALESCE(b.docDistStart, 'dummy') AS explanationStartDate,
         COALESCE(b.docDistEnd, 'dummy') AS explanationEndDate,
@@ -1611,6 +1618,7 @@ class DBOperatorGCPVM(DBOperator):
         1000 AS estimatedAmountMax,
         'closed' AS status,
         10 AS actualAmount,
+
         concat('com-', 1) AS winningCompanyId,
         'dummy_wincomp' AS winningCompanyName,
         ARRAY_AGG(
@@ -1717,6 +1725,7 @@ class DBOperatorGCPVM(DBOperator):
             'dummycat' AS category,
             topAgencyName AS organization,
             workPlace AS workLocation,
+            
             struct(
                 '999-9999' as postalCode,
                 '北極' as address,
@@ -1726,6 +1735,7 @@ class DBOperatorGCPVM(DBOperator):
                 '99-9999-9999' as fax,
                 'kikaku@example.go.jp' as email
             ) as department,
+
             publishDate AS publishDate,
             docDistStart AS explanationStartDate,
             docDistEnd AS explanationEndDate,
