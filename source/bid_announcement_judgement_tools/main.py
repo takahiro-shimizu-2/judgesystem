@@ -1598,23 +1598,23 @@ class DBOperatorGCPVM(DBOperator):
         concat('ann-', b.announcement_no) AS id,
         b.announcement_no AS `no`,
         b.orderer_id AS ordererId,
-        COALESCE(b.workName, 'dummytitle') AS title,
+        COALESCE(b.workName, 'unknown_workName') AS title,
 
-        COALESCE(b.topAgencyName, 'dummy') AS organization,
-        'dummy_cat' AS category,
-        COALESCE(b.workPlace, 'dummy') AS workLocation,
+        COALESCE(b.topAgencyName, 'unknown_agency') AS organization,
+        'unknown_category' AS category,
+        COALESCE(b.workPlace, 'unknown_workplace') AS workLocation,
 
         b.department,
 
         
-        COALESCE(b.publishDate, 'dummy') AS publishDate,
-        COALESCE(b.docDistStart, 'dummy') AS explanationStartDate,
-        COALESCE(b.docDistEnd, 'dummy') AS explanationEndDate,
-        COALESCE(b.submissionStart, 'dummy') AS applicationStartDate,
-        COALESCE(b.submissionEnd, 'dummy') AS applicationEndDate,
-        COALESCE(b.bidStartDate, 'dummy') AS bidStartDate,
-        COALESCE(b.bidEndDate, 'dummy') AS bidEndDate,
-        'dummy_deadline' AS deadline,
+        COALESCE(b.publishDate, 'unknown_publishDate') AS publishDate,
+        COALESCE(b.docDistStart, 'unknown_docDistStart') AS explanationStartDate,
+        COALESCE(b.docDistEnd, 'unknown_docDistEnd') AS explanationEndDate,
+        COALESCE(b.submissionStart, 'unknown_submissionStart') AS applicationStartDate,
+        COALESCE(b.submissionEnd, 'unknown_submissionEnd') AS applicationEndDate,
+        COALESCE(b.bidStartDate, 'unknown_bidStartDate') AS bidStartDate,
+        COALESCE(b.bidEndDate, 'unknown_bidEndDate') AS bidEndDate,
+        'unknown_deadline' AS deadline,
 
 
         1 AS estimatedAmountMin,
@@ -1623,7 +1623,7 @@ class DBOperatorGCPVM(DBOperator):
         10 AS actualAmount,
 
         concat('com-', 1) AS winningCompanyId,
-        'dummy_wincomp' AS winningCompanyName,
+        'unknonw_wincomp' AS winningCompanyName,
         ARRAY_AGG(
             STRUCT(
                 mc.name,
@@ -1655,10 +1655,10 @@ class DBOperatorGCPVM(DBOperator):
             eval.evaluation_no,
             eval.announcement_no,
             
-            coalesce(anno.workName, 'dummytitle') AS workName,
-            coalesce(anno.topAgencyName, 'dummy_org') AS topAgencyName,
-            coalesce(anno.workPlace, 'workloc') AS workPlace,
-            coalesce(anno.department, 'department') AS department,
+            coalesce(anno.workName, 'unknown_title') AS workName,
+            coalesce(anno.topAgencyName, 'unknown_organization') AS topAgencyName,
+            coalesce(anno.workPlace, 'unknown_location') AS workPlace,
+            coalesce(anno.department, 'unknown_department') AS department,
 
 
             coalesce(anno.zipcode, 'unknown_zipcode') as postalCode,
@@ -1677,7 +1677,7 @@ class DBOperatorGCPVM(DBOperator):
             coalesce(anno.submissionStart, 'unknown_appStartDate') AS submissionStart,
             coalesce(anno.submissionEnd, 'unknown_appEndDate') AS submissionEnd,
             coalesce(anno.bidStartDate, 'unkdnown_bidStartDate') AS bidStartDate,
-            coalesce(anno.bidEndDate, 'unkdnown_bidStartDate') AS bidEndDate,
+            coalesce(anno.bidEndDate, 'unkdnown_bidEndDate') AS bidEndDate,
             coalesce(anno.pdfUrl, 'https://example.com/') AS pdfUrl,
             coalesce(anno.orderer_id, 'unknown_orderer_id') AS orderer_id,
             
