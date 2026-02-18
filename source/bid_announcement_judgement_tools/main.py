@@ -1918,6 +1918,7 @@ class DBOperatorGCPVM(DBOperator):
         self.client.query(sql).result()
 
     def createBackendOrderers(self, tablename):
+        # カテゴリの値は要確認：category
         sql = fr"""
         CREATE OR REPLACE TABLE {self.project_id}.{self.dataset_name}.{tablename} AS
         with base as (
@@ -1925,7 +1926,7 @@ class DBOperatorGCPVM(DBOperator):
             orderer_id as id,
             `no`,
             name,
-            category, 
+            'national' as category, 
             address,
             phone,
             fax,
