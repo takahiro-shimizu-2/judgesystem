@@ -1179,6 +1179,7 @@ class DBOperatorGCPVM(DBOperator):
             target.submissionstart = source.submissionstart,
             target.submissionend = source.submissionend,
             target.bidstartdate = source.bidstartdate,
+            target.bidenddate = source.bidenddate,
             target.doneocr = TRUE
         """        
         self.client.query(sql).result()
@@ -2503,7 +2504,7 @@ class DBOperatorSQLITE3(DBOperator):
         submissionstart,
         submissionend,
         bidstartdate,
-        NULL,
+        bidenddate,
         NULL,
         NULL,
         NULL,
@@ -2532,7 +2533,7 @@ class DBOperatorSQLITE3(DBOperator):
             submissionstart = excluded.submissionstart,
             submissionend = excluded.submissionend,
             bidstartdate = excluded.bidstartdate,
-            bidEndDate = {bid_announcements_tablename}.bidenddate,
+            bidenddate = excluded.bidenddate,
             doneocr = TRUE,
             remarks = {bid_announcements_tablename}.remarks, 
             createdDate = {bid_announcements_tablename}.createddate,
