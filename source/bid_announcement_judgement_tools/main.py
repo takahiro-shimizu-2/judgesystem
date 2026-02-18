@@ -1570,13 +1570,13 @@ class DBOperatorGCPVM(DBOperator):
                 a.pdfUrl,
 
                 STRUCT(
-                    COALESCE(a.zipcode, 'dummy') AS postalCode,
-                    COALESCE(a.address, 'dummy') AS address,
-                    COALESCE(a.department, 'dummy') AS name,
-                    COALESCE(a.assigneeName, 'dummy') AS contactPerson,
-                    COALESCE(a.telephone, 'dummy') AS phone,
-                    COALESCE(a.fax, 'dummy') AS fax,
-                    COALESCE(a.mail, 'dummy') AS email
+                    COALESCE(a.zipcode, 'unknown_zipcode') AS postalCode,
+                    COALESCE(a.address, 'unknown_address') AS address,
+                    COALESCE(a.department, 'unknown_department') AS name,
+                    COALESCE(a.assigneeName, 'unkdnown_assigneeName') AS contactPerson,
+                    COALESCE(a.telephone, 'unknown_telephone') AS phone,
+                    COALESCE(a.fax, 'unknown_fax') AS fax,
+                    COALESCE(a.mail, 'unknown_mail') AS email
                 ) AS department,
 
                 a.publishDate,
