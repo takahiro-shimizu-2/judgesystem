@@ -1606,6 +1606,7 @@ class DBOperatorGCPVM(DBOperator):
 
         b.department,
 
+        
         COALESCE(b.publishDate, 'dummy') AS publishDate,
         COALESCE(b.docDistStart, 'dummy') AS explanationStartDate,
         COALESCE(b.docDistEnd, 'dummy') AS explanationEndDate,
@@ -1614,6 +1615,8 @@ class DBOperatorGCPVM(DBOperator):
         COALESCE(b.bidStartDate, 'dummy') AS bidStartDate,
         COALESCE(b.bidEndDate, 'dummy') AS bidEndDate,
         'dummy_deadline' AS deadline,
+
+
         1 AS estimatedAmountMin,
         1000 AS estimatedAmountMax,
         'closed' AS status,
@@ -1656,15 +1659,27 @@ class DBOperatorGCPVM(DBOperator):
             coalesce(anno.topAgencyName, 'dummy_org') AS topAgencyName,
             coalesce(anno.workPlace, 'workloc') AS workPlace,
             coalesce(anno.department, 'department') AS department,
-            coalesce(anno.publishDate, 'publishDate') AS publishDate,
-            coalesce(anno.docDistStart, 'expStartDate') AS docDistStart,
-            coalesce(anno.docDistEnd, 'expEndDate') AS docDistEnd,
-            coalesce(anno.submissionStart, 'appStartDate') AS submissionStart,
-            coalesce(anno.submissionEnd, 'appEndDate') AS submissionEnd,
-            coalesce(anno.bidStartDate, 'dummy') AS bidStartDate,
-            coalesce(anno.bidEndDate, 'dummy') AS bidEndDate,
+
+
+            coalesce(anno.zipcode, 'unknown_zipcode') as postalCode,
+            coalesce(anno.address, 'unknown_address') as address,
+            coalesce(anno.department, 'unknown_department') as name,
+            coalesce(anno.assigneeName, 'unknown_assigneeName') as contactPerson,
+            coalesce(anno.telephone, 'unknown_telephone') as phone,
+            coalesce(anno.fax, 'unknown_fax') as fax,
+            coalesce(anno.mail, 'unknown_mail') as email,
+
+
+            
+            coalesce(anno.publishDate, 'unknown_publishDate') AS publishDate,
+            coalesce(anno.docDistStart, 'unknown_expStartDate') AS docDistStart,
+            coalesce(anno.docDistEnd, 'unknown_expEndDate') AS docDistEnd,
+            coalesce(anno.submissionStart, 'unknown_appStartDate') AS submissionStart,
+            coalesce(anno.submissionEnd, 'unknown_appEndDate') AS submissionEnd,
+            coalesce(anno.bidStartDate, 'unkdnown_bidStartDate') AS bidStartDate,
+            coalesce(anno.bidEndDate, 'unkdnown_bidStartDate') AS bidEndDate,
             coalesce(anno.pdfUrl, 'https://example.com/') AS pdfUrl,
-            coalesce(anno.orderer_id, 'unknown') AS orderer_id,
+            coalesce(anno.orderer_id, 'unknown_orderer_id') AS orderer_id,
             
             1 as documents_id,
             'bid_documents' as documents_type,
@@ -1722,20 +1737,22 @@ class DBOperatorGCPVM(DBOperator):
             concat('ann-', announcement_no) AS id,
             orderer_id AS ordererId,
             workName AS title,
-            'dummycat' AS category,
+            'unknown_category' AS category,
             topAgencyName AS organization,
             workPlace AS workLocation,
+
             
             struct(
-                '999-9999' as postalCode,
-                '北極' as address,
-                department as name,
-                'あいうえお' as contactPerson,
-                '99-9999-9999' as phone,
-                '99-9999-9999' as fax,
-                'kikaku@example.go.jp' as email
+                postalCode,
+                address,
+                name,
+                contactPerson,
+                phone,
+                fax,
+                email
             ) as department,
 
+            
             publishDate AS publishDate,
             docDistStart AS explanationStartDate,
             docDistEnd AS explanationEndDate,
@@ -1792,7 +1809,19 @@ class DBOperatorGCPVM(DBOperator):
         workName,
         topAgencyName,
         workPlace,
+
+        postalCode,
+        address,
+        name,
+        contactPerson,
+        phone,
+        fax,
+        email,
+
+        
         department,
+
+
         publishDate,
         docDistStart,
         docDistEnd,
