@@ -1050,6 +1050,18 @@ class DBOperatorGCPVM(DBOperator):
 
     def transferAnnouncementsV2(self, bid_announcements_tablename, bid_announcements_documents_tablename):
         sql = fr"""
+        INSERT INTO `{self.project_id}.{self.dataset_name}.{bid_announcements_tablename}` (
+            announcement_no,
+            workName,
+            pdfUrl, pdfUrl_type, document_id,
+            pdfUrl2, pdfUrl2_type, document_id2,
+            pdfUrl3, pdfUrl3_type, document_id3,
+            pdfUrl4, pdfUrl4_type, document_id4,
+            pdfUrl5, pdfUrl5_type, document_id5,
+            doneOCR,
+            createdDate,
+            updatedDate
+        )
         WITH ordered AS (
             SELECT
                 ad.*,
@@ -1059,20 +1071,6 @@ class DBOperatorGCPVM(DBOperator):
                 ) AS rn
             FROM `{self.project_id}.{self.dataset_name}.{bid_announcements_documents_tablename}` ad
         )
-        INSERT INTO `{self.project_id}.{self.dataset_name}.{bid_announcements_tablename}` (
-            announcement_no,
-            workName,
-
-            pdfUrl, pdfUrl_type, document_id,
-            pdfUrl2, pdfUrl2_type, document_id2,
-            pdfUrl3, pdfUrl3_type, document_id3,
-            pdfUrl4, pdfUrl4_type, document_id4,
-            pdfUrl5, pdfUrl5_type, document_id5,
-
-            doneOCR,
-            createdDate,
-            updatedDate
-        )
         SELECT
             o.announcement_id,
             MAX(CASE WHEN o.rn = 1 THEN o.title END) AS workName,
@@ -1080,29 +1078,33 @@ class DBOperatorGCPVM(DBOperator):
             MAX(CASE WHEN o.rn = 1 THEN o.url END) AS pdfUrl,
             MAX(CASE WHEN o.rn = 1 THEN o.type END) AS pdfUrl_type,
             MAX(CASE WHEN o.rn = 1 THEN o.document_id END) AS document_id,
+
             MAX(CASE WHEN o.rn = 2 THEN o.url END) AS pdfUrl2,
             MAX(CASE WHEN o.rn = 2 THEN o.type END) AS pdfUrl2_type,
             MAX(CASE WHEN o.rn = 2 THEN o.document_id END) AS document_id2,
+
             MAX(CASE WHEN o.rn = 3 THEN o.url END) AS pdfUrl3,
             MAX(CASE WHEN o.rn = 3 THEN o.type END) AS pdfUrl3_type,
             MAX(CASE WHEN o.rn = 3 THEN o.document_id END) AS document_id3,
+
             MAX(CASE WHEN o.rn = 4 THEN o.url END) AS pdfUrl4,
             MAX(CASE WHEN o.rn = 4 THEN o.type END) AS pdfUrl4_type,
             MAX(CASE WHEN o.rn = 4 THEN o.document_id END) AS document_id4,
+
             MAX(CASE WHEN o.rn = 5 THEN o.url END) AS pdfUrl5,
             MAX(CASE WHEN o.rn = 5 THEN o.type END) AS pdfUrl5_type,
             MAX(CASE WHEN o.rn = 5 THEN o.document_id END) AS document_id5,
 
-            0 AS doneOCR,
-            CURRENT_TIMESTAMP() AS createdDate,
-            CURRENT_TIMESTAMP() AS updatedDate
+            FALSE AS doneOCR,
+            FORMAT_TIMESTAMP('%Y-%m-%d %H:%M:%S', CURRENT_TIMESTAMP()) AS createdDate,
+            FORMAT_TIMESTAMP('%Y-%m-%d %H:%M:%S', CURRENT_TIMESTAMP()) AS updatedDate
         FROM ordered o
         WHERE NOT EXISTS (
             SELECT 1
             FROM `{self.project_id}.{self.dataset_name}.{bid_announcements_tablename}` b
             WHERE b.announcement_no = o.announcement_id
         )
-        GROUP BY o.announcement_id;
+        GROUP BY o.announcement_id
         """        
         self.client.query(sql).result()
 
@@ -1481,7 +1483,7 @@ class DBOperatorGCPVM(DBOperator):
             announcement_id,
             ARRAY_AGG(
             STRUCT(
-                concat('doc-ann-', announcement_id, '-', document_id) as id,
+                document_id as id,
                 type,
                 title,
                 fileFormat,
@@ -3124,6 +3126,7 @@ class BidJudgementSan:
 
         df1 = pd.DataFrame(all_announcements)
         if df1.shape[0] > 0:
+            df1["fax"] = df1["fax"].astype("string")
             print(fr"Upload {tmp_tablename_announcements}")
             db_operator.uploadDataToTable(data=df1, tablename=tmp_tablename_announcements, chunksize=5000)
 
@@ -3479,10 +3482,11 @@ class BidJudgementSan:
 if __name__ == "__main__":
     # GCP bigquery想定
     # google ai studio に接続しなくてよいなら  --google_ai_studio_api_key_filepath 無しでよい。
-    # python source/bid_announcement_judgement_tools/main.py --bid_announcements_pre_file data/bid_announcements_pre/bid_announcements_pre_1.txt --google_ai_studio_api_key_filepath data/sec/google_ai_studio_api_key.txt --bigquery_location SPECIFY_LOCATION --bigquery_project_id SPECIFY_PROJECT_ID --bigquery_dataset_name SPECIFY_DATASET_NAME --use_gcp_vm
-    # python source/bid_announcement_judgement_tools/main.py --bid_announcements_pre_file data/bid_announcements_pre/bid_announcements_pre_1.txt --google_ai_studio_api_key_filepath data/sec/google_ai_studio_api_key.txt --bigquery_location "asia-northeast1" --bigquery_project_id vocal-raceway-473509-f1 --bigquery_dataset_name October_20251004 --use_gcp_vm
-    # python source/bid_announcement_judgement_tools/main.py --bid_announcements_pre_file data/bid_announcements_pre/all.txt --google_ai_studio_api_key_filepath data/sec/google_ai_studio_api_key.txt --bigquery_location "asia-northeast1" --bigquery_project_id vocal-raceway-473509-f1 --bigquery_dataset_name October_20251004 --use_gcp_vm
-    # python source/bid_announcement_judgement_tools/main.py --bid_announcements_pre_file data/bid_announcements_pre/all.txt --google_ai_studio_api_key_filepath data/sec/google_ai_studio_api_key.txt --bigquery_location "asia-northeast1" --bigquery_project_id vocal-raceway-473509-f1 --bigquery_dataset_name October_20251004 --use_gcp_vm  --step1_transfer_remove_table --step3_remove_table
+    # python source/bid_announcement_judgement_tools/main.py --google_ai_studio_api_key_filepath data/sec/google_ai_studio_api_key_mizu.txt --bigquery_location SPECIFY_LOCATION --bigquery_project_id SPECIFY_PROJECT_ID --bigquery_dataset_name SPECIFY_DATASET_NAME --use_gcp_vm
+    # 
+    # python source/bid_announcement_judgement_tools/main.py --google_ai_studio_api_key_filepath data/sec/google_ai_studio_api_key_mizu.txt --bigquery_location "asia-northeast1" --bigquery_project_id mizu-api-457906 --bigquery_dataset_name bid_db --use_gcp_vm
+    # python source/bid_announcement_judgement_tools/main.py --google_ai_studio_api_key_filepath data/sec/google_ai_studio_api_key_mizu.txt --bigquery_location "asia-northeast1" --bigquery_project_id mizu-api-457906 --bigquery_dataset_name bid_db --use_gcp_vm
+    # python source/bid_announcement_judgement_tools/main.py --google_ai_studio_api_key_filepath data/sec/google_ai_studio_api_key_mizu.txt --bigquery_location "asia-northeast1" --bigquery_project_id mizu-api-457906 --bigquery_dataset_name bid_db --use_gcp_vm  --step1_transfer_remove_table --step3_remove_table
     # 
     # sqlite3想定
     # python source/bid_announcement_judgement_tools/main.py --bid_announcements_pre_file data/bid_announcements_pre/bid_announcements_pre_1.txt --google_ai_studio_api_key_filepath data/sec/google_ai_studio_api_key.txt --sqlite3_db_file_path data/example.db
@@ -3602,7 +3606,10 @@ if __name__ == "__main__":
 
     # announcements_documents_master = master.getAnnouncementsDocumentsMaster()
     # db_operator.uploadDataToTable(data=announcements_documents_master, tablename="announcements_documents_master")
-
+    if False:
+        announcements_documents_file="source/check_html/use_claude/3_source_formatting/output/announcements_document_202602162218_updated.txt.zip"
+        announcements_documents_master = pd.read_csv(announcements_documents_file, sep="\t")
+        db_operator.uploadDataToTable(data=announcements_documents_master, tablename="announcements_documents_master")
 
     # db_operator.selectToTable(tablename="bid_announcements_pre")
     # db_operator.selectToTable(tablename="bid_announcements")
