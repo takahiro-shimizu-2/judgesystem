@@ -736,6 +736,10 @@ class DBOperator:
         raise NotImplementedError
 
     @abstractmethod
+    def createBidOrderersFromAnnouncements(self, bid_orderer_tablename, bid_announcements_tablename):
+        raise NotImplementedError
+
+    @abstractmethod
     def createBidRequirements(self, bid_requirements_tablename):
         raise NotImplementedError
 
@@ -917,6 +921,7 @@ class DBOperatorGCPVM(DBOperator):
         telephone string,
         fax string,
         mail string,
+
         publishDate string,
         docDistStart string,
         docDistEnd string,
@@ -924,11 +929,53 @@ class DBOperatorGCPVM(DBOperator):
         submissionEnd string,    
         bidStartDate string,
         bidEndDate string,
+
         doneOCR bool,
         remarks string, 
         createdDate string,
-        updatedDate string
+        updatedDate string,
+
+        orderer_id string
         )
+        """
+        self.client.query(sql).result()
+
+
+    def createBidOrderersFromAnnouncements(self, bid_orderer_tablename, bid_announcements_tablename):
+        sql = fr"""
+        create table `{self.project_id}.{self.dataset_name}.{bid_orderer_tablename}` as 
+        select
+        a.orderer_id,
+        row_number() over() as `no`,
+        a.name,
+        a.category,
+        a.address,
+        a.phone,
+        a.fax,
+        a.email,
+        a.departments,
+        a.announcementCount,
+        a.awardCount,
+        a.averageAmount,
+        a.lastAnnouncementDate
+        from (
+            select
+            orderer_id,
+            orderer_id as name,
+            'unknown' as category,
+            'unknown' as address,
+            'unknown' as phone,
+            'unknown' as fax,
+            'unknown' as email,
+            'unknown' as departments,
+            count(*) as announcementCount,
+            0 as awardCount,
+            0 as averageAmount,
+            min(updatedDate) as lastAnnouncementDate
+            from `{self.project_id}.{self.dataset_name}.{bid_announcements_tablename}`
+            group by
+            orderer_id
+        ) a
         """
         self.client.query(sql).result()
 
@@ -1060,7 +1107,9 @@ class DBOperatorGCPVM(DBOperator):
             pdfUrl5, pdfUrl5_type, document_id5,
             doneOCR,
             createdDate,
-            updatedDate
+            updatedDate,
+
+            orderer_id
         )
         WITH ordered AS (
             SELECT
@@ -1097,7 +1146,9 @@ class DBOperatorGCPVM(DBOperator):
 
             FALSE AS doneOCR,
             FORMAT_TIMESTAMP('%Y-%m-%d %H:%M:%S', CURRENT_TIMESTAMP()) AS createdDate,
-            FORMAT_TIMESTAMP('%Y-%m-%d %H:%M:%S', CURRENT_TIMESTAMP()) AS updatedDate
+            FORMAT_TIMESTAMP('%Y-%m-%d %H:%M:%S', CURRENT_TIMESTAMP()) AS updatedDate,
+
+            MAX(CASE WHEN o.rn = 1 THEN o.orderer_id END) AS orderer_id
         FROM ordered o
         WHERE NOT EXISTS (
             SELECT 1
@@ -1514,6 +1565,7 @@ class DBOperatorGCPVM(DBOperator):
                 a.subAgencyName,
                 a.workPlace,
                 a.pdfUrl,
+
                 STRUCT(
                     COALESCE(a.zipcode, 'dummy') AS postalCode,
                     COALESCE(a.address, 'dummy') AS address,
@@ -1523,6 +1575,7 @@ class DBOperatorGCPVM(DBOperator):
                     COALESCE(a.fax, 'dummy') AS fax,
                     COALESCE(a.mail, 'dummy') AS email
                 ) AS department,
+
                 a.publishDate,
                 a.docDistStart,
                 a.docDistEnd,
@@ -1533,13 +1586,15 @@ class DBOperatorGCPVM(DBOperator):
                 a.doneOCR,
                 a.remarks,
                 a.createdDate,
-                a.updatedDate
+                a.updatedDate,
+                a.orderer_id
             FROM {self.project_id}.{self.dataset_name}.bid_announcements a
+            left outer join {self.project_id}.{self.dataset_name}.bid_orderer b 
         )
         SELECT
         concat('ann-', b.announcement_no) AS id,
         b.announcement_no AS `no`,
-        concat('ord-', 1) AS ordererId,
+        b.orderer_id AS ordererId,
         COALESCE(b.workName, 'dummytitle') AS title,
         'dummy_cat' AS category,
         COALESCE(b.topAgencyName, 'dummy') AS organization,
@@ -1602,6 +1657,7 @@ class DBOperatorGCPVM(DBOperator):
             coalesce(anno.bidStartDate, 'dummy') AS bidStartDate,
             coalesce(anno.bidEndDate, 'dummy') AS bidEndDate,
             coalesce(anno.pdfUrl, 'https://example.com/') AS pdfUrl,
+            coalesce(anno.orderer_id, 'unknown') AS orderer_ud,
             
             1 as documents_id,
             'bid_documents' as documents_type,
@@ -1657,7 +1713,7 @@ class DBOperatorGCPVM(DBOperator):
         LPAD(CAST(evaluation_no AS STRING), 8, '0') AS evaluationNo,
         struct(
             concat('ann-', announcement_no) AS id,
-            concat('ord-', 1) AS ordererId,
+            orderer_id AS ordererId,
             workName AS title,
             'dummycat' AS category,
             topAgencyName AS organization,
@@ -1723,6 +1779,7 @@ class DBOperatorGCPVM(DBOperator):
         GROUP BY
         evaluation_no,
         announcement_no,
+        orderer_id,
         workName,
         topAgencyName,
         workPlace,
@@ -1827,22 +1884,23 @@ class DBOperatorGCPVM(DBOperator):
         CREATE OR REPLACE TABLE {self.project_id}.{self.dataset_name}.{tablename} AS
         with base as (
             select 
-            1 as id,
-            1 as `no`,
-            'dummy' as name,
-            'national' as category, 
-            'dummy' as address,
-            'dummy' as phone,
-            'dummy' as fax,
-            'dummy' as email,
-            'dummy' as departments,
-            10 as announcementCount,
-            10 as awardCount,
-            10 as averageAmount,
-            'dummy' as lastAnnouncementDate
+            orderer_id as id,
+            `no`,
+            name,
+            category, 
+            address,
+            phone,
+            fax,
+            email,
+            departments,
+            announcementCount,
+            awardCount,
+            averageAmount,
+            lastAnnouncementDate
+            from {self.project_id}.{self.dataset_name}.bid_orderer
         )
         select
-        concat('ord-', id) as id,
+        id,
         `no`,
         name,
         category,
@@ -2112,6 +2170,7 @@ class DBOperatorSQLITE3(DBOperator):
         telephone string,
         fax string,
         mail string,
+
         publishDate string,
         docDistStart string,
         docDistEnd string,
@@ -2119,11 +2178,53 @@ class DBOperatorSQLITE3(DBOperator):
         submissionEnd string,    
         bidStartDate string,
         bidEndDate string,
+
         doneOCR bool,
         remarks string, 
         createdDate string,
-        updatedDate string
+        updatedDate string,
+
+        orderer_id string
         )
+        """
+        self.cur.execute(sql)
+
+
+    def createBidOrderersFromAnnouncements(self, bid_orderer_tablename, bid_announcements_tablename):
+        sql = fr"""
+        create table {bid_orderer_tablename} as 
+        select
+        a.orderer_id,
+        row_number() over() as `no`,
+        a.name,
+        a.category,
+        a.address,
+        a.phone,
+        a.fax,
+        a.email,
+        a.departments,
+        a.announcementCount,
+        a.awardCount,
+        a.averageAmount,
+        a.lastAnnouncementDate
+        from (
+            select
+            orderer_id,
+            orderer_id as name,
+            'unknown' as category,
+            'unknown' as address,
+            'unknown' as phone,
+            'unknown' as fax,
+            'unknown' as email,
+            'unknown' as departments,
+            count(*) as announcementCount,
+            0 as awardCount,
+            0 as averageAmount,
+            min(updatedDate) as lastAnnouncementDate
+            from {bid_announcements_tablename}
+            group by
+            orderer_id
+        ) a
         """
         self.cur.execute(sql)
 
@@ -2270,7 +2371,9 @@ class DBOperatorSQLITE3(DBOperator):
 
             doneOCR,
             createdDate,
-            updatedDate
+            updatedDate,
+
+            orderer_id
         )
         SELECT
             o.announcement_id,
@@ -2294,7 +2397,9 @@ class DBOperatorSQLITE3(DBOperator):
 
             0 AS doneOCR,
             CURRENT_TIMESTAMP,
-            CURRENT_TIMESTAMP
+            CURRENT_TIMESTAMP,
+
+            MAX(CASE WHEN o.rn = 1 THEN o.orderer_id END) AS orderer_id
         FROM ordered o
         WHERE NOT EXISTS (
             SELECT 1
@@ -2944,7 +3049,7 @@ class BidJudgementSan:
         df_new = pd.read_csv(announcements_documents_file,sep="\t")
         df_new.head(6)
         col = "announcement_id"
-        df_new = df_new[df_new[col] <= 400000]
+        df_new = df_new[df_new[col] <= 300000]
         # df_new = df_new[df_new[col] >= 300143]
         df_new.head(6)
         db_operator.uploadDataToTable(data=df_new, tablename=tablename_bid_announcements_document_table, chunksize=5000)
@@ -3457,6 +3562,7 @@ class BidJudgementSan:
 
                 print(fr"Upload {tmp_result_judgement_table}")
                 db_operator.uploadDataToTable(data=result_judgement, tablename=tmp_result_judgement_table, chunksize=5000)
+                print(fr"Update {tablename_company_bid_judgement}")
                 db_operator.updateCompanyBidJudgement(
                     company_bid_judgement_tablename=tablename_company_bid_judgement, 
                     company_bid_judgement_tablename_for_update=tmp_result_judgement_table
@@ -3467,6 +3573,7 @@ class BidJudgementSan:
                 tmp_result_insufficient_requirements_master_table = "tmp_result_insufficient_requirements"
                 print(fr"Upload {tmp_result_insufficient_requirements_master_table}")
                 db_operator.uploadDataToTable(data=result_insufficient_requirements, tablename=tmp_result_insufficient_requirements_master_table, chunksize=5000)
+                print(fr"Update {tablename_insufficient_requirement_master}")
                 db_operator.updateInsufficientRequirements(
                     insufficient_requirements_tablename=tablename_insufficient_requirement_master, 
                     insufficient_requirements_tablename_for_update=tmp_result_insufficient_requirements_master_table
@@ -3477,6 +3584,7 @@ class BidJudgementSan:
                 tmp_result_sufficient_requirements_master_table = "tmp_result_sufficient_requirements"
                 print(fr"Upload {tmp_result_sufficient_requirements_master_table}")
                 db_operator.uploadDataToTable(data=result_sufficient_requirements, tablename=tmp_result_sufficient_requirements_master_table, chunksize=5000)
+                print(fr"Update {tablename_sufficient_requirement_master}")
                 db_operator.updateSufficientRequirements(
                     sufficient_requirements_tablename=tablename_sufficient_requirement_master, 
                     sufficient_requirements_tablename_for_update=tmp_result_sufficient_requirements_master_table
@@ -3624,6 +3732,7 @@ if __name__ == "__main__":
     # db_operator.selectToTable(tablename="sufficient_requirements")
     # db_operator.selectToTable(tablename="insufficient_requirements")
     # db_operator.selectToTable(tablename="company_bid_judgement")
+    # db_operator.selectToTable(tablename="bid_orderer")
     # db_operator.any_query(sql = "SELECT name FROM sqlite_master WHERE type='table'")
 
     # db_operator.any_query(sql = fr"SELECT table_name FROM `{bigquery_project_id}.{bigquery_dataset_name}.INFORMATION_SCHEMA.TABLES`")
@@ -3631,6 +3740,12 @@ if __name__ == "__main__":
 
     # backend 用意する用
     if False:
+        if not db_operator.ifTableExists(tablename="bid_orderer"):
+            db_operator.createBidOrderersFromAnnouncements(bid_orderer_tablename="bid_orderer", bid_announcements_tablename="bid_announcements")
+        else:
+            db_operator.dropTable("bid_orderer")
+            db_operator.createBidOrderersFromAnnouncements(bid_orderer_tablename="bid_orderer", bid_announcements_tablename="bid_announcements")
+
         db_operator.createBackendAnnouncements(tablename="backend_announcements")
         db_operator.createBackendEvaluations(tablename="backend_evaluations")
         db_operator.createBackendCompanies(tablename="backend_companies")
