@@ -1682,19 +1682,19 @@ class DBOperatorGCPVM(DBOperator):
             coalesce(anno.docDistEnd, 'unknown_expEndDate') AS docDistEnd,
             coalesce(anno.submissionStart, 'unknown_appStartDate') AS submissionStart,
             coalesce(anno.submissionEnd, 'unknown_appEndDate') AS submissionEnd,
-            coalesce(anno.bidStartDate, 'unkdnown_bidStartDate') AS bidStartDate,
-            coalesce(anno.bidEndDate, 'unkdnown_bidEndDate') AS bidEndDate,
+            coalesce(anno.bidStartDate, 'unknown_bidStartDate') AS bidStartDate,
+            coalesce(anno.bidEndDate, 'unknown_bidEndDate') AS bidEndDate,
             coalesce(anno.pdfUrl, 'https://example.com/') AS pdfUrl,
             coalesce(anno.orderer_id, 'unknown_orderer_id') AS orderer_id,
             
-            1 as documents_id,
-            'bid_documents' as documents_type,
-            '入札関連書' as documents_title,
-            'pdf' as documents_fileFormat,
-            25 as documents_pageCount,
-            'dummy' as documents_extractedAt,
-            'https://example.com/docs/ann-1/bid_documents.pdf' as documents_url,
-            '入札関連書...' as documents_content,
+            doc.documents_id,
+            doc.type,
+            doc.title,
+            doc.fileFormat,
+            doc.pageCount,
+            doc.extractedAt,
+            doc.url,
+            doc.content,
             
             eval.company_no,
             coalesce(comp.company_name, 'dummy') AS company_name,
@@ -1713,6 +1713,9 @@ class DBOperatorGCPVM(DBOperator):
 
             inner join {self.project_id}.{self.dataset_name}.bid_announcements anno
             on eval.announcement_no = anno.announcement_no
+
+            left outer join {self.project_id}.{self.dataset_name}.announcements_documents_master doc
+            on anno.announcement_no = doc.announcement_no
 
             inner join {self.project_id}.{self.dataset_name}.company_master comp
             on eval.company_no = comp.company_no
@@ -1770,15 +1773,17 @@ class DBOperatorGCPVM(DBOperator):
             10000 AS estimatedAmountMin,
             20000 AS estimatedAmountMax,
             pdfUrl AS pdfUrl,
-            struct(
-                concat('doc-',documents_id) as id,
-                documents_type as type,
-                documents_title as title,
-                documents_fileFormat as fileFormat,
-                documents_pageCount as pageCount,
-                documents_extractedAt as extractedAt,
-                documents_url as url,
-                documents_content as content
+            array_agg(
+                struct(
+                    documents_id as id,
+                    type as type,
+                    title as title,
+                    fileFormat as fileFormat,
+                    pageCount as pageCount,
+                    extractedAt as extractedAt,
+                    url as url,
+                    content as content
+                )
             ) as documents
         ) AS announcement,
         struct(
@@ -1836,15 +1841,6 @@ class DBOperatorGCPVM(DBOperator):
         bidStartDate,
         bidEndDate,
         pdfUrl,
-        
-        documents_id,
-        documents_type,
-        documents_title,
-        documents_fileFormat,
-        documents_pageCount,
-        documents_extractedAt,
-        documents_url,
-        documents_content,
         
         company_no,
         company_name,
