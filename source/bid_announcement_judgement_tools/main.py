@@ -1100,6 +1100,9 @@ class DBOperatorGCPVM(DBOperator):
         INSERT INTO `{self.project_id}.{self.dataset_name}.{bid_announcements_tablename}` (
             announcement_no,
             workName,
+
+            topAgencyName,
+
             pdfUrl, pdfUrl_type, document_id,
             pdfUrl2, pdfUrl2_type, document_id2,
             pdfUrl3, pdfUrl3_type, document_id3,
@@ -1123,6 +1126,8 @@ class DBOperatorGCPVM(DBOperator):
         SELECT
             o.announcement_id,
             MAX(CASE WHEN o.rn = 1 THEN o.title END) AS workName,
+
+            MAX(CASE WHEN o.rn = 1 THEN o.topAgencyName END) AS topAgencyName,
 
             MAX(CASE WHEN o.rn = 1 THEN o.url END) AS pdfUrl,
             MAX(CASE WHEN o.rn = 1 THEN o.type END) AS pdfUrl_type,
@@ -2403,6 +2408,8 @@ class DBOperatorSQLITE3(DBOperator):
             announcement_no,
             workName,
 
+            topAgencyName,
+
             pdfUrl, pdfUrl_type, document_id,
             pdfUrl2, pdfUrl2_type, document_id2,
             pdfUrl3, pdfUrl3_type, document_id3,
@@ -2418,6 +2425,8 @@ class DBOperatorSQLITE3(DBOperator):
         SELECT
             o.announcement_id,
             MAX(CASE WHEN o.rn = 1 THEN o.title END) AS workName,
+
+            MAX(CASE WHEN o.rn = 1 THEN o.topAgencyName END) AS topAgencyName,
 
             MAX(CASE WHEN o.rn = 1 THEN o.url END) AS pdfUrl,
             MAX(CASE WHEN o.rn = 1 THEN o.type END) AS pdfUrl_type,
@@ -3288,6 +3297,7 @@ class BidJudgementSan:
                 val_pre = db_operator.selectToTable(tablename=tablename_announcements)
                 print(val_pre)
 
+            print(fr"Update {tablename_announcements}")
             db_operator.updateAnnouncements(bid_announcements_tablename=tablename_announcements, bid_announcements_tablename_for_update=tmp_tablename_announcements)
 
         # 中間テーブル削除
@@ -3312,6 +3322,7 @@ class BidJudgementSan:
 
             print(fr"Upload {tmp_tablename_requirements}")
             db_operator.uploadDataToTable(data=df2, tablename=tmp_tablename_requirements, chunksize=5000)
+            print(fr"Update {tablename_requirements}")
             db_operator.updateRequirements(bid_requirements_tablename=tablename_requirements, bid_requirements_tablename_for_update=tmp_tablename_requirements)
 
         # 中間テーブル削除
