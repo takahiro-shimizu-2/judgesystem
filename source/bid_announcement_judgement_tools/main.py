@@ -1620,7 +1620,7 @@ class DBOperatorGCPVM(DBOperator):
         COALESCE(b.submissionEnd, 'unknown_submissionEnd') AS applicationEndDate,
         COALESCE(b.bidStartDate, 'unknown_bidStartDate') AS bidStartDate,
         COALESCE(b.bidEndDate, 'unknown_bidEndDate') AS bidEndDate,
-        'unknown_deadline' AS deadline,
+        COALESCE(b.bidEndDate, 'unknown_deadline') AS deadline,
 
 
         1 AS estimatedAmountMin,
