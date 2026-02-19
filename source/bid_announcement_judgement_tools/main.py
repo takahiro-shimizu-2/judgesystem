@@ -1608,6 +1608,7 @@ class DBOperatorGCPVM(DBOperator):
 
         COALESCE(b.topAgencyName, 'unknown_agency') AS organization,
         'unknown_category' AS category,
+        'unknown' as bidType,
         COALESCE(b.workPlace, 'unknown_workplace') AS workLocation,
 
         b.department,
