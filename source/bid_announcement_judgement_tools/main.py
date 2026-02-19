@@ -1630,7 +1630,7 @@ class DBOperatorGCPVM(DBOperator):
         10 AS actualAmount,
 
         concat('com-', 1) AS winningCompanyId,
-        'unknonw_wincomp' AS winningCompanyName,
+        'unknown_wincomp' AS winningCompanyName,
         ARRAY_AGG(
             STRUCT(
                 mc.name,
