@@ -1687,15 +1687,8 @@ class DBOperatorGCPVM(DBOperator):
             coalesce(anno.pdfUrl, 'https://example.com/') AS pdfUrl,
             coalesce(anno.orderer_id, 'unknown_orderer_id') AS orderer_id,
             
-            doc.document_id,
-            doc.type,
-            doc.title,
-            doc.fileFormat,
-            doc.pageCount,
-            doc.extractedAt,
-            doc.url,
-            doc.content,
-            
+            doc.documents,
+
             eval.company_no,
             coalesce(comp.company_name, 'dummy') AS company_name,
             coalesce(comp.company_address, 'dummy') AS company_address,
@@ -1714,14 +1707,11 @@ class DBOperatorGCPVM(DBOperator):
             inner join {self.project_id}.{self.dataset_name}.bid_announcements anno
             on eval.announcement_no = anno.announcement_no
 
-            left outer join {self.project_id}.{self.dataset_name}.announcements_documents_master doc
-            on anno.announcement_no = doc.announcement_id
-
             LEFT OUTER JOIN (
                 SELECT
                     announcement_id,
                     ARRAY_AGG(
-                        STRUCT(documents_id, type, title, fileFormat, pageCount, extractedAt, url, content)
+                        STRUCT(document_id, type, title, fileFormat, pageCount, extractedAt, url, content)
                     ) AS documents
                 FROM (
                     SELECT DISTINCT
@@ -1854,7 +1844,9 @@ class DBOperatorGCPVM(DBOperator):
         bidStartDate,
         bidEndDate,
         pdfUrl,
-        
+       
+        documents,
+
         company_no,
         company_name,
         company_address,
