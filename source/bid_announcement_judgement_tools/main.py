@@ -1579,7 +1579,7 @@ class DBOperatorGCPVM(DBOperator):
                     COALESCE(a.zipcode, 'unknown_zipcode') AS postalCode,
                     COALESCE(a.address, 'unknown_address') AS address,
                     COALESCE(a.department, 'unknown_department') AS name,
-                    COALESCE(a.assigneeName, 'unkdnown_assigneeName') AS contactPerson,
+                    COALESCE(a.assigneeName, 'unknown_assigneeName') AS contactPerson,
                     COALESCE(a.telephone, 'unknown_telephone') AS phone,
                     COALESCE(a.fax, 'unknown_fax') AS fax,
                     COALESCE(a.mail, 'unknown_mail') AS email
