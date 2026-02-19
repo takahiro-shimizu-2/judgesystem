@@ -1717,6 +1717,29 @@ class DBOperatorGCPVM(DBOperator):
             left outer join {self.project_id}.{self.dataset_name}.announcements_documents_master doc
             on anno.announcement_no = doc.announcement_id
 
+            LEFT OUTER JOIN (
+                SELECT
+                    announcement_id,
+                    ARRAY_AGG(
+                        STRUCT(documents_id, type, title, fileFormat, pageCount, extractedAt, url, content)
+                    ) AS documents
+                FROM (
+                    SELECT DISTINCT
+                    announcement_id,
+                    document_id,
+                    type,
+                    title,
+                    fileFormat,
+                    pageCount,
+                    extractedAt,
+                    url,
+                    content
+                    FROM {self.project_id}.{self.dataset_name}.announcements_documents_master
+                )
+                GROUP BY announcement_id
+            ) doc
+            ON anno.announcement_no = doc.announcement_id
+            
             inner join {self.project_id}.{self.dataset_name}.company_master comp
             on eval.company_no = comp.company_no
 
@@ -1773,18 +1796,7 @@ class DBOperatorGCPVM(DBOperator):
             10000 AS estimatedAmountMin,
             20000 AS estimatedAmountMax,
             pdfUrl AS pdfUrl,
-            array_agg(
-                distinct struct(
-                    document_id as id,
-                    type as type,
-                    title as title,
-                    fileFormat as fileFormat,
-                    pageCount as pageCount,
-                    extractedAt as extractedAt,
-                    url as url,
-                    content as content
-                )
-            ) as documents
+            documents
         ) AS announcement,
         struct(
             concat('com-', company_no) AS id,
@@ -1799,7 +1811,7 @@ class DBOperatorGCPVM(DBOperator):
             office_address AS address
         ) AS branch,
         array_agg(
-            distinct struct(
+            struct(
                 concat('req-', requirement_no) AS id,
                 requirement_type AS category,
                 requirement_text AS name,
