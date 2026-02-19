@@ -1687,7 +1687,7 @@ class DBOperatorGCPVM(DBOperator):
             coalesce(anno.pdfUrl, 'https://example.com/') AS pdfUrl,
             coalesce(anno.orderer_id, 'unknown_orderer_id') AS orderer_id,
             
-            doc.documents_id,
+            doc.document_id,
             doc.type,
             doc.title,
             doc.fileFormat,
@@ -1715,7 +1715,7 @@ class DBOperatorGCPVM(DBOperator):
             on eval.announcement_no = anno.announcement_no
 
             left outer join {self.project_id}.{self.dataset_name}.announcements_documents_master doc
-            on anno.announcement_no = doc.announcement_no
+            on anno.announcement_no = doc.announcement_id
 
             inner join {self.project_id}.{self.dataset_name}.company_master comp
             on eval.company_no = comp.company_no
@@ -1774,8 +1774,8 @@ class DBOperatorGCPVM(DBOperator):
             20000 AS estimatedAmountMax,
             pdfUrl AS pdfUrl,
             array_agg(
-                struct(
-                    documents_id as id,
+                distinct struct(
+                    document_id as id,
                     type as type,
                     title as title,
                     fileFormat as fileFormat,
@@ -1799,7 +1799,7 @@ class DBOperatorGCPVM(DBOperator):
             office_address AS address
         ) AS branch,
         array_agg(
-            struct(
+            distinct struct(
                 concat('req-', requirement_no) AS id,
                 requirement_type AS category,
                 requirement_text AS name,
@@ -1813,6 +1813,7 @@ class DBOperatorGCPVM(DBOperator):
         'judgement' AS currentStep,
         coalesce(updatedDate, 'dummy') AS evaluatedAt
         FROM base
+
         GROUP BY
         evaluation_no,
         announcement_no,
