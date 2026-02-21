@@ -351,7 +351,7 @@ class OCRutils:
         {
         "工事場所": "",
         "入札手続等担当部局": {
-            "郵便番号\": "",
+            "郵便番号": "",
             "住所": "",
             "担当部署名": "",
             "担当者名": "",
@@ -359,6 +359,7 @@ class OCRutils:
             "FAX番号": "",
             "メールアドレス": ""
         },
+        "公告日" : "",
         "入札説明書の交付期間": {
             "開始日": "",
             "終了日": ""
@@ -453,6 +454,10 @@ class OCRutils:
             new_json["telephone"] = tmp_json.get("電話番号", None)
             new_json["fax"] = tmp_json.get("FAX番号", None)
             new_json["mail"] = tmp_json.get("メールアドレス", None)
+
+        tmp_val = json_value.get("公告日", None)
+        if isinstance(tmp_json, str):
+            new_json["publishdate"] = _modifyDate(datestr=tmp_val)
 
         tmp_json = json_value.get("入札説明書の交付期間", None)
         if isinstance(tmp_json, dict):
@@ -1179,6 +1184,7 @@ class DBOperatorGCPVM(DBOperator):
             target.telephone = source.telephone,
             target.fax = source.fax,
             target.mail = source.mail,
+            target.publishdate = source.publishdate,
             target.docdiststart = source.docdiststart,
             target.docdistend = source.docdistend,
             target.submissionstart = source.submissionstart,
@@ -2509,7 +2515,7 @@ class DBOperatorSQLITE3(DBOperator):
         telephone,
         fax,
         mail,
-        NULL,
+        publishdate,
         docdiststart,
         docdistend,
         submissionstart,
@@ -2538,7 +2544,7 @@ class DBOperatorSQLITE3(DBOperator):
             telephone = excluded.telephone,
             fax = excluded.fax,
             mail = excluded.mail,
-            publishDate = {bid_announcements_tablename}.publishDate,
+            publishDate = excluded.publishDate,
             docdiststart = excluded.docdiststart,
             docdistend = excluded.docdistend,
             submissionstart = excluded.submissionstart,
@@ -3207,6 +3213,7 @@ class BidJudgementSan:
                         "入札手続等担当部局___電話番号" : dict1["入札手続等担当部局"]["電話番号"],
                         "入札手続等担当部局___FAX番号" : dict1["入札手続等担当部局"]["FAX番号"],
                         "入札手続等担当部局___メールアドレス" : dict1["入札手続等担当部局"]["メールアドレス"],
+                        "公告日" : dict1["公告日"],
                         "入札説明書の交付期間___開始日" : dict1["入札説明書の交付期間"]["開始日"],
                         "入札説明書の交付期間___終了日" : dict1["入札説明書の交付期間"]["終了日"],
                         "申請書及び競争参加資格確認資料の提出期限___開始日" : dict1["申請書及び競争参加資格確認資料の提出期限"]["開始日"],
@@ -3231,6 +3238,7 @@ class BidJudgementSan:
                             "FAX番号": dict2["入札手続等担当部局___FAX番号"].values[0],
                             "メールアドレス": dict2["入札手続等担当部局___メールアドレス"].values[0]
                         },
+                        "公告日": dict2["公告日"].values[0],
                         "入札説明書の交付期間": {
                             "開始日": dict2["入札説明書の交付期間___開始日"].values[0],
                             "終了日": dict2["入札説明書の交付期間___終了日"].values[0]
@@ -3258,7 +3266,7 @@ class BidJudgementSan:
                     requirement_texts = ocr_utils.getRequirementText(doc_data=doc_data)
                     dict2 = {
                         "document_id" : document_id,
-                        "資格・条件" : requirement_texts["資格・条件"]
+                        "資格・条件" : str(requirement_texts["資格・条件"])
                     }
                     # tmpdict2 = pd.DataFrame(dict2, index=[0])
                     tmpdict2 = pd.DataFrame([dict2])
