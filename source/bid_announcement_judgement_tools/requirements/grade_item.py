@@ -323,7 +323,7 @@ def checkDefault(requiredItems, officeLicenses, constructionMap, agencyMap, requ
         areaLicenses = []
         for lic in officeLicenses:
             agInfo = agencyMap.get(lic["agency_no"])
-            if not agInfo or not agInfo["gency_area"]:
+            if not agInfo or not agInfo["agency_area"]:
                 continue
 
             areaMatched = False
