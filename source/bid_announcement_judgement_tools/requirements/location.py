@@ -315,6 +315,6 @@ def checkLocationRequirement(
             matchDescription = "所在地要件：条件を満たしています"
         return { "is_ok": True, "reason": matchDescription }
     elif not prefectureMatch:
-        return {"is_ok": False, "reason": "所在地要件：要求地域(" + prefectures.join("・") + ")に拠点がありません"}
+        return {"is_ok": False, "reason": "所在地要件：要求地域(" + "・".join(prefectures) + ")に拠点がありません"}
     else:
-        return {"is_ok": False, "reason": "所在地要件：要求拠点種別(" + officetypes.join("・") + ")の条件を満たしていません"}
+        return {"is_ok": False, "reason": "所在地要件：要求拠点種別(" + "・".join(officetypes) + ")の条件を満たしていません"}
