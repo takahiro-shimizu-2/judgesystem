@@ -3267,9 +3267,14 @@ class BidJudgementSan:
                 # requirements
                 if document_id in df_req["document_id"].values:
                     dict2 = df_req[df_req["document_id"]==document_id]
-                    requirement_texts = {
-                        "資格・条件": dict2["資格・条件"].apply(ast.literal_eval).values[0]
-                    }
+                    if dict2["資格・条件"].isna().all():
+                        requirement_texts = {
+                            "資格・条件": ["Missing requirements."]
+                        }
+                    else:
+                        requirement_texts = {
+                            "資格・条件": dict2["資格・条件"].apply(ast.literal_eval).values[0]
+                        }
                 else:
                     print(document_id)
                     if doc_data is None:
