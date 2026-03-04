@@ -3468,8 +3468,8 @@ class BidJudgementSan:
             result_sufficient_requirements_list = []
             result_insufficient_requirements_list = []
             for index, row1 in tqdm(df.iterrows(), total=len(df)):
-                print(fr"announcement_no={announcement_no}")
                 announcement_no = row1["announcement_no"]
+                print(fr"announcement_no={announcement_no}")
                 company_no = row1["company_no"]
                 office_no = row1["office_no"]
                 tmp_result_judgement_list = []
