@@ -3,6 +3,7 @@
 import re
 import pandas as pd
 import argparse
+import time
 
 #######################################
 # 業種・等級要件の判定
@@ -325,6 +326,11 @@ def checkDefault(requiredItems, officeLicenses, constructionMap, agencyMap, requ
             agInfo = agencyMap.get(lic["agency_no"])
             if not agInfo or not agInfo["agency_area"]:
                 continue
+
+            if not isinstance(agInfo["agency_area"], str):
+                print(fr"agInfo['agency_area'] not str : {agInfo["agency_area"]}")
+                agInfo["agency_area"] = str(agInfo["agency_area"])
+                time.sleep(5)
 
             areaMatched = False
             for area in requiredAreas:
