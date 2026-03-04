@@ -3201,8 +3201,6 @@ class BidJudgementSan:
             pdfurl = row["pdfUrl"]
             document_id = row["document_id"]
 
-            time.sleep(1)
-
             try:
                 # announcements
                 doc_data = None
