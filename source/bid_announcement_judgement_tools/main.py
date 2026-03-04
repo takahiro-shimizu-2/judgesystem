@@ -456,8 +456,11 @@ class OCRutils:
             new_json["mail"] = tmp_json.get("メールアドレス", None)
 
         tmp_val = json_value.get("公告日", None)
-        if isinstance(tmp_json, str):
+        if isinstance(tmp_val, str):
             new_json["publishdate"] = _modifyDate(datestr=tmp_val)
+        else:
+            new_json["publishdate"] = None
+
 
         tmp_json = json_value.get("入札説明書の交付期間", None)
         if isinstance(tmp_json, dict):
