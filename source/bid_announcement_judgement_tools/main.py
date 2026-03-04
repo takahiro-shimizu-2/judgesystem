@@ -3103,10 +3103,18 @@ class BidJudgementSan:
 
 
 
-        df_new = pd.read_csv(announcements_documents_file,sep="\t")
-        df_new.head(6)
-        col = "announcement_id"
-        df_new = df_new[df_new[col] <= 300000]
+        if True:
+            announcements_documents_file = 'source/check_html/use_claude/3_source_formatting/output/announcements_document_202603031408_merged_updated.txt'
+            df_new = pd.read_csv(announcements_documents_file,sep="\t")
+            df_target = pd.read_csv("source/check_html/use_claude/3_source_formatting/output/announcements_document_202602162218_date_df_target_did.txt", sep="\t")
+            announcement_ids = df_new.loc[df_new["document_id"].isin(df_target["document_id"]), "announcement_id"]
+            df_new = df_new[df_new["announcement_id"].isin(announcement_ids)]
+            df_new = df_new.reset_index(drop=True)
+        else:
+            df_new = pd.read_csv(announcements_documents_file,sep="\t")
+            df_new.head(6)
+            col = "announcement_id"
+            df_new = df_new[df_new[col] <= 300000]
         # df_new = df_new[df_new[col] >= 300143]
         df_new.head(6)
         db_operator.uploadDataToTable(data=df_new, tablename=tablename_bid_announcements_document_table, chunksize=5000)
@@ -3198,34 +3206,7 @@ class BidJudgementSan:
             try:
                 # announcements
                 doc_data = None
-                if not document_id in df_ann["document_id"].values:
-                    print(document_id)
-                    time.sleep(0.5)
-                    doc_data = ocr_utils.getPDFDataFromUrl(pdfurl)
-                    dict1 = ocr_utils.getJsonFromDocData(doc_data=doc_data)
-                    dict2 = {
-                        "document_id" : document_id,
-                        "工事場所" : dict1["工事場所"],
-                        "入札手続等担当部局___郵便番号" : dict1["入札手続等担当部局"]["郵便番号"],
-                        "入札手続等担当部局___住所" : dict1["入札手続等担当部局"]["住所"],
-                        "入札手続等担当部局___担当部署名" : dict1["入札手続等担当部局"]["担当部署名"],
-                        "入札手続等担当部局___担当者名" : dict1["入札手続等担当部局"]["担当者名"],
-                        "入札手続等担当部局___電話番号" : dict1["入札手続等担当部局"]["電話番号"],
-                        "入札手続等担当部局___FAX番号" : dict1["入札手続等担当部局"]["FAX番号"],
-                        "入札手続等担当部局___メールアドレス" : dict1["入札手続等担当部局"]["メールアドレス"],
-                        "公告日" : dict1["公告日"],
-                        "入札説明書の交付期間___開始日" : dict1["入札説明書の交付期間"]["開始日"],
-                        "入札説明書の交付期間___終了日" : dict1["入札説明書の交付期間"]["終了日"],
-                        "申請書及び競争参加資格確認資料の提出期限___開始日" : dict1["申請書及び競争参加資格確認資料の提出期限"]["開始日"],
-                        "申請書及び競争参加資格確認資料の提出期限___終了日" : dict1["申請書及び競争参加資格確認資料の提出期限"]["終了日"],
-                        "入札書の提出期間___開始日" : dict1["入札書の提出期間"]["開始日"],
-                        "入札書の提出期間___終了日" : dict1["入札書の提出期間"]["終了日"]
-                    }
-                    tmpdict2 = pd.DataFrame(dict2, index=[0])
-                    df_ann = pd.concat([df_ann, tmpdict2], axis=0, ignore_index=True)
-                    df_ann.to_csv(output_path_ann, sep="\t", index=False)
-                    df_ann.to_csv(output_path_ann_zip, sep="\t", compression="zip", index=False)
-                else:
+                if document_id in df_ann["document_id"].values:
                     dict2 = df_ann[df_ann["document_id"]==document_id]
                     dict1 = {
                         "工事場所": dict2["工事場所"].values[0],
@@ -3252,12 +3233,44 @@ class BidJudgementSan:
                             "終了日": dict2["入札書の提出期間___終了日"].values[0]
                         }
                     }
+                else:
+                    print(document_id)
+                    time.sleep(0.5)
+                    doc_data = ocr_utils.getPDFDataFromUrl(pdfurl)
+                    dict1 = ocr_utils.getJsonFromDocData(doc_data=doc_data)
+                    dict2 = {
+                        "document_id" : document_id,
+                        "工事場所" : dict1["工事場所"],
+                        "入札手続等担当部局___郵便番号" : dict1["入札手続等担当部局"]["郵便番号"],
+                        "入札手続等担当部局___住所" : dict1["入札手続等担当部局"]["住所"],
+                        "入札手続等担当部局___担当部署名" : dict1["入札手続等担当部局"]["担当部署名"],
+                        "入札手続等担当部局___担当者名" : dict1["入札手続等担当部局"]["担当者名"],
+                        "入札手続等担当部局___電話番号" : dict1["入札手続等担当部局"]["電話番号"],
+                        "入札手続等担当部局___FAX番号" : dict1["入札手続等担当部局"]["FAX番号"],
+                        "入札手続等担当部局___メールアドレス" : dict1["入札手続等担当部局"]["メールアドレス"],
+                        "公告日" : dict1["公告日"],
+                        "入札説明書の交付期間___開始日" : dict1["入札説明書の交付期間"]["開始日"],
+                        "入札説明書の交付期間___終了日" : dict1["入札説明書の交付期間"]["終了日"],
+                        "申請書及び競争参加資格確認資料の提出期限___開始日" : dict1["申請書及び競争参加資格確認資料の提出期限"]["開始日"],
+                        "申請書及び競争参加資格確認資料の提出期限___終了日" : dict1["申請書及び競争参加資格確認資料の提出期限"]["終了日"],
+                        "入札書の提出期間___開始日" : dict1["入札書の提出期間"]["開始日"],
+                        "入札書の提出期間___終了日" : dict1["入札書の提出期間"]["終了日"]
+                    }
+                    tmpdict2 = pd.DataFrame(dict2, index=[0])
+                    #df_ann = pd.concat([df_ann, tmpdict2], axis=0, ignore_index=True)
+                    #df_ann.to_csv(output_path_ann, sep="\t", index=False)
+                    #df_ann.to_csv(output_path_ann_zip, sep="\t", compression="zip", index=False)
                 dict1["announcement_no"] = announcement_no
                 new_json = ocr_utils.convertJson(json_value=dict1)
 
 
                 # requirements
-                if not document_id in df_req["document_id"].values:
+                if document_id in df_req["document_id"].values:
+                    dict2 = df_req[df_req["document_id"]==document_id]
+                    requirement_texts = {
+                        "資格・条件": dict2["資格・条件"].apply(ast.literal_eval).values[0]
+                    }
+                else:
                     print(document_id)
                     if doc_data is None:
                         doc_data = ocr_utils.getPDFDataFromUrl(pdfurl)
@@ -3270,14 +3283,9 @@ class BidJudgementSan:
                     }
                     # tmpdict2 = pd.DataFrame(dict2, index=[0])
                     tmpdict2 = pd.DataFrame([dict2])
-                    df_req = pd.concat([df_req, tmpdict2], axis=0, ignore_index=True)
-                    df_req.to_csv(output_path_req, sep="\t", index=False)
-                    df_req.to_csv(output_path_req_zip, sep="\t", compression="zip", index=False)
-                else:
-                    dict2 = df_req[df_req["document_id"]==document_id]
-                    requirement_texts = {
-                        "資格・条件": dict2["資格・条件"].apply(ast.literal_eval).values[0]
-                    }
+                    #df_req = pd.concat([df_req, tmpdict2], axis=0, ignore_index=True)
+                    #df_req.to_csv(output_path_req, sep="\t", index=False)
+                    #df_req.to_csv(output_path_req_zip, sep="\t", compression="zip", index=False)
                 requirement_texts["announcement_no"] = announcement_no
                 dic = ocr_utils.convertRequirementTextDict(requirement_texts=requirement_texts)
 
