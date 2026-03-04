@@ -82,6 +82,7 @@ from google.genai import types
 import httpx
 import requests
 import ast
+from tqdm import tqdm
 
 try:
     from google.cloud import bigquery
@@ -3458,12 +3459,16 @@ class BidJudgementSan:
         
         # 部分的に(chunk_sizeごとに)実行。
         chunk_size = 1000
+        # req_df はひとまず一括取得
+        req_df0 = db_operator.selectToTable(tablename=fr"{tablename_requirements}")
         for start in range(0, len(df0), chunk_size):
+            print(fr"start : {start}")
             df = df0.iloc[start:start+chunk_size]
             result_judgement_list = []
             result_sufficient_requirements_list = []
             result_insufficient_requirements_list = []
-            for index, row1 in df.iterrows():
+            for index, row1 in tqdm(df.iterrows(), total=len(df)):
+                print(fr"announcement_no={announcement_no}")
                 announcement_no = row1["announcement_no"]
                 company_no = row1["company_no"]
                 office_no = row1["office_no"]
@@ -3473,9 +3478,10 @@ class BidJudgementSan:
                     company_no = int(df["company_no"][0])
                     office_no = int(df["office_no"][0])
 
-                req_df = db_operator.selectToTable(tablename=fr"{tablename_requirements}", where_clause=fr"where announcement_no = {announcement_no}")
+                # req_df = db_operator.selectToTable(tablename=fr"{tablename_requirements}", where_clause=fr"where announcement_no = {announcement_no}")
+                req_df = req_df0[req_df0["announcement_no"]==announcement_no]
                 if req_df.shape[0] == 0:
-                    print(fr"announcement_no={announcement_no}: No requirement found. Skip anyway.")
+                    print(fr"   announcement_no={announcement_no}: No requirement found. Skip anyway.")
                     continue
 
                 for jndex, row2 in req_df.iterrows():
