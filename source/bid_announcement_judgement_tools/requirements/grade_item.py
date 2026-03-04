@@ -330,7 +330,7 @@ def checkDefault(requiredItems, officeLicenses, constructionMap, agencyMap, requ
             if not isinstance(agInfo["agency_area"], str):
                 print(fr"agInfo['agency_area'] not str : {agInfo["agency_area"]}")
                 agInfo["agency_area"] = str(agInfo["agency_area"])
-                time.sleep(5)
+                # time.sleep(5)
 
             areaMatched = False
             for area in requiredAreas:

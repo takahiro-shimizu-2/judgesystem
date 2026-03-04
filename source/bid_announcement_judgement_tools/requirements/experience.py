@@ -138,8 +138,8 @@ def extractExperienceConditions(text):
             conditions["fiscalYearFrom"] = pd.Timestamp(year=fiscalYear, month=4, day=1)
     # 西暦年度
     elif yearMatch := re.search(r"(\d{4})\s*年度以降", text):
-        year = int(yearMatch[1])
-        conditions["yearFrom"] = year
+        fiscalYear = int(yearMatch[1])
+        conditions["yearFrom"] = fiscalYear
         # 4月1日開始
         conditions["fiscalYearFrom"] = pd.Timestamp(year=fiscalYear, month=4, day=1)
     
