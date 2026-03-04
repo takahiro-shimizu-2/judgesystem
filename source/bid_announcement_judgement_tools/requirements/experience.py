@@ -162,14 +162,14 @@ def extractExperienceConditions(text):
     if jvMatch:
         conditions["minJvRatio"] = float(jvMatch[1])
     elif "出資比率が20%以上" in lowerText:
-        conditions.minJvRatio = 20
+        conditions["minJvRatio"] = 20
     elif "出資比率が" in lowerText and "%以上" in lowerText:
         # numMatch = lowerText.match(/出資比率が(\d+(?:\.\d+)?)%以上/)
         numMatch = re.search(r"出資比率が(\d+(?:\.\d+)?)%以上", lowerText)
         if numMatch:
-            conditions.minJvRatio = float(numMatch[1])
+            conditions["minJvRatio"] = float(numMatch[1])
         elif "共同企業体" in lowerText or "jv" in lowerText:
-            conditions.minJvRatio = 20 # よくある閾値として仮に20
+            conditions["minJvRatio"] = 20 # よくある閾値として仮に20
 
 
     # 4. 発注機関ごとの点数条件を抽出
