@@ -3197,10 +3197,10 @@ class BidJudgementSan:
         all_requirement_texts = []
         # Processing OCR for announcement_no=300144...
         # 00003_2025_0204a
-        for index, row in df1.iterrows():
+        for index, row in tqdm(df1.iterrows(), total=len(df1)):
             # row = df1.loc[index]
             announcement_no = row["announcement_no"]
-            print(f"Processing OCR for announcement_no={announcement_no}...")
+            # print(f"Processing OCR for announcement_no={announcement_no}...")
 
             pdfurl = row["pdfUrl"]
             document_id = row["document_id"]
