@@ -63,16 +63,33 @@ app.get("/api/announcements", async (req, res) => {
   const query = `select * from ${prefix}backend_announcements`;
 
   try{
-    const [rows] = await bigquery.query({ query });
-    res.set("Cache-Control", "public, max-age=1800");
-    res.json(rows);
-
-    // Cache-Control でとりあえずキャッシュ。
-    // キャッシュが使われる条件は次の 2 つだけ。
-    //    同じ URL（パス＋クエリパラメータ）であること
-    //    TTL（max-age）がまだ切れていないこと
-    // max-age は秒。ひとまず1日。24 * 60 * 60
-    
+      // ヘッダー設定
+      res.setHeader("Content-Type", "application/json");
+      res.setHeader("Cache-Control", "public, max-age=1800");
+      // JSONの配列開始
+      res.write("[");
+      let firstRow = true;
+      // BigQueryのストリーミング
+      const stream = bigquery.createQueryStream({ query });
+      stream
+        .on("data", (row) => {
+          // 2行目以降はカンマを追加
+          if (!firstRow) {
+            res.write(",");
+          }
+          res.write(JSON.stringify(row));
+          firstRow = false;
+        })
+        .on("error", (err) => {
+          console.error("ERROR in /api/evaluations stream:", err);
+          // ストリーム途中のエラーは完全なエラーレスポンスを返せない
+          res.end();
+        })
+        .on("end", () => {
+          // JSONの配列終了
+          res.write("]");
+          res.end();
+        });
   } catch(err){
     console.error("ERROR in /api/announcements:", err);
     res.status(500).json({ error: "Internal Server Error" });
@@ -98,9 +115,33 @@ app.get("/api/evaluations", async (req, res) => {
   const query = `select * from ${prefix}backend_evaluations`;
 
   try{
-    const [rows] = await bigquery.query({ query });
-    res.set("Cache-Control", "public, max-age=1800");
-    res.json(rows);
+      // ヘッダー設定
+      res.setHeader("Content-Type", "application/json");
+      res.setHeader("Cache-Control", "public, max-age=1800");
+      // JSONの配列開始
+      res.write("[");
+      let firstRow = true;
+      // BigQueryのストリーミング
+      const stream = bigquery.createQueryStream({ query });
+      stream
+        .on("data", (row) => {
+          // 2行目以降はカンマを追加
+          if (!firstRow) {
+            res.write(",");
+          }
+          res.write(JSON.stringify(row));
+          firstRow = false;
+        })
+        .on("error", (err) => {
+          console.error("ERROR in /api/evaluations stream:", err);
+          // ストリーム途中のエラーは完全なエラーレスポンスを返せない
+          res.end();
+        })
+        .on("end", () => {
+          // JSONの配列終了
+          res.write("]");
+          res.end();
+        });
   } catch(err){
     console.error("ERROR in /api/evaluations:", err);
     res.status(500).json({ error: "Internal Server Error" });
@@ -125,9 +166,33 @@ app.get("/api/companies", async (req, res) => {
   const query = `select * from ${prefix}backend_companies`;
   
   try{
-    const [rows] = await bigquery.query({ query });
-    res.set("Cache-Control", "public, max-age=1800");
-    res.json(rows);
+      // ヘッダー設定
+      res.setHeader("Content-Type", "application/json");
+      res.setHeader("Cache-Control", "public, max-age=1800");
+      // JSONの配列開始
+      res.write("[");
+      let firstRow = true;
+      // BigQueryのストリーミング
+      const stream = bigquery.createQueryStream({ query });
+      stream
+        .on("data", (row) => {
+          // 2行目以降はカンマを追加
+          if (!firstRow) {
+            res.write(",");
+          }
+          res.write(JSON.stringify(row));
+          firstRow = false;
+        })
+        .on("error", (err) => {
+          console.error("ERROR in /api/evaluations stream:", err);
+          // ストリーム途中のエラーは完全なエラーレスポンスを返せない
+          res.end();
+        })
+        .on("end", () => {
+          // JSONの配列終了
+          res.write("]");
+          res.end();
+        });
   } catch(err){
     console.error("ERROR in /api/companies:", err);
     res.status(500).json({ error: "Internal Server Error" });
@@ -152,9 +217,33 @@ app.get("/api/orderers", async (req, res) => {
   const query = `select * from ${prefix}backend_orderers`;
   
   try{
-    const [rows] = await bigquery.query({ query });
-    res.set("Cache-Control", "public, max-age=1800");
-    res.json(rows);
+      // ヘッダー設定
+      res.setHeader("Content-Type", "application/json");
+      res.setHeader("Cache-Control", "public, max-age=1800");
+      // JSONの配列開始
+      res.write("[");
+      let firstRow = true;
+      // BigQueryのストリーミング
+      const stream = bigquery.createQueryStream({ query });
+      stream
+        .on("data", (row) => {
+          // 2行目以降はカンマを追加
+          if (!firstRow) {
+            res.write(",");
+          }
+          res.write(JSON.stringify(row));
+          firstRow = false;
+        })
+        .on("error", (err) => {
+          console.error("ERROR in /api/evaluations stream:", err);
+          // ストリーム途中のエラーは完全なエラーレスポンスを返せない
+          res.end();
+        })
+        .on("end", () => {
+          // JSONの配列終了
+          res.write("]");
+          res.end();
+        });
   } catch(err){
     console.error("ERROR in /api/orderers:", err);
     res.status(500).json({ error: "Internal Server Error" });
@@ -179,9 +268,33 @@ app.get("/api/partners", async (req, res) => {
   const query = `select * from ${prefix}backend_partners`;
 
   try{
-    const [rows] = await bigquery.query({ query });
-    res.set("Cache-Control", "public, max-age=1800");
-    res.json(rows);
+      // ヘッダー設定
+      res.setHeader("Content-Type", "application/json");
+      res.setHeader("Cache-Control", "public, max-age=1800");
+      // JSONの配列開始
+      res.write("[");
+      let firstRow = true;
+      // BigQueryのストリーミング
+      const stream = bigquery.createQueryStream({ query });
+      stream
+        .on("data", (row) => {
+          // 2行目以降はカンマを追加
+          if (!firstRow) {
+            res.write(",");
+          }
+          res.write(JSON.stringify(row));
+          firstRow = false;
+        })
+        .on("error", (err) => {
+          console.error("ERROR in /api/evaluations stream:", err);
+          // ストリーム途中のエラーは完全なエラーレスポンスを返せない
+          res.end();
+        })
+        .on("end", () => {
+          // JSONの配列終了
+          res.write("]");
+          res.end();
+        });
   } catch(err){
     console.error("ERROR in /api/partners:", err);
     res.status(500).json({ error: "Internal Server Error" });
