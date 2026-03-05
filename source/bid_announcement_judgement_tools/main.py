@@ -944,7 +944,9 @@ class DBOperatorGCPVM(DBOperator):
         createdDate string,
         updatedDate string,
 
-        orderer_id string
+        orderer_id string,
+        category string,
+        bidType string
         )
         """
         self.client.query(sql).result()
@@ -1121,7 +1123,9 @@ class DBOperatorGCPVM(DBOperator):
             createdDate,
             updatedDate,
 
-            orderer_id
+            orderer_id,
+            category,
+            bidType
         )
         WITH ordered AS (
             SELECT
@@ -1162,7 +1166,9 @@ class DBOperatorGCPVM(DBOperator):
             FORMAT_TIMESTAMP('%Y-%m-%d %H:%M:%S', CURRENT_TIMESTAMP()) AS createdDate,
             FORMAT_TIMESTAMP('%Y-%m-%d %H:%M:%S', CURRENT_TIMESTAMP()) AS updatedDate,
 
-            MAX(CASE WHEN o.rn = 1 THEN o.orderer_id END) AS orderer_id
+            MAX(CASE WHEN o.rn = 1 THEN o.orderer_id END) AS orderer_id,
+            MAX(CASE WHEN o.rn = 1 THEN o.category END) AS category,
+            MAX(CASE WHEN o.rn = 1 THEN o.bidType END) AS bidType
         FROM ordered o
         WHERE NOT EXISTS (
             SELECT 1
@@ -1578,9 +1584,14 @@ class DBOperatorGCPVM(DBOperator):
 
                 a.userAnnNo,
                 a.topAgencyNo,
+
                 a.topAgencyName,
                 a.subAgencyNo,
                 a.subAgencyName,
+
+                'unknown_category' AS category,
+                'unknown' as bidType,
+
                 a.workPlace,
 
                 a.pdfUrl,
@@ -1617,8 +1628,10 @@ class DBOperatorGCPVM(DBOperator):
         COALESCE(b.workName, 'unknown_workName') AS title,
 
         COALESCE(b.topAgencyName, 'unknown_agency') AS organization,
-        'unknown_category' AS category,
-        'unknown' as bidType,
+
+        b.category,
+        b.bidType,
+
         COALESCE(b.workPlace, 'unknown_workplace') AS workLocation,
 
         b.department,
@@ -1673,6 +1686,7 @@ class DBOperatorGCPVM(DBOperator):
             eval.announcement_no,
             
             coalesce(anno.workName, 'unknown_title') AS workName,
+            'unknown_category' AS category,
             coalesce(anno.topAgencyName, 'unknown_organization') AS topAgencyName,
             coalesce(anno.workPlace, 'unknown_location') AS workPlace,
             coalesce(anno.department, 'unknown_department') AS department,
@@ -1770,10 +1784,9 @@ class DBOperatorGCPVM(DBOperator):
             concat('ann-', announcement_no) AS id,
             orderer_id AS ordererId,
             workName AS title,
-            'unknown_category' AS category,
+            category,
             topAgencyName AS organization,
             workPlace AS workLocation,
-
             
             struct(
                 postalCode,
@@ -2241,7 +2254,9 @@ class DBOperatorSQLITE3(DBOperator):
         createdDate string,
         updatedDate string,
 
-        orderer_id string
+        orderer_id string,
+        category string,
+        bidType string
         )
         """
         self.cur.execute(sql)
@@ -2432,7 +2447,9 @@ class DBOperatorSQLITE3(DBOperator):
             createdDate,
             updatedDate,
 
-            orderer_id
+            orderer_id,
+            category,
+            bidType
         )
         SELECT
             o.announcement_id,
@@ -2460,7 +2477,9 @@ class DBOperatorSQLITE3(DBOperator):
             CURRENT_TIMESTAMP,
             CURRENT_TIMESTAMP,
 
-            MAX(CASE WHEN o.rn = 1 THEN o.orderer_id END) AS orderer_id
+            MAX(CASE WHEN o.rn = 1 THEN o.orderer_id END) AS orderer_id,
+            MAX(CASE WHEN o.rn = 1 THEN o.category END) AS category,
+            MAX(CASE WHEN o.rn = 1 THEN o.bidType END) AS bidType
         FROM ordered o
         WHERE NOT EXISTS (
             SELECT 1
@@ -3110,9 +3129,11 @@ class BidJudgementSan:
         if True:
             announcements_documents_file = 'source/check_html/use_claude/3_source_formatting/output/announcements_document_202603031408_merged_updated.txt'
             df_new = pd.read_csv(announcements_documents_file,sep="\t")
-            df_target = pd.read_csv("source/check_html/use_claude/3_source_formatting/output/announcements_document_202602162218_date_df_target_did.txt", sep="\t")
-            announcement_ids = df_new.loc[df_new["document_id"].isin(df_target["document_id"]), "announcement_id"]
-            df_new = df_new[df_new["announcement_id"].isin(announcement_ids)]
+            #df_target = pd.read_csv("source/check_html/use_claude/3_source_formatting/output/announcements_document_202602162218_date_df_target_did.txt", sep="\t")
+            #announcement_ids = df_new.loc[df_new["document_id"].isin(df_target["document_id"]), "announcement_id"]
+            #df_new = df_new[df_new["announcement_id"].isin(announcement_ids)]
+            col = "announcement_id"
+            df_new = df_new[df_new[col] <= 100000]
             df_new = df_new.reset_index(drop=True)
         else:
             df_new = pd.read_csv(announcements_documents_file,sep="\t")
@@ -3763,6 +3784,7 @@ if __name__ == "__main__":
         condition_doneOCR=condition_doneOCR
     )
     obj.step3(remove_table=step3_remove_table)
+    print("Ended step3.")
 
     master = Master()
     company_master = master.getCompanyMaster()
