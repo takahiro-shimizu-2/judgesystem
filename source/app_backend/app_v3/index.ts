@@ -1,6 +1,7 @@
 import express from "express";
 import { BigQuery } from "@google-cloud/bigquery";
 import cors from "cors";
+import compression from "compression";
 
 const app = express();
 
@@ -26,6 +27,9 @@ app.use(cors({
 
 // credentials: false
 app.options("*", cors());
+
+// gzip圧縮を有効化
+app.use(compression());
 
 // credentials: true なら以下が必要？(未確認)
 //app.options("*", (req, res) => {
