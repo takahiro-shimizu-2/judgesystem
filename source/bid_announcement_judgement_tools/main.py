@@ -1589,8 +1589,8 @@ class DBOperatorGCPVM(DBOperator):
                 a.subAgencyNo,
                 a.subAgencyName,
 
-                'unknown_category' AS category,
-                'unknown' as bidType,
+                a.category,
+                a.bidType,
 
                 a.workPlace,
 
@@ -1629,8 +1629,8 @@ class DBOperatorGCPVM(DBOperator):
 
         COALESCE(b.topAgencyName, 'unknown_agency') AS organization,
 
-        b.category,
-        b.bidType,
+        COALESCE(b.category, 'unknown_category') AS category,
+        COALESCE(b.bidType, 'unknown') AS bidType,
 
         COALESCE(b.workPlace, 'unknown_workplace') AS workLocation,
 
@@ -1668,7 +1668,7 @@ class DBOperatorGCPVM(DBOperator):
         LEFT JOIN documents d
         ON d.announcement_id = b.announcement_no
         GROUP BY
-        id, `no`, ordererId, title, category, organization, workLocation,
+        id, `no`, ordererId, title, category, bidType, organization, workLocation,
         b.department,
         publishDate, explanationStartDate, explanationEndDate,
         applicationStartDate, applicationEndDate, bidStartDate, bidEndDate,
@@ -1686,7 +1686,7 @@ class DBOperatorGCPVM(DBOperator):
             eval.announcement_no,
             
             coalesce(anno.workName, 'unknown_title') AS workName,
-            'unknown_category' AS category,
+            coalesce(anno.category, 'unknown_category') AS category,
             coalesce(anno.topAgencyName, 'unknown_organization') AS topAgencyName,
             coalesce(anno.workPlace, 'unknown_location') AS workPlace,
             coalesce(anno.department, 'unknown_department') AS department,
@@ -1845,6 +1845,7 @@ class DBOperatorGCPVM(DBOperator):
         announcement_no,
         orderer_id,
         workName,
+        category,
         topAgencyName,
         workPlace,
 
@@ -3848,6 +3849,12 @@ if __name__ == "__main__":
         else:
             db_operator.dropTable("bid_orderer")
             db_operator.createBidOrderersFromAnnouncements(bid_orderer_tablename="bid_orderer", bid_announcements_tablename="bid_announcements")
+
+        db_operator.createBackendAnnouncements(tablename="backend_announcements_pre")
+        db_operator.createBackendEvaluations(tablename="backend_evaluations_pre")
+        db_operator.createBackendCompanies(tablename="backend_companies_pre")
+        db_operator.createBackendOrderers(tablename="backend_orderers_pre")
+        db_operator.createBackendPartners(tablename="backend_partners_pre")
 
         db_operator.createBackendAnnouncements(tablename="backend_announcements")
         db_operator.createBackendEvaluations(tablename="backend_evaluations")
