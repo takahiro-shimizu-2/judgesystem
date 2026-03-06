@@ -3323,7 +3323,7 @@ class BidJudgementSan:
                 all_announcements.append(new_json)
                 all_requirement_texts.append(pd.DataFrame(dic))
             except ClientError as e:
-                print(e)
+                # print(e)
                 break
 
 
@@ -3505,7 +3505,7 @@ class BidJudgementSan:
             result_insufficient_requirements_list = []
             for index, row1 in tqdm(df.iterrows(), total=len(df)):
                 announcement_no = row1["announcement_no"]
-                print(fr"announcement_no={announcement_no}")
+                # print(fr"announcement_no={announcement_no}")
                 company_no = row1["company_no"]
                 office_no = row1["office_no"]
                 tmp_result_judgement_list = []
