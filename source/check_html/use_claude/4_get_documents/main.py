@@ -1,0 +1,876 @@
+from pathlib import Path
+from pathlib import PurePosixPath
+import glob
+import os
+import time
+import warnings
+warnings.simplefilter(action="ignore", category=FutureWarning)
+import argparse
+from tqdm import tqdm
+import requests
+from bs4 import BeautifulSoup, Comment, Doctype
+import pandas as pd
+import numpy as np
+from ftfy import fix_encoding
+from ftfy.badness import badness
+from pypdf import PdfReader
+import pdfplumber
+import json
+from datetime import datetime
+from concurrent.futures import ProcessPoolExecutor
+import re
+import subprocess
+import pdf2image  # Need sudo apt install poppler-utils
+import pytesseract
+# Need
+# sudo apt install tesseract-ocr
+# sudo apt install tesseract-ocr-jpn
+import platform
+from multiprocessing import Pool, cpu_count
+
+new_path = r"C:\Program Files\Tesseract-OCR"
+if 'PATH' in os.environ:
+    os.environ['PATH'] = new_path + os.pathsep + os.environ['PATH']
+
+def open_file_from_document_id(document_id, remove_sakura=False):
+    # document_id <- "00001_2025_0422a"
+    adhoc_index = document_id.split("_")[0]
+    if not remove_sakura:
+        sakura = "C:/Program Files (x86)/sakura/sakura.exe"
+        path_txt = fr"C:/Users/TA/Desktop/work/github/judgesystem/source/check_html/use_claude/4_get_documents/output_v3/pdf_txt_all_py/pdf_{adhoc_index}/{document_id}.txt"
+
+        subprocess.Popen([
+            sakura,
+            path_txt
+        ])
+
+    chrome_path = "C:/Program Files (x86)/Google/Chrome/Application/chrome.exe"
+    path_pdf = fr"C:/Users/TA/Desktop/work/github/judgesystem/source/check_html/use_claude/4_get_documents/output_v3/pdf/pdf_{adhoc_index}/{document_id}.pdf"
+    
+    subprocess.Popen([
+        chrome_path,
+        path_pdf
+    ])
+
+
+def get_pages(path, previous_result):
+    # path = modify_path(path)
+    # path = '../4_get_documents/output_v3/pdf/pdf_00018/00018_opencounter_380-0417-009-oc-2_1.pdf'
+    if not path.lower().endswith(".pdf"):
+        return path, -1
+    
+    if previous_result != -1:
+        return path, previous_result
+    
+    try:
+        reader = PdfReader(path)
+        return path, len(reader.pages)
+    except:
+        return path, -1
+
+
+def pdf_to_txt(save_path, use_tesseract=False):
+    # pdf_path = row["save_path"]
+    pdf_path = save_path
+    output_path = pdf_path.replace("/pdf/","/pdf_txt_all_py/")
+
+    base, ext = os.path.splitext(output_path)
+    output_path = base + ".txt"
+
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+
+    if not os.path.exists(pdf_path):
+        return "pdf無し"
+
+    if False and os.path.exists(pdf_path):
+        return "pdfあり"
+
+    if True and os.path.exists(output_path):
+        return "出力済み"
+
+    if False and not os.path.exists(output_path):
+        return "未出力"
+
+    if not pdf_path.lower().endswith(".pdf"):
+        return "拡張子がpdfでは無い"
+
+    # テキスト抽出
+    try:
+        texts = ""
+        with pdfplumber.open(pdf_path) as pdf:
+            for page in pdf.pages:
+                text = page.extract_text()
+                if text:
+                    texts = texts + text + "\n"
+        if texts != "":
+            with open(output_path, "w", encoding="utf-8") as f:
+                _ = f.write(texts)
+
+        if texts == "" and use_tesseract:
+            if platform.system() == "Windows":
+                path_to_tesseract = r"tesseract.exe"
+                pytesseract.tesseract_cmd = path_to_tesseract
+            pages = pdf2image.convert_from_path(pdf_path)
+            texts = "THIS TEXT IS EXTRACTED BY TESSERACT\n"
+            for page in pages:
+                texts += pytesseract.image_to_string(page, lang="jpn")
+
+            with open(output_path, "w", encoding="utf-8") as f:
+                _ = f.write(texts)
+            
+        return "テキスト抽出:ファイル出力終了"
+    except Exception as e:
+        return f"テキスト抽出:エラー: {e}"
+
+def pdf_to_txt_without_tesseract(save_path):
+    return pdf_to_txt(save_path, use_tesseract=False)
+
+def pdf_to_txt_with_tesseract(save_path):
+    return pdf_to_txt(save_path, use_tesseract=True)
+
+
+def parse_reiwa_date(s):
+    s = s.replace("元","1")
+    m = re.search(r"令和([0-9０-９]+)年([0-9０-９]+)月([0-9０-９]+)日", s)
+    if not m:
+        return None
+
+    try:
+        # 全角→半角
+        year = int(m.group(1).translate(str.maketrans("０１２３４５６７８９", "0123456789")))
+        month = int(m.group(2).translate(str.maketrans("０１２３４５６７８９", "0123456789")))
+        day = int(m.group(3).translate(str.maketrans("０１２３４５６７８９", "0123456789")))
+
+        # 令和1年 = 2019年
+        year = 2018 + year
+
+        return datetime(year, month, day)
+    except Exception as e:
+        return None
+
+    if False:
+        for s in matches_list:
+            s = s.replace("元","1")
+            m = re.search(r"令和([0-9０-９]+)年([0-9０-９]+)月([0-9０-９]+)日", s)
+
+            if not m:
+                continue
+
+            # 全角→半角
+            year = int(m.group(1).translate(str.maketrans("０１２３４５６７８９", "0123456789")))
+            month = int(m.group(2).translate(str.maketrans("０１２３４５６７８９", "0123456789")))
+            day = int(m.group(3).translate(str.maketrans("０１２３４５６７８９", "0123456789")))
+
+            # 令和1年 = 2019年
+            year = 2018 + year
+
+
+def process_row(row):
+    # pdf_path = row["save_path"]
+    pdf_path = row
+
+    # output_path = row["fs_txt"]
+    output_path = pdf_path.replace("/pdf/","/pdf_txt_all_py/")
+    base, ext = os.path.splitext(output_path)
+    output_path = base + ".txt"
+
+    # ファイル存在チェック
+    if not os.path.exists(pdf_path):
+        return {"type": "ファイル無し(pdf)", "from": "ファイル無し(pdf)", "line": -1}
+
+    if not os.path.exists(output_path):
+        return {"type": "ファイル無し(txt)", "from": "ファイル無し(txt)", "line": -1}
+
+    # テキスト読み込み
+    with open(output_path, encoding="utf-8", errors="ignore") as f:
+        tex4 = f.readlines()
+
+    head10 = [x.strip() for x in tex4[:20] if x.strip() != ""]
+
+    # ---------------------------------------------------------
+    # 1. grepwords_list（行ごとに grep）
+    # ---------------------------------------------------------
+    grepwords_list = [
+        (["公募"], "公募"),
+        (["一般競争入札"], "一般競争入札"),
+        (["指名停止措置"], "指名停止措置")
+    ]
+
+    for patterns, label in grepwords_list:
+        result = [all(re.search(p, xx) for p in patterns) for xx in head10]
+        if any(result):
+            #print({"type": label, "from": "head20_1", "line": result.index(True) + 1})
+            return {"type": label, "from": "head20_1", "line": result.index(True) + 1}
+
+    # ---------------------------------------------------------
+    # 2. keystrlists（== で一致）
+    # ---------------------------------------------------------
+    keystrlists = [
+        (["入札公告"], "入札公告"),
+        (["変更公告", "注意事項公告", "訂正公告", "再公告"], "変更公告/注意事項公告/訂正公告/再公告"),
+        (["入札公告の中止", "中止公告"], "入札公告の中止/中止公告"),
+        (["企画競争実施の公示"], "企画競争実施の公示"),
+        (["企画競争に係る手続開始の公示", "企画競争に係る手続き開始の公示"], "企画競争に係る手続開始の公示"),
+        (["競争参加者の資格に関する公示"], "競争参加者の資格に関する公示"),
+        (["見積書"], "見積書"),
+        (["見積依頼", "見積依頼書"], "見積依頼(書)"),
+        (["品目等内訳書"], "品目等内訳書"),
+        (["市場調査内訳書"], "市場調査内訳書"),
+        (["入札書"], "入札書"),
+        (["入札結果", "入札の結果", "入札等の結果"], "入札結果"),
+        (["公告結果"], "公告結果"),
+        (["競争入札の結果"], "競争入札の結果"),
+        (["仕様書", "仕様書番号"], "仕様書(番号)"),
+        (["情報・提案要求書"], "情報・提案要求書"),
+        (["業者の選定"], "業者の選定"),
+        (["公告"], "公告"),
+        (["公示"], "公示"),
+        (["中止公示"], "中止公示")
+    ]
+
+    for patterns, label in keystrlists:
+        for i, line in enumerate(head10):
+            line = line.replace(" ","")
+            if line in patterns:
+                #print({"type": label, "from": "head20_2", "line": i + 1})
+                return {"type": label, "from": "head20_2", "line": i + 1}
+
+    # ---------------------------------------------------------
+    # 3. grepwords_list（複数パターンを grep）
+    # ---------------------------------------------------------
+    grepwords_list2 = [
+        (["^市場価格調査依頼|市場価格調査依頼$"], "市場価格調査依頼"),
+        (["オープンカウンター方式", "見積依頼"], "オープンカウンター方式/見積依頼"),
+        (["オープンカウンター方式", "見積り依頼"], "オープンカウンター方式/見積依頼"),
+        (["入札公告\\(+.\\)"], "入札公告(+.)"),
+        (["入札結果\\(+.\\)"], "入札結果(+.)"),
+        (["^仕様書|仕様書$"], "仕様書"),
+        (["発注予定"], "発注予定"),
+        (["一般条項$"], "一般条項$"),
+        (["特約条項$"], "特約条項$"),
+        (["規格書$"], "規格書$"),
+        (["入札及び契約心得$"], "入札及び契約心得$"),
+        (["情報・提案要求書$"], "情報・提案要求書$")
+    ]
+
+    for patterns, label in grepwords_list2:
+        result = [all(re.search(p, xx) for p in patterns) for xx in head10]
+        if any(result):
+            return {"type": label, "from": "head20_3", "line": result.index(True) + 1}
+
+    # ---------------------------------------------------------
+    # 4. 空行でブロック化して連結
+    # ---------------------------------------------------------
+    blocks = []
+    current = []
+
+    for line in head10:
+        if line == "":
+            if current:
+                blocks.append("".join(current))
+                current = []
+        else:
+            current.append(line)
+
+    if current:
+        blocks.append("".join(current))
+
+    # ---------------------------------------------------------
+    # 5. ブロックに対して grep
+    # ---------------------------------------------------------
+    grepwords3 = [
+        "業者の選定について$",
+        "業者の募集について$"
+    ]
+
+    for pattern in grepwords3:
+        for i, block in enumerate(blocks):
+            if re.search(pattern, block):
+                return {"type": pattern, "from": "head20_4", "line": i + 1}
+
+    # ---------------------------------------------------------
+    # 6. その他
+    # ---------------------------------------------------------
+    return {"type": "その他", "from": "head20[1]", "line": 1}
+
+
+# ---------------------------------------------------------
+# 並列実行部分
+# ---------------------------------------------------------
+def run_parallel(df):
+    # rows = [dict(row) for _, row in df.iterrows()]  # pandas DataFrame → list of dict
+    # rows = list(zip(df["fs"].tolist(), df["fs_txt"].tolist()))
+    rows = df["save_path"].tolist()
+
+    n_workers = min(4, cpu_count())
+
+    #with Pool(n_workers) as pool:
+    #    results = pool.map(process_row, rows)
+    with Pool(n_workers) as pool:
+        results = []
+        # imap_unordered もあるが入力と結果の順序が保持されない。
+        for r in tqdm(pool.imap(process_row, rows), total=len(rows)):
+            results.append(r)
+
+    return results
+
+
+
+if __name__ == "__main__":
+
+    today_str = datetime.now().strftime("%Y-%m-%d")
+
+    parser = argparse.ArgumentParser(description="")
+    parser.add_argument("--input_file1", default="../3_source_formatting/output/announcements_document_202603031408_merged.txt")
+    parser.add_argument("--do_url_requests", action="store_true")
+    parser.add_argument("--do_pdf_is_saved", action="store_true")
+    parser.add_argument("--do_pagecount", action="store_true")
+    parser.add_argument("--do_output", action="store_true")
+    parser.add_argument("--do_pdf2txt", action="store_true")
+    parser.add_argument("--use_tesseract", action="store_true")
+    parser.add_argument("--do_bidtypecheck", action="store_true")
+    parser.add_argument("--do_datesimplecheck", action="store_true")
+    parser.add_argument("--do_categorysimplecheck", action="store_true")
+    parser.add_argument("--stop_processing", action="store_true")
+
+    args = parser.parse_args()
+    input_file1 = args.input_file1
+    # input_file1 = "../3_source_formatting/output/announcements_document_202603031408_merged.txt"
+    
+    base, ext = os.path.splitext(input_file1)
+    output_file1 = base + "_updated" + ext
+    type_df_output_file = input_file1.replace(".txt","_type_df.txt")
+    date_df_output_file = input_file1.replace(".txt","_date_df.txt")
+
+    do_url_requests = args.do_url_requests
+    do_pdf_is_saved = args.do_pdf_is_saved
+    do_pagecount = args.do_pagecount
+    do_output = args.do_output
+    do_pdf2txt = args.do_pdf2txt
+    use_tesseract = args.use_tesseract
+    do_bidtypecheck = args.do_bidtypecheck
+    do_datesimplecheck = args.do_datesimplecheck
+    do_categorysimplecheck = args.do_categorysimplecheck
+
+    stop_processing = args.stop_processing
+
+    if use_tesseract:
+        pdf_to_txt_actual = pdf_to_txt_with_tesseract
+    else:
+        pdf_to_txt_actual = pdf_to_txt_without_tesseract
+
+
+    pdf_requests_skip_urls = [
+        "https://www.mod.go.jp/gsdf/wae/info/",
+        "https://www.mod.go.jp/gsdf/nae/fin/nafin",
+        "https://www.mod.go.jp/gsdf/neae/koukoku"
+    ]
+    pdf_requests_skip_urls = ["dummy"]
+
+    df = pd.read_csv(input_file1, sep="\t")
+
+    baseinfofile = "../1_source2_just_extract_html_source/data/リスト_防衛省入札_2.txt"
+    baseinfo = pd.read_csv(baseinfofile, sep="\t")
+
+    if stop_processing:
+        exit(1)
+
+    df["pdf_is_saved_date"].value_counts(dropna=False)
+
+    # exit(1)
+
+    # とりあえずの url 存在判定確認コード。
+    if False:
+        def url_exists(url):
+            try:
+                r = requests.head(url, allow_redirects=True, timeout=5)
+
+                # HEAD が許可されていない場合は GET に fallback
+                if r.status_code == 405:
+                    r = requests.get(url, stream=True, timeout=5)
+
+                # 404 だけが「存在しない」
+                return r.status_code != 404
+
+            except requests.RequestException:
+                return False
+
+    # pdf 保存処理
+    if do_url_requests:
+        print("Save pdf by requests.")
+        for i, row in tqdm(df.iterrows(), total=len(df)):
+            # index_value = row["adhoc_index"]
+            pdfurl = row["url"]
+            target_url = row["base_link_parent"]
+            save_path = row["save_path"]
+
+            save_path_dirname = os.path.dirname(save_path)
+
+            if not os.path.exists(save_path_dirname):
+                os.makedirs(save_path_dirname, exist_ok=True)
+
+            if pdfurl is None:
+                continue
+
+            if os.path.exists(save_path):
+                #print(fr"Skip: {save_path} already exists.")
+                if pd.isna(df.loc[i,"pdf_is_saved_date"]):
+                    df.loc[i,"pdf_is_saved_date"] = today_str
+                continue
+
+            for skipurl in pdf_requests_skip_urls:
+                if pdfurl.startswith(skipurl):
+                    print(fr"Skip url: {skipurl}...")
+                    continue
+
+            if pdfurl is not None and not pdfurl.startswith("https://tinyurl"):
+                print(pdfurl)
+                if pd.notna(df.loc[i,"pdf_is_saved_date"]):
+                    # print("Already tried requests.")
+                    continue
+
+                df.loc[i,"pdf_is_saved_date"] = today_str
+
+                try:
+                    # PDF をダウンロード
+                    time.sleep(0.7)
+                    response = requests.get(pdfurl, headers = {
+                        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.5993.90 Safari/537.36",
+                        "Accept-Language": "ja,en-US;q=0.9,en;q=0.8",
+                        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp",
+                        "Connection": "keep-alive",
+                    })
+                    response.raise_for_status()  # エラーがあれば例外を出す
+                except requests.exceptions.HTTPError as e:
+                    print(f"HTTP エラー: {pdfurl} -> {e}")
+                    time.sleep(1)
+                    continue  # エラーが出ても次の URL に進む
+                except requests.exceptions.RequestException as e:
+                    print(f"通信エラー: {pdfurl} -> {e}")
+                    time.sleep(1)
+                    continue
+                try:
+                    Path(save_path).write_bytes(response.content)
+                    print(fr"Saved {save_path}.")
+                except Exception as e:
+                    print(e)
+
+    if do_pdf_is_saved:
+        print("Check pdf_is_saved.")
+        for i, row in tqdm(df.iterrows(), total=len(df)):
+            p = row["save_path"]
+            if p is not None and os.path.exists(p):
+                df.loc[i,"pdf_is_saved"] = True
+            else:
+                df.loc[i,"pdf_is_saved"] = False
+
+    df["pdf_is_saved"].value_counts(dropna=False)
+
+
+    if do_pagecount:
+        print("pagecount.")
+        ### python main.py で実行しないとダメなうえに、実行してしまった場合、落とさないといけないので注意。
+        cpu_count = os.cpu_count()
+        max_workers = min(4, cpu_count)
+        files = df["save_path"].values
+        page_counts = df["pageCount"].values
+        with ProcessPoolExecutor(max_workers=max_workers) as ex:
+            results = list(tqdm(ex.map(get_pages, files, page_counts), total=len(files)))
+        results_df = pd.DataFrame(results, columns=["path","num_of_pages"])
+        results_df["num_of_pages"].value_counts()
+        df["pageCount"] = results_df["num_of_pages"].values
+        (df["pageCount"]==results_df["num_of_pages"]).value_counts(dropna=False)
+        df["pageCount"].value_counts(dropna=False)
+
+    if do_output:
+        if all(col not in df.columns for col in ["orderer_id", "topAgencyName"]):
+            # ord <- baseinfo[,c("Unnamed..0" ,"Unnamed..1","入札公告.現在募集中.2")]
+            ord = baseinfo[["Unnamed: 0", "Unnamed: 1", "入札公告（現在募集中）2"]].copy()
+            # ord[["orderer_id"]] <- paste("防衛省",ord[["Unnamed..0"]],ord[["Unnamed..1"]])
+            ord["orderer_id"] = "防衛省" + ord["Unnamed: 0"].astype(str) + ord["Unnamed: 1"].astype(str)
+            # 辞書を作る
+            mapping = dict(zip(ord["入札公告（現在募集中）2"], ord["orderer_id"]))
+            # match相当
+            df["orderer_id"] = df["base_link"].map(mapping)
+            # 固定値代入
+            df["topAgencyName"] = "防衛省"
+        
+        df.to_csv(output_file1, sep="\t", index=False)
+
+    if False:
+        chk = []
+        for i,row in tqdm(df.iterrows(),total=len(df)):
+            pdf_path = row["save_path"]
+            output_path = pdf_path.replace("/pdf/","/pdf_txt_all_py/")
+            base, ext = os.path.splitext(output_path)
+            output_path = base + ".txt"
+            texts = ""
+            if os.path.exists(output_path):
+                with open(output_path, "r", encoding="utf-8") as fff:
+                    texts = fff.read()
+                if texts == "":
+                    chk.append("not text")
+                else:
+                    chk.append("text")
+            else:
+                chk.append("no text")
+        aaa = pd.DataFrame(chk,columns=["aaa"])
+        aaa.value_counts()
+
+
+    if do_pdf2txt:
+        print("pdf2txt.")
+        if False:
+            # テキストの存在とサイズ確認
+            def tmpf2(s):
+                output_path = s.replace("/pdf/","/pdf_txt_all_py/")
+                base, ext = os.path.splitext(output_path)
+                output_path = base + ".txt"
+                return output_path
+
+            df["save_path_txt_all_py"] = df["save_path"].apply(tmpf2)
+            df["save_path_txt_all_py_is"] = False
+            df["txt_size"] = -1
+
+            # 存在・サイズ確認
+            print("Check existence, size.")
+            for i, row in tqdm(df.iterrows(), total=len(df)):
+                p = row["save_path_txt_all_py"]
+                if p is not None and os.path.exists(p):
+                    df.loc[i,"save_path_txt_all_py_is"] = True
+                    df.loc[i,"txt_size"] = os.path.getsize(p)
+                else:
+                    df.loc[i,"save_path_txt_all_py_is"] = False
+
+            df = df[(~df["save_path_txt_all_py_is"]) & (df["pdf_is_saved"]) & (df["pdf_is_saved_date"]=="2026-03-03") & (df["fileFormat"]=="pdf")]
+
+            # exit(1)
+
+        if False:
+            # テキストの存在とサイズ確認後。
+            df2 = df[(~df["save_path_txt_all_py_is"]) & (df["pdf_is_saved"]) & (df["pdf_is_saved_date"]=="2026-03-03") & (df["fileFormat"]=="pdf")]
+            df2 = df2.reset_index()
+            df2.shape
+            df = df2
+            df["url"].shape
+            df["url"].unique().shape
+            df["save_path"].shape
+            df["save_path"].unique().shape
+            xxx = df[["url","save_path"]].copy()
+            xxx["url_dup"] = xxx["url"].duplicated(keep=False)
+        rows = [row for _, row in df.iterrows()]
+        save_path_here = [row["save_path"] for row in rows]
+        cpu_count = os.cpu_count()
+        max_workers = min(4, cpu_count)
+        with ProcessPoolExecutor(max_workers=max_workers) as executor:
+            results = list(tqdm(executor.map(pdf_to_txt_actual, save_path_here), total=len(save_path_here)))
+
+        if False:
+            # テキストの存在とサイズ確認後。
+            df["pdf_is_saved_date"].value_counts(dropna=False)
+            df_xx = df.copy()
+            df_xx["chk"] = ccc["chk"]
+            df_xx[(df_xx["chk"]=="未出力") & (df_xx["pdf_is_saved_date"]=="2026-03-03")]
+            df_y1 = df_xx[(df_xx["chk"]=="未出力") & (df_xx["pdf_is_saved_date"]=="2026-03-03") & (df_xx["fileFormat"]=="pdf")]
+            df_y2 = df_xx[(~df_xx["save_path_txt_all_py_is"]) & (df_xx["pdf_is_saved"]) & (df_xx["pdf_is_saved_date"]=="2026-03-03") & (df_xx["fileFormat"]=="pdf")]
+            df_y1.shape
+            df_y2.shape
+            df_y2_only = df_y2.loc[~df_y2.index.isin(df_y1.index)]
+
+            aaaa = df[df["txt_size"]==0]
+
+            tmpout = []
+            ccc = pd.DataFrame(tmpout, columns=["chk"])
+            ccc.value_counts(dropna=False)
+            ccc = pd.DataFrame({
+                "chk": tmpout,
+                "pdf_is_saved_date": df["pdf_is_saved_date"].values,
+                "fileFormat":df["fileFormat"].values
+            })
+            ccc2 = ccc.value_counts(dropna=False).reset_index(name="count")
+            ccc2[(ccc2["chk"]=="未出力") & (ccc2["pdf_is_saved_date"]=="2026-03-03")]
+            for i,row in tqdm(df.iterrows(),total=len(df)):
+                pdf_path = row["save_path"]
+                output_path = pdf_path.replace("/pdf/","/pdf_txt_all_py/")
+
+                base, ext = os.path.splitext(output_path)
+                output_path = base + ".txt"
+
+                os.makedirs(os.path.dirname(output_path), exist_ok=True)
+
+                if not os.path.exists(pdf_path):
+                    tmpout.append( "pdf無し" )
+                    continue
+
+                if False and os.path.exists(pdf_path):
+                    tmpout.append( "pdfあり" )
+                    continue
+
+                if True and os.path.exists(output_path):
+                    tmpout.append( "出力済み" )
+                    continue
+
+                if True and not os.path.exists(output_path):
+                    tmpout.append( "未出力" )
+                    continue
+                
+                # テキスト抽出
+                try:
+                    texts = ""
+                    with pdfplumber.open(pdf_path) as pdf:
+                        for page in pdf.pages:
+                            text = page.extract_text()
+                            if text:
+                                texts = texts + text + "\n"
+                    if texts != "":
+                        with open(output_path, "w", encoding="utf-8") as f:
+                            _ = f.write(texts)
+
+                    if texts == "" and use_tesseract:
+                        if platform.system() == "Windows":
+                            path_to_tesseract = r"tesseract.exe"
+                            pytesseract.tesseract_cmd = path_to_tesseract
+                        pages = pdf2image.convert_from_path(pdf_path)
+                        texts = "THIS TEXT IS EXTRACTED BY TESSERACT\n"
+                        for page in pages:
+                            texts += pytesseract.image_to_string(page, lang="jpn")
+
+                        with open(output_path, "w", encoding="utf-8") as f:
+                            _ = f.write(texts)
+                        
+                    tmpout.append("テキスト抽出:ファイル出力終了")
+                except Exception as e:
+                    print(e)
+                    tmpout.append("テキスト抽出:エラー")
+
+
+
+    if False:
+        # テキストの存在とサイズ確認
+        def tmpf2(s):
+            output_path = s.replace("/pdf/","/pdf_txt_all_py/")
+            base, ext = os.path.splitext(output_path)
+            output_path = base + ".txt"
+            return output_path
+
+        df["save_path_txt_all_py"] = df["save_path"].apply(tmpf2)
+        df["save_path_txt_all_py_is"] = False
+        df["txt_size"] = -1
+
+        # 存在・サイズ確認
+        print("Check existence, size.")
+        for i, row in tqdm(df.iterrows(), total=len(df)):
+            p = row["save_path_txt_all_py"]
+            if p is not None and os.path.exists(p):
+                df.loc[i,"save_path_txt_all_py_is"] = True
+                df.loc[i,"txt_size"] = os.path.getsize(p)
+            else:
+                df.loc[i,"save_path_txt_all_py_is"] = False
+
+        tmpdf0 = df[df["txt_size"]==0]
+        tmpdf = df[df["txt_size"]>=0]
+        tmpdf["txt_size"].value_counts(dropna=False)
+        tmpdf0["pdf_is_saved_date"].value_counts()
+        tmpdf0["save_path_txt_all_py"]
+
+        for txt_path in tmpdf0["save_path_txt_all_py"]:
+            if os.path.exists(txt_path):
+                os.remove(txt_path)
+
+    if do_bidtypecheck:
+        results = run_parallel(df)
+        results_df = pd.DataFrame(results)
+        results_df["type"].value_counts()
+
+        df["type"] = results_df["type"]
+
+
+    if do_output:
+        if all(col not in df.columns for col in ["orderer_id", "topAgencyName"]):
+            # ord <- baseinfo[,c("Unnamed..0" ,"Unnamed..1","入札公告.現在募集中.2")]
+            ord = baseinfo[["Unnamed: 0", "Unnamed: 1", "入札公告（現在募集中）2"]].copy()
+            # ord[["orderer_id"]] <- paste("防衛省",ord[["Unnamed..0"]],ord[["Unnamed..1"]])
+            ord["orderer_id"] = "防衛省" + ord["Unnamed: 0"].astype(str) + ord["Unnamed: 1"].astype(str)
+            # 辞書を作る
+            mapping = dict(zip(ord["入札公告（現在募集中）2"], ord["orderer_id"]))
+            # match相当
+            df["orderer_id"] = df["base_link"].map(mapping)
+            # 固定値代入
+            df["topAgencyName"] = "防衛省"
+
+        df.to_csv(output_file1, sep="\t", index=False)
+
+    if do_datesimplecheck:
+        print("datesimplecheck")
+        date_list = []
+        document_id = df["document_id"][0]
+        for i,row in tqdm(df.iterrows(), total=len(df)):
+
+            document_id = row["document_id"]
+            f_pdf = row["save_path"]
+            f_txt = f_pdf.replace("/pdf/","/pdf_txt_all_py/")
+            base, ext = os.path.splitext(f_txt)
+            f_txt = base + ".txt"
+
+            if os.path.exists(f_txt):
+                with open(f_txt, "r", encoding="utf-8") as f0:
+                    data_txt = f0.read()
+            else:
+                date_list.append( (document_id, None, None, None, None) )
+                continue
+
+            # with open(f_pdf, "rb") as f0:
+            #    data_pdf = f0.read()   # ただのバイト列
+
+            data_txt2 = data_txt.replace(" ","").replace("\n","")
+
+            # N = 30
+            # pattern = rf".{{0,{N}}}@.{{0,{N}}}"
+            # matches = re.findall(pattern, data_txt2)
+
+
+            # 前後に取りたい文字数
+            N = 15
+            # pattern = rf".{{0,{N}}}令和[0-9０-９元]+年.{{0,{N}}}"
+            pattern = rf"令和[0-9０-９元]+年.{{0,{N}}}"
+            matches = re.findall(pattern, data_txt2)
+            matches_list = []
+            for m in matches:
+                if m.find("日") >= 0:
+                    m2 = m[m.find("令和"):(m.find("日")+1)]
+                elif m.find("月") >= 0:
+                    m2 = m[m.find("令和"):(m.find("月")+1)]
+                elif m.find("年") >= 0:
+                    m2 = m[m.find("令和"):(m.find("年")+1)]
+                else:
+                    m2= None
+                matches_list.append(m2)
+            
+            if matches_list == []:
+                date_list.append( (document_id, None, None, None, None) )
+                continue
+
+            # 日付として最小を取る
+            dates = [(s, parse_reiwa_date(s)) for s in matches_list]
+            valid_dates = [d for d in dates if d[1] is not None]
+            if valid_dates == []:
+                date_list.append( (document_id, None, None, None, None) )
+                continue
+            earliest = min(valid_dates, key=lambda x: x[1])
+            latest = max(valid_dates, key=lambda x: x[1])
+            date_list.append( (document_id, earliest[0], earliest[1], latest[0], latest[1]) )
+
+        date_df = pd.DataFrame(date_list, columns=["document_id","datelabel_earliest","date_earliest","datelabel_latest","date_latest"])
+        date_df.to_csv(date_df_output_file, sep="\t", index=False)
+
+
+    if do_categorysimplecheck:
+        print("categorysimplecheck")
+        type_list = []
+        document_id = df["document_id"][0]
+        for i,row in tqdm(df.iterrows(), total=len(df)):
+
+            document_id = row["document_id"]
+            f_pdf = row["save_path"]
+            f_txt = f_pdf.replace("/pdf/","/pdf_txt_all_py/")
+            base, ext = os.path.splitext(f_txt)
+            f_txt = base + ".txt"
+
+            if os.path.exists(f_txt):
+                with open(f_txt, "r", encoding="utf-8") as f0:
+                    data_txt = f0.read()
+            else:
+                type_list.append( (document_id, None, None, None, None) )
+                continue
+
+            # with open(f_pdf, "rb") as f0:
+            #    data_pdf = f0.read()   # ただのバイト列
+
+            data_txt2 = data_txt.replace(" ","").replace("\n","")
+
+            if False:
+                data_txt2.find("工事")
+                data_txt2.find("業務")
+                data_txt2.find("土木")
+                data_txt2.find("建設")
+                data_txt2.find("測量")
+                data_txt2.find("調査")
+                data_txt2.find("役務")
+            
+            patterns_const = [
+                r"入札公告[（(].+?工事[）)]",
+                r"工事概要",
+                r"工事名",
+                r"工事場所",
+                r"工事内容",
+                r"工期"
+            ]
+            flgs_const = []
+            score_const = 0
+            for i,pattern in enumerate(patterns_const):
+                flg = re.search(pattern, data_txt2)
+                if flg:
+                    flg = flg.group()
+                    if pattern == "入札公告[（(].+?工事[）)]":
+                        if len(flg) > 10:
+                            flg = None
+                        else:
+                            flg = flg.replace("（","(").replace("）",")")
+                            score_const += 1
+                    else:
+                        score_const += 1
+                flgs_const.append(flg)
+
+            patterns_business = [
+                r"業務概要",
+                r"業務の名称",
+                r"履行場所",
+                r"業務内容",
+                r"履行期間",
+                r"サービス"
+            ]
+            flgs_business = []
+            score_business = 0
+            for i,pattern in enumerate(patterns_business):
+                flg = re.search(pattern, data_txt2)
+                if flg:
+                    flg = flg.group()
+                    score_business += 1
+                flgs_business.append(flg)
+
+            type_list.append( [document_id] + flgs_const + flgs_business + [score_const] + [score_business] )
+
+        #bidType
+        #open_competitive          170
+        #designated_competitive     66
+        #negotiated_contract        33
+        #planning_competition       33
+        #preferred_designation      33
+        #open_counter               33
+        #document_request           33
+        #opinion_request            33
+        #unknown                    33
+        #other                      33
+
+        type_df = pd.DataFrame(type_list, columns=["document_id"] + [fr"const{i}" for i in range(len(patterns_const))] + [fr"business{i}" for i in range(len(patterns_business))] + ["score_const","score_business"] )
+        type_df.to_csv(type_df_output_file, sep="\t", index=False)
+
+    if do_output:
+        if all(col not in df.columns for col in ["orderer_id", "topAgencyName"]):
+            # ord <- baseinfo[,c("Unnamed..0" ,"Unnamed..1","入札公告.現在募集中.2")]
+            ord = baseinfo[["Unnamed: 0", "Unnamed: 1", "入札公告（現在募集中）2"]].copy()
+            # ord[["orderer_id"]] <- paste("防衛省",ord[["Unnamed..0"]],ord[["Unnamed..1"]])
+            ord["orderer_id"] = "防衛省" + ord["Unnamed: 0"].astype(str) + ord["Unnamed: 1"].astype(str)
+            # 辞書を作る
+            mapping = dict(zip(ord["入札公告（現在募集中）2"], ord["orderer_id"]))
+            # match相当
+            df["orderer_id"] = df["base_link"].map(mapping)
+            # 固定値代入
+            df["topAgencyName"] = "防衛省"
+
+        # type_df["const0"].value_counts(dropna=False)
+        # (type_df["document_id"]==df["document_id"]).all()
+        df["bidType"] = "unknown"
+        df["category"] = type_df["const0"].fillna("その他")
+
+        df.to_csv(output_file1, sep="\t", index=False)

@@ -1,0 +1,1256 @@
+import sqlite3  # sqlite3使わない想定でもimport
+import os
+import argparse
+import re
+import json
+import time
+from datetime import datetime
+from dataclasses import dataclass
+from abc import ABC, abstractmethod
+
+import pandas as pd
+import numpy as np
+from google import genai # For OCR
+from google.genai.errors import ClientError
+from google.genai import types
+import glob
+from pathlib import Path
+import ast
+from tqdm import tqdm
+import asyncio
+import pickle
+from concurrent.futures import ThreadPoolExecutor
+
+### ocr : document_id 
+### 
+import argparse
+import re
+
+def extract_second_level(url):
+    # プロトコル部分（http://, https://）を削除
+    url = re.sub(r'^https?://', '', url)
+    # 第二階層まで取り出す
+    # 例: example.com/foo/bar → example.com/foo
+    m = re.match(r'([^/]+/[^/]+)', url)
+    if not m:
+        return 'unknown'
+    second = m.group(1)
+    # 置換処理
+    second = second.replace('.', '_').replace('/', '---')
+    return second
+
+def getJsonFromData(data, data_type):
+    prompt = """
+    Goal: Extract specific information related to construction projects and bidding procedures from the provided context.
+
+    Steps (T1 → T2 → T3):
+    T1: Thoroughly read and understand the entire context.
+    T2: Identify and locate the following fields within the context.  If a field is not present, its value will be "".
+    T3: Return the extracted information in a valid JSON format, adhering to the specified rules.
+
+    JSON Structure:
+
+    ```json
+    {
+    "工事場所": "",
+    "入札手続等担当部局": {
+        "郵便番号": "",
+        "住所": "",
+        "担当部署名": "",
+        "担当者名": "",
+        "電話番号": "",
+        "FAX番号": "",
+        "メールアドレス": ""
+    },
+    "公告日" : "",
+    "入札説明書の交付期間": {
+        "開始日": "",
+        "終了日": ""
+    },
+    "申請書及び競争参加資格確認資料の提出期限": {
+        "開始日": "",
+        "終了日": ""
+    },
+    "入札書の提出期間": {
+        "開始日": "",
+        "終了日": ""
+    }
+    }
+    ```
+
+    Rules:
+    1.  **Exact Text:** Use the exact original text from the context for all extracted data.  Do not modify or translate the text.
+    2.  **Completeness:**  Extract all requested fields. If a field is not found in the context, represent it with an empty string (`""`). No omissions are allowed.
+    3.  **Limited Output:** Only include the specified fields in the JSON output. Do not add any extra information or labels.
+    4.  **Hide Steps:** Do not display the internal steps (T1 or T2). Only the final JSON output (T3) should be shown.
+    5.  **Prefix Exclusion:** Exclude prefixes like "〒", "TEL", "FAX", and "E-mail:" from the extracted values.
+    6.  **Output Language:** The output (field names and extracted text if applicable) should be in Japanese.
+    7. **Data Structure:** Maintain the nested structure shown in the JSON Structure above.  "入札手続等担当部局", "入札説明書の交付期間", "申請書及び競争参加資格確認資料の提出期限" and "入札書の提出期間" are objects containing their respective sub-fields.
+    """
+
+    if data_type == "txt":
+        response = client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=[
+                types.Part.from_text(text=data),  # ← ここが PDF の代わり
+                prompt
+            ]
+        )
+    elif data_type == "pdf":
+        response = client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=[
+                types.Part.from_bytes(
+                    data=data,
+                    mime_type='application/pdf',
+                ),
+                prompt
+            ]
+        )
+    elif data_type == "pdf_fileapi":
+        response = client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=[
+                data,
+                prompt
+            ]
+        )
+
+    # print(response.text)
+
+    text=response.text
+    #json_text = extract_json(text=response.text)
+    text2 = text.replace('\n', '').replace('```json', '').replace("```","")
+    dict1 = json.loads(text2)
+    return dict1
+
+
+def convertJson(json_value):
+    """ 
+    公告データから取得した json ライクな公告情報を整形して json とする。
+
+    Args:
+
+    - json_value
+
+        json ライクな公告データ
+    """
+
+    def _modifyDate(datestr, handle_same_year=None):
+        try:
+            datestr = datestr.replace("令和元年", "令和1年")
+            if "同年" in datestr:
+                datestr = datestr.replace("同年", fr"{handle_same_year}年")
+
+            m = re.search(r"令和\s*(\d+)年\s*(\d+)月\s*(\d+)日", datestr)
+            if m:
+                return fr"{int(m.group(1))+2018:04}-{int(m.group(2)):02}-{int(m.group(3)):02}"
+            
+            m = re.search(r"(\d{4})年\s*(\d+)月\s*(\d+)日", datestr)
+            if m:
+                return fr"{int(m.group(1))}-{int(m.group(2)):02}-{int(m.group(3)):02}"
+            return datestr
+        except Exception as e:
+            # print(e)
+            return None
+
+    def extract_year(s: str) -> str:
+        if not s:
+            return ""
+        try:
+            dt = datetime.strptime(s, "%Y-%m-%d")
+            return str(dt.year)
+        except ValueError:
+            return ""
+
+
+    new_json = {}
+    new_json["announcement_no"] = json_value.get("announcement_no", None)
+    new_json["workplace"] = json_value.get("工事場所", None)
+
+    tmp_json = json_value.get("入札手続等担当部局", None)
+    if isinstance(tmp_json, dict):
+        new_json["zipcode"] = tmp_json.get("郵便番号", None)
+        new_json["address"] = tmp_json.get("住所", None)
+        new_json["department"] = tmp_json.get("担当部署名", None)
+        new_json["assigneename"] = tmp_json.get("担当者名", None)
+        new_json["telephone"] = tmp_json.get("電話番号", None)
+        new_json["fax"] = tmp_json.get("FAX番号", None)
+        new_json["mail"] = tmp_json.get("メールアドレス", None)
+
+    tmp_val = json_value.get("公告日", None)
+    if isinstance(tmp_val, str):
+        new_json["publishdate"] = _modifyDate(datestr=tmp_val)
+    else:
+        new_json["publishdate"] = None
+
+    tmp_json = json_value.get("入札説明書の交付期間", None)
+    if isinstance(tmp_json, dict):
+        new_json["docdiststart"] = _modifyDate(datestr=tmp_json.get("開始日", None))
+        new_json["docdistend"] = _modifyDate(datestr=tmp_json.get("終了日", None), handle_same_year=extract_year(new_json["docdiststart"]))
+
+    tmp_json = json_value.get("申請書及び競争参加資格確認資料の提出期限", None)
+    if isinstance(tmp_json, dict):
+        new_json["submissionstart"] = _modifyDate(datestr=tmp_json.get("開始日", None))
+        new_json["submissionend"] = _modifyDate(datestr=tmp_json.get("終了日", None), handle_same_year=extract_year(new_json["submissionstart"]))
+
+    tmp_json = json_value.get("入札書の提出期間", None)
+    if isinstance(tmp_json, dict):
+        new_json["bidstartdate"] = _modifyDate(datestr=tmp_json.get("開始日", None))
+        new_json["bidenddate"] = _modifyDate(datestr=tmp_json.get("終了日", None), handle_same_year=extract_year(new_json["bidstartdate"]))
+
+    return new_json
+
+
+
+
+
+
+
+
+
+
+def getRequirementText(data, data_type):
+    """ 
+    公告データ doc_data を受け取り、gemini に渡して、公告の要件文を json ライクな形式で受け取る。
+
+    gemini 用プロンプトはハードコードされている。
+
+    Args:
+
+    - doc_data
+
+        公告データ
+    """
+
+    prompt = """
+    # Goal Seek Prompt for Bid Qualification Extraction
+
+    [Input] 
+    → [Extract bidding qualifications from document]
+    → [Intent](identify, extract, format, maintain original text, output JSON)
+
+    [Input]
+    → [User Intent]
+    → [Want or need Intent](accurate extraction, complete requirements, properly formatted JSON, faithful text reproduction)
+
+    [抽象化オブジェクト]
+    -> Legal Document Parser for Bid Qualifications
+    Why
+    <User Input>
+    I need to automatically extract all bidding and competition participation qualifications/requirements from legal documents and format them in a structured JSON output while preserving the original text exactly.
+    </User Input>
+    [Fixed User want intent] = Extract and structure bidding qualification requirements from legal documents
+
+    Achieve Goal == Need Tasks[Qualification Extraction]=[Tasks](
+    Read and comprehend document,
+    Identify qualification sections,
+    Determine primary qualification headings, 
+    Extract qualification text blocks, 
+    Maintain text integrity, 
+    Handle dependent requirements, 
+    Format as specified JSON
+    )
+    
+    To Do Task Execute need Prompt And (Text Analysis Tool)
+    assign Agent
+    LegalDocumentParser
+    
+    Agent Task Execute Feed back loop:
+    1. Read entire document to understand context
+    2. Locate all sections related to "competition participation qualifications
+    3. Identify primary qualification sections and related subsections
+    4. Extract complete text blocks for each qualification item
+    5. Preserve original formatting including numbering and indentation
+    6. Group dependent requirements together
+    7. Structure output in specified JSON format
+    8. Verify all qualification requirements are captured
+    
+    Then Task Complete
+    Execute
+    ====================
+    
+    ### Important Output Instructions
+    1. The JSON key name must be exactly "資格・条件" - do not change this key name even if similar terms appear in the document
+    2. Preserve the original text of qualifications exactly as they appear in the document, including numbering and formatting
+    3. Extract all qualifications completely without omission
+    4. Ensure the output is valid JSON format
+
+    ### Output Format
+    ```json
+    {
+    "資格・条件" : [
+    "(1) ・・・本文・・・",
+    "(2) ・・・本文・・・",
+    ...
+    ]
+    }
+    ```
+    """
+
+    if data_type == "text":
+        response = client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=[
+                types.Part.from_text(text=data),  # ← ここが PDF の代わり
+                prompt
+            ]
+        )
+    elif data_type == "pdf":
+        response = client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=[
+                types.Part.from_bytes(
+                    data=data,
+                    mime_type='application/pdf',
+                ),
+                prompt
+            ]
+        )
+    elif data_type == "pdf_fileapi":
+        response = client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=[
+                data,
+                prompt
+            ]
+        )
+
+    # print(response.text)
+    text=response.text
+    #json_text = extract_json(text=response.text)
+    text2 = text.replace('\n', '').replace('```json', '').replace("```","")
+    try:
+        dict1 = json.loads(text2)
+    except json.decoder.JSONDecodeError:
+        text2 = text2.replace('"',"'")
+        dict1 = json.loads('{"資格・条件" : ["' + text2 + '"]}')
+    
+    return dict1
+
+def convertRequirementTextDict(requirement_texts):
+    """ 
+    公告データから取得した json ライクな公告情報を整形して json とする。
+
+    Args:
+
+    - requirement_texts
+
+        json ライクな要件文
+    """
+
+    # requirement_texts = {"announcement_no":1, "資格・条件":["(2)令和07・08・09年度防衛省競争参加資格(全省庁統一資格)の「役務の提供等」において、開札時までに「C」又は「D」の等級に格付けされ北海道地域の競争参加を希望する者であること(会社更生法(平成14年法律第154号)に基づき更生手続開始の申立てがなされている者又は民事再生法(平成11年法律第225号)に基づき再生手続開始の申立てがなされている者については、手続開始の決定後、再度級別の格付けを受けていること。)。"]}
+    # announcement_no = requirement_texts["announcement_no"]
+    announcement_no = None
+
+    announcement_no_list = []
+    requirement_no_list = []
+    requirement_type_list = []
+    requirement_text_list = []
+    createdDate_list = []
+    updatedDate_list = []
+    # req_type_list = ["欠格要件","業種・等級要件","所在地要件","技術者要件","実績要件","その他"]
+    req_type_list_search_list = {
+        "欠格要件":[
+            "70条","71条","会社更生法","民事再生法","更生手続",
+            "再生手続","情報保全","資本関係","人的関係","滞納",
+            "外国法","取引停止","破産","暴力団","指名停止",
+            "後見人","法人格取消"
+        ],
+        "業種・等級要件":["競争参加資格","一般競争","指名競争","等級","総合審査"],
+        "所在地要件":["所在","県内","市内","防衛局管内","本店が","支店が"],
+        "技術者要件":[
+            "施工管理技士","技術士","資格者証","電気工事士","建築士",
+            "基幹技能者","監理技術者","主任技術者","監理技術者資格者証","監理技術者講習修了証"
+        ],
+        "実績要件":[
+            "実績","工事成績","元請けとして","元請として","点以上",
+            "jv比率","過去実績"
+        ],
+        "その他要件":["jv","共同企業体","出資比率"] # JV, 共同企業体, or 不明
+    }
+    for i, text in enumerate(requirement_texts["資格・条件"]):
+        # TODO
+        # text は、"改行分割" が必要？
+        # 未処理。
+
+        has_other_req = True
+        text_lower = text.lower()
+        for req_type, search_list in req_type_list_search_list.items():
+            search_str = "|".join(search_list)
+            if (req_type != "その他要件" and re.search(search_str, text_lower)) or (req_type == "その他要件" and re.search(search_str, text_lower)) or (req_type == "その他要件" and not re.search(search_str, text_lower) and has_other_req):
+                announcement_no_list.append(announcement_no)
+                requirement_no_list.append(i)
+                requirement_type_list.append(req_type)
+                requirement_text_list.append(text)
+                createdDate_list.append(datetime.now())
+                updatedDate_list.append(datetime.now())
+                has_other_req = False
+
+    new_dict = {
+        "announcement_no":announcement_no_list,
+        "requirement_no":requirement_no_list,
+        "requirement_type":requirement_type_list,
+        "requirement_text":requirement_text_list,
+        "createdDate":createdDate_list,
+        "updatedDate":updatedDate_list
+    }
+    return new_dict
+
+
+
+def call_gemini(prompt, document_id, data_type):
+
+    f_pdf = fr"../4_get_documents/output_v3/pdf/pdf_{document_id.split('_')[0]}/{document_id}.pdf"
+    with open(f_pdf, "rb") as f0:
+        data = f0.read()   # ただのバイト列
+
+
+    if data_type == "text":
+        response = client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=[
+                types.Part.from_text(text=data),  # ← ここが PDF の代わり
+                prompt
+            ]
+        )
+    elif data_type == "pdf":
+        response = client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=[
+                types.Part.from_bytes(
+                    data=data,
+                    mime_type='application/pdf',
+                ),
+                prompt
+            ]
+        )
+    elif data_type == "pdf_fileapi":
+        response = client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=[
+                data,
+                prompt
+            ]
+        )
+
+    return response.text
+
+
+async def call_parallel(params, max_concurrency=5):
+    semaphore = asyncio.Semaphore(max_concurrency)
+
+    async def wrapper(prompt, document_id, data_type, type2):
+        async with semaphore:
+            try:
+                result = await asyncio.to_thread(
+                    call_gemini, prompt, document_id, data_type
+                )
+                return {"document_id": document_id, "result": result, "error": None, "type": type2}
+            except Exception as e:
+                return {"document_id": document_id, "result": None, "error": str(e), "type": type2}
+
+    tasks = [wrapper(p, d, t, t2) for p, d, t, t2 in params]
+    return await asyncio.gather(*tasks)
+
+
+PROMPT_ANN = """
+Goal: Extract specific information related to construction projects and bidding procedures from the provided context.
+
+Steps (T1 → T2 → T3):
+T1: Thoroughly read and understand the entire context.
+T2: Identify and locate the following fields within the context.  If a field is not present, its value will be "".
+T3: Return the extracted information in a valid JSON format, adhering to the specified rules.
+
+JSON Structure:
+
+```json
+{
+"工事場所": "",
+"入札手続等担当部局": {
+"郵便番号": "",
+"住所": "",
+"担当部署名": "",
+"担当者名": "",
+"電話番号": "",
+"FAX番号": "",
+"メールアドレス": ""
+},
+"公告日" : "",
+"入札説明書の交付期間": {
+"開始日": "",
+"終了日": ""
+},
+"申請書及び競争参加資格確認資料の提出期限": {
+"開始日": "",
+"終了日": ""
+},
+"入札書の提出期間": {
+"開始日": "",
+"終了日": ""
+}
+}
+```
+
+Rules:
+1.  **Exact Text:** Use the exact original text from the context for all extracted data.  Do not modify or translate the text.
+2.  **Completeness:**  Extract all requested fields. If a field is not found in the context, represent it with an empty string (`""`). No omissions are allowed.
+3.  **Limited Output:** Only include the specified fields in the JSON output. Do not add any extra information or labels.
+4.  **Hide Steps:** Do not display the internal steps (T1 or T2). Only the final JSON output (T3) should be shown.
+5.  **Prefix Exclusion:** Exclude prefixes like "〒", "TEL", "FAX", and "E-mail:" from the extracted values.
+6.  **Output Language:** The output (field names and extracted text if applicable) should be in Japanese.
+7. **Data Structure:** Maintain the nested structure shown in the JSON Structure above.  "入札手続等担当部局", "入札説明書の交付期間", "申請書及び競争参加資格確認資料の提出期限" and "入札書の提出期間" are objects containing their respective sub-fields.
+"""
+
+PROMPT_REQ = """
+# Goal Seek Prompt for Bid Qualification Extraction
+
+[Input] 
+→ [Extract bidding qualifications from document]
+→ [Intent](identify, extract, format, maintain original text, output JSON)
+
+[Input]
+→ [User Intent]
+→ [Want or need Intent](accurate extraction, complete requirements, properly formatted JSON, faithful text reproduction)
+
+[抽象化オブジェクト]
+-> Legal Document Parser for Bid Qualifications
+Why
+<User Input>
+I need to automatically extract all bidding and competition participation qualifications/requirements from legal documents and format them in a structured JSON output while preserving the original text exactly.
+</User Input>
+[Fixed User want intent] = Extract and structure bidding qualification requirements from legal documents
+
+Achieve Goal == Need Tasks[Qualification Extraction]=[Tasks](
+Read and comprehend document,
+Identify qualification sections,
+Determine primary qualification headings, 
+Extract qualification text blocks, 
+Maintain text integrity, 
+Handle dependent requirements, 
+Format as specified JSON
+)
+
+To Do Task Execute need Prompt And (Text Analysis Tool)
+assign Agent
+LegalDocumentParser
+
+Agent Task Execute Feed back loop:
+1. Read entire document to understand context
+2. Locate all sections related to "competition participation qualifications
+3. Identify primary qualification sections and related subsections
+4. Extract complete text blocks for each qualification item
+5. Preserve original formatting including numbering and indentation
+6. Group dependent requirements together
+7. Structure output in specified JSON format
+8. Verify all qualification requirements are captured
+
+Then Task Complete
+Execute
+====================
+
+### Important Output Instructions
+1. The JSON key name must be exactly "資格・条件" - do not change this key name even if similar terms appear in the document
+2. Preserve the original text of qualifications exactly as they appear in the document, including numbering and formatting
+3. Extract all qualifications completely without omission
+4. Ensure the output is valid JSON format
+
+### Output Format
+```json
+{
+"資格・条件" : [
+"(1) ・・・本文・・・",
+"(2) ・・・本文・・・",
+...
+]
+}
+```
+"""
+
+
+def is_document_id_value_nan(document_id, df_ann, df_req):
+    v1 = df_ann[df_ann["document_id"]==document_id]
+    cols = [
+        "工事場所",
+        "入札手続等担当部局___郵便番号",
+        "入札手続等担当部局___住所",
+        "入札手続等担当部局___担当部署名",
+        "入札手続等担当部局___担当者名",
+        "入札手続等担当部局___電話番号",
+        "入札手続等担当部局___FAX番号",
+        "入札手続等担当部局___メールアドレス",
+        "公告日",
+        "入札説明書の交付期間___開始日",
+        "入札説明書の交付期間___終了日",
+        "申請書及び競争参加資格確認資料の提出期限___開始日",
+        "申請書及び競争参加資格確認資料の提出期限___終了日",
+        "入札書の提出期間___開始日",
+        "入札書の提出期間___終了日"
+    ]
+    flg1 = v1.iloc[0][cols].isna().all()
+    v2 = df_req[df_req["document_id"]==document_id]
+    cols = ["資格・条件"]
+    flg2 = v2.iloc[0][cols].isna().all()
+    if flg1 and flg2:
+        return True
+    return False
+
+
+
+if __name__ == "__main__":
+
+    parser = argparse.ArgumentParser(description="")
+    parser.add_argument("--stop_processing", action="store_true")
+    args = parser.parse_args()
+    stop_processing = args.stop_processing
+
+    yyyymmdd = datetime.now().strftime("%Y%m%d")
+
+    google_ai_studio_api_key_filepath = "../../../../data/sec/google_ai_studio_api_key.txt"
+    google_ai_studio_api_key_filepath = "../../../../data/sec/google_ai_studio_api_key_mizu.txt"
+
+    if google_ai_studio_api_key_filepath is None:
+        key = ""
+    else:
+        with open(google_ai_studio_api_key_filepath,"r") as f:
+            key = f.read()
+
+    client = genai.Client(api_key=key)
+
+    if False:
+        output_path_ann = "../4_get_documents/output_v3/pdf_txt_all_gemini_ann/ann_announcements_document_202602162218.txt"
+        output_path_ann_zip = "../4_get_documents/output_v3/pdf_txt_all_gemini_ann/ann_announcements_document_202602162218.txt.zip"
+        os.makedirs(os.path.dirname(output_path_ann), exist_ok=True)
+        output_path_req = "../4_get_documents/output_v3/pdf_txt_all_gemini_req/req_announcements_document_202602162218.txt"
+        output_path_req_zip = "../4_get_documents/output_v3/pdf_txt_all_gemini_req/req_announcements_document_202602162218.txt.zip"
+        os.makedirs(os.path.dirname(output_path_req), exist_ok=True)
+    output_path_ann = "../4_get_documents/output_v3/pdf_txt_all_gemini_ann/ann_announcements_document_202603031408.txt"
+    output_path_ann_zip = "../4_get_documents/output_v3/pdf_txt_all_gemini_ann/ann_announcements_document_202603031408.txt.zip"
+    os.makedirs(os.path.dirname(output_path_ann), exist_ok=True)
+    output_path_req = "../4_get_documents/output_v3/pdf_txt_all_gemini_req/req_announcements_document_202603031408.txt"
+    output_path_req_zip = "../4_get_documents/output_v3/pdf_txt_all_gemini_req/req_announcements_document_202603031408.txt.zip"
+    os.makedirs(os.path.dirname(output_path_req), exist_ok=True)
+
+
+
+    # 既にファイルがある前提になっていることに注意。
+    if os.path.exists(output_path_ann_zip):
+        df_ann = pd.read_csv(output_path_ann_zip,sep="\t", low_memory=False)
+    else:
+        df_ann = pd.read_csv(output_path_ann,sep="\t", low_memory=False)
+
+    df_ann0 = pd.read_csv(output_path_ann,sep="\t", low_memory=False)
+
+    if os.path.exists(output_path_req_zip):
+        df_req = pd.read_csv(output_path_req_zip,sep="\t", low_memory=False)
+    else:
+        df_req = pd.read_csv(output_path_req,sep="\t", low_memory=False)
+
+
+    if False:
+        # 新しい document_id を追加する。
+        df_new = pd.read_csv("../3_source_formatting/output/announcements_document_202603031408_merged_updated.txt",sep="\t")
+        new_ids = df_new[~df_new["document_id"].isin(df_ann["document_id"])]
+        new_ids = new_ids.reset_index(drop=True)
+
+        rows_ann = pd.DataFrame({
+            col: [None] * len(new_ids)
+            for col in df_ann.columns
+        })
+        rows_ann["document_id"] = new_ids["document_id"]
+        rows_ann["url"] = new_ids["url"]
+        df_ann = pd.concat([df_ann, rows_ann], ignore_index=True)
+        df_ann = df_ann.sort_values("document_id")
+        df_ann["document_id"].reset_index(drop=True).equals(df_new["document_id"].reset_index(drop=True))
+
+        new_ids = df_new[~df_new["document_id"].isin(df_req["document_id"])]
+        new_ids = new_ids.reset_index(drop=True)
+
+        rows_req = pd.DataFrame({
+            col: [None] * len(new_ids)
+            for col in df_req.columns
+        })
+        rows_req["document_id"] = new_ids["document_id"]
+        df_req = pd.concat([df_req, rows_req], ignore_index=True)
+        df_req = df_req.sort_values("document_id")
+        df_req["document_id"].reset_index(drop=True).equals(df_new["document_id"].reset_index(drop=True))
+
+
+
+    (df_ann["document_id"]==df_req["document_id"]).all()
+
+    if False:
+
+        for document_id in date_df2["document_id"]:
+            f_txt = fr"../4_get_documents/output_v3/pdf_txt_all_py/pdf_{document_id.split('_')[0]}/{document_id}.txt"
+            if os.path.exists(f_txt):
+                with open(f_txt, "r", encoding="utf-8") as f0:
+                    data_txt = f0.read()
+                if data_txt.find("TESSERACT") >= 0:
+                    break
+    if False:
+        date_df = pd.read_csv("../3_source_formatting/output/announcements_document_202602162218_date_df.txt",sep="\t")
+        type_df = pd.read_csv("../3_source_formatting/output/announcements_document_202602162218_type_df.txt",sep="\t")
+    date_df = pd.read_csv("../3_source_formatting/output/announcements_document_202603031408_merged_date_df.txt",sep="\t")
+    type_df = pd.read_csv("../3_source_formatting/output/announcements_document_202603031408_merged_type_df.txt",sep="\t")
+    (date_df["document_id"]==type_df["document_id"]).all()
+
+    date_df2 = date_df["2026-01-01" <= date_df["date_earliest"]]
+    date_df2 = date_df2.reset_index(drop=True)
+
+    # exit(1)
+
+    df_ann_updated = []
+    df_req_updated = []
+
+    row = df_ann[df_ann["document_id"]=='01993_wp-content_uploads_2026_01_koukoku_8_2_13']
+    # document_id = df_ann["document_id"][0]
+
+    tmpdf = date_df2[date_df2["document_id"]=='00393_kokoku_166_166kk']
+    tmpdf = date_df2
+    print(tmpdf.index[0])
+    date_df3 = date_df2[tmpdf.index[0]:]
+    date_df3 = date_df3.reset_index(drop=True)
+
+    date_df2.shape
+    date_df3.shape
+    date_df2.shape[0] - date_df3.shape[0]
+
+    if stop_processing:
+        exit(1)
+
+    df_req["資格・条件"].isna().value_counts()
+    df_ann[[
+        "工事場所",
+        "入札手続等担当部局___郵便番号",
+        "入札手続等担当部局___住所",
+        "入札手続等担当部局___担当部署名",
+        "入札手続等担当部局___担当者名",
+        "入札手続等担当部局___電話番号",
+        "入札手続等担当部局___FAX番号",
+        "入札手続等担当部局___メールアドレス",
+        "公告日",
+        "入札説明書の交付期間___開始日",
+        "入札説明書の交付期間___終了日",
+        "申請書及び競争参加資格確認資料の提出期限___開始日",
+        "申請書及び競争参加資格確認資料の提出期限___終了日",
+        "入札書の提出期間___開始日",
+        "入札書の提出期間___終了日"
+    ]].isna().all(axis=1).value_counts()
+
+    if False:
+        date_df2.to_csv("../3_source_formatting/output/announcements_document_202602162218_date_df_target_did.txt",sep="\t",index=False)
+
+
+    # 抽出結果を取り出すだけの処理。
+    if False:
+        #for i, row in tqdm(date_df2.iterrows(), total=len(date_df2)):
+        for i, row in tqdm(df_ann.iterrows(), total=len(df_ann)):
+            document_id = row["document_id"]
+            try:
+                url = df_ann[df_ann["document_id"]==document_id]["url"].values[0]
+                if True:
+                    # announcements
+                    if document_id in df_ann["document_id"].values:
+                        # df_ann から取得して整形...
+                        dict2 = df_ann[df_ann["document_id"]==document_id]
+                        dict1 = {
+                            "工事場所": dict2["工事場所"].values[0],
+                            "入札手続等担当部局": {
+                                "郵便番号": dict2["入札手続等担当部局___郵便番号"].values[0],
+                                "住所": dict2["入札手続等担当部局___住所"].values[0],
+                                "担当部署名": dict2["入札手続等担当部局___担当部署名"].values[0],
+                                "担当者名": dict2["入札手続等担当部局___担当者名"].values[0],
+                                "電話番号": dict2["入札手続等担当部局___電話番号"].values[0],
+                                "FAX番号": dict2["入札手続等担当部局___FAX番号"].values[0],
+                                "メールアドレス": dict2["入札手続等担当部局___メールアドレス"].values[0]
+                            },
+                            "公告日": dict2["公告日"].values[0],
+                            "入札説明書の交付期間": {
+                                "開始日": dict2["入札説明書の交付期間___開始日"].values[0],
+                                "終了日": dict2["入札説明書の交付期間___終了日"].values[0]
+                            },
+                            "申請書及び競争参加資格確認資料の提出期限": {
+                                "開始日": dict2["申請書及び競争参加資格確認資料の提出期限___開始日"].values[0],
+                                "終了日": dict2["申請書及び競争参加資格確認資料の提出期限___終了日"].values[0]
+                            },
+                            "入札書の提出期間": {
+                                "開始日": dict2["入札書の提出期間___開始日"].values[0],
+                                "終了日": dict2["入札書の提出期間___終了日"].values[0]
+                            }
+                        }
+                        new_json = convertJson(json_value=dict1)
+                        df_ann_updated.append(new_json)
+
+                if True:
+                    # requirements
+                    if document_id in df_req["document_id"].values:
+                        dict2 = df_req[df_req["document_id"]==document_id]
+                        if dict2["資格・条件"].isna().all():
+                            requirement_texts = {
+                                "資格・条件": ["Missing requirements."]
+                            }
+                        else:
+                            requirement_texts = {
+                                "資格・条件": dict2["資格・条件"].apply(ast.literal_eval).values[0]
+                            }
+                    dic = convertRequirementTextDict(requirement_texts=requirement_texts)
+                    df_req_updated.append(dic)
+            except Exception as e:
+                print(e)
+                #time.sleep(60)
+        df_ann_updated_df = pd.DataFrame(df_ann_updated)
+        df_req_updated_df = pd.DataFrame(df_req_updated)
+        
+        col = df_req_updated_df["requirement_text"]
+        lens = col.apply(len)
+        mask = (lens == 0) | ((lens == 1) & (col.str[0] == "Missing requirements."))
+        aa2 = df_req_updated_df[mask]
+
+        df_ann_updated_df.shape
+        df_req_updated_df.shape
+        
+        
+        df_req_updated_df = df_req_updated_df.explode(list(df_req_updated_df.columns), ignore_index=True)
+
+
+
+        ret = is_document_id_value_nan(document_id, df_ann, df_req)
+
+
+    # 抽出結果を取り出すだけの処理(並列化版)
+    if False:
+        df_ann_indexed = df_ann.set_index("document_id")
+        df_req_indexed = df_req.set_index("document_id")
+        def process_row(row):
+            document_id = row["document_id"]
+
+            ann_result = None
+            req_result = None
+
+            try:
+                # announcements
+                if document_id in df_ann_indexed.index:
+                    dict2 = df_ann_indexed.loc[document_id]
+
+                    dict1 = {
+                        "工事場所": dict2["工事場所"],
+                        "入札手続等担当部局": {
+                            "郵便番号": dict2["入札手続等担当部局___郵便番号"],
+                            "住所": dict2["入札手続等担当部局___住所"],
+                            "担当部署名": dict2["入札手続等担当部局___担当部署名"],
+                            "担当者名": dict2["入札手続等担当部局___担当者名"],
+                            "電話番号": dict2["入札手続等担当部局___電話番号"],
+                            "FAX番号": dict2["入札手続等担当部局___FAX番号"],
+                            "メールアドレス": dict2["入札手続等担当部局___メールアドレス"]
+                        },
+                        "公告日": dict2["公告日"],
+                        "入札説明書の交付期間": {
+                            "開始日": dict2["入札説明書の交付期間___開始日"],
+                            "終了日": dict2["入札説明書の交付期間___終了日"]
+                        },
+                        "申請書及び競争参加資格確認資料の提出期限": {
+                            "開始日": dict2["申請書及び競争参加資格確認資料の提出期限___開始日"],
+                            "終了日": dict2["申請書及び競争参加資格確認資料の提出期限___終了日"]
+                        },
+                        "入札書の提出期間": {
+                            "開始日": dict2["入札書の提出期間___開始日"],
+                            "終了日": dict2["入札書の提出期間___終了日"]
+                        }
+                    }
+
+                    ann_result = convertJson(json_value=dict1)
+
+                # requirements
+                if document_id in df_req_indexed.index:
+                    dict2 = df_req_indexed.loc[document_id]
+
+                    if dict2["資格・条件"] is None:
+                        requirement_texts = {"資格・条件": ["Missing requirements."]}
+                    else:
+                        requirement_texts = {
+                            "資格・条件": ast.literal_eval(dict2["資格・条件"])
+                        }
+
+                    req_result = convertRequirementTextDict(
+                        requirement_texts=requirement_texts
+                    )
+
+            except Exception as e:
+                print(e)
+
+            return ann_result, req_result
+
+        df_ann_updated = []
+        df_req_updated = []
+
+        with ThreadPoolExecutor(max_workers=8) as executor:
+            results = list(
+                tqdm(
+                    executor.map(process_row, [row for _, row in df_ann.iterrows()]),
+                    total=len(df_ann)
+                )
+            )
+
+        for ann, req in results:
+            if ann:
+                df_ann_updated.append(ann)
+            if req:
+                df_req_updated.append(req)
+
+        df_ann_updated_df = pd.DataFrame(df_ann_updated)
+        df_req_updated_df = pd.DataFrame(df_req_updated)
+
+
+    # gemini逐次実行
+    if False:
+        data_type = ["txt","pdf","pdf_fileapi"][2]
+        print(fr"data_type={data_type}")
+        processed_document_id = []
+        #for i, row in tqdm(date_df2.iterrows(), total=len(date_df2)):
+        for i, row in tqdm(df_ann.iterrows(), total=len(df_ann)):
+            document_id = row["document_id"]
+
+            if False:
+                ret = is_document_id_value_nan(document_id, df_ann, df_req)
+                if not ret:
+                    continue
+
+            try:
+                if False:
+                    if document_id in processed_document_id:
+                        print(fr"Already processed document_id = {document_id}")
+                        continue
+
+                url = df_ann[df_ann["document_id"]==document_id]["url"].values[0]
+
+                #f_txt = fr"../4_get_documents/output_v3/pdf_txt_all_py/pdf_{document_id.split('_')[0]}/{document_id}.txt"
+                #if os.path.exists(f_txt):
+                #    with open(f_txt, "r", encoding="utf-8") as f0:
+                #        data_txt = f0.read()
+                #else:
+                #    print(fr"FileNotFound: {f_txt}")
+                if False:
+                    f_pdf = fr"../4_get_documents/output_v3/pdf/pdf_{document_id.split('_')[0]}/{document_id}.pdf"
+                    with open(f_pdf, "rb") as f0:
+                        data_pdf = f0.read()   # ただのバイト列
+
+
+                if False:
+                    # PDFデータはバイト列で渡す
+                    with open(f_pdf, "rb") as f0:
+                        data_pdf = f0.read()
+
+                    # pdf_file = client.files.upload(file="sample.pdf")
+                    pdf_file = client.files.upload(file=f_pdf)
+                    prompts = [PROMPT_ANN, PROMPT_REQ]
+                    results = asyncio.run(call_parallel(prompts, pdf_file))
+                    print(results)
+                    client.files.delete(name=pdf_file.name)
+
+                if True:
+                    # announcements
+                    if document_id in df_ann["document_id"].values:
+                        if False:
+                            print(fr"ann - {document_id}")
+                            time.sleep(0.2)
+                            # dict1 = getJsonFromData(data=data_txt,data_type="txt")
+                            if data_type in ["txt","pdf"]:
+                                dict1 = getJsonFromData(data=data_pdf,data_type=data_type)
+                            elif data_type in ["pdf_fileapi"]:
+                                pdf_file = client.files.upload(file=f_pdf)
+                                dict1 = getJsonFromData(data=pdf_file,data_type=data_type)
+                            else:
+                                raise ValueError(fr"Unknown data_type={data_type}.")
+                            dict2 = {
+                                "document_id": document_id,
+                                "工事場所": dict1.get("工事場所"),
+                                "入札手続等担当部局___郵便番号": dict1.get("入札手続等担当部局", {}).get("郵便番号"),
+                                "入札手続等担当部局___住所": dict1.get("入札手続等担当部局", {}).get("住所"),
+                                "入札手続等担当部局___担当部署名": dict1.get("入札手続等担当部局", {}).get("担当部署名"),
+                                "入札手続等担当部局___担当者名": dict1.get("入札手続等担当部局", {}).get("担当者名"),
+                                "入札手続等担当部局___電話番号": dict1.get("入札手続等担当部局", {}).get("電話番号"),
+                                "入札手続等担当部局___FAX番号": dict1.get("入札手続等担当部局", {}).get("FAX番号"),
+                                "入札手続等担当部局___メールアドレス": dict1.get("入札手続等担当部局", {}).get("メールアドレス"),
+                                "公告日": dict1.get("公告日"),
+                                "入札説明書の交付期間___開始日": dict1.get("入札説明書の交付期間", {}).get("開始日"),
+                                "入札説明書の交付期間___終了日": dict1.get("入札説明書の交付期間", {}).get("終了日"),
+                                "申請書及び競争参加資格確認資料の提出期限___開始日": dict1.get("申請書及び競争参加資格確認資料の提出期限", {}).get("開始日"),
+                                "申請書及び競争参加資格確認資料の提出期限___終了日": dict1.get("申請書及び競争参加資格確認資料の提出期限", {}).get("終了日"),
+                                "入札書の提出期間___開始日": dict1.get("入札書の提出期間", {}).get("開始日"),
+                                "入札書の提出期間___終了日": dict1.get("入札書の提出期間", {}).get("終了日"),
+                                "url": None
+                            }
+                            if False:
+                                for k,v in dict2.items():
+                                    print(k,v)
+                                df_ann.loc[df_ann["document_id"] == document_id,]
+                                for cname in df_ann.columns:
+                                    print(cname, df_ann.loc[df_ann["document_id"] == document_id,cname].values[0])
+                            tmpdict2 = pd.DataFrame(dict2, index=[0])
+                            keys = list(tmpdict2.keys())
+                            keys = [k for k in keys if k not in ["document_id","url"] ]
+                            for key in keys:
+                                df_ann.loc[df_ann["document_id"] == document_id, key] = dict2[key]
+                            # df_ann[df_ann["document_id"]==document_id]
+                            # df_ann = pd.concat([df_ann, tmpdict2], axis=0, ignore_index=True)
+                        else:
+                            # df_ann から取得して整形...
+                            dict2 = df_ann[df_ann["document_id"]==document_id]
+                            dict1 = {
+                                "工事場所": dict2["工事場所"].values[0],
+                                "入札手続等担当部局": {
+                                    "郵便番号": dict2["入札手続等担当部局___郵便番号"].values[0],
+                                    "住所": dict2["入札手続等担当部局___住所"].values[0],
+                                    "担当部署名": dict2["入札手続等担当部局___担当部署名"].values[0],
+                                    "担当者名": dict2["入札手続等担当部局___担当者名"].values[0],
+                                    "電話番号": dict2["入札手続等担当部局___電話番号"].values[0],
+                                    "FAX番号": dict2["入札手続等担当部局___FAX番号"].values[0],
+                                    "メールアドレス": dict2["入札手続等担当部局___メールアドレス"].values[0]
+                                },
+                                "公告日": dict2["公告日"].values[0],
+                                "入札説明書の交付期間": {
+                                    "開始日": dict2["入札説明書の交付期間___開始日"].values[0],
+                                    "終了日": dict2["入札説明書の交付期間___終了日"].values[0]
+                                },
+                                "申請書及び競争参加資格確認資料の提出期限": {
+                                    "開始日": dict2["申請書及び競争参加資格確認資料の提出期限___開始日"].values[0],
+                                    "終了日": dict2["申請書及び競争参加資格確認資料の提出期限___終了日"].values[0]
+                                },
+                                "入札書の提出期間": {
+                                    "開始日": dict2["入札書の提出期間___開始日"].values[0],
+                                    "終了日": dict2["入札書の提出期間___終了日"].values[0]
+                                }
+                            }
+                    if True:
+                        new_json = convertJson(json_value=dict1)
+                        df_ann_updated.append(new_json)
+
+                if True:
+                    # requirements
+                    if document_id in df_req["document_id"].values:
+                        if False:
+                            print(fr"req - {document_id}")
+                            time.sleep(0.2)
+                            # requirement_texts = getRequirementText(data=data_txt, data_type="txt")
+                            if data_type in ["txt","pdf"]:
+                                requirement_texts = getRequirementText(data=data_pdf, data_type=data_type)
+                            elif data_type in ["pdf_fileapi"]:
+                                requirement_texts = getRequirementText(data=pdf_file, data_type=data_type)
+                                client.files.delete(name=pdf_file.name)
+
+                            dict2 = {
+                                "document_id" : document_id,
+                                "資格・条件" : str(requirement_texts["資格・条件"])
+                            }
+                            # tmpdict2 = pd.DataFrame(dict2, index=[0])
+                            # tmpdict2 = pd.DataFrame([dict2])
+                            #df_req = pd.concat([df_req, tmpdict2], axis=0, ignore_index=True)
+                            tmpdict2 = pd.DataFrame(dict2, index=[0])
+                            keys = list(tmpdict2.keys())
+                            keys = [k for k in keys if k not in ["document_id","url"] ]
+                            for key in keys:
+                                df_req.loc[df_req["document_id"] == document_id, key] = dict2[key]
+                            # df_req[df_req["document_id"]==document_id]
+                        else:
+                            dict2 = df_req[df_req["document_id"]==document_id]
+                            if dict2["資格・条件"].isna().all():
+                                requirement_texts = {
+                                    "資格・条件": ["Missing requirements."]
+                                }
+                            else:
+                                requirement_texts = {
+                                    "資格・条件": dict2["資格・条件"].apply(ast.literal_eval).values[0]
+                                }
+                    if True:
+                        dic = convertRequirementTextDict(requirement_texts=requirement_texts)
+                        df_req_updated.append(dic)
+                processed_document_id.append(document_id)
+            except Exception as e:
+                print(e)
+                #time.sleep(60)
+
+
+    # gemini逐次実行
+    # 並列化検討
+    # まず params 作成。
+    if False:
+        params = []
+        print("Check target document_id and make triples of parameters.")
+        for i, row in tqdm(date_df2.iterrows(), total=len(date_df2)):
+            document_id = row["document_id"]
+
+            # 結果が1つでも埋まっているならスキップ。
+            ret = is_document_id_value_nan(document_id, df_ann, df_req)
+            if not ret:
+                continue
+
+            f_pdf = fr"../4_get_documents/output_v3/pdf/pdf_{document_id.split('_')[0]}/{document_id}.pdf"
+            # pdf を開けるか確認。
+            try:
+                with open(f_pdf, "rb") as f0:
+                    data_pdf = f0.read()   # ただのバイト列
+            except Exception as e:
+                print(e)
+                continue
+            
+            params.append( [PROMPT_ANN, document_id, "pdf", "ann"] )
+            params.append( [PROMPT_REQ, document_id, "pdf", "req"] )
+
+            # pdf_file = client.files.upload(file=f_pdf)
+            # client.files.delete(name=pdf_file.name)
+
+        start = time.time()
+        results = asyncio.run(call_parallel(params))
+        end = time.time()
+        print(f"処理時間: {end - start:.4f} 秒")
+        # 処理時間: 23044.9809 秒
+        # pickle 保存
+        with open(fr"../4_get_documents/output_v3/gemini_results_{yyyymmdd}.pkl", "wb") as f:
+            pickle.dump(results, f)
+
+    if False:
+        results2 = []
+        tmp_req_df_list = []
+        tmp_ann_df_list = []
+        for i,res in enumerate(tqdm(results, total=len(results))):
+            document_id = res["document_id"]
+            prompt = res["prompt"]
+            if prompt.startswith("\n# Goal Seek"):
+                type1 = "req"
+            else:
+                type1 = "ann"
+
+            if type1 == "req":
+                try:
+                    text2 = res["result"].replace('\n', '').replace('```json', '').replace("```","")
+                    # text2 = text2.replace('\n', '').replace('```json', '').replace("```","")
+                except Exception as e:
+                    text2 = res["error"]
+                    text2 = "ERROR"
+                try:
+                    requirement_texts = json.loads(text2)
+                except json.decoder.JSONDecodeError:
+                    text2 = text2.replace('"',"'")
+                    requirement_texts = json.loads('{"資格・条件" : ["' + text2 + '"]}')
+
+                dict2 = {
+                    "document_id" : document_id,
+                    "資格・条件" : str(requirement_texts["資格・条件"])
+                }
+                # tmpdict2 = pd.DataFrame(dict2, index=[0])
+                # tmpdict2 = pd.DataFrame([dict2])
+                #df_req = pd.concat([df_req, tmpdict2], axis=0, ignore_index=True)
+                tmpdict2 = pd.DataFrame(dict2, index=[0])
+                if True:
+                    keys = list(tmpdict2.keys())
+                    keys = [k for k in keys if k not in ["document_id","url"] ]
+                    for key in keys:
+                        df_req.loc[df_req["document_id"] == document_id, key] = dict2[key]
+                    # df_ann[df_ann["document_id"]==document_id]
+                tmp_req_df_list.append(tmpdict2)
+            else:
+                dict1 = res["result"].replace('\n', '').replace('```json', '').replace("```","")
+                dict1 = json.loads(dict1)
+                dict2 = {
+                    "document_id": document_id,
+                    "工事場所": dict1.get("工事場所"),
+                    "入札手続等担当部局___郵便番号": dict1.get("入札手続等担当部局", {}).get("郵便番号"),
+                    "入札手続等担当部局___住所": dict1.get("入札手続等担当部局", {}).get("住所"),
+                    "入札手続等担当部局___担当部署名": dict1.get("入札手続等担当部局", {}).get("担当部署名"),
+                    "入札手続等担当部局___担当者名": dict1.get("入札手続等担当部局", {}).get("担当者名"),
+                    "入札手続等担当部局___電話番号": dict1.get("入札手続等担当部局", {}).get("電話番号"),
+                    "入札手続等担当部局___FAX番号": dict1.get("入札手続等担当部局", {}).get("FAX番号"),
+                    "入札手続等担当部局___メールアドレス": dict1.get("入札手続等担当部局", {}).get("メールアドレス"),
+                    "公告日": dict1.get("公告日"),
+                    "入札説明書の交付期間___開始日": dict1.get("入札説明書の交付期間", {}).get("開始日"),
+                    "入札説明書の交付期間___終了日": dict1.get("入札説明書の交付期間", {}).get("終了日"),
+                    "申請書及び競争参加資格確認資料の提出期限___開始日": dict1.get("申請書及び競争参加資格確認資料の提出期限", {}).get("開始日"),
+                    "申請書及び競争参加資格確認資料の提出期限___終了日": dict1.get("申請書及び競争参加資格確認資料の提出期限", {}).get("終了日"),
+                    "入札書の提出期間___開始日": dict1.get("入札書の提出期間", {}).get("開始日"),
+                    "入札書の提出期間___終了日": dict1.get("入札書の提出期間", {}).get("終了日"),
+                    "url": None
+                }
+
+                if False:
+                    for k,v in dict2.items():
+                        print(k,v)
+                    df_ann.loc[df_ann["document_id"] == document_id,]
+                    for cname in df_ann.columns:
+                        print(cname, df_ann.loc[df_ann["document_id"] == document_id,cname].values[0])
+                tmpdict2 = pd.DataFrame(dict2, index=[0])
+                if True:
+                    keys = list(tmpdict2.keys())
+                    keys = [k for k in keys if k not in ["document_id","url"] ]
+                    for key in keys:
+                        df_ann.loc[df_ann["document_id"] == document_id, key] = dict2[key]
+                    # df_req[df_req["document_id"]==document_id]
+                tmp_ann_df_list.append(tmpdict2)
+
+
+        tmp_ann_df = pd.concat(tmp_ann_df_list)
+        tmp_ann_df = tmp_ann_df.reset_index(drop=True)
+        tmp_req_df = pd.concat(tmp_req_df_list)
+        tmp_req_df = tmp_req_df.reset_index(drop=True)
+
+        xxx = tmp_req_df[tmp_req_df["資格・条件"].str.len() <= 10]
+        xxx = tmp_req_df[tmp_req_df["資格・条件"].str.len() <= 30]
+        xxx = tmp_req_df[tmp_req_df["資格・条件"].str.contains("ERROR")]
+        xxx["資格・条件"].value_counts()
+
+
+
+
+    # インタラクティブ環境
+    if False:
+        async def tmpfunc():
+            results = await call_parallel(triples)
+            return results
+        
+        start = time.time()
+        all_results = asyncio.run(tmpfunc())
+
+        end = time.time()
+        print(f"処理時間: {end - start:.4f} 秒")
+
+
+
+
+    # 保存
+    if False:
+        
+        df_ann.to_csv(output_path_ann, sep="\t", index=False)
+        df_ann.to_csv(output_path_ann_zip, sep="\t", compression="zip", index=False)
+        df_req.to_csv(output_path_req, sep="\t", index=False)
+        df_req.to_csv(output_path_req_zip, sep="\t", compression="zip", index=False)
+
+        df_ann.to_csv("../4_get_documents/output_v3/pdf_txt_all_gemini_ann/ann_announcements_document_202603031408.txt", sep="\t", index=False)
+        df_ann.to_csv("../4_get_documents/output_v3/pdf_txt_all_gemini_ann/ann_announcements_document_202603031408.txt_zip", sep="\t", compression="zip", index=False)
+        df_req.to_csv("../4_get_documents/output_v3/pdf_txt_all_gemini_ann/req_announcements_document_202603031408.txt", sep="\t", index=False)
+        df_req.to_csv("../4_get_documents/output_v3/pdf_txt_all_gemini_ann/req_announcements_document_202603031408.txt.zip", sep="\t", compression="zip", index=False)
+
+    if False:
+        df_ann_updated = pd.DataFrame(df_ann_updated)
+        df_ann_updated["zipcode"].value_counts()
+        df_ann_updated["bidenddate"].value_counts()
+        df_ann_updated.columns
+
+        df_req_updated = pd.DataFrame(df_req_updated)
+        # こいつらは保存し (て）ない。
+
+    if False:
+        df_ann_updated_latest = df_ann_updated["2026-01-01" <= df_ann_updated["publishdate"]]
+        df_ann_updated_latest.shape
+        df_ann_updated_latest["publishdate"].value_counts()
+        df_ann_updated_latest["bidenddate"].value_counts()
+
+        df_ann_updated_latest = df_ann_updated["2026-03-01" <= df_ann_updated["submissionend"]]
+        df_ann_updated_latest.shape
+        df_ann_updated_latest["publishdate"].value_counts()
+        df_ann_updated_latest["bidenddate"].value_counts()
+
+
+
+
+
+
