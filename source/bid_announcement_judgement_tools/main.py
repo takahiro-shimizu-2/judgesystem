@@ -429,7 +429,7 @@ class OCRutils:
                     return fr"{int(m.group(1))}-{int(m.group(2)):02}-{int(m.group(3)):02}"
                 return datestr
             except Exception as e:
-                print(e)
+                # print(e)
                 return None
 
         def extract_year(s: str) -> str:
