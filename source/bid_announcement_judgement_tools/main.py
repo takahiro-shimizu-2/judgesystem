@@ -3503,6 +3503,11 @@ class BidJudgementSan:
             result_judgement_list = []
             result_sufficient_requirements_list = []
             result_insufficient_requirements_list = []
+
+            # 事前に
+            # req_df_map = dict(tuple(req_df0.groupby("announcement_no")))
+
+            # df.itertuples()
             for index, row1 in tqdm(df.iterrows(), total=len(df)):
                 announcement_no = row1["announcement_no"]
                 # print(fr"announcement_no={announcement_no}")
@@ -3515,7 +3520,11 @@ class BidJudgementSan:
                     office_no = int(df["office_no"][0])
 
                 # req_df = db_operator.selectToTable(tablename=fr"{tablename_requirements}", where_clause=fr"where announcement_no = {announcement_no}")
+
+                # 毎回 DataFrame filter しているので遅い
                 req_df = req_df0[req_df0["announcement_no"]==announcement_no]
+                # req_df = req_df_map.get(announcement_no)
+
                 if req_df.shape[0] == 0:
                     print(fr"   announcement_no={announcement_no}: No requirement found. Skip anyway.")
                     continue
