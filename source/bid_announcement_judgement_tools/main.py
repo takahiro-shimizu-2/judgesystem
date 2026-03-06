@@ -3378,7 +3378,7 @@ class BidJudgementSan:
     def step3(self, remove_table=False):
         """
         step3 : 要件判定処理
-    
+
         企業 x 拠点 x 要件の全組み合わせに対して要件判定し結果を企業公告判定マスターに格納する。
 
         また、充足要件マスターと不足要件マスターを作成する。
@@ -3389,8 +3389,8 @@ class BidJudgementSan:
 
         Args:
 
-        - remove_table: 
-        
+        - remove_table:
+
           処理の前に、企業公告判定マスター・充足要件マスター・不足要件マスターを削除するかどうか。
         """
 
@@ -3404,6 +3404,21 @@ class BidJudgementSan:
         tablename_insufficient_requirement_master = self.tablenamesconfig.insufficient_requirements
 
         db_operator = self.db_operator
+
+        # ループの外で全てのマスターデータを事前に読み込み（高速化のため）
+        print("Loading master data files...")
+        master_data_company = pd.read_csv("data/master/company_master.txt", sep="\t")
+        master_data_office_registration_authorization = pd.read_csv("data/master/office_registration_authorization_master.txt", sep="\t")
+        master_data_office_registration_authorization_with_converter = pd.read_csv("data/master/office_registration_authorization_master.txt", sep="\t", converters={"construction_no": lambda x: str(x)})
+        master_data_agency = pd.read_csv("data/master/agency_master.txt", sep="\t")
+        master_data_construction = pd.read_csv("data/master/construction_master.txt", sep="\t")
+        master_data_office = pd.read_csv("data/master/office_master.txt", sep="\t")
+        master_data_office_work_achivements = pd.read_csv("data/master/office_work_achivements_master.txt", sep="\t")
+        master_data_employee = pd.read_csv("data/master/employee_master.txt", sep="\t")
+        master_data_employee_qualification = pd.read_csv("data/master/employee_qualification_master.txt", sep="\t")
+        master_data_technician_qualification = pd.read_csv("data/master/technician_qualification_master.txt", sep="\t")
+        master_data_employee_experience = pd.read_csv("data/master/employee_experience_master.txt", sep="\t")
+        print("Master data files loaded.")
 
 
 
@@ -3439,10 +3454,9 @@ class BidJudgementSan:
                 print(fr"ALREADY EXISTS: {target_tablename}.")
 
 
-        # office_master テーブルを作成
-        tmp_office_master = pd.read_csv("data/master/office_master.txt",sep="\t")
+        # office_master テーブルを作成（既に読み込んだデータを使用）
         print(fr"Upload {tablename_office_master}")
-        db_operator.uploadDataToTable(data=tmp_office_master, tablename=tablename_office_master, chunksize=5000)
+        db_operator.uploadDataToTable(data=master_data_office, tablename=tablename_office_master, chunksize=5000)
 
         if False:
             db_operator.preupdateCompanyBidJudgement(
@@ -3521,45 +3535,45 @@ class BidJudgementSan:
                     
                     if requirement_type == "欠格要件":
                         val = checkIneligibilityDynamic(
-                            requirementText=requirement_text, 
-                            companyNo=company_no, 
+                            requirementText=requirement_text,
+                            companyNo=company_no,
                             officeNo=office_no,
-                            company_data = pd.read_csv("data/master/company_master.txt",sep="\t"), 
-                            office_registration_authorization_data=pd.read_csv("data/master/office_registration_authorization_master.txt",sep="\t")
+                            company_data=master_data_company,
+                            office_registration_authorization_data=master_data_office_registration_authorization
                         )
                     elif requirement_type == "業種・等級要件":
                         val = checkGradeAndItemRequirement(
-                            requirementText=requirement_text, 
+                            requirementText=requirement_text,
                             officeNo=office_no,
-                            licenseData = pd.read_csv("data/master/office_registration_authorization_master.txt",sep="\t", converters={"construction_no": lambda x: str(x)}),
-                            agencyData = pd.read_csv("data/master/agency_master.txt",sep="\t"),
-                            constructionData = pd.read_csv("data/master/construction_master.txt",sep="\t")
+                            licenseData=master_data_office_registration_authorization_with_converter,
+                            agencyData=master_data_agency,
+                            constructionData=master_data_construction
                         )
                     elif requirement_type == "所在地要件":
                         val = checkLocationRequirement(
-                            requirementText=requirement_text, 
+                            requirementText=requirement_text,
                             officeNo=office_no,
-                            agencyData=pd.read_csv("data/master/agency_master.txt",sep="\t"),
-                            officeData = pd.read_csv("data/master/office_master.txt",sep="\t")
+                            agencyData=master_data_agency,
+                            officeData=master_data_office
                         )
 
                     elif requirement_type == "実績要件":
                         val = checkExperienceRequirement(
-                            requirementText=requirement_text, 
+                            requirementText=requirement_text,
                             officeNo=office_no,
-                            office_experience_data=pd.read_csv("data/master/office_work_achivements_master.txt",sep="\t"),
-                            agency_data=pd.read_csv("data/master/agency_master.txt",sep="\t"), 
-                            construction_data=pd.read_csv("data/master/construction_master.txt",sep="\t")
+                            office_experience_data=master_data_office_work_achivements,
+                            agency_data=master_data_agency,
+                            construction_data=master_data_construction
                         )
                     elif requirement_type == "技術者要件":
                         val = checkTechnicianRequirement(
-                            requirementText=requirement_text, 
-                            companyNo=company_no, 
+                            requirementText=requirement_text,
+                            companyNo=company_no,
                             officeNo=office_no,
-                            employeeData=pd.read_csv("data/master/employee_master.txt", sep="\t"), 
-                            qualData=pd.read_csv("data/master/employee_qualification_master.txt", sep="\t"), 
-                            qualMasterData=pd.read_csv("data/master/technician_qualification_master.txt", sep="\t"),
-                            expData = pd.read_csv("data/master/employee_experience_master.txt", sep="\t")
+                            employeeData=master_data_employee,
+                            qualData=master_data_employee_qualification,
+                            qualMasterData=master_data_technician_qualification,
+                            expData=master_data_employee_experience
                         )
                     else:
                         val = {"is_ok":False, "reason":"その他要件があります。確認してください"}
