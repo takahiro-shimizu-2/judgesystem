@@ -125,6 +125,99 @@ def getJsonFromData(data, data_type):
     return dict1
 
 
+
+def getJsonFromData_v2(data, data_type):
+    prompt = """
+    Goal: Extract specific information related to construction projects and bidding procedures from the provided context.
+
+    Steps (T1 → T2 → T3):
+    T1: Thoroughly read and understand the entire context.
+    T2: Identify and locate the following fields within the context.  If a field is not present, its value will be "".
+    T3: Return the extracted information in a valid JSON format, adhering to the specified rules.
+
+    JSON Structure:
+
+    ```json
+    {
+    "工事場所": "",
+    "入札手続等担当部局": {
+        "郵便番号": "",
+        "住所": "",
+        "担当部署名": "",
+        "担当者名": "",
+        "電話番号": "",
+        "FAX番号": "",
+        "メールアドレス": ""
+    },
+    "公告日" : "",
+    "入札方式" : "",
+    "資料種類" : "",
+    "category" : "",
+    "入札説明書の交付期間": {
+        "開始日": "",
+        "終了日": ""
+    },
+    "申請書及び競争参加資格確認資料の提出期限": {
+        "開始日": "",
+        "終了日": ""
+    },
+    "入札書の提出期間": {
+        "開始日": "",
+        "終了日": ""
+    }
+    }
+    ```
+
+    Rules:
+    1.  **Exact Text:** Use the exact original text from the context for all extracted data.  Do not modify or translate the text.
+    1-1. As to the "入札方式" field, please set one from: open_competitive, designated_competitive, negotiated_contract, planning_competition, preferred_designation, open_counter, document_request, opinion_request, unknown, other.
+    1-2. As to the "資料種類" field, please set one from: "公募", "一般競争入札", "指名停止措置", "入札公告", "変更公告/注意事項公告/訂正公告/再公告", "中止", "企画競争実施の公示", "企画競争に係る手続開始の公示", "競争参加者の資格に関する公示", "見積書", "見積依頼書", "品目等内訳書", "入札書", "入札結果", "公告結果", "仕様書", "情報提案要求書", "業者の選定", "その他".
+    1-3. As to the "category" field, please set one from: '土木一式工事', '建築一式工事', '大工工事', '左官工事', 'とび・土工・コンクリート工事', '石工事', '屋根工事', '電気工事', '管工事', 'タイル・れんが・ブロック工事', '鋼構造物工事', '鉄筋工事', '舗装工事', 'しゅんせつ工事', '板金工事', 'ガラス工事', '塗装工事', '防水工事', '内装仕上工事', '機械器具設置工事', '熱絶縁工事', '電気通信工事', '造園工事', 'さく井工事', '建具工事', '水道施設工事', '消防施設工事', '清掃施設工事', '解体工事', 'その他'.
+    2.  **Completeness:**  Extract all requested fields. If a field is not found in the context, represent it with an empty string (`""`). No omissions are allowed.
+    3.  **Limited Output:** Only include the specified fields in the JSON output. Do not add any extra information or labels.
+    4.  **Hide Steps:** Do not display the internal steps (T1 or T2). Only the final JSON output (T3) should be shown.
+    5.  **Prefix Exclusion:** Exclude prefixes like "〒", "TEL", "FAX", and "E-mail:" from the extracted values.
+    6.  **Output Language:** The output (field names and extracted text if applicable) should be in Japanese.
+    7. **Data Structure:** Maintain the nested structure shown in the JSON Structure above.  "入札手続等担当部局", "入札説明書の交付期間", "申請書及び競争参加資格確認資料の提出期限" and "入札書の提出期間" are objects containing their respective sub-fields.
+    """
+
+    if data_type == "txt":
+        response = client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=[
+                types.Part.from_text(text=data),  # ← ここが PDF の代わり
+                prompt
+            ]
+        )
+    elif data_type == "pdf":
+        response = client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=[
+                types.Part.from_bytes(
+                    data=data,
+                    mime_type='application/pdf',
+                ),
+                prompt
+            ]
+        )
+    elif data_type == "pdf_fileapi":
+        response = client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=[
+                data,
+                prompt
+            ]
+        )
+
+    # print(response.text)
+
+    text=response.text
+    #json_text = extract_json(text=response.text)
+    text2 = text.replace('\n', '').replace('```json', '').replace("```","")
+    dict1 = json.loads(text2)
+    return dict1
+
+
 def convertJson(json_value):
     """ 
     公告データから取得した json ライクな公告情報を整形して json とする。
@@ -477,6 +570,9 @@ JSON Structure:
 "メールアドレス": ""
 },
 "公告日" : "",
+"入札方式" : "",
+"資料種類" : "",
+"category" : "",
 "入札説明書の交付期間": {
 "開始日": "",
 "終了日": ""
@@ -494,6 +590,9 @@ JSON Structure:
 
 Rules:
 1.  **Exact Text:** Use the exact original text from the context for all extracted data.  Do not modify or translate the text.
+1-1. As to the "入札方式" field, please set one from: open_competitive, designated_competitive, negotiated_contract, planning_competition, preferred_designation, open_counter, document_request, opinion_request, unknown, other.
+1-2. As to the "資料種類" field, please set one from: "公募", "一般競争入札", "指名停止措置", "入札公告", "変更公告/注意事項公告/訂正公告/再公告", "中止", "企画競争実施の公示", "企画競争に係る手続開始の公示", "競争参加者の資格に関する公示", "見積書", "見積依頼書", "品目等内訳書", "入札書", "入札結果", "公告結果", "仕様書", "情報提案要求書", "業者の選定", "その他".
+1-3. As to the "category" field, please set one from: '土木一式工事', '建築一式工事', '大工工事', '左官工事', 'とび・土工・コンクリート工事', '石工事', '屋根工事', '電気工事', '管工事', 'タイル・れんが・ブロック工事', '鋼構造物工事', '鉄筋工事', '舗装工事', 'しゅんせつ工事', '板金工事', 'ガラス工事', '塗装工事', '防水工事', '内装仕上工事', '機械器具設置工事', '熱絶縁工事', '電気通信工事', '造園工事', 'さく井工事', '建具工事', '水道施設工事', '消防施設工事', '清掃施設工事', '解体工事', 'その他'.
 2.  **Completeness:**  Extract all requested fields. If a field is not found in the context, represent it with an empty string (`""`). No omissions are allowed.
 3.  **Limited Output:** Only include the specified fields in the JSON output. Do not add any extra information or labels.
 4.  **Hide Steps:** Do not display the internal steps (T1 or T2). Only the final JSON output (T3) should be shown.
@@ -599,15 +698,46 @@ def is_document_id_value_nan(document_id, df_ann, df_req):
 
 if __name__ == "__main__":
 
-    parser = argparse.ArgumentParser(description="")
+    parser = argparse.ArgumentParser(description="Process bid announcements with Gemini API")
+    parser.add_argument("--input_dir",
+                       default="../3_source_formatting/output",
+                       help="Directory to search for latest input files")
+    parser.add_argument("--output_base_dir",
+                       default="../4_get_documents/output_v3",
+                       help="Base directory for output files")
+    parser.add_argument("--timestamp",
+                       default=None,
+                       help="Timestamp to use (format: YYYYMMDDHHMM). If not specified, uses latest from input_dir")
+    parser.add_argument("--api_key_file",
+                       default="../../../../data/sec/google_ai_studio_api_key_mizu.txt",
+                       help="Path to Google AI Studio API key file")
     parser.add_argument("--stop_processing", action="store_true")
     args = parser.parse_args()
     stop_processing = args.stop_processing
 
     yyyymmdd = datetime.now().strftime("%Y%m%d")
 
-    google_ai_studio_api_key_filepath = "../../../../data/sec/google_ai_studio_api_key.txt"
-    google_ai_studio_api_key_filepath = "../../../../data/sec/google_ai_studio_api_key_mizu.txt"
+    # タイムスタンプの決定（指定がない場合は最新を自動選択）
+    if args.timestamp is None:
+        input_dir_path = Path(args.input_dir)
+        if not input_dir_path.exists():
+            raise FileNotFoundError(f"Input directory not found: {input_dir_path}")
+
+        # yyyymmddhhmm 形式のディレクトリを探す
+        all_dirs = [d for d in input_dir_path.iterdir() if d.is_dir() and d.name.isdigit()]
+
+        if not all_dirs:
+            raise FileNotFoundError(f"No timestamp directories found in {input_dir_path}")
+
+        # 最新のディレクトリを取得（ディレクトリ名でソート）
+        latest_dir = sorted(all_dirs, reverse=True)[0]
+        timestamp = latest_dir.name
+        print(f"Using latest timestamp: {timestamp}")
+    else:
+        timestamp = args.timestamp
+
+    # API key読み込み
+    google_ai_studio_api_key_filepath = args.api_key_file
 
     if google_ai_studio_api_key_filepath is None:
         key = ""
@@ -617,19 +747,17 @@ if __name__ == "__main__":
 
     client = genai.Client(api_key=key)
 
-    if False:
-        output_path_ann = "../4_get_documents/output_v3/pdf_txt_all_gemini_ann/ann_announcements_document_202602162218.txt"
-        output_path_ann_zip = "../4_get_documents/output_v3/pdf_txt_all_gemini_ann/ann_announcements_document_202602162218.txt.zip"
-        os.makedirs(os.path.dirname(output_path_ann), exist_ok=True)
-        output_path_req = "../4_get_documents/output_v3/pdf_txt_all_gemini_req/req_announcements_document_202602162218.txt"
-        output_path_req_zip = "../4_get_documents/output_v3/pdf_txt_all_gemini_req/req_announcements_document_202602162218.txt.zip"
-        os.makedirs(os.path.dirname(output_path_req), exist_ok=True)
-    output_path_ann = "../4_get_documents/output_v3/pdf_txt_all_gemini_ann/ann_announcements_document_202603031408.txt"
-    output_path_ann_zip = "../4_get_documents/output_v3/pdf_txt_all_gemini_ann/ann_announcements_document_202603031408.txt.zip"
+    # 出力パス設定
+    output_path_ann = f"{args.output_base_dir}/pdf_txt_all_gemini_ann/ann_announcements_document_{timestamp}.txt"
+    output_path_ann_zip = f"{args.output_base_dir}/pdf_txt_all_gemini_ann/ann_announcements_document_{timestamp}.txt.zip"
     os.makedirs(os.path.dirname(output_path_ann), exist_ok=True)
-    output_path_req = "../4_get_documents/output_v3/pdf_txt_all_gemini_req/req_announcements_document_202603031408.txt"
-    output_path_req_zip = "../4_get_documents/output_v3/pdf_txt_all_gemini_req/req_announcements_document_202603031408.txt.zip"
+    output_path_req = f"{args.output_base_dir}/pdf_txt_all_gemini_req/req_announcements_document_{timestamp}.txt"
+    output_path_req_zip = f"{args.output_base_dir}/pdf_txt_all_gemini_req/req_announcements_document_{timestamp}.txt.zip"
     os.makedirs(os.path.dirname(output_path_req), exist_ok=True)
+
+    print(f"Output paths:")
+    print(f"  ann: {output_path_ann}")
+    print(f"  req: {output_path_req}")
 
 
 
@@ -649,7 +777,10 @@ if __name__ == "__main__":
 
     if False:
         # 新しい document_id を追加する。
-        df_new = pd.read_csv("../3_source_formatting/output/announcements_document_202603031408_merged_updated.txt",sep="\t")
+        df_new_path = input_timestamp_dir / f"announcements_document_{timestamp}_merged_updated.txt"
+        if not df_new_path.exists():
+            df_new_path = input_timestamp_dir / f"announcements_document_{timestamp}_updated.txt"
+        df_new = pd.read_csv(df_new_path, sep="\t")
         new_ids = df_new[~df_new["document_id"].isin(df_ann["document_id"])]
         new_ids = new_ids.reset_index(drop=True)
 
@@ -676,11 +807,9 @@ if __name__ == "__main__":
         df_req["document_id"].reset_index(drop=True).equals(df_new["document_id"].reset_index(drop=True))
 
 
-
     (df_ann["document_id"]==df_req["document_id"]).all()
 
     if False:
-
         for document_id in date_df2["document_id"]:
             f_txt = fr"../4_get_documents/output_v3/pdf_txt_all_py/pdf_{document_id.split('_')[0]}/{document_id}.txt"
             if os.path.exists(f_txt):
@@ -688,11 +817,23 @@ if __name__ == "__main__":
                     data_txt = f0.read()
                 if data_txt.find("TESSERACT") >= 0:
                     break
-    if False:
-        date_df = pd.read_csv("../3_source_formatting/output/announcements_document_202602162218_date_df.txt",sep="\t")
-        type_df = pd.read_csv("../3_source_formatting/output/announcements_document_202602162218_type_df.txt",sep="\t")
-    date_df = pd.read_csv("../3_source_formatting/output/announcements_document_202603031408_merged_date_df.txt",sep="\t")
-    type_df = pd.read_csv("../3_source_formatting/output/announcements_document_202603031408_merged_type_df.txt",sep="\t")
+    # 入力ファイルパス設定
+    input_timestamp_dir = Path(args.input_dir) / timestamp
+    date_df_path = input_timestamp_dir / f"announcements_document_{timestamp}_merged_date_df.txt"
+    type_df_path = input_timestamp_dir / f"announcements_document_{timestamp}_merged_type_df.txt"
+
+    # _merged がない場合は、_merged なしのファイルを探す
+    if not date_df_path.exists():
+        date_df_path = input_timestamp_dir / f"announcements_document_{timestamp}_date_df.txt"
+    if not type_df_path.exists():
+        type_df_path = input_timestamp_dir / f"announcements_document_{timestamp}_type_df.txt"
+
+    print(f"Input paths:")
+    print(f"  date_df: {date_df_path}")
+    print(f"  type_df: {type_df_path}")
+
+    date_df = pd.read_csv(date_df_path, sep="\t")
+    type_df = pd.read_csv(type_df_path, sep="\t")
     (date_df["document_id"]==type_df["document_id"]).all()
 
     date_df2 = date_df["2026-01-01" <= date_df["date_earliest"]]
@@ -706,7 +847,6 @@ if __name__ == "__main__":
     row = df_ann[df_ann["document_id"]=='01993_wp-content_uploads_2026_01_koukoku_8_2_13']
     # document_id = df_ann["document_id"][0]
 
-    tmpdf = date_df2[date_df2["document_id"]=='00393_kokoku_166_166kk']
     tmpdf = date_df2
     print(tmpdf.index[0])
     date_df3 = date_df2[tmpdf.index[0]:]
@@ -739,7 +879,8 @@ if __name__ == "__main__":
     ]].isna().all(axis=1).value_counts()
 
     if False:
-        date_df2.to_csv("../3_source_formatting/output/announcements_document_202602162218_date_df_target_did.txt",sep="\t",index=False)
+        date_df2_output_path = input_timestamp_dir / f"announcements_document_{timestamp}_date_df_target_did.txt"
+        date_df2.to_csv(date_df2_output_path, sep="\t", index=False)
 
 
     # 抽出結果を取り出すだけの処理。
@@ -904,6 +1045,7 @@ if __name__ == "__main__":
 
     # gemini逐次実行
     if False:
+        data_type = ["txt","pdf","pdf_fileapi"][1]
         data_type = ["txt","pdf","pdf_fileapi"][2]
         print(fr"data_type={data_type}")
         processed_document_id = []
@@ -935,19 +1077,6 @@ if __name__ == "__main__":
                     with open(f_pdf, "rb") as f0:
                         data_pdf = f0.read()   # ただのバイト列
 
-
-                if False:
-                    # PDFデータはバイト列で渡す
-                    with open(f_pdf, "rb") as f0:
-                        data_pdf = f0.read()
-
-                    # pdf_file = client.files.upload(file="sample.pdf")
-                    pdf_file = client.files.upload(file=f_pdf)
-                    prompts = [PROMPT_ANN, PROMPT_REQ]
-                    results = asyncio.run(call_parallel(prompts, pdf_file))
-                    print(results)
-                    client.files.delete(name=pdf_file.name)
-
                 if True:
                     # announcements
                     if document_id in df_ann["document_id"].values:
@@ -956,10 +1085,10 @@ if __name__ == "__main__":
                             time.sleep(0.2)
                             # dict1 = getJsonFromData(data=data_txt,data_type="txt")
                             if data_type in ["txt","pdf"]:
-                                dict1 = getJsonFromData(data=data_pdf,data_type=data_type)
+                                dict1 = getJsonFromData_v2(data=data_pdf,data_type=data_type)
                             elif data_type in ["pdf_fileapi"]:
                                 pdf_file = client.files.upload(file=f_pdf)
-                                dict1 = getJsonFromData(data=pdf_file,data_type=data_type)
+                                dict1 = getJsonFromData_v2(data=pdf_file,data_type=data_type)
                             else:
                                 raise ValueError(fr"Unknown data_type={data_type}.")
                             dict2 = {
@@ -1071,10 +1200,9 @@ if __name__ == "__main__":
                 #time.sleep(60)
 
 
-    # gemini逐次実行
-    # 並列化検討
-    # まず params 作成。
+    # gemini逐次実行の並列化検討
     if False:
+        # まず params 作成。
         params = []
         print("Check target document_id and make triples of parameters.")
         for i, row in tqdm(date_df2.iterrows(), total=len(date_df2)):
@@ -1218,16 +1346,10 @@ if __name__ == "__main__":
 
     # 保存
     if False:
-        
         df_ann.to_csv(output_path_ann, sep="\t", index=False)
         df_ann.to_csv(output_path_ann_zip, sep="\t", compression="zip", index=False)
         df_req.to_csv(output_path_req, sep="\t", index=False)
         df_req.to_csv(output_path_req_zip, sep="\t", compression="zip", index=False)
-
-        df_ann.to_csv("../4_get_documents/output_v3/pdf_txt_all_gemini_ann/ann_announcements_document_202603031408.txt", sep="\t", index=False)
-        df_ann.to_csv("../4_get_documents/output_v3/pdf_txt_all_gemini_ann/ann_announcements_document_202603031408.txt_zip", sep="\t", compression="zip", index=False)
-        df_req.to_csv("../4_get_documents/output_v3/pdf_txt_all_gemini_ann/req_announcements_document_202603031408.txt", sep="\t", index=False)
-        df_req.to_csv("../4_get_documents/output_v3/pdf_txt_all_gemini_ann/req_announcements_document_202603031408.txt.zip", sep="\t", compression="zip", index=False)
 
     if False:
         df_ann_updated = pd.DataFrame(df_ann_updated)
