@@ -90,7 +90,12 @@ def append_new_documents_by_group(file1="output/announcements_document_202602162
 
     # helper列削除
     final_df = final_df.drop(columns=["announcement_group"])
-    final_df.sort_values("document_id", inplace=True)
+
+    # ソート: announcement_id → fileFormat (pdfを先に) → document_id
+    # fileFormatのソートキー: pdfなら0、それ以外は1 (pdfが先に来る)
+    final_df["_sort_fileformat"] = final_df["fileFormat"].apply(lambda x: 0 if x == "pdf" else 1)
+    final_df.sort_values(["announcement_id", "_sort_fileformat", "document_id"], inplace=True)
+    final_df = final_df.drop(columns=["_sort_fileformat"])
 
     return final_df
 
@@ -192,31 +197,88 @@ if False:
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="")
-    parser.add_argument("--stop_processing", action="store_true")
+    parser = argparse.ArgumentParser(description="Format bid announcement documents")
+
+    # 入力ファイル
+    parser.add_argument("--input1",
+                       default="../1_source2_just_extract_html_source/data/リスト_防衛省入札_2.txt",
+                       help="Input file 1: リスト_防衛省入札")
+    parser.add_argument("--input2",
+                       default=None,
+                       help="Input file 2: announcements_document_*.txt (If not specified, uses latest file in ../2_gen_by_claude/output/)")
+    parser.add_argument("--input2_dir",
+                       default="../2_gen_by_claude/output",
+                       help="Directory to search for latest announcements_document file when --input2 is not specified")
+
+    # 出力設定
+    parser.add_argument("--output_base",
+                       default="output",
+                       help="Base output directory")
+    parser.add_argument("--timestamp",
+                       default=None,
+                       help="Timestamp for output directory (format: YYYYMMDDHHMM). If not specified, current time will be used")
+    parser.add_argument("--output_dir_for_get_documents",
+                       default="output_v3",
+                       help="Output directory for get_documents")
+
+    # その他のパラメータ
+    parser.add_argument("--extracted_at",
+                       default=datetime.now().strftime("%Y-%m-%d"),
+                       help="Extraction date (format: YYYY-MM-DD)")
+    parser.add_argument("--no_merge",
+                       action="store_true",
+                       help="Do not merge with previous result (default: merge is enabled)")
+    parser.add_argument("--base_digits",
+                       type=int,
+                       default=5,
+                       help="Base digits for announcement_id grouping (default: 5)")
+    parser.add_argument("--stop_processing",
+                       action="store_true",
+                       help="Stop processing before main logic")
 
     args = parser.parse_args()
-    stop_processing = args.stop_processing
 
-    # input
-    path1 = "../1_source2_just_extract_html_source/data/リスト_防衛省入札_2.txt"
+    # タイムスタンプの設定
+    if args.timestamp is None:
+        timestamp = datetime.now().strftime("%Y%m%d%H%M")
+    else:
+        timestamp = args.timestamp
+
+    # 入力ファイル1の読み込み
+    path1 = args.input1
     df1 = pd.read_csv(path1, sep="\t")
-    path2 = "../2_gen_by_claude/output_v2_20260205222731/announcements.txt"
-    path2 = "../2_gen_by_claude/output_v2_20260205222731_run2/announcements.txt"
+
+    # 入力ファイル2の決定（指定がない場合は最新ファイルを自動選択）
+    if args.input2 is None:
+        input2_dir = Path(args.input2_dir)
+        if not input2_dir.exists():
+            raise FileNotFoundError(f"Input2 directory not found: {input2_dir}")
+
+        # announcements_document_*.txt の最新ファイルを検索
+        pattern = "announcements_document_*.txt"
+        matching_files = sorted(input2_dir.glob(pattern), key=lambda p: p.stat().st_mtime, reverse=True)
+
+        if not matching_files:
+            raise FileNotFoundError(f"No {pattern} files found in {input2_dir}")
+
+        path2 = str(matching_files[0])
+        print(f"Using latest input2 file: {path2}")
+    else:
+        path2 = args.input2
+
     df2 = pd.read_csv(path2, sep="\t", quoting=csv.QUOTE_NONE)
 
     df2["announcement_name"] = (df2["announcement_name"].str.replace('"', '', regex=False))
     df2["link_text"] = (df2["link_text"].str.replace('"', '', regex=False))
 
     # =======================================================================
-    # output
-    output_dir = "output"
+    # 出力設定
+    output_dir = f"{args.output_base}/{timestamp}"
     os.makedirs(output_dir, exist_ok=True)
-    timestamp = datetime.now().strftime("%Y%m%d%H%M")
-    output_path1 = fr"{output_dir}/announcements_document_{timestamp}.txt"
-    output_dir_for_get_documents = "output_v3"
+    output_path1 = f"{output_dir}/announcements_document_{timestamp}.txt"
+    output_dir_for_get_documents = args.output_dir_for_get_documents
     # =======================================================================
-    if stop_processing:
+    if args.stop_processing:
         exit(1)
 
     # target_link から index 取得。
@@ -249,7 +311,7 @@ if __name__ == "__main__":
     df_merged.shape[0] == df2.shape[0]
 
     df_merged["pdf_full_url"] = df_merged.apply(
-        lambda row: urljoin(row["base_link_parent"] + "/", row["pdf_link"]),
+        lambda row: urljoin(row["base_link_parent"] + "/", row["pdf_link"]) if row["base_link_parent"] is not None else row["pdf_link"],
         axis=1
     )
     if False:
@@ -274,16 +336,23 @@ if __name__ == "__main__":
         index = row["adhoc_index"]
         pdfurl = row["pdf_full_url"]
         target_url = row["base_link_parent"]
-        #pdfurl
-        #target_url
 
-        # pdfがある url と、公告一覧の url から共通部分を除去し、pdfの保存先として使う。
-        # 問題点として、たとえば以下を共通とみなして除去される点がある。
-        # 'https://www.mod.go.jp/j/budget/chotatsu/naikyoku/koubo'
-        # 'https://warp.da.ndl.go.jp/info:ndljp/pid/11450712/www.mod.go.jp/j/procurement/chotatsu/naikyoku/iken/pdf/20161021.pdf'
-        # common == 'https://w'
-        common = os.path.commonprefix([pdfurl, target_url])
-        pname = pdfurl[len(common):]
+        # pdfurl または target_url が None の場合はスキップ
+        if pdfurl is None or pd.isna(pdfurl) or target_url is None or pd.isna(target_url):
+            # フォールバック: pdfurl が有効な場合はそれを使用
+            if pdfurl is not None and not pd.isna(pdfurl):
+                pname = pdfurl
+            else:
+                # 両方 None の場合はデフォルト名を使用
+                pname = f"unknown_{i}"
+        else:
+            # pdfがある url と、公告一覧の url から共通部分を除去し、pdfの保存先として使う。
+            # 問題点として、たとえば以下を共通とみなして除去される点がある。
+            # 'https://www.mod.go.jp/j/budget/chotatsu/naikyoku/koubo'
+            # 'https://warp.da.ndl.go.jp/info:ndljp/pid/11450712/www.mod.go.jp/j/procurement/chotatsu/naikyoku/iken/pdf/20161021.pdf'
+            # common == 'https://w'
+            common = os.path.commonprefix([pdfurl, target_url])
+            pname = pdfurl[len(common):]
 
         #print(pname)
         #p = Path(pname)
@@ -300,6 +369,12 @@ if __name__ == "__main__":
     df_merged["save_path"] = [p.as_posix() for p in save_path_list]
     df_merged["document_id"] = df_merged["save_path"].apply(lambda p: Path(p).stem)
 
+    # pdf_full_url が https: で始まらないレコードを除外
+    before_filter_count = len(df_merged)
+    df_merged = df_merged[df_merged["pdf_full_url"].str.startswith("https:", na=False)].copy()
+    after_filter_count = len(df_merged)
+    excluded_count = before_filter_count - after_filter_count
+    print(f"Excluded {excluded_count} records where pdf_full_url does not start with 'https:' (before: {before_filter_count}, after: {after_filter_count})")
 
     df_merged[df_merged["announcement_id"]==100002]
     df_merged[df_merged["announcement_id"]==182200001]
@@ -322,7 +397,7 @@ if __name__ == "__main__":
         "title":           df_merged["link_text"],
         "fileFormat":      df_merged["pdf_full_url"].str.extract(r'\.([^.]+)$')[0].fillna(""),
         "pageCount":       [-1]*df_merged.shape[0],
-        "extractedAt":     ['2026-02-06']*df_merged.shape[0],
+        "extractedAt":     [args.extracted_at]*df_merged.shape[0],
         "url":             df_merged["pdf_full_url"],
         "content":         ["dummy"]*df_merged.shape[0],
         "adhoc_index":     df_merged["adhoc_index"],
@@ -351,8 +426,60 @@ if __name__ == "__main__":
 
     # exit(1)
 
-    df_new.sort_values("document_id", inplace=True)
+    # ソート: announcement_id → fileFormat (pdfを先に) → document_id
+    df_new["_sort_fileformat"] = df_new["fileFormat"].apply(lambda x: 0 if x == "pdf" else 1)
+    df_new.sort_values(["announcement_id", "_sort_fileformat", "document_id"], inplace=True)
+    df_new = df_new.drop(columns=["_sort_fileformat"])
+
     df_new.to_csv(output_path1, sep="\t", index=False)
+    print(f"Output saved to: {output_path1}")
+
+    # 過去の結果とマージ
+    if not args.no_merge:
+        # output_base配下のディレクトリを取得（今回のディレクトリを除く）
+        output_base_path = Path(args.output_base)
+        if output_base_path.exists():
+            # yyyymmddhhmm 形式のディレクトリを探す
+            all_dirs = [d for d in output_base_path.iterdir() if d.is_dir() and d.name.isdigit()]
+            # 今回のディレクトリを除外
+            all_dirs = [d for d in all_dirs if d.name != timestamp]
+
+            if all_dirs:
+                # 最新のディレクトリを取得（ディレクトリ名でソート）
+                latest_dir = sorted(all_dirs, reverse=True)[0]
+
+                # そのディレクトリ内のannouncements_document_*.txtを探す
+                pattern = "announcements_document_*.txt"
+                matching_files = sorted(latest_dir.glob(pattern), key=lambda p: p.stat().st_mtime, reverse=True)
+
+                # _merged.txt を除外
+                matching_files = [f for f in matching_files if not f.name.endswith("_merged.txt")]
+
+                if matching_files:
+                    previous_file = str(matching_files[0])
+                    current_file = output_path1
+
+                    print(f"Merging with previous result: {previous_file}")
+
+                    # マージ実行
+                    df_merged_result = append_new_documents_by_group(
+                        file1=previous_file,
+                        file2=current_file,
+                        base_digits=args.base_digits
+                    )
+
+                    # マージ結果を保存
+                    merged_output_path = f"{output_dir}/announcements_document_{timestamp}_merged.txt"
+                    df_merged_result.to_csv(merged_output_path, sep="\t", index=False)
+                    print(f"Merged output saved to: {merged_output_path}")
+                else:
+                    print(f"No previous announcements_document file found in {latest_dir}")
+            else:
+                print(f"No previous output directories found in {output_base_path}")
+        else:
+            print(f"Output base directory does not exist: {output_base_path}")
+    else:
+        print("Skipping merge with previous result (--no_merge specified)")
 
     if False:
         1
