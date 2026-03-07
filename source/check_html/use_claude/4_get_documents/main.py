@@ -28,9 +28,88 @@ import pytesseract
 import platform
 from multiprocessing import Pool, cpu_count
 
+# GCS support
+try:
+    from google.cloud import storage
+    GCS_AVAILABLE = True
+except ImportError:
+    GCS_AVAILABLE = False
+
 new_path = r"C:\Program Files\Tesseract-OCR"
 if 'PATH' in os.environ:
     os.environ['PATH'] = new_path + os.pathsep + os.environ['PATH']
+
+
+# GCS helper functions
+def parse_gcs_path(gcs_path):
+    """Parse gs://bucket/path into (bucket, path)"""
+    if not gcs_path.startswith("gs://"):
+        return None, None
+    parts = gcs_path[5:].split("/", 1)
+    if len(parts) == 2:
+        return parts[0], parts[1]
+    return parts[0], ""
+
+
+def gcs_exists(gcs_path):
+    """Check if GCS object exists"""
+    if not GCS_AVAILABLE:
+        return False
+    bucket_name, blob_name = parse_gcs_path(gcs_path)
+    if not bucket_name or not blob_name:
+        return False
+    try:
+        client = storage.Client()
+        bucket = client.bucket(bucket_name)
+        blob = bucket.blob(blob_name)
+        return blob.exists()
+    except Exception:
+        return False
+
+
+def gcs_upload_from_bytes(gcs_path, data):
+    """Upload bytes to GCS"""
+    if not GCS_AVAILABLE:
+        raise RuntimeError("google-cloud-storage not installed")
+    bucket_name, blob_name = parse_gcs_path(gcs_path)
+    if not bucket_name or not blob_name:
+        raise ValueError(f"Invalid GCS path: {gcs_path}")
+    client = storage.Client()
+    bucket = client.bucket(bucket_name)
+    blob = bucket.blob(blob_name)
+    blob.upload_from_string(data)
+
+
+def gcs_download_as_bytes(gcs_path):
+    """Download GCS object as bytes"""
+    if not GCS_AVAILABLE:
+        raise RuntimeError("google-cloud-storage not installed")
+    bucket_name, blob_name = parse_gcs_path(gcs_path)
+    if not bucket_name or not blob_name:
+        raise ValueError(f"Invalid GCS path: {gcs_path}")
+    client = storage.Client()
+    bucket = client.bucket(bucket_name)
+    blob = bucket.blob(blob_name)
+    return blob.download_as_bytes()
+
+
+def read_text_file(file_path, encoding="utf-8"):
+    """Read text file from local or GCS"""
+    if file_path.startswith("gs://"):
+        data = gcs_download_as_bytes(file_path)
+        return data.decode(encoding)
+    else:
+        with open(file_path, "r", encoding=encoding) as f:
+            return f.read()
+
+
+def file_exists(file_path):
+    """Check if file exists (local or GCS)"""
+    if file_path.startswith("gs://"):
+        return gcs_exists(file_path)
+    else:
+        return os.path.exists(file_path)
+
 
 def open_file_from_document_id(document_id, remove_sakura=False):
     # document_id <- "00001_2025_0422a"
@@ -58,38 +137,58 @@ def get_pages(path, previous_result):
     # path = '../4_get_documents/output_v3/pdf/pdf_00018/00018_opencounter_380-0417-009-oc-2_1.pdf'
     if not path.lower().endswith(".pdf"):
         return path, -1
-    
+
     if previous_result != -1:
         return path, previous_result
-    
+
     try:
-        reader = PdfReader(path)
-        return path, len(reader.pages)
+        if path.startswith("gs://"):
+            # GCS path - download to memory
+            import io
+            pdf_bytes = gcs_download_as_bytes(path)
+            reader = PdfReader(io.BytesIO(pdf_bytes))
+            return path, len(reader.pages)
+        else:
+            # Local path
+            reader = PdfReader(path)
+            return path, len(reader.pages)
     except:
         return path, -1
 
 
 def pdf_to_txt(save_path, use_tesseract=False):
     # pdf_path = row["save_path"]
+    import io
+    import tempfile
+
     pdf_path = save_path
-    output_path = pdf_path.replace("/pdf/","/pdf_txt_all_py/")
+    output_path = pdf_path.replace("/pdf/", "/pdf_txt_all_py/")
 
     base, ext = os.path.splitext(output_path)
     output_path = base + ".txt"
 
-    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    is_gcs_pdf = pdf_path.startswith("gs://")
+    is_gcs_output = output_path.startswith("gs://")
 
-    if not os.path.exists(pdf_path):
-        return "pdf無し"
+    # Create output directory for local paths
+    if not is_gcs_output:
+        os.makedirs(os.path.dirname(output_path), exist_ok=True)
 
-    if False and os.path.exists(pdf_path):
-        return "pdfあり"
+    # Check if PDF exists
+    if is_gcs_pdf:
+        if not gcs_exists(pdf_path):
+            return "pdf無し"
+    else:
+        if not os.path.exists(pdf_path):
+            return "pdf無し"
 
-    if True and os.path.exists(output_path):
-        return "出力済み"
-
-    if False and not os.path.exists(output_path):
-        return "未出力"
+    # Check if output already exists
+    if is_gcs_output:
+        if gcs_exists(output_path):
+            return "出力済み"
+    else:
+        if os.path.exists(output_path):
+            return "出力済み"
 
     if not pdf_path.lower().endswith(".pdf"):
         return "拡張子がpdfでは無い"
@@ -97,27 +196,49 @@ def pdf_to_txt(save_path, use_tesseract=False):
     # テキスト抽出
     try:
         texts = ""
-        with pdfplumber.open(pdf_path) as pdf:
+
+        # Download PDF if GCS
+        if is_gcs_pdf:
+            pdf_bytes = gcs_download_as_bytes(pdf_path)
+            pdf_file = io.BytesIO(pdf_bytes)
+        else:
+            pdf_file = pdf_path
+
+        with pdfplumber.open(pdf_file) as pdf:
             for page in pdf.pages:
                 text = page.extract_text()
                 if text:
                     texts = texts + text + "\n"
-        if texts != "":
-            with open(output_path, "w", encoding="utf-8") as f:
-                _ = f.write(texts)
 
         if texts == "" and use_tesseract:
+            # Tesseract needs local file
+            if is_gcs_pdf:
+                with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
+                    tmp.write(pdf_bytes)
+                    tmp_path = tmp.name
+            else:
+                tmp_path = pdf_path
+
             if platform.system() == "Windows":
                 path_to_tesseract = r"tesseract.exe"
                 pytesseract.tesseract_cmd = path_to_tesseract
-            pages = pdf2image.convert_from_path(pdf_path)
+
+            pages = pdf2image.convert_from_path(tmp_path)
             texts = "THIS TEXT IS EXTRACTED BY TESSERACT\n"
             for page in pages:
                 texts += pytesseract.image_to_string(page, lang="jpn")
 
-            with open(output_path, "w", encoding="utf-8") as f:
-                _ = f.write(texts)
-            
+            if is_gcs_pdf:
+                os.unlink(tmp_path)
+
+        # Write output
+        if texts != "":
+            if is_gcs_output:
+                gcs_upload_from_bytes(output_path, texts.encode("utf-8"))
+            else:
+                with open(output_path, "w", encoding="utf-8") as f:
+                    f.write(texts)
+
         return "テキスト抽出:ファイル出力終了"
     except Exception as e:
         return f"テキスト抽出:エラー: {e}"
@@ -337,6 +458,8 @@ if __name__ == "__main__":
     parser.add_argument("--do_datesimplecheck", action="store_true")
     parser.add_argument("--do_categorysimplecheck", action="store_true")
     parser.add_argument("--stop_processing", action="store_true")
+    parser.add_argument("--gcp_vm", action="store_true", default=True,
+                       help="Use GCS paths (gs://) instead of local paths (default: True)")
 
     args = parser.parse_args()
 
@@ -394,6 +517,7 @@ if __name__ == "__main__":
     do_categorysimplecheck = args.do_categorysimplecheck
 
     stop_processing = args.stop_processing
+    gcp_vm = args.gcp_vm
 
     if use_tesseract:
         pdf_to_txt_actual = pdf_to_txt_with_tesseract
@@ -421,6 +545,13 @@ if __name__ == "__main__":
 
     if stop_processing:
         exit(1)
+
+    # GCP VM環境の場合、save_pathをGCSパスに変換
+    if gcp_vm:
+        df["save_path"] = df["save_path"].apply(
+            lambda x: x.replace("output_v3/pdf/", "gs://ann-files/pdf/") if pd.notna(x) else x
+        )
+        print("Converted save_path to GCS format (gs://ann-files/pdf/...)")
 
     df["pdf_is_saved_date"].value_counts(dropna=False)
 
@@ -451,19 +582,26 @@ if __name__ == "__main__":
             target_url = row["base_link_parent"]
             save_path = row["save_path"]
 
-            save_path_dirname = os.path.dirname(save_path)
-
-            if not os.path.exists(save_path_dirname):
-                os.makedirs(save_path_dirname, exist_ok=True)
-
             if pdfurl is None:
                 continue
 
-            if os.path.exists(save_path):
-                #print(fr"Skip: {save_path} already exists.")
-                if pd.isna(df.loc[i,"pdf_is_saved_date"]):
-                    df.loc[i,"pdf_is_saved_date"] = today_str
-                continue
+            # GCS or local path handling
+            if gcp_vm and save_path.startswith("gs://"):
+                # GCS path
+                if gcs_exists(save_path):
+                    if pd.isna(df.loc[i,"pdf_is_saved_date"]):
+                        df.loc[i,"pdf_is_saved_date"] = today_str
+                    continue
+            else:
+                # Local path
+                save_path_dirname = os.path.dirname(save_path)
+                if not os.path.exists(save_path_dirname):
+                    os.makedirs(save_path_dirname, exist_ok=True)
+
+                if os.path.exists(save_path):
+                    if pd.isna(df.loc[i,"pdf_is_saved_date"]):
+                        df.loc[i,"pdf_is_saved_date"] = today_str
+                    continue
 
             for skipurl in pdf_requests_skip_urls:
                 if pdfurl.startswith(skipurl):
@@ -471,9 +609,7 @@ if __name__ == "__main__":
                     continue
 
             if pdfurl is not None and not pdfurl.startswith("https://tinyurl"):
-                # print(pdfurl)
                 if pd.notna(df.loc[i,"pdf_is_saved_date"]):
-                    # print("Already tried requests.")
                     continue
 
                 df.loc[i,"pdf_is_saved_date"] = today_str
@@ -487,18 +623,23 @@ if __name__ == "__main__":
                         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp",
                         "Connection": "keep-alive",
                     })
-                    response.raise_for_status()  # エラーがあれば例外を出す
+                    response.raise_for_status()
                 except requests.exceptions.HTTPError as e:
                     print(f"HTTP エラー: {pdfurl} -> {e}")
                     time.sleep(1)
-                    continue  # エラーが出ても次の URL に進む
+                    continue
                 except requests.exceptions.RequestException as e:
                     print(f"通信エラー: {pdfurl} -> {e}")
                     time.sleep(1)
                     continue
+
                 try:
-                    Path(save_path).write_bytes(response.content)
-                    print(fr"Saved {save_path}.")
+                    if gcp_vm and save_path.startswith("gs://"):
+                        gcs_upload_from_bytes(save_path, response.content)
+                        print(fr"Saved {save_path}.")
+                    else:
+                        Path(save_path).write_bytes(response.content)
+                        print(fr"Saved {save_path}.")
                 except Exception as e:
                     print(e)
 
@@ -506,8 +647,11 @@ if __name__ == "__main__":
         print("Check pdf_is_saved.")
         for i, row in tqdm(df.iterrows(), total=len(df)):
             p = row["save_path"]
-            if p is not None and os.path.exists(p):
-                df.loc[i,"pdf_is_saved"] = True
+            if p is not None:
+                if gcp_vm and p.startswith("gs://"):
+                    df.loc[i,"pdf_is_saved"] = gcs_exists(p)
+                else:
+                    df.loc[i,"pdf_is_saved"] = os.path.exists(p)
             else:
                 df.loc[i,"pdf_is_saved"] = False
 
@@ -704,9 +848,8 @@ if __name__ == "__main__":
             base, ext = os.path.splitext(f_txt)
             f_txt = base + ".txt"
 
-            if os.path.exists(f_txt):
-                with open(f_txt, "r", encoding="utf-8") as f0:
-                    data_txt = f0.read()
+            if file_exists(f_txt):
+                data_txt = read_text_file(f_txt)
             else:
                 date_list.append( (document_id, None, None, None, None) )
                 continue
@@ -768,9 +911,8 @@ if __name__ == "__main__":
             base, ext = os.path.splitext(f_txt)
             f_txt = base + ".txt"
 
-            if os.path.exists(f_txt):
-                with open(f_txt, "r", encoding="utf-8") as f0:
-                    data_txt = f0.read()
+            if file_exists(f_txt):
+                data_txt = read_text_file(f_txt)
             else:
                 type_list.append( (document_id, None, None, None, None) )
                 continue
