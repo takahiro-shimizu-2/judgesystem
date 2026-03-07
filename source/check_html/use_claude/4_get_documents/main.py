@@ -423,7 +423,7 @@ def run_parallel(df):
     # rows = list(zip(df["fs"].tolist(), df["fs_txt"].tolist()))
     rows = df["save_path"].tolist()
 
-    n_workers = min(4, cpu_count())
+    n_workers = min(8, cpu_count())
 
     #with Pool(n_workers) as pool:
     #    results = pool.map(process_row, rows)
@@ -662,7 +662,7 @@ if __name__ == "__main__":
         print("pagecount.")
         ### python main.py で実行しないとダメなうえに、実行してしまった場合、落とさないといけないので注意。
         cpu_count_value = os.cpu_count()
-        max_workers = min(4, cpu_count_value)
+        max_workers = min(8, cpu_count_value)
         files = df["save_path"].values
         page_counts = df["pageCount"].values
         with ProcessPoolExecutor(max_workers=max_workers) as ex:
@@ -693,8 +693,8 @@ if __name__ == "__main__":
         print("pdf2txt.")
         rows = [row for _, row in df.iterrows()]
         save_path_here = [row["save_path"] for row in rows]
-        cpu_count = os.cpu_count()
-        max_workers = min(4, cpu_count)
+        cpu_count_value = os.cpu_count()
+        max_workers = min(8, cpu_count_value)
         with ProcessPoolExecutor(max_workers=max_workers) as executor:
             results = list(tqdm(executor.map(pdf_to_txt_actual, save_path_here), total=len(save_path_here)))
 
