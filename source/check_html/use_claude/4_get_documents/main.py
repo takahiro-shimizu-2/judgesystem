@@ -321,7 +321,12 @@ if __name__ == "__main__":
     today_str = datetime.now().strftime("%Y-%m-%d")
 
     parser = argparse.ArgumentParser(description="")
-    parser.add_argument("--input_file1", default="../3_source_formatting/output/announcements_document_202603031408_merged.txt")
+    parser.add_argument("--input_file1",
+                       default=None,
+                       help="Input file path. If not specified, uses latest *_merged.txt from ../3_source_formatting/output/<latest_timestamp>/")
+    parser.add_argument("--input_dir",
+                       default="../3_source_formatting/output",
+                       help="Directory to search for latest input file when --input_file1 is not specified")
     parser.add_argument("--do_url_requests", action="store_true")
     parser.add_argument("--do_pdf_is_saved", action="store_true")
     parser.add_argument("--do_pagecount", action="store_true")
@@ -334,9 +339,39 @@ if __name__ == "__main__":
     parser.add_argument("--stop_processing", action="store_true")
 
     args = parser.parse_args()
-    input_file1 = args.input_file1
-    # input_file1 = "../3_source_formatting/output/announcements_document_202603031408_merged.txt"
-    
+
+    # 入力ファイルの決定（指定がない場合は最新ファイルを自動選択）
+    if args.input_file1 is None:
+        input_dir = Path(args.input_dir)
+        if not input_dir.exists():
+            raise FileNotFoundError(f"Input directory not found: {input_dir}")
+
+        # yyyymmddhhmm 形式のディレクトリを探す
+        all_dirs = [d for d in input_dir.iterdir() if d.is_dir() and d.name.isdigit()]
+
+        if not all_dirs:
+            raise FileNotFoundError(f"No timestamp directories found in {input_dir}")
+
+        # 最新のディレクトリを取得（ディレクトリ名でソート）
+        latest_dir = sorted(all_dirs, reverse=True)[0]
+
+        # そのディレクトリ内の*_merged.txtを優先的に探す
+        pattern_merged = "announcements_document_*_merged.txt"
+        matching_files = sorted(latest_dir.glob(pattern_merged), key=lambda p: p.stat().st_mtime, reverse=True)
+
+        if not matching_files:
+            # _merged.txt がなければ announcements_document_*.txt を探す
+            pattern = "announcements_document_*.txt"
+            matching_files = sorted(latest_dir.glob(pattern), key=lambda p: p.stat().st_mtime, reverse=True)
+
+        if not matching_files:
+            raise FileNotFoundError(f"No announcements_document file found in {latest_dir}")
+
+        input_file1 = str(matching_files[0])
+        print(f"Using latest input file: {input_file1}")
+    else:
+        input_file1 = args.input_file1
+
     base, ext = os.path.splitext(input_file1)
     output_file1 = base + "_updated" + ext
     type_df_output_file = input_file1.replace(".txt","_type_df.txt")
@@ -424,7 +459,7 @@ if __name__ == "__main__":
                     continue
 
             if pdfurl is not None and not pdfurl.startswith("https://tinyurl"):
-                print(pdfurl)
+                # print(pdfurl)
                 if pd.notna(df.loc[i,"pdf_is_saved_date"]):
                     # print("Already tried requests.")
                     continue
@@ -470,8 +505,8 @@ if __name__ == "__main__":
     if do_pagecount:
         print("pagecount.")
         ### python main.py で実行しないとダメなうえに、実行してしまった場合、落とさないといけないので注意。
-        cpu_count = os.cpu_count()
-        max_workers = min(4, cpu_count)
+        cpu_count_value = os.cpu_count()
+        max_workers = min(4, cpu_count_value)
         files = df["save_path"].values
         page_counts = df["pageCount"].values
         with ProcessPoolExecutor(max_workers=max_workers) as ex:
@@ -497,67 +532,10 @@ if __name__ == "__main__":
         
         df.to_csv(output_file1, sep="\t", index=False)
 
-    if False:
-        chk = []
-        for i,row in tqdm(df.iterrows(),total=len(df)):
-            pdf_path = row["save_path"]
-            output_path = pdf_path.replace("/pdf/","/pdf_txt_all_py/")
-            base, ext = os.path.splitext(output_path)
-            output_path = base + ".txt"
-            texts = ""
-            if os.path.exists(output_path):
-                with open(output_path, "r", encoding="utf-8") as fff:
-                    texts = fff.read()
-                if texts == "":
-                    chk.append("not text")
-                else:
-                    chk.append("text")
-            else:
-                chk.append("no text")
-        aaa = pd.DataFrame(chk,columns=["aaa"])
-        aaa.value_counts()
 
-
+    ## TODO pdfからのテキスト出力を辞めたい
     if do_pdf2txt:
         print("pdf2txt.")
-        if False:
-            # テキストの存在とサイズ確認
-            def tmpf2(s):
-                output_path = s.replace("/pdf/","/pdf_txt_all_py/")
-                base, ext = os.path.splitext(output_path)
-                output_path = base + ".txt"
-                return output_path
-
-            df["save_path_txt_all_py"] = df["save_path"].apply(tmpf2)
-            df["save_path_txt_all_py_is"] = False
-            df["txt_size"] = -1
-
-            # 存在・サイズ確認
-            print("Check existence, size.")
-            for i, row in tqdm(df.iterrows(), total=len(df)):
-                p = row["save_path_txt_all_py"]
-                if p is not None and os.path.exists(p):
-                    df.loc[i,"save_path_txt_all_py_is"] = True
-                    df.loc[i,"txt_size"] = os.path.getsize(p)
-                else:
-                    df.loc[i,"save_path_txt_all_py_is"] = False
-
-            df = df[(~df["save_path_txt_all_py_is"]) & (df["pdf_is_saved"]) & (df["pdf_is_saved_date"]=="2026-03-03") & (df["fileFormat"]=="pdf")]
-
-            # exit(1)
-
-        if False:
-            # テキストの存在とサイズ確認後。
-            df2 = df[(~df["save_path_txt_all_py_is"]) & (df["pdf_is_saved"]) & (df["pdf_is_saved_date"]=="2026-03-03") & (df["fileFormat"]=="pdf")]
-            df2 = df2.reset_index()
-            df2.shape
-            df = df2
-            df["url"].shape
-            df["url"].unique().shape
-            df["save_path"].shape
-            df["save_path"].unique().shape
-            xxx = df[["url","save_path"]].copy()
-            xxx["url_dup"] = xxx["url"].duplicated(keep=False)
         rows = [row for _, row in df.iterrows()]
         save_path_here = [row["save_path"] for row in rows]
         cpu_count = os.cpu_count()
@@ -643,8 +621,6 @@ if __name__ == "__main__":
                     print(e)
                     tmpout.append("テキスト抽出:エラー")
 
-
-
     if False:
         # テキストの存在とサイズ確認
         def tmpf2(s):
@@ -678,10 +654,16 @@ if __name__ == "__main__":
                 os.remove(txt_path)
 
     if do_bidtypecheck:
+        # ファイル見て公募とかチェック。
+        # 
+        #grepwords_list = [
+        #    (["公募"], "公募"),
+        #    (["一般競争入札"], "一般競争入札"),
+        #    (["指名停止措置"], "指名停止措置")
+        #]
         results = run_parallel(df)
         results_df = pd.DataFrame(results)
         results_df["type"].value_counts()
-
         df["type"] = results_df["type"]
 
 
@@ -840,18 +822,6 @@ if __name__ == "__main__":
 
             type_list.append( [document_id] + flgs_const + flgs_business + [score_const] + [score_business] )
 
-        #bidType
-        #open_competitive          170
-        #designated_competitive     66
-        #negotiated_contract        33
-        #planning_competition       33
-        #preferred_designation      33
-        #open_counter               33
-        #document_request           33
-        #opinion_request            33
-        #unknown                    33
-        #other                      33
-
         type_df = pd.DataFrame(type_list, columns=["document_id"] + [fr"const{i}" for i in range(len(patterns_const))] + [fr"business{i}" for i in range(len(patterns_business))] + ["score_const","score_business"] )
         type_df.to_csv(type_df_output_file, sep="\t", index=False)
 
@@ -870,7 +840,76 @@ if __name__ == "__main__":
 
         # type_df["const0"].value_counts(dropna=False)
         # (type_df["document_id"]==df["document_id"]).all()
+
+        # 現状の type みたいなもの。
         df["bidType"] = "unknown"
-        df["category"] = type_df["const0"].fillna("その他")
+        #bidType
+        #open_competitive          170
+        #designated_competitive     66
+        #negotiated_contract        33
+        #planning_competition       33
+        #preferred_designation      33
+        #open_counter               33
+        #document_request           33
+        #opinion_request            33
+        #unknown                    33
+        #other                      33
+
+
+        if do_categorysimplecheck:
+            df["category"] = type_df["const0"].fillna("その他")
+        else:
+            ## TODO 別ロジック
+            df["category"] ="その他"
 
         df.to_csv(output_file1, sep="\t", index=False)
+
+    """
+type : 
+pdfへのリンクに表示する文字列。仕様書とか。公告とか。
+
+bidType :
+open_competitive          170
+designated_competitive     66
+negotiated_contract        33
+planning_competition       33
+preferred_designation      33
+open_counter               33
+document_request           33
+opinion_request            33
+unknown                    33
+other                      33
+
+category :
+工事についていえば。  (一般のカテゴリだが公告がこれらに基づいているかは不明)
+'土木一式工事',
+'建築一式工事',
+'大工工事',
+'左官工事',
+'とび・土工・コンクリート工事',
+'石工事',
+'屋根工事',
+'電気工事',
+'管工事',
+'タイル・れんが・ブロック工事',
+'鋼構造物工事',
+'鉄筋工事',
+'舗装工事',
+'しゅんせつ工事',
+'板金工事',
+'ガラス工事',
+'塗装工事',
+'防水工事',
+'内装仕上工事',
+'機械器具設置工事',
+'熱絶縁工事',
+'電気通信工事',
+'造園工事',
+'さく井工事',
+'建具工事',
+'水道施設工事',
+'消防施設工事',
+'清掃施設工事',
+'解体工事',
+'その他'
+    """
