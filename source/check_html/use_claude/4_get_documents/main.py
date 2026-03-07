@@ -518,18 +518,17 @@ if __name__ == "__main__":
         df["pageCount"].value_counts(dropna=False)
 
     if do_output:
-        if all(col not in df.columns for col in ["orderer_id", "topAgencyName"]):
-            # ord <- baseinfo[,c("Unnamed..0" ,"Unnamed..1","入札公告.現在募集中.2")]
-            ord = baseinfo[["Unnamed: 0", "Unnamed: 1", "入札公告（現在募集中）2"]].copy()
-            # ord[["orderer_id"]] <- paste("防衛省",ord[["Unnamed..0"]],ord[["Unnamed..1"]])
-            ord["orderer_id"] = "防衛省" + ord["Unnamed: 0"].astype(str) + ord["Unnamed: 1"].astype(str)
-            # 辞書を作る
-            mapping = dict(zip(ord["入札公告（現在募集中）2"], ord["orderer_id"]))
-            # match相当
-            df["orderer_id"] = df["base_link"].map(mapping)
-            # 固定値代入
-            df["topAgencyName"] = "防衛省"
-        
+        # ord <- baseinfo[,c("Unnamed..0" ,"Unnamed..1","入札公告.現在募集中.2")]
+        ord = baseinfo[["Unnamed: 0", "Unnamed: 1", "入札公告（現在募集中）2"]].copy()
+        # ord[["orderer_id"]] <- paste("防衛省",ord[["Unnamed..0"]],ord[["Unnamed..1"]])
+        ord["orderer_id"] = "防衛省" + ord["Unnamed: 0"].astype(str) + ord["Unnamed: 1"].astype(str)
+        # 辞書を作る
+        mapping = dict(zip(ord["入札公告（現在募集中）2"], ord["orderer_id"]))
+        # match相当
+        df["orderer_id"] = df["base_link"].map(mapping)
+        # 固定値代入
+        df["topAgencyName"] = "防衛省"
+
         df.to_csv(output_file1, sep="\t", index=False)
 
 
@@ -668,17 +667,16 @@ if __name__ == "__main__":
 
 
     if do_output:
-        if all(col not in df.columns for col in ["orderer_id", "topAgencyName"]):
-            # ord <- baseinfo[,c("Unnamed..0" ,"Unnamed..1","入札公告.現在募集中.2")]
-            ord = baseinfo[["Unnamed: 0", "Unnamed: 1", "入札公告（現在募集中）2"]].copy()
-            # ord[["orderer_id"]] <- paste("防衛省",ord[["Unnamed..0"]],ord[["Unnamed..1"]])
-            ord["orderer_id"] = "防衛省" + ord["Unnamed: 0"].astype(str) + ord["Unnamed: 1"].astype(str)
-            # 辞書を作る
-            mapping = dict(zip(ord["入札公告（現在募集中）2"], ord["orderer_id"]))
-            # match相当
-            df["orderer_id"] = df["base_link"].map(mapping)
-            # 固定値代入
-            df["topAgencyName"] = "防衛省"
+        # ord <- baseinfo[,c("Unnamed..0" ,"Unnamed..1","入札公告.現在募集中.2")]
+        ord = baseinfo[["Unnamed: 0", "Unnamed: 1", "入札公告（現在募集中）2"]].copy()
+        # ord[["orderer_id"]] <- paste("防衛省",ord[["Unnamed..0"]],ord[["Unnamed..1"]])
+        ord["orderer_id"] = "防衛省" + ord["Unnamed: 0"].astype(str) + ord["Unnamed: 1"].astype(str)
+        # 辞書を作る
+        mapping = dict(zip(ord["入札公告（現在募集中）2"], ord["orderer_id"]))
+        # match相当
+        df["orderer_id"] = df["base_link"].map(mapping)
+        # 固定値代入
+        df["topAgencyName"] = "防衛省"
 
         df.to_csv(output_file1, sep="\t", index=False)
 
@@ -826,17 +824,16 @@ if __name__ == "__main__":
         type_df.to_csv(type_df_output_file, sep="\t", index=False)
 
     if do_output:
-        if all(col not in df.columns for col in ["orderer_id", "topAgencyName"]):
-            # ord <- baseinfo[,c("Unnamed..0" ,"Unnamed..1","入札公告.現在募集中.2")]
-            ord = baseinfo[["Unnamed: 0", "Unnamed: 1", "入札公告（現在募集中）2"]].copy()
-            # ord[["orderer_id"]] <- paste("防衛省",ord[["Unnamed..0"]],ord[["Unnamed..1"]])
-            ord["orderer_id"] = "防衛省" + ord["Unnamed: 0"].astype(str) + ord["Unnamed: 1"].astype(str)
-            # 辞書を作る
-            mapping = dict(zip(ord["入札公告（現在募集中）2"], ord["orderer_id"]))
-            # match相当
-            df["orderer_id"] = df["base_link"].map(mapping)
-            # 固定値代入
-            df["topAgencyName"] = "防衛省"
+        # ord <- baseinfo[,c("Unnamed..0" ,"Unnamed..1","入札公告.現在募集中.2")]
+        ord = baseinfo[["Unnamed: 0", "Unnamed: 1", "入札公告（現在募集中）2"]].copy()
+        # ord[["orderer_id"]] <- paste("防衛省",ord[["Unnamed..0"]],ord[["Unnamed..1"]])
+        ord["orderer_id"] = "防衛省" + ord["Unnamed: 0"].astype(str) + ord["Unnamed: 1"].astype(str)
+        # 辞書を作る
+        mapping = dict(zip(ord["入札公告（現在募集中）2"], ord["orderer_id"]))
+        # match相当
+        df["orderer_id"] = df["base_link"].map(mapping)
+        # 固定値代入
+        df["topAgencyName"] = "防衛省"
 
         # type_df["const0"].value_counts(dropna=False)
         # (type_df["document_id"]==df["document_id"]).all()
