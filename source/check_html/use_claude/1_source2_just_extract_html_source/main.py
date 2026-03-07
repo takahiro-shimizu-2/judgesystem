@@ -14,7 +14,6 @@ import pandas as pd
 import numpy as np
 from ftfy import fix_encoding
 from ftfy.badness import badness
-from PyPDF2 import PdfReader
 import pdfplumber
 
 from google import genai # For OCR
@@ -29,8 +28,7 @@ if False:
 
 def convert_input_list(input_list="data/リスト_防衛省入札_1.txt", output_list="data/リスト_防衛省入札_2.txt", tinyurl_as_is=True):
     df = pd.read_csv(input_list,sep="\t")
-    tmp_df = df["入札公告（現在募集中）"]
-    df["入札公告（現在募集中）"] = df["入札公告（現在募集中）"].apply(lambda x: f"<a href='{x}'>{x}</a>")
+    
     # TinyURL を展開する
     def expand_tinyurl(url):
         if isinstance(url, str) and url.startswith("https://tinyurl"):
@@ -43,8 +41,17 @@ def convert_input_list(input_list="data/リスト_防衛省入札_1.txt", output
             except Exception:
                 return None
         return url
+    
+    tmp_df = df["入札公告（現在募集中）"]
+    df["入札公告（現在募集中）"] = df["入札公告（現在募集中）"].apply(lambda x: f"<a href='{x}'>{x}</a>")
     if not tinyurl_as_is:
         df.insert(df.columns.get_loc('入札公告（現在募集中）')+1, "入札公告（現在募集中）2", tmp_df.apply(expand_tinyurl))
+
+    tmp_df = df["落札情報（過去）"]
+    df["落札情報（過去）"] = df["落札情報（過去）"].apply(lambda x: f"<a href='{x}'>{x}</a>")
+    if not tinyurl_as_is:
+        df.insert(df.columns.get_loc('落札情報（過去）')+1, "落札情報（過去）2", tmp_df.apply(expand_tinyurl))
+        
     df.to_csv(output_list, sep="\t", index=False)
     df.to_html(Path(output_list).with_suffix(".html"), escape=False)
     return df
