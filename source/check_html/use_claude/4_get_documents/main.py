@@ -607,6 +607,10 @@ if __name__ == "__main__":
             if pdfurl is None:
                 continue
 
+            # Skip if already attempted download
+            if pd.notna(df.loc[i,"pdf_is_saved_date"]):
+                continue
+
             # GCS or local path handling
             if gcp_vm and save_path.startswith("gs://"):
                 # GCS path
@@ -631,9 +635,6 @@ if __name__ == "__main__":
                     continue
 
             if pdfurl is not None and not pdfurl.startswith("https://tinyurl"):
-                if pd.notna(df.loc[i,"pdf_is_saved_date"]):
-                    continue
-
                 df.loc[i,"pdf_is_saved_date"] = today_str
 
                 try:
