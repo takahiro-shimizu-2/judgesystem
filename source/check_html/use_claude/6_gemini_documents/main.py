@@ -153,6 +153,7 @@ def getJsonFromData_v2(data, data_type):
     "入札方式" : "",
     "資料種類" : "",
     "category" : "",
+    "pagecount" : "",
     "入札説明書の交付期間": {
         "開始日": "",
         "終了日": ""
@@ -492,11 +493,22 @@ def convertRequirementTextDict(requirement_texts):
 
 
 
-def call_gemini(prompt, document_id, data_type):
+def call_gemini(prompt, document_id, data_type, gcp_vm=True):
 
-    f_pdf = fr"../4_get_documents/output_v3/pdf/pdf_{document_id.split('_')[0]}/{document_id}.pdf"
-    with open(f_pdf, "rb") as f0:
-        data = f0.read()   # ただのバイト列
+    if gcp_vm:
+        # GCSからダウンロード
+        from google.cloud import storage
+        storage_client = storage.Client()
+        bucket_name = "ann-files"
+        blob_path = f"pdf/pdf_{document_id.split('_')[0]}/{document_id}.pdf"
+        bucket = storage_client.bucket(bucket_name)
+        blob = bucket.blob(blob_path)
+        data = blob.download_as_bytes()
+    else:
+        # ローカルファイルから読み込み
+        f_pdf = fr"../4_get_documents/output_v3/pdf/pdf_{document_id.split('_')[0]}/{document_id}.pdf"
+        with open(f_pdf, "rb") as f0:
+            data = f0.read()   # ただのバイト列
 
 
     if data_type == "text":
@@ -530,14 +542,14 @@ def call_gemini(prompt, document_id, data_type):
     return response.text
 
 
-async def call_parallel(params, max_concurrency=5):
+async def call_parallel(params, max_concurrency=5, gcp_vm=True):
     semaphore = asyncio.Semaphore(max_concurrency)
 
     async def wrapper(prompt, document_id, data_type, type2):
         async with semaphore:
             try:
                 result = await asyncio.to_thread(
-                    call_gemini, prompt, document_id, data_type
+                    call_gemini, prompt, document_id, data_type, gcp_vm
                 )
                 return {"document_id": document_id, "result": result, "error": None, "type": type2}
             except Exception as e:
@@ -573,6 +585,7 @@ JSON Structure:
 "入札方式" : "",
 "資料種類" : "",
 "category" : "",
+"pagecount" : "",
 "入札説明書の交付期間": {
 "開始日": "",
 "終了日": ""
@@ -679,6 +692,10 @@ def is_document_id_value_nan(document_id, df_ann, df_req):
         "入札手続等担当部局___FAX番号",
         "入札手続等担当部局___メールアドレス",
         "公告日",
+        "入札方式",
+        "資料種類",
+        "category",
+        "pagecount",
         "入札説明書の交付期間___開始日",
         "入札説明書の交付期間___終了日",
         "申請書及び競争参加資格確認資料の提出期限___開始日",
@@ -712,8 +729,11 @@ if __name__ == "__main__":
                        default="../../../../data/sec/google_ai_studio_api_key_mizu.txt",
                        help="Path to Google AI Studio API key file")
     parser.add_argument("--stop_processing", action="store_true")
+    parser.add_argument("--gcp_vm", action="store_true", default=True,
+                       help="Use GCS paths for PDF files (default: True)")
     args = parser.parse_args()
     stop_processing = args.stop_processing
+    gcp_vm = args.gcp_vm
 
     yyyymmdd = datetime.now().strftime("%Y%m%d")
 
@@ -747,13 +767,37 @@ if __name__ == "__main__":
 
     client = genai.Client(api_key=key)
 
-    # 出力パス設定
-    output_path_ann = f"{args.output_base_dir}/pdf_txt_all_gemini_ann/ann_announcements_document_{timestamp}.txt"
-    output_path_ann_zip = f"{args.output_base_dir}/pdf_txt_all_gemini_ann/ann_announcements_document_{timestamp}.txt.zip"
-    os.makedirs(os.path.dirname(output_path_ann), exist_ok=True)
-    output_path_req = f"{args.output_base_dir}/pdf_txt_all_gemini_req/req_announcements_document_{timestamp}.txt"
-    output_path_req_zip = f"{args.output_base_dir}/pdf_txt_all_gemini_req/req_announcements_document_{timestamp}.txt.zip"
-    os.makedirs(os.path.dirname(output_path_req), exist_ok=True)
+    # 出力パス設定 - 最新のタイムスタンプファイルを探す
+    ann_dir = f"{args.output_base_dir}/pdf_txt_all_gemini_ann"
+    req_dir = f"{args.output_base_dir}/pdf_txt_all_gemini_req"
+    os.makedirs(ann_dir, exist_ok=True)
+    os.makedirs(req_dir, exist_ok=True)
+
+    # ann の最新ファイルを探す
+    ann_files = list(Path(ann_dir).glob("ann_announcements_document_*.txt"))
+    ann_files = [f for f in ann_files if not f.name.endswith('.zip')]
+    if ann_files:
+        latest_ann_file = sorted(ann_files, reverse=True)[0]
+        output_path_ann = str(latest_ann_file)
+        output_path_ann_zip = output_path_ann + ".zip"
+        print(f"Using existing ann file: {output_path_ann}")
+    else:
+        output_path_ann = f"{ann_dir}/ann_announcements_document_{timestamp}.txt"
+        output_path_ann_zip = output_path_ann + ".zip"
+        print(f"Creating new ann file: {output_path_ann}")
+
+    # req の最新ファイルを探す
+    req_files = list(Path(req_dir).glob("req_announcements_document_*.txt"))
+    req_files = [f for f in req_files if not f.name.endswith('.zip')]
+    if req_files:
+        latest_req_file = sorted(req_files, reverse=True)[0]
+        output_path_req = str(latest_req_file)
+        output_path_req_zip = output_path_req + ".zip"
+        print(f"Using existing req file: {output_path_req}")
+    else:
+        output_path_req = f"{req_dir}/req_announcements_document_{timestamp}.txt"
+        output_path_req_zip = output_path_req + ".zip"
+        print(f"Creating new req file: {output_path_req}")
 
     print(f"Output paths:")
     print(f"  ann: {output_path_ann}")
@@ -761,53 +805,68 @@ if __name__ == "__main__":
 
 
 
-    # 既にファイルがある前提になっていることに注意。
+    # 入力ファイルパス設定（df_newを先に読み込む必要がある）
+    input_timestamp_dir = Path(args.input_dir) / timestamp
+    df_new_path = input_timestamp_dir / f"announcements_document_{timestamp}_merged_updated.txt"
+    if not df_new_path.exists():
+        df_new_path = input_timestamp_dir / f"announcements_document_{timestamp}_updated.txt"
+    df_new = pd.read_csv(df_new_path, sep="\t")
+
+    # 既にファイルがあるか確認
     if os.path.exists(output_path_ann_zip):
         df_ann = pd.read_csv(output_path_ann_zip,sep="\t", low_memory=False)
-    else:
+    elif os.path.exists(output_path_ann):
         df_ann = pd.read_csv(output_path_ann,sep="\t", low_memory=False)
+    else:
+        # ファイルが存在しない場合、新規作成
+        print(f"Creating new ann dataframe with columns from df_new")
+        df_ann = pd.DataFrame({
+            "document_id": df_new["document_id"],
+            "工事場所": None,
+            "入札手続等担当部局___郵便番号": None,
+            "入札手続等担当部局___住所": None,
+            "入札手続等担当部局___担当部署名": None,
+            "入札手続等担当部局___担当者名": None,
+            "入札手続等担当部局___電話番号": None,
+            "入札手続等担当部局___FAX番号": None,
+            "入札手続等担当部局___メールアドレス": None,
+            "公告日": None,
+            "入札方式": None,
+            "資料種類": None,
+            "category": None,
+            "pagecount": None,
+            "入札説明書の交付期間___開始日": None,
+            "入札説明書の交付期間___終了日": None,
+            "申請書及び競争参加資格確認資料の提出期限___開始日": None,
+            "申請書及び競争参加資格確認資料の提出期限___終了日": None,
+            "入札書の提出期間___開始日": None,
+            "入札書の提出期間___終了日": None,
+            "url": df_new["url"]
+        })
+        # 保存
+        df_ann.to_csv(output_path_ann, sep="\t", index=False)
 
-    df_ann0 = pd.read_csv(output_path_ann,sep="\t", low_memory=False)
+    if os.path.exists(output_path_ann):
+        df_ann0 = pd.read_csv(output_path_ann,sep="\t", low_memory=False)
+    else:
+        df_ann0 = df_ann.copy()
 
     if os.path.exists(output_path_req_zip):
         df_req = pd.read_csv(output_path_req_zip,sep="\t", low_memory=False)
-    else:
+    elif os.path.exists(output_path_req):
         df_req = pd.read_csv(output_path_req,sep="\t", low_memory=False)
-
-
-    if False:
-        # 新しい document_id を追加する。
-        df_new_path = input_timestamp_dir / f"announcements_document_{timestamp}_merged_updated.txt"
-        if not df_new_path.exists():
-            df_new_path = input_timestamp_dir / f"announcements_document_{timestamp}_updated.txt"
-        df_new = pd.read_csv(df_new_path, sep="\t")
-        new_ids = df_new[~df_new["document_id"].isin(df_ann["document_id"])]
-        new_ids = new_ids.reset_index(drop=True)
-
-        rows_ann = pd.DataFrame({
-            col: [None] * len(new_ids)
-            for col in df_ann.columns
+    else:
+        # ファイルが存在しない場合、新規作成
+        print(f"Creating new req dataframe with columns from df_new")
+        df_req = pd.DataFrame({
+            "document_id": df_new["document_id"],
+            "資格・条件": None
         })
-        rows_ann["document_id"] = new_ids["document_id"]
-        rows_ann["url"] = new_ids["url"]
-        df_ann = pd.concat([df_ann, rows_ann], ignore_index=True)
-        df_ann = df_ann.sort_values("document_id")
-        df_ann["document_id"].reset_index(drop=True).equals(df_new["document_id"].reset_index(drop=True))
+        # 保存
+        df_req.to_csv(output_path_req, sep="\t", index=False)
 
-        new_ids = df_new[~df_new["document_id"].isin(df_req["document_id"])]
-        new_ids = new_ids.reset_index(drop=True)
-
-        rows_req = pd.DataFrame({
-            col: [None] * len(new_ids)
-            for col in df_req.columns
-        })
-        rows_req["document_id"] = new_ids["document_id"]
-        df_req = pd.concat([df_req, rows_req], ignore_index=True)
-        df_req = df_req.sort_values("document_id")
-        df_req["document_id"].reset_index(drop=True).equals(df_new["document_id"].reset_index(drop=True))
-
-
-    (df_ann["document_id"]==df_req["document_id"]).all()
+    if not (df_ann["document_id"]==df_req["document_id"]).all():
+        raise ValueError("The document_id columns in df_ann and df_req are not identical.")
 
     if False:
         for document_id in date_df2["document_id"]:
@@ -817,70 +876,37 @@ if __name__ == "__main__":
                     data_txt = f0.read()
                 if data_txt.find("TESSERACT") >= 0:
                     break
-    # 入力ファイルパス設定
-    input_timestamp_dir = Path(args.input_dir) / timestamp
-    date_df_path = input_timestamp_dir / f"announcements_document_{timestamp}_merged_date_df.txt"
-    type_df_path = input_timestamp_dir / f"announcements_document_{timestamp}_merged_type_df.txt"
 
-    # _merged がない場合は、_merged なしのファイルを探す
-    if not date_df_path.exists():
-        date_df_path = input_timestamp_dir / f"announcements_document_{timestamp}_date_df.txt"
-    if not type_df_path.exists():
-        type_df_path = input_timestamp_dir / f"announcements_document_{timestamp}_type_df.txt"
+    ##########################################
+    # 新しい document_id を追加する。
+    new_ids = df_new[~df_new["document_id"].isin(df_ann["document_id"])]
+    new_ids = new_ids.reset_index(drop=True)
 
-    print(f"Input paths:")
-    print(f"  date_df: {date_df_path}")
-    print(f"  type_df: {type_df_path}")
+    rows_ann = pd.DataFrame({
+        col: [None] * len(new_ids)
+        for col in df_ann.columns
+    })
+    rows_ann["document_id"] = new_ids["document_id"]
+    rows_ann["url"] = new_ids["url"]
+    df_ann = pd.concat([df_ann, rows_ann], ignore_index=True)
+    df_ann = df_ann.sort_values("document_id")
+    df_ann["document_id"].reset_index(drop=True).equals(df_new["document_id"].reset_index(drop=True))
 
-    date_df = pd.read_csv(date_df_path, sep="\t")
-    type_df = pd.read_csv(type_df_path, sep="\t")
-    (date_df["document_id"]==type_df["document_id"]).all()
+    new_ids = df_new[~df_new["document_id"].isin(df_req["document_id"])]
+    new_ids = new_ids.reset_index(drop=True)
 
-    date_df2 = date_df["2026-01-01" <= date_df["date_earliest"]]
-    date_df2 = date_df2.reset_index(drop=True)
-
-    # exit(1)
-
-    df_ann_updated = []
-    df_req_updated = []
-
-    row = df_ann[df_ann["document_id"]=='01993_wp-content_uploads_2026_01_koukoku_8_2_13']
-    # document_id = df_ann["document_id"][0]
-
-    tmpdf = date_df2
-    print(tmpdf.index[0])
-    date_df3 = date_df2[tmpdf.index[0]:]
-    date_df3 = date_df3.reset_index(drop=True)
-
-    date_df2.shape
-    date_df3.shape
-    date_df2.shape[0] - date_df3.shape[0]
+    rows_req = pd.DataFrame({
+        col: [None] * len(new_ids)
+        for col in df_req.columns
+    })
+    rows_req["document_id"] = new_ids["document_id"]
+    df_req = pd.concat([df_req, rows_req], ignore_index=True)
+    df_req = df_req.sort_values("document_id")
+    df_req["document_id"].reset_index(drop=True).equals(df_new["document_id"].reset_index(drop=True))
+    ##########################################
 
     if stop_processing:
         exit(1)
-
-    df_req["資格・条件"].isna().value_counts()
-    df_ann[[
-        "工事場所",
-        "入札手続等担当部局___郵便番号",
-        "入札手続等担当部局___住所",
-        "入札手続等担当部局___担当部署名",
-        "入札手続等担当部局___担当者名",
-        "入札手続等担当部局___電話番号",
-        "入札手続等担当部局___FAX番号",
-        "入札手続等担当部局___メールアドレス",
-        "公告日",
-        "入札説明書の交付期間___開始日",
-        "入札説明書の交付期間___終了日",
-        "申請書及び競争参加資格確認資料の提出期限___開始日",
-        "申請書及び競争参加資格確認資料の提出期限___終了日",
-        "入札書の提出期間___開始日",
-        "入札書の提出期間___終了日"
-    ]].isna().all(axis=1).value_counts()
-
-    if False:
-        date_df2_output_path = input_timestamp_dir / f"announcements_document_{timestamp}_date_df_target_did.txt"
-        date_df2.to_csv(date_df2_output_path, sep="\t", index=False)
 
 
     # 抽出結果を取り出すだけの処理。
@@ -907,6 +933,10 @@ if __name__ == "__main__":
                                 "メールアドレス": dict2["入札手続等担当部局___メールアドレス"].values[0]
                             },
                             "公告日": dict2["公告日"].values[0],
+                            "入札方式": dict2["入札方式"].values[0],
+                            "資料種類": dict2["資料種類"].values[0],
+                            "category": dict2["category"].values[0],
+                            "pagecount": dict2["pagecount"].values[0],
                             "入札説明書の交付期間": {
                                 "開始日": dict2["入札説明書の交付期間___開始日"].values[0],
                                 "終了日": dict2["入札説明書の交付期間___終了日"].values[0]
@@ -986,6 +1016,10 @@ if __name__ == "__main__":
                             "メールアドレス": dict2["入札手続等担当部局___メールアドレス"]
                         },
                         "公告日": dict2["公告日"],
+                        "入札方式": dict2["入札方式"],
+                        "資料種類": dict2["資料種類"],
+                        "category": dict2["category"],
+                        "pagecount": dict2["pagecount"],
                         "入札説明書の交付期間": {
                             "開始日": dict2["入札説明書の交付期間___開始日"],
                             "終了日": dict2["入札説明書の交付期間___終了日"]
@@ -1102,6 +1136,10 @@ if __name__ == "__main__":
                                 "入札手続等担当部局___FAX番号": dict1.get("入札手続等担当部局", {}).get("FAX番号"),
                                 "入札手続等担当部局___メールアドレス": dict1.get("入札手続等担当部局", {}).get("メールアドレス"),
                                 "公告日": dict1.get("公告日"),
+                                "入札方式": dict1.get("入札方式"),
+                                "資料種類": dict1.get("資料種類"),
+                                "category": dict1.get("category"),
+                                "pagecount": dict1.get("pagecount"),
                                 "入札説明書の交付期間___開始日": dict1.get("入札説明書の交付期間", {}).get("開始日"),
                                 "入札説明書の交付期間___終了日": dict1.get("入札説明書の交付期間", {}).get("終了日"),
                                 "申請書及び競争参加資格確認資料の提出期限___開始日": dict1.get("申請書及び競争参加資格確認資料の提出期限", {}).get("開始日"),
@@ -1138,6 +1176,10 @@ if __name__ == "__main__":
                                     "メールアドレス": dict2["入札手続等担当部局___メールアドレス"].values[0]
                                 },
                                 "公告日": dict2["公告日"].values[0],
+                                "入札方式": dict2["入札方式"].values[0],
+                                "資料種類": dict2["資料種類"].values[0],
+                                "category": dict2["category"].values[0],
+                                "pagecount": dict2["pagecount"].values[0],
                                 "入札説明書の交付期間": {
                                     "開始日": dict2["入札説明書の交付期間___開始日"].values[0],
                                     "終了日": dict2["入札説明書の交付期間___終了日"].values[0]
@@ -1201,11 +1243,11 @@ if __name__ == "__main__":
 
 
     # gemini逐次実行の並列化検討
-    if False:
+    if True:
         # まず params 作成。
         params = []
         print("Check target document_id and make triples of parameters.")
-        for i, row in tqdm(date_df2.iterrows(), total=len(date_df2)):
+        for i, row in tqdm(df_ann.iterrows(), total=len(df_ann)):
             document_id = row["document_id"]
 
             # 結果が1つでも埋まっているならスキップ。
@@ -1213,15 +1255,28 @@ if __name__ == "__main__":
             if not ret:
                 continue
 
-            f_pdf = fr"../4_get_documents/output_v3/pdf/pdf_{document_id.split('_')[0]}/{document_id}.pdf"
-            # pdf を開けるか確認。
+            if gcp_vm:
+                f_pdf = f"gs://ann-files/pdf/pdf_{document_id.split('_')[0]}/{document_id}.pdf"
+            else:
+                f_pdf = fr"../4_get_documents/output_v3/pdf/pdf_{document_id.split('_')[0]}/{document_id}.pdf"
+
+            # pdf の存在を確認。
             try:
-                with open(f_pdf, "rb") as f0:
-                    data_pdf = f0.read()   # ただのバイト列
+                if gcp_vm:
+                    # GCSの場合は存在チェックのみ（実際の読み込みはcall_gemini内で行う）
+                    # ここでは簡易的にスキップ（GCS SDKを使う場合は別途実装が必要）
+                    pdf_exists = True
+                else:
+                    # ローカルの場合はファイル存在チェック
+                    pdf_exists = os.path.exists(f_pdf)
+
+                if not pdf_exists:
+                    print(f"PDF not found: {f_pdf}")
+                    continue
             except Exception as e:
                 print(e)
                 continue
-            
+
             params.append( [PROMPT_ANN, document_id, "pdf", "ann"] )
             params.append( [PROMPT_REQ, document_id, "pdf", "req"] )
 
@@ -1229,7 +1284,7 @@ if __name__ == "__main__":
             # client.files.delete(name=pdf_file.name)
 
         start = time.time()
-        results = asyncio.run(call_parallel(params))
+        results = asyncio.run(call_parallel(params, gcp_vm=gcp_vm))
         end = time.time()
         print(f"処理時間: {end - start:.4f} 秒")
         # 処理時間: 23044.9809 秒
@@ -1237,17 +1292,14 @@ if __name__ == "__main__":
         with open(fr"../4_get_documents/output_v3/gemini_results_{yyyymmdd}.pkl", "wb") as f:
             pickle.dump(results, f)
 
-    if False:
+    if True:
         results2 = []
         tmp_req_df_list = []
         tmp_ann_df_list = []
         for i,res in enumerate(tqdm(results, total=len(results))):
             document_id = res["document_id"]
             prompt = res["prompt"]
-            if prompt.startswith("\n# Goal Seek"):
-                type1 = "req"
-            else:
-                type1 = "ann"
+            type1 = res["type"]
 
             if type1 == "req":
                 try:
@@ -1291,6 +1343,10 @@ if __name__ == "__main__":
                     "入札手続等担当部局___FAX番号": dict1.get("入札手続等担当部局", {}).get("FAX番号"),
                     "入札手続等担当部局___メールアドレス": dict1.get("入札手続等担当部局", {}).get("メールアドレス"),
                     "公告日": dict1.get("公告日"),
+                    "入札方式": dict1.get("入札方式"),
+                    "資料種類": dict1.get("資料種類"),
+                    "category": dict1.get("category"),
+                    "pagecount": dict1.get("pagecount"),
                     "入札説明書の交付期間___開始日": dict1.get("入札説明書の交付期間", {}).get("開始日"),
                     "入札説明書の交付期間___終了日": dict1.get("入札説明書の交付期間", {}).get("終了日"),
                     "申請書及び競争参加資格確認資料の提出期限___開始日": dict1.get("申請書及び競争参加資格確認資料の提出期限", {}).get("開始日"),
@@ -1315,7 +1371,14 @@ if __name__ == "__main__":
                     # df_req[df_req["document_id"]==document_id]
                 tmp_ann_df_list.append(tmpdict2)
 
+    # 保存
+    if True:
+        df_ann.to_csv(output_path_ann, sep="\t", index=False)
+        df_ann.to_csv(output_path_ann_zip, sep="\t", compression="zip", index=False)
+        df_req.to_csv(output_path_req, sep="\t", index=False)
+        df_req.to_csv(output_path_req_zip, sep="\t", compression="zip", index=False)
 
+    if False:
         tmp_ann_df = pd.concat(tmp_ann_df_list)
         tmp_ann_df = tmp_ann_df.reset_index(drop=True)
         tmp_req_df = pd.concat(tmp_req_df_list)
@@ -1344,12 +1407,6 @@ if __name__ == "__main__":
 
 
 
-    # 保存
-    if False:
-        df_ann.to_csv(output_path_ann, sep="\t", index=False)
-        df_ann.to_csv(output_path_ann_zip, sep="\t", compression="zip", index=False)
-        df_req.to_csv(output_path_req, sep="\t", index=False)
-        df_req.to_csv(output_path_req_zip, sep="\t", compression="zip", index=False)
 
     if False:
         df_ann_updated = pd.DataFrame(df_ann_updated)
