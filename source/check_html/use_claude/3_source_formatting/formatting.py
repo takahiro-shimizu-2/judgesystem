@@ -435,6 +435,8 @@ if __name__ == "__main__":
     print(f"Output saved to: {output_path1}")
 
     # 過去の結果とマージ
+    merged_output_path = f"{output_dir}/announcements_document_{timestamp}_merged.txt"
+
     if not args.no_merge:
         # output_base配下のディレクトリを取得（今回のディレクトリを除く）
         output_base_path = Path(args.output_base)
@@ -469,17 +471,24 @@ if __name__ == "__main__":
                     )
 
                     # マージ結果を保存
-                    merged_output_path = f"{output_dir}/announcements_document_{timestamp}_merged.txt"
                     df_merged_result.to_csv(merged_output_path, sep="\t", index=False)
                     print(f"Merged output saved to: {merged_output_path}")
                 else:
                     print(f"No previous announcements_document file found in {latest_dir}")
+                    print(f"Creating _merged.txt as copy of current output (first run)")
+                    df_new.to_csv(merged_output_path, sep="\t", index=False)
             else:
                 print(f"No previous output directories found in {output_base_path}")
+                print(f"Creating _merged.txt as copy of current output (first run)")
+                df_new.to_csv(merged_output_path, sep="\t", index=False)
         else:
             print(f"Output base directory does not exist: {output_base_path}")
+            print(f"Creating _merged.txt as copy of current output (first run)")
+            df_new.to_csv(merged_output_path, sep="\t", index=False)
     else:
         print("Skipping merge with previous result (--no_merge specified)")
+        print(f"Creating _merged.txt as copy of current output (--no_merge mode)")
+        df_new.to_csv(merged_output_path, sep="\t", index=False)
 
     if False:
         1
