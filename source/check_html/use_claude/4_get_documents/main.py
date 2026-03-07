@@ -340,9 +340,15 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
+    # スクリプトのディレクトリを取得（相対パスを解決するため）
+    script_dir = Path(__file__).parent
+
     # 入力ファイルの決定（指定がない場合は最新ファイルを自動選択）
     if args.input_file1 is None:
         input_dir = Path(args.input_dir)
+        if not input_dir.is_absolute():
+            input_dir = script_dir / input_dir
+
         if not input_dir.exists():
             raise FileNotFoundError(f"Input directory not found: {input_dir}")
 
@@ -404,7 +410,13 @@ if __name__ == "__main__":
 
     df = pd.read_csv(input_file1, sep="\t")
 
-    baseinfofile = "../1_source2_just_extract_html_source/data/リスト_防衛省入札_2.txt"
+    baseinfofile = Path("../1_source2_just_extract_html_source/data/リスト_防衛省入札_2.txt")
+    if not baseinfofile.is_absolute():
+        baseinfofile = script_dir / baseinfofile
+
+    if not baseinfofile.exists():
+        raise FileNotFoundError(f"Base info file not found: {baseinfofile}")
+
     baseinfo = pd.read_csv(baseinfofile, sep="\t")
 
     if stop_processing:
