@@ -93,6 +93,22 @@ def gcs_download_as_bytes(gcs_path):
     return blob.download_as_bytes()
 
 
+def list_gcs_files_in_prefix(gcs_prefix):
+    """List all files under a GCS prefix and return as a set of full paths"""
+    if not GCS_AVAILABLE:
+        return set()
+    bucket_name, prefix = parse_gcs_path(gcs_prefix)
+    if not bucket_name:
+        return set()
+
+    client = storage.Client()
+    bucket = client.bucket(bucket_name)
+    blobs = bucket.list_blobs(prefix=prefix)
+
+    # Return full gs:// paths as a set for O(1) lookup
+    return {f"gs://{bucket_name}/{blob.name}" for blob in blobs}
+
+
 def read_text_file(file_path, encoding="utf-8"):
     """Read text file from local or GCS"""
     if file_path.startswith("gs://"):
@@ -460,7 +476,13 @@ if __name__ == "__main__":
     parser.add_argument("--stop_processing", action="store_true")
     parser.add_argument("--gcp_vm", action="store_true", default=True,
                        help="Use GCS paths (gs://) instead of local paths (default: True)")
-
+    parser.add_argument(
+        "--no_gcp_vm",
+        dest="gcp_vm",
+        action="store_false",
+        help="Use local paths instead of GCS paths"
+    )
+    parser.set_defaults(gcp_vm=True)
     args = parser.parse_args()
 
     # スクリプトのディレクトリを取得（相対パスを解決するため）
@@ -645,15 +667,52 @@ if __name__ == "__main__":
 
     if do_pdf_is_saved:
         print("Check pdf_is_saved.")
+
+        # ディレクトリごとにファイルリストをキャッシュして高速化
+        file_cache = {}
+
         for i, row in tqdm(df.iterrows(), total=len(df)):
             p = row["save_path"]
-            if p is not None:
-                if gcp_vm and p.startswith("gs://"):
-                    df.loc[i,"pdf_is_saved"] = gcs_exists(p)
-                else:
-                    df.loc[i,"pdf_is_saved"] = os.path.exists(p)
-            else:
+            if p is None or pd.isna(p):
                 df.loc[i,"pdf_is_saved"] = False
+                continue
+
+            if gcp_vm and p.startswith("gs://"):
+                # GCSパスからディレクトリ部分を抽出 (例: gs://ann-files/pdf/pdf_00001/)
+                parts = p.split("/")
+                if len(parts) >= 5:  # gs://bucket/pdf/pdf_XXXXX/...
+                    dir_key = "/".join(parts[:5]) + "/"  # gs://ann-files/pdf/pdf_00001/
+
+                    # キャッシュにない場合はディレクトリ内のファイル一覧を取得
+                    if dir_key not in file_cache:
+                        print(f"Loading file list for: {dir_key}")
+                        file_cache[dir_key] = list_gcs_files_in_prefix(dir_key)
+
+                    # キャッシュされたセットでO(1)検索
+                    df.loc[i,"pdf_is_saved"] = p in file_cache[dir_key]
+                else:
+                    # パス形式が想定外の場合は従来通り
+                    df.loc[i,"pdf_is_saved"] = gcs_exists(p)
+            else:
+                # ローカルパス: プラットフォーム依存の区切り文字に正規化
+                # 'output_v3/pdf/pdf_00001/file.pdf' -> Windows: 'output_v3\pdf\pdf_00001\file.pdf'
+                p_normalized = os.path.normpath(p)
+                dir_key = os.path.dirname(p_normalized)
+
+                # キャッシュにない場合はディレクトリ内のファイル一覧を取得
+                if dir_key not in file_cache:
+                    if os.path.exists(dir_key):
+                        # ディレクトリ内の全ファイルをセットに格納（正規化済みパス）
+                        file_cache[dir_key] = {
+                            os.path.join(dir_key, f)
+                            for f in os.listdir(dir_key)
+                            if os.path.isfile(os.path.join(dir_key, f))
+                        }
+                    else:
+                        file_cache[dir_key] = set()
+
+                # キャッシュされたセットでO(1)検索（両方とも正規化済み）
+                df.loc[i,"pdf_is_saved"] = p_normalized in file_cache[dir_key]
 
     df["pdf_is_saved"].value_counts(dropna=False)
 
