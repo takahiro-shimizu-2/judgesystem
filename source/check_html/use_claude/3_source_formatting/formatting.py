@@ -238,19 +238,31 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
+    # スクリプトのディレクトリを取得（相対パスを解決するため）
+    script_dir = Path(__file__).parent
+
     # タイムスタンプの設定
     if args.timestamp is None:
         timestamp = datetime.now().strftime("%Y%m%d%H%M")
     else:
         timestamp = args.timestamp
 
-    # 入力ファイル1の読み込み
+    # 入力ファイル1の読み込み（相対パスの場合はスクリプトディレクトリ基準で解決）
     path1 = args.input1
+    if not Path(path1).is_absolute():
+        path1 = script_dir / path1
+
+    if not path1.exists():
+        raise FileNotFoundError(f"Input file 1 not found: {path1}")
+
     df1 = pd.read_csv(path1, sep="\t")
 
     # 入力ファイル2の決定（指定がない場合は最新ファイルを自動選択）
     if args.input2 is None:
         input2_dir = Path(args.input2_dir)
+        if not input2_dir.is_absolute():
+            input2_dir = script_dir / input2_dir
+
         if not input2_dir.exists():
             raise FileNotFoundError(f"Input2 directory not found: {input2_dir}")
 
@@ -273,9 +285,13 @@ if __name__ == "__main__":
 
     # =======================================================================
     # 出力設定
-    output_dir = f"{args.output_base}/{timestamp}"
+    output_base = Path(args.output_base)
+    if not output_base.is_absolute():
+        output_base = script_dir / output_base
+
+    output_dir = output_base / timestamp
     os.makedirs(output_dir, exist_ok=True)
-    output_path1 = f"{output_dir}/announcements_document_{timestamp}.txt"
+    output_path1 = output_dir / f"announcements_document_{timestamp}.txt"
     output_dir_for_get_documents = args.output_dir_for_get_documents
     # =======================================================================
     if args.stop_processing:
@@ -435,14 +451,13 @@ if __name__ == "__main__":
     print(f"Output saved to: {output_path1}")
 
     # 過去の結果とマージ
-    merged_output_path = f"{output_dir}/announcements_document_{timestamp}_merged.txt"
+    merged_output_path = output_dir / f"announcements_document_{timestamp}_merged.txt"
 
     if not args.no_merge:
         # output_base配下のディレクトリを取得（今回のディレクトリを除く）
-        output_base_path = Path(args.output_base)
-        if output_base_path.exists():
+        if output_base.exists():
             # yyyymmddhhmm 形式のディレクトリを探す
-            all_dirs = [d for d in output_base_path.iterdir() if d.is_dir() and d.name.isdigit()]
+            all_dirs = [d for d in output_base.iterdir() if d.is_dir() and d.name.isdigit()]
             # 今回のディレクトリを除外
             all_dirs = [d for d in all_dirs if d.name != timestamp]
 
@@ -459,7 +474,7 @@ if __name__ == "__main__":
 
                 if matching_files:
                     previous_file = str(matching_files[0])
-                    current_file = output_path1
+                    current_file = str(output_path1)
 
                     print(f"Merging with previous result: {previous_file}")
 
@@ -478,11 +493,11 @@ if __name__ == "__main__":
                     print(f"Creating _merged.txt as copy of current output (first run)")
                     df_new.to_csv(merged_output_path, sep="\t", index=False)
             else:
-                print(f"No previous output directories found in {output_base_path}")
+                print(f"No previous output directories found in {output_base}")
                 print(f"Creating _merged.txt as copy of current output (first run)")
                 df_new.to_csv(merged_output_path, sep="\t", index=False)
         else:
-            print(f"Output base directory does not exist: {output_base_path}")
+            print(f"Output base directory does not exist: {output_base}")
             print(f"Creating _merged.txt as copy of current output (first run)")
             df_new.to_csv(merged_output_path, sep="\t", index=False)
     else:
