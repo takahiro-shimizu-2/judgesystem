@@ -7,6 +7,7 @@ import sys
 import warnings
 warnings.simplefilter(action="ignore", category=FutureWarning)
 import argparse
+from datetime import datetime
 
 import requests
 from bs4 import BeautifulSoup, Comment, Doctype
@@ -227,9 +228,12 @@ if __name__ == "__main__":
     stop_processing = args.stop_processing
     return_encode_info = args.return_encode_info
 
-    output_dir1 = fr"{output_dir_base}/each_list_2"
+    # タイムスタンプ生成
+    timestamp = datetime.now().strftime("%Y%m%d%H%M")
+    output_dir1 = fr"{output_dir_base}/each_list_{timestamp}"
     # output_dir_pdf_base = fr"{output_dir_base}/pdf"
     os.makedirs(output_dir1, exist_ok=True)
+    print(f"Output directory: {output_dir1}")
     #output_file_each_list_all_v1 = fr"{output_dir_base}/_all_v1.txt"
     #output_file_each_list_all_v2 = fr"{output_dir_base}/_all_v2.txt"
     #output_file_each_list_all_v3 = fr"{output_dir_base}/_all_v3.txt"
