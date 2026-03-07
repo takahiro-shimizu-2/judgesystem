@@ -1298,7 +1298,6 @@ if __name__ == "__main__":
         tmp_ann_df_list = []
         for i,res in enumerate(tqdm(results, total=len(results))):
             document_id = res["document_id"]
-            prompt = res["prompt"]
             type1 = res["type"]
 
             if type1 == "req":
