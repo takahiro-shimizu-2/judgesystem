@@ -25,6 +25,7 @@ from concurrent.futures import ThreadPoolExecutor
 ### 
 import argparse
 import re
+import random
 
 def extract_second_level(url):
     # プロトコル部分（http://, https://）を削除
@@ -493,7 +494,7 @@ def convertRequirementTextDict(requirement_texts):
 
 
 
-def call_gemini(prompt, document_id, data_type, gcp_vm=True):
+def call_gemini(prompt, document_id, data_type, model="gemini-2.5-flash-lite", gcp_vm=True):
 
     if gcp_vm:
         # GCSからダウンロード
@@ -513,7 +514,7 @@ def call_gemini(prompt, document_id, data_type, gcp_vm=True):
 
     if data_type == "text":
         response = client.models.generate_content(
-            model="gemini-2.5-flash",
+            model=model,
             contents=[
                 types.Part.from_text(text=data),  # ← ここが PDF の代わり
                 prompt
@@ -521,7 +522,7 @@ def call_gemini(prompt, document_id, data_type, gcp_vm=True):
         )
     elif data_type == "pdf":
         response = client.models.generate_content(
-            model="gemini-2.5-flash",
+            model=model,
             contents=[
                 types.Part.from_bytes(
                     data=data,
@@ -532,7 +533,7 @@ def call_gemini(prompt, document_id, data_type, gcp_vm=True):
         )
     elif data_type == "pdf_fileapi":
         response = client.models.generate_content(
-            model="gemini-2.5-flash",
+            model=model,
             contents=[
                 data,
                 prompt
@@ -541,22 +542,84 @@ def call_gemini(prompt, document_id, data_type, gcp_vm=True):
 
     return response.text
 
+if False:
+    # old
+    async def call_parallel(params, max_concurrency=5, gcp_vm=True):
+        semaphore = asyncio.Semaphore(max_concurrency)
+
+        async def wrapper(prompt, document_id, data_type, type2):
+            async with semaphore:
+                try:
+                    result = await asyncio.to_thread(
+                        call_gemini, prompt, document_id, data_type, gcp_vm
+                    )
+                    return {"document_id": document_id, "result": result, "error": None, "type": type2}
+                except Exception as e:
+                    return {"document_id": document_id, "result": None, "error": str(e), "type": type2}
+
+        tasks = [wrapper(p, d, t, t2) for p, d, t, t2 in params]
+        return await asyncio.gather(*tasks)
 
 async def call_parallel(params, max_concurrency=5, gcp_vm=True):
-    semaphore = asyncio.Semaphore(max_concurrency)
 
-    async def wrapper(prompt, document_id, data_type, type2):
-        async with semaphore:
-            try:
-                result = await asyncio.to_thread(
-                    call_gemini, prompt, document_id, data_type, gcp_vm
-                )
-                return {"document_id": document_id, "result": result, "error": None, "type": type2}
-            except Exception as e:
-                return {"document_id": document_id, "result": None, "error": str(e), "type": type2}
+    queue = asyncio.Queue()
+    results = []
 
-    tasks = [wrapper(p, d, t, t2) for p, d, t, t2 in params]
-    return await asyncio.gather(*tasks)
+    for p in params:
+        await queue.put(p)
+
+    async def worker():
+        while True:
+            item = await queue.get()
+            if item is None:
+                break
+
+            prompt, document_id, data_type, model, type2 = item
+
+            for attempt in range(3):
+                try:
+                    result = await asyncio.to_thread(
+                        call_gemini,
+                        prompt,
+                        document_id,
+                        data_type,
+                        model,
+                        gcp_vm
+                    )
+
+                    results.append({
+                        "document_id": document_id,
+                        "result": result,
+                        "error": None,
+                        "type": type2
+                    })
+                    break
+
+                except Exception as e:
+                    if "429" in str(e) and attempt < 2:
+                        await asyncio.sleep(2 ** attempt + random.random())
+                    else:
+                        results.append({
+                            "document_id": document_id,
+                            "result": None,
+                            "error": str(e),
+                            "type": type2
+                        })
+                        break
+
+            queue.task_done()
+
+    workers = [asyncio.create_task(worker()) for _ in range(max_concurrency)]
+
+    await queue.join()
+
+    for _ in workers:
+        await queue.put(None)
+
+    await asyncio.gather(*workers)
+
+    return results
+
 
 
 PROMPT_ANN = """
@@ -712,6 +775,73 @@ def is_document_id_value_nan(document_id, df_ann, df_req):
     return False
 
 
+def process_result(res):
+    document_id = res["document_id"]
+    type1 = res["type"]
+
+    if type1 == "req":
+        try:
+            text2 = res["result"].replace('\n','').replace('```json','').replace("```","")
+        except Exception:
+            text2 = "ERROR"
+
+        try:
+            requirement_texts = json.loads(text2)
+        except json.decoder.JSONDecodeError:
+            text2 = text2.replace('"',"'")
+            requirement_texts = json.loads('{"資格・条件" : ["' + text2 + '"]}')
+
+        try:
+            dict2 = {
+                "document_id": document_id,
+                "資格・条件": str(requirement_texts["資格・条件"])
+            }
+            # "資格・条件" は、listの文字列。
+        except Exception as e:
+            # LLMが以下を返す場合があるが未対応。
+            # - json の直下のキーが "資格・条件" ではない。
+            # - 辞書ではなくリスト。
+            dict2 = {
+                "document_id": document_id,
+                "資格・条件": "['Error fetching requirements.']"
+            }
+
+
+        return ("req", dict2)
+
+    else:
+        try:
+            dict1 = res["result"].replace('\n','').replace('```json','').replace("```","")
+            dict1 = json.loads(dict1)
+        except Exception as e:
+            dict1 = {}
+
+        dict2 = {
+            "document_id": document_id,
+            "工事場所": dict1.get("工事場所"),
+            "入札手続等担当部局___郵便番号": dict1.get("入札手続等担当部局", {}).get("郵便番号"),
+            "入札手続等担当部局___住所": dict1.get("入札手続等担当部局", {}).get("住所"),
+            "入札手続等担当部局___担当部署名": dict1.get("入札手続等担当部局", {}).get("担当部署名"),
+            "入札手続等担当部局___担当者名": dict1.get("入札手続等担当部局", {}).get("担当者名"),
+            "入札手続等担当部局___電話番号": dict1.get("入札手続等担当部局", {}).get("電話番号"),
+            "入札手続等担当部局___FAX番号": dict1.get("入札手続等担当部局", {}).get("FAX番号"),
+            "入札手続等担当部局___メールアドレス": dict1.get("入札手続等担当部局", {}).get("メールアドレス"),
+            "公告日": dict1.get("公告日"),
+            "入札方式": dict1.get("入札方式"),
+            "資料種類": dict1.get("資料種類"),
+            "category": dict1.get("category"),
+            "pagecount": dict1.get("pagecount"),
+            "入札説明書の交付期間___開始日": dict1.get("入札説明書の交付期間", {}).get("開始日"),
+            "入札説明書の交付期間___終了日": dict1.get("入札説明書の交付期間", {}).get("終了日"),
+            "申請書及び競争参加資格確認資料の提出期限___開始日": dict1.get("申請書及び競争参加資格確認資料の提出期限", {}).get("開始日"),
+            "申請書及び競争参加資格確認資料の提出期限___終了日": dict1.get("申請書及び競争参加資格確認資料の提出期限", {}).get("終了日"),
+            "入札書の提出期間___開始日": dict1.get("入札書の提出期間", {}).get("開始日"),
+            "入札書の提出期間___終了日": dict1.get("入札書の提出期間", {}).get("終了日"),
+            "url": None
+        }
+
+        return ("ann", dict2)
+
 
 if __name__ == "__main__":
 
@@ -731,6 +861,8 @@ if __name__ == "__main__":
     parser.add_argument("--stop_processing", action="store_true")
     parser.add_argument("--gcp_vm", action="store_true", default=True,
                        help="Use GCS paths for PDF files (default: True)")
+    parser.add_argument("--no_gcp_vm", action="store_false", dest="gcp_vm",
+                       help="Use local paths for PDF files instead of GCS")
     args = parser.parse_args()
     stop_processing = args.stop_processing
     gcp_vm = args.gcp_vm
@@ -1250,10 +1382,11 @@ if __name__ == "__main__":
         for i, row in tqdm(df_ann.iterrows(), total=len(df_ann)):
             document_id = row["document_id"]
 
-            # 結果が1つでも埋まっているならスキップ。
-            ret = is_document_id_value_nan(document_id, df_ann, df_req)
-            if not ret:
+            if i <= 6000:
                 continue
+
+            if i >= 6010:
+                break
 
             if gcp_vm:
                 f_pdf = f"gs://ann-files/pdf/pdf_{document_id.split('_')[0]}/{document_id}.pdf"
@@ -1277,12 +1410,13 @@ if __name__ == "__main__":
                 print(e)
                 continue
 
-            params.append( [PROMPT_ANN, document_id, "pdf", "ann"] )
-            params.append( [PROMPT_REQ, document_id, "pdf", "req"] )
+            params.append( [PROMPT_ANN, document_id, "pdf", "gemini-2.5-flash-lite", "ann"] )
+            # params.append( [PROMPT_REQ, document_id, "pdf", "gemini-2.5-flash-lite", "req"] )
 
             # pdf_file = client.files.upload(file=f_pdf)
             # client.files.delete(name=pdf_file.name)
 
+        print("gemini call_parallel.")
         start = time.time()
         results = asyncio.run(call_parallel(params, gcp_vm=gcp_vm))
         end = time.time()
@@ -1292,7 +1426,54 @@ if __name__ == "__main__":
         with open(fr"../4_get_documents/output_v3/gemini_results_{yyyymmdd}.pkl", "wb") as f:
             pickle.dump(results, f)
 
-    if True:
+
+
+
+    if False:
+        with open(fr"../4_get_documents/output_v3/gemini_results_20260308.pkl", "rb") as f:
+            results = pickle.load(f)
+
+        ann_results = [r for r in results if r["type"] == "ann"]
+        req_results = [r for r in results if r["type"] == "req"]
+
+        # エラーのみ抽出
+        err_ann = [r for r in results if r["type"] == "ann" and r["error"] is not None]
+
+        # エラー数の確認
+        print(f"ann エラー数: {len(err_ann)} / {len([r for r in results if r['type'] == 'ann'])}")
+
+        # エラー内容の確認
+        for e in err_ann[:5]:  # 最初の5件
+            print(f"document_id: {e['document_id']}, error: {e['error']}")
+
+
+        ann_results = pd.DataFrame(ann_results)
+        ann_results_2 = []
+        for i,row in ann_results.iterrows():
+            aa = process_result(row)
+            ann_results_2.append(aa[1])
+        ann_results_2 = pd.DataFrame(ann_results_2)
+
+
+        req_results = pd.DataFrame(req_results)
+        req_results_2 = []
+        for i,row in req_results.iterrows():
+            aa = process_result(row)
+            req_results_2.append(aa[1])
+        req_results_2 = pd.DataFrame(req_results_2)
+        
+        (df_ann["document_id"]==df_req["document_id"]).all()
+        (df_ann["document_id"].iloc[0:ann_results_2.shape[0]].to_numpy() == ann_results_2["document_id"].to_numpy()).all()
+        # df_ann に存在するかどうかのブール列を作る
+        ann_results_2["exists_in_df"] = ann_results_2["document_id"].isin(df_ann["document_id"])
+
+        # 集計
+        counts = ann_results_2["exists_in_df"].value_counts()
+        print(counts)
+
+
+
+    if False:
         results2 = []
         tmp_req_df_list = []
         tmp_ann_df_list = []
@@ -1370,8 +1551,10 @@ if __name__ == "__main__":
                     # df_req[df_req["document_id"]==document_id]
                 tmp_ann_df_list.append(tmpdict2)
 
+
+
     # 保存
-    if True:
+    if False:
         df_ann.to_csv(output_path_ann, sep="\t", index=False)
         df_ann.to_csv(output_path_ann_zip, sep="\t", compression="zip", index=False)
         df_req.to_csv(output_path_req, sep="\t", index=False)
@@ -1387,23 +1570,6 @@ if __name__ == "__main__":
         xxx = tmp_req_df[tmp_req_df["資格・条件"].str.len() <= 30]
         xxx = tmp_req_df[tmp_req_df["資格・条件"].str.contains("ERROR")]
         xxx["資格・条件"].value_counts()
-
-
-
-
-    # インタラクティブ環境
-    if False:
-        async def tmpfunc():
-            results = await call_parallel(triples)
-            return results
-        
-        start = time.time()
-        all_results = asyncio.run(tmpfunc())
-
-        end = time.time()
-        print(f"処理時間: {end - start:.4f} 秒")
-
-
 
 
 
