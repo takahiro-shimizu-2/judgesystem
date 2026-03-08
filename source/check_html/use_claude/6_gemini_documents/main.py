@@ -646,8 +646,8 @@ async def call_parallel(params, max_concurrency=5, gcp_vm=True):
                     break
 
                 except Exception as e:
-                    if "429" in str(e) and attempt < 2:
-                        await asyncio.sleep(2 ** attempt + random.random())
+                    if ("429" in str(e) or "503" in str(e)) and attempt < 2:
+                        await asyncio.sleep(2 ** (attempt+1) + random.random())
                     else:
                         results.append({
                             "document_id": document_id,
@@ -1468,7 +1468,7 @@ if __name__ == "__main__":
 
         print("gemini call_parallel.")
         start = time.time()
-        results = asyncio.run(call_parallel(params, gcp_vm=gcp_vm))
+        results = asyncio.run(call_parallel(params, max_concurrency=5, gcp_vm=gcp_vm))
         end = time.time()
         print(f"処理時間: {end - start:.4f} 秒")
         # 処理時間: 23044.9809 秒
@@ -1480,11 +1480,17 @@ if __name__ == "__main__":
 
 
     if True:
+        with open(fr"../4_get_documents/output_v3/gemini_results_20260307.pkl", "rb") as f:
+            results_1 = pickle.load(f)
+            ann_results_1 = [r for r in results_1 if r["type"] == "ann"]
+            req_results_1 = [r for r in results_1 if r["type"] == "req"]
         with open(fr"../4_get_documents/output_v3/gemini_results_20260308.pkl", "rb") as f:
-            results = pickle.load(f)
+            results_2 = pickle.load(f)
 
-        ann_results = [r for r in results if r["type"] == "ann"]
-        req_results = [r for r in results if r["type"] == "req"]
+        results = ann_results_1 + results_2
+        ann_results = results
+        req_results = req_results_1
+
 
         # エラーのみ抽出
         err_ann = [r for r in results if r["type"] == "ann" and r["error"] is not None]
@@ -1498,7 +1504,7 @@ if __name__ == "__main__":
             print(f"document_id: {e['document_id']}, error: {e['error']}")
 
 
-        ann_results = pd.DataFrame(ann_results)
+        ann_results = pd.DataFrame(results)
         if False:
             ann_results_2 = []
             print("Process result(ann).")
