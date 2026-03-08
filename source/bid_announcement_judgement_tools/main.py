@@ -414,19 +414,32 @@ class OCRutils:
           json ライクな公告データ
         """
 
-        def _modifyDate(datestr, handle_same_year=None):
+        def _modifyDate(datestr, handle_same_year=None, handle_same_month=None):
             try:
                 datestr = datestr.replace("令和元年", "令和1年")
                 if "同年" in datestr:
                     datestr = datestr.replace("同年", fr"{handle_same_year}年")
 
+                # 同月25日
+                m = re.search(r"同月\s*(\d+)日", datestr)
+                if m and handle_same_month:
+                    y, mth = handle_same_month.split("-")
+                    return f"{y}-{mth}-{int(m.group(1)):02}"
+
+                # 令和7年3月18日
                 m = re.search(r"令和\s*(\d+)年\s*(\d+)月\s*(\d+)日", datestr)
                 if m:
                     return fr"{int(m.group(1))+2018:04}-{int(m.group(2)):02}-{int(m.group(3)):02}"
                 
+                # 2025年3月18日
                 m = re.search(r"(\d{4})年\s*(\d+)月\s*(\d+)日", datestr)
                 if m:
                     return fr"{int(m.group(1))}-{int(m.group(2)):02}-{int(m.group(3)):02}"
+                
+                # 7.3.18 → 令和7年3月18日
+                m = re.search(r"\b(\d+)\.(\d{1,2})\.(\d{1,2})\b", datestr)
+                if m:
+                    return fr"{int(m.group(1))+2018:04}-{int(m.group(2)):02}-{int(m.group(3)):02}"
                 return datestr
             except Exception as e:
                 # print(e)
