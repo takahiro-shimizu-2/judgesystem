@@ -22,11 +22,14 @@ import re
 import subprocess
 import pdf2image  # Need sudo apt install poppler-utils
 import pytesseract
+from collections import Counter
 # Need
 # sudo apt install tesseract-ocr
 # sudo apt install tesseract-ocr-jpn
 import platform
 from multiprocessing import Pool, cpu_count
+import io
+import fitz
 
 # GCS support
 try:
@@ -148,28 +151,35 @@ def open_file_from_document_id(document_id, remove_sakura=False):
     ])
 
 
-def get_pages(path, previous_result):
+def get_pages(path):
     # path = modify_path(path)
     # path = '../4_get_documents/output_v3/pdf/pdf_00018/00018_opencounter_380-0417-009-oc-2_1.pdf'
     if not path.lower().endswith(".pdf"):
-        return path, -1
+        return -2
 
-    if previous_result != -1:
-        return path, previous_result
+    #if previous_result != -1:
+    #    return path, previous_result
 
     try:
         if path.startswith("gs://"):
             # GCS path - download to memory
-            import io
             pdf_bytes = gcs_download_as_bytes(path)
-            reader = PdfReader(io.BytesIO(pdf_bytes))
-            return path, len(reader.pages)
+            if True:
+                with fitz.open(stream=pdf_bytes, filetype="pdf") as doc:
+                    return doc.page_count
+            else:
+                with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf: 
+                    return len(pdf.pages)
         else:
             # Local path
-            reader = PdfReader(path)
-            return path, len(reader.pages)
-    except:
-        return path, -1
+            if True:
+                with fitz.open(path) as doc:
+                    return doc.page_count
+            else:
+                with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf: 
+                    return len(pdf.pages)
+    except Exception:
+        return -2
 
 
 def pdf_to_txt(save_path, use_tesseract=False):
@@ -723,14 +733,17 @@ if __name__ == "__main__":
         ### python main.py で実行しないとダメなうえに、実行してしまった場合、落とさないといけないので注意。
         cpu_count_value = os.cpu_count()
         max_workers = min(8, cpu_count_value)
-        files = df["save_path"].values
-        page_counts = df["pageCount"].values
+
+        mask = df["pageCount"] != -1
+        files = df.loc[mask, "save_path"].values
         with ProcessPoolExecutor(max_workers=max_workers) as ex:
-            results = list(tqdm(ex.map(get_pages, files, page_counts), total=len(files)))
-        results_df = pd.DataFrame(results, columns=["path","num_of_pages"])
-        results_df["num_of_pages"].value_counts()
-        df["pageCount"] = results_df["num_of_pages"].values
-        (df["pageCount"]==results_df["num_of_pages"]).value_counts(dropna=False)
+            results = list(
+                tqdm(
+                    ex.map(get_pages, files, chunksize=200),
+                    total=len(files)
+                )
+            )
+        df.loc[mask, "pageCount"] = results
         df["pageCount"].value_counts(dropna=False)
 
     if do_output:
