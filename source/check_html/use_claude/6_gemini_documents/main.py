@@ -233,30 +233,54 @@ def convertJson(json_value):
 
     def _modifyDate(datestr, handle_same_year=None, handle_same_month=None):
         try:
+            # スペースを除去してから処理
+            datestr = datestr.replace(" ", "").replace("　", "")
+
             datestr = datestr.replace("令和元年", "令和1年")
             if "同年" in datestr:
                 datestr = datestr.replace("同年", fr"{handle_same_year}年")
 
             # 同月25日
-            m = re.search(r"同月\s*(\d+)日", datestr)
+            m = re.search(r"同月(\d+)日", datestr)
             if m and handle_same_month:
                 y, mth = handle_same_month.split("-")
                 return f"{y}-{mth}-{int(m.group(1)):02}"
 
             # 令和7年3月18日
-            m = re.search(r"令和\s*(\d+)年\s*(\d+)月\s*(\d+)日", datestr)
+            m = re.search(r"令和(\d+)年(\d+)月(\d+)日", datestr)
             if m:
                 return fr"{int(m.group(1))+2018:04}-{int(m.group(2)):02}-{int(m.group(3)):02}"
-            
-            # 2025年3月18日
-            m = re.search(r"(\d{4})年\s*(\d+)月\s*(\d+)日", datestr)
+
+            # 2025年3月18日 (4桁の年号)
+            m = re.search(r"(\d{4})年(\d+)月(\d+)日", datestr)
             if m:
                 return fr"{int(m.group(1))}-{int(m.group(2)):02}-{int(m.group(3)):02}"
-            
+
+            # 7年4月14日 → 令和7年として扱う (1-2桁の年号は令和とみなす)
+            m = re.search(r"(\d{1,2})年(\d+)月(\d+)日", datestr)
+            if m:
+                year = int(m.group(1))
+                # 年が100未満なら令和として扱う
+                if year < 100:
+                    return fr"{year+2018:04}-{int(m.group(2)):02}-{int(m.group(3)):02}"
+                else:
+                    return fr"{year}-{int(m.group(2)):02}-{int(m.group(3)):02}"
+
+            # R7.7.2 → 令和7年7月2日
+            m = re.search(r"R(\d+)\.(\d{1,2})\.(\d{1,2})", datestr)
+            if m:
+                return fr"{int(m.group(1))+2018:04}-{int(m.group(2)):02}-{int(m.group(3)):02}"
+
             # 7.3.18 → 令和7年3月18日
             m = re.search(r"\b(\d+)\.(\d{1,2})\.(\d{1,2})\b", datestr)
             if m:
                 return fr"{int(m.group(1))+2018:04}-{int(m.group(2)):02}-{int(m.group(3)):02}"
+
+            # 2025/5/12 → 2025-05-12
+            m = re.search(r"(\d{4})/(\d{1,2})/(\d{1,2})", datestr)
+            if m:
+                return fr"{int(m.group(1))}-{int(m.group(2)):02}-{int(m.group(3)):02}"
+
             return datestr
         except Exception as e:
             # print(e)
@@ -1455,7 +1479,7 @@ if __name__ == "__main__":
 
 
     if True:
-        with open(fr"../4_get_documents/output_v3/gemini_results_20260307.pkl", "rb") as f:
+        with open(fr"../4_get_documents/output_v3/gemini_results_20260308.pkl", "rb") as f:
             results = pickle.load(f)
 
         ann_results = [r for r in results if r["type"] == "ann"]
