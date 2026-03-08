@@ -1473,6 +1473,62 @@ if __name__ == "__main__":
 
 
 
+
+
+        results2 = []
+        tmp_req_df_list = []
+        tmp_ann_df_list = []
+        for i, row in tqdm(ann_results.iterrows(), total=len(ann_results)):
+            document_id = row["document_id"]
+            dict1 = row["result"].replace('\n', '').replace('```json', '').replace("```","")
+            dict1 = json.loads(dict1)
+            dict1 = convertJson(dict1)
+
+            dict2 = {
+                "document_id": document_id,
+                "工事場所": dict1.get("工事場所"),
+                "入札手続等担当部局___郵便番号": dict1.get("入札手続等担当部局", {}).get("郵便番号"),
+                "入札手続等担当部局___住所": dict1.get("入札手続等担当部局", {}).get("住所"),
+                "入札手続等担当部局___担当部署名": dict1.get("入札手続等担当部局", {}).get("担当部署名"),
+                "入札手続等担当部局___担当者名": dict1.get("入札手続等担当部局", {}).get("担当者名"),
+                "入札手続等担当部局___電話番号": dict1.get("入札手続等担当部局", {}).get("電話番号"),
+                "入札手続等担当部局___FAX番号": dict1.get("入札手続等担当部局", {}).get("FAX番号"),
+                "入札手続等担当部局___メールアドレス": dict1.get("入札手続等担当部局", {}).get("メールアドレス"),
+                "公告日": dict1.get("公告日"),
+                "入札方式": dict1.get("入札方式"),
+                "資料種類": dict1.get("資料種類"),
+                "category": dict1.get("category"),
+                "pagecount": dict1.get("pagecount"),
+                "入札説明書の交付期間___開始日": dict1.get("入札説明書の交付期間", {}).get("開始日"),
+                "入札説明書の交付期間___終了日": dict1.get("入札説明書の交付期間", {}).get("終了日"),
+                "申請書及び競争参加資格確認資料の提出期限___開始日": dict1.get("申請書及び競争参加資格確認資料の提出期限", {}).get("開始日"),
+                "申請書及び競争参加資格確認資料の提出期限___終了日": dict1.get("申請書及び競争参加資格確認資料の提出期限", {}).get("終了日"),
+                "入札書の提出期間___開始日": dict1.get("入札書の提出期間", {}).get("開始日"),
+                "入札書の提出期間___終了日": dict1.get("入札書の提出期間", {}).get("終了日"),
+                "url": None
+            }
+
+
+            if False:
+                for k,v in dict2.items():
+                    print(k,v)
+                df_ann.loc[df_ann["document_id"] == document_id,]
+                for cname in df_ann.columns:
+                    print(cname, df_ann.loc[df_ann["document_id"] == document_id,cname].values[0])
+            tmpdict2 = pd.DataFrame(dict2, index=[0])
+            if True:
+                keys = list(tmpdict2.keys())
+                keys = [k for k in keys if k not in ["document_id","url"] ]
+                for key in keys:
+                    df_ann.loc[df_ann["document_id"] == document_id, key] = dict2[key]
+                # df_req[df_req["document_id"]==document_id]
+            tmp_ann_df_list.append(dict2)
+        ann_df_list = pd.concat(tmp_ann_df_list)
+        for i in tmp_ann_df_list:
+            print(i.values())
+
+
+
     if False:
         results2 = []
         tmp_req_df_list = []
@@ -1550,7 +1606,6 @@ if __name__ == "__main__":
                         df_ann.loc[df_ann["document_id"] == document_id, key] = dict2[key]
                     # df_req[df_req["document_id"]==document_id]
                 tmp_ann_df_list.append(tmpdict2)
-
 
 
     # 保存
