@@ -26,6 +26,7 @@ from concurrent.futures import ThreadPoolExecutor
 import argparse
 import re
 import random
+from collections import Counter
 
 def extract_second_level(url):
     # プロトコル部分（http://, https://）を削除
@@ -1526,8 +1527,12 @@ if __name__ == "__main__":
             counts = ann_results_2["exists_in_df"].value_counts()
             print(counts)
 
+        err_ann_2 = [r["error"] for r in results if r["type"] == "ann" and r["error"] is not None and r["error"].find("No such object:")==-1]
+        counts = Counter(err_ann_2)
+        print(counts)
 
-
+        error_set = list({r["error"] for r in err_ann})
+        error_set = [i for i in error_set if i.find("No such object:") == -1]
 
 
         # JSON列をリストに展開
