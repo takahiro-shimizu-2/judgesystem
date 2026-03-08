@@ -1,0 +1,310 @@
+以下の[partnersクエリ]と同じように、
+announcements に対して、クエリを作ってくれませんか。
+つまり、announcementsとそれに関連するテーブルがあり、
+関連テーブルは with 句で事前に集約し、それを join して結果を返すクエリが欲しいです。
+
+[announcements]
+テーブルの列
+announcement_no as id,
+1 as \`no\`,
+1 as ordererId,
+coalesce(anno.workName, 'dummytitle') as title,
+'dummy_cat' as category,
+coalesce(anno.topAgencyName, 'dummy') as organization,
+coalesce(anno.workPlace, 'dummy') as workLocation,
+
+coalesce(anno.zipcode, 'dummy') as department_postalcode,
+coalesce(anno.address, 'dummy') as department_address,
+coalesce(anno.department, 'dummy') as department_name,
+coalesce(anno.assigneeName, 'dummy') as department_contactPerson,
+coalesce(anno.telephone, 'dummy') as department_phone,
+coalesce(anno.fax, 'dummy') as department_fax,
+coalesce(anno.mail, 'dummy') as department_email,
+
+coalesce(anno.publishDate, 'dummy') as publishDate,
+coalesce(anno.docDistStart, 'dummy') as explanationStartDate,
+coalesce(anno.docDistEnd, 'dummy') as explanationEndDate,
+coalesce(anno.submissionStart, 'dummy') as applicationStartDate,
+coalesce(anno.submissionEnd, 'dummy') as applicationEndDate,
+coalesce(anno.bidStartDate, 'dummy') as bidStartDate,
+coalesce(anno.bidEndDate, 'dummy') as bidEndDate,
+'dummy_deadline' as deadline,
+
+1 as estimatedAmountMin,
+1000 as estimatedAmountMax,
+
+'closed' as status,
+
+10 as actualAmount,
+1 as winningCompanyId,
+'dummy_wincomp' as winningCompanyName
+
+[announcements_competing_companies]
+announcement_id
+company_name
+isWinner
+
+[announcements_competing_company_bids]
+announcement_id
+company_name
+bid_order
+bid_amount
+
+[announcements_documents]
+announcement_id
+document_id
+type
+title
+fileFormat
+pageCount
+extractedAt
+url
+content
+
+
+
+[partnersクエリ]
+WITH
+-- 1) categories を partner_id ごとに集約
+categories AS (
+  SELECT
+    partner_id,
+    ARRAY_AGG(categories) AS categories
+  FROM ${prefix}partners_categories
+  GROUP BY partner_id
+),
+
+-- 2) past projects を partner_id ごとに集約
+past_projects AS (
+  SELECT
+    partner_id,
+    ARRAY_AGG(
+      STRUCT(
+        cast(evaluationId as string) as evaluationId,
+        announcementId,
+        cast(announcementNo as int64) as announcementNo,
+        announcementTitle,
+        branchName,
+        workStatus,
+        evaluationStatus,
+        cast(priority as int64) as priority,
+        bidType,
+        category,
+        prefecture,
+        publishDate,
+        deadline,
+        evaluatedAt,
+        organization
+      )
+    ) AS pastProjects
+  FROM ${prefix}partners_past_projects
+  GROUP BY partner_id
+),
+
+-- 3) branches を partner_id ごとに集約
+branches AS (
+  SELECT
+    partner_id,
+    ARRAY_AGG(
+      STRUCT(
+        name,
+        address
+      )
+    ) AS branches
+  FROM ${prefix}partners_branches
+  GROUP BY partner_id
+),
+
+-- 4) unified qualifications を partner_id ごとに集約
+qual_unified AS (
+  SELECT
+    partner_id,
+    ARRAY_AGG(
+      STRUCT(
+        mainCategory,
+        category,
+        region,
+        cast(value as string) as value,
+        grade
+      )
+    ) AS unified
+  FROM ${prefix}partners_qualifications_unified
+  GROUP BY partner_id
+),
+
+-- 5) orderer items を ordererName ごとに集約
+orderer_items AS (
+  SELECT
+    partner_id,
+    ordererName,
+    ARRAY_AGG(
+      STRUCT(
+        category,
+        region,
+        cast(value as string) as value,
+        grade
+      )
+    ) AS items
+  FROM ${prefix}partners_qualifications_orderer_items
+  GROUP BY partner_id, ordererName
+),
+
+-- 6) orderers を partner_id ごとに集約
+orderers AS (
+  SELECT
+    partner_id,
+    ARRAY_AGG(
+      STRUCT(
+        ordererName,
+        items
+      )
+    ) AS orderers
+  FROM orderer_items
+  GROUP BY partner_id
+)
+
+-- 7) 最終結合（爆発しない）
+SELECT
+  pm.partner_id AS id,
+  pm.no,
+  pm.name,
+  pm.postalCode,
+  pm.address,
+  pm.phone,
+  pm.fax,
+  pm.email,
+  pm.url,
+  pm.surveyCount,
+  cast(pm.rating as int64) as rating,
+  pm.resultCount,
+  c.categories,
+  pp.pastProjects,
+  pm.representative,
+  pm.established,
+  pm.capital,
+  pm.employeeCount,
+  b.branches,
+  STRUCT(
+    qu.unified,
+    o.orderers
+  ) AS qualifications
+FROM ${prefix}partners_master pm
+LEFT JOIN categories c USING (partner_id)
+LEFT JOIN past_projects pp USING (partner_id)
+LEFT JOIN branches b USING (partner_id)
+LEFT JOIN qual_unified qu USING (partner_id)
+LEFT JOIN orderers o USING (partner_id);
+
+
+==================================================
+
+WITH
+-- 1) competing companies を announcement_id ごとに集約
+competing_companies AS (
+  SELECT
+    announcement_id,
+    ARRAY_AGG(
+      STRUCT(
+        company_name,
+        isWinner
+      )
+    ) AS competingCompanies
+  FROM `mizu-api-457906.bid_db.announcements_competing_companies_master`
+  GROUP BY announcement_id
+),
+
+-- 2) competing company bids を announcement_id ごとに集約
+competing_company_bids AS (
+  SELECT
+    announcement_id,
+    ARRAY_AGG(
+      STRUCT(
+        company_name,
+        bid_order,
+        bid_amount
+      )
+    ) AS competingCompanyBids
+  FROM `mizu-api-457906.bid_db.announcements_competing_company_bids_master`
+  GROUP BY announcement_id
+),
+
+-- 3) documents を announcement_id ごとに集約
+documents AS (
+  SELECT
+    announcement_id,
+    ARRAY_AGG(
+      STRUCT(
+        document_id,
+        type,
+        title,
+        fileFormat,
+        pageCount,
+        extractedAt,
+        url,
+        content
+      )
+    ) AS documents
+  FROM `mizu-api-457906.bid_db.announcements_documents_master`
+  GROUP BY announcement_id
+)
+
+-- 4) 最終結合（爆発しない）
+SELECT
+  a.announcement_no AS id,
+  1 AS `no`,
+  1 AS ordererId,
+
+  COALESCE(a.workName, 'dummytitle') AS title,
+  'dummy_cat' AS category,
+  COALESCE(a.topAgencyName, 'dummy') AS organization,
+  COALESCE(a.workPlace, 'dummy') AS workLocation,
+
+  COALESCE(a.zipcode, 'dummy') AS department_postalcode,
+  COALESCE(a.address, 'dummy') AS department_address,
+  COALESCE(a.department, 'dummy') AS department_name,
+  COALESCE(a.assigneeName, 'dummy') AS department_contactPerson,
+  COALESCE(a.telephone, 'dummy') AS department_phone,
+  COALESCE(a.fax, 'dummy') AS department_fax,
+  COALESCE(a.mail, 'dummy') AS department_email,
+
+  COALESCE(a.publishDate, 'dummy') AS publishDate,
+  COALESCE(a.docDistStart, 'dummy') AS explanationStartDate,
+  COALESCE(a.docDistEnd, 'dummy') AS explanationEndDate,
+  COALESCE(a.submissionStart, 'dummy') AS applicationStartDate,
+  COALESCE(a.submissionEnd, 'dummy') AS applicationEndDate,
+  COALESCE(a.bidStartDate, 'dummy') AS bidStartDate,
+  COALESCE(a.bidEndDate, 'dummy') AS bidEndDate,
+  'dummy_deadline' AS deadline,
+
+  1 AS estimatedAmountMin,
+  1000 AS estimatedAmountMax,
+
+  'closed' AS status,
+
+  10 AS actualAmount,
+  1 AS winningCompanyId,
+  'dummy_wincomp' AS winningCompanyName,
+
+  cc.competingCompanies,
+  ccb.competingCompanyBids,
+  d.documents
+
+FROM `mizu-api-457906.bid_db.bid_announcements` a
+LEFT JOIN competing_companies cc
+  ON cc.announcement_id = a.announcement_no
+LEFT JOIN competing_company_bids ccb
+  ON ccb.announcement_id = a.announcement_no
+LEFT JOIN documents d
+  ON d.announcement_id = a.announcement_no;
+
+
+SELECT
+  table_name
+FROM
+  `mizu-api-457906.bid_db.INFORMATION_SCHEMA.TABLES`;
+
+
+
+
+
+  
