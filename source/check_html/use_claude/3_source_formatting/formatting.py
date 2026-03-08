@@ -8,6 +8,7 @@ from pathlib import PurePosixPath
 from pypdf import PdfReader
 from tqdm import tqdm
 import csv
+import numpy as np
 import argparse
 
 # index == 公告ページを識別する番号。
@@ -412,7 +413,7 @@ if __name__ == "__main__":
         "type":            [None]*df_merged.shape[0],
         "title":           df_merged["link_text"],
         "fileFormat":      df_merged["pdf_full_url"].str.extract(r'\.([^.]+)$')[0].fillna(""),
-        "pageCount":       [-1]*df_merged.shape[0],
+        "pageCount":       np.where(df_merged["pdf_full_url"].str.extract(r'\.([^.]+)$')[0].fillna(""), -2, -1),
         "extractedAt":     [args.extracted_at]*df_merged.shape[0],
         "url":             df_merged["pdf_full_url"],
         "content":         ["dummy"]*df_merged.shape[0],
@@ -465,15 +466,34 @@ if __name__ == "__main__":
                 # 最新のディレクトリを取得（ディレクトリ名でソート）
                 latest_dir = sorted(all_dirs, reverse=True)[0]
 
-                # そのディレクトリ内のannouncements_document_*.txtを探す
-                pattern = "announcements_document_*.txt"
-                matching_files = sorted(latest_dir.glob(pattern), key=lambda p: p.stat().st_mtime, reverse=True)
+                # 優先順位で過去ファイルを選択
+                # 1. _merged_updated.txt
+                # 2. _merged.txt
+                # 3. announcements_document_*.txt (上記以外)
 
-                # _merged.txt を除外
-                matching_files = [f for f in matching_files if not f.name.endswith("_merged.txt")]
+                previous_file = None
 
-                if matching_files:
-                    previous_file = str(matching_files[0])
+                # 優先順位1: _merged_updated.txt を探す
+                merged_updated_files = list(latest_dir.glob("announcements_document_*_merged_updated.txt"))
+                if merged_updated_files:
+                    previous_file = str(sorted(merged_updated_files, key=lambda p: p.stat().st_mtime, reverse=True)[0])
+
+                # 優先順位2: _merged.txt を探す
+                if not previous_file:
+                    merged_files = list(latest_dir.glob("announcements_document_*_merged.txt"))
+                    if merged_files:
+                        previous_file = str(sorted(merged_files, key=lambda p: p.stat().st_mtime, reverse=True)[0])
+
+                # 優先順位3: その他のannouncements_document_*.txt
+                if not previous_file:
+                    pattern = "announcements_document_*.txt"
+                    matching_files = sorted(latest_dir.glob(pattern), key=lambda p: p.stat().st_mtime, reverse=True)
+                    # _merged.txt と _merged_updated.txt を除外
+                    matching_files = [f for f in matching_files if not (f.name.endswith("_merged.txt") or f.name.endswith("_merged_updated.txt"))]
+                    if matching_files:
+                        previous_file = str(matching_files[0])
+
+                if previous_file:
                     current_file = str(output_path1)
 
                     print(f"Merging with previous result: {previous_file}")
