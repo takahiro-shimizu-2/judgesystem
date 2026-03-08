@@ -734,7 +734,7 @@ if __name__ == "__main__":
         cpu_count_value = os.cpu_count()
         max_workers = min(8, cpu_count_value)
 
-        mask = df["pageCount"] != -1
+        mask = df["pageCount"] == -1
         files = df.loc[mask, "save_path"].values
         with ProcessPoolExecutor(max_workers=max_workers) as ex:
             results = list(
