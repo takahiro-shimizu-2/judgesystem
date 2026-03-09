@@ -998,11 +998,11 @@ if __name__ == "__main__":
 
     # 既にファイルがあるか確認
     if os.path.exists(output_path_ann_zip):
-        df_ann = pd.read_csv(output_path_ann_zip,sep="\t", low_memory=False)
+        df_ann = pd.read_csv(output_path_ann_zip,sep="\t", low_memory=False, encoding="utf-8")
         if "done" in df_ann.columns:
             df_ann["done"] = df_ann["done"].fillna(False).astype(bool)
     elif os.path.exists(output_path_ann):
-        df_ann = pd.read_csv(output_path_ann,sep="\t", low_memory=False)
+        df_ann = pd.read_csv(output_path_ann,sep="\t", low_memory=False, encoding="utf-8")
         if "done" in df_ann.columns:
             df_ann["done"] = df_ann["done"].fillna(False).astype(bool)
     else:
@@ -1032,13 +1032,13 @@ if __name__ == "__main__":
             "done": False
         })
         # 保存
-        df_ann.to_csv(output_path_ann, sep="\t", index=False)
+        df_ann.to_csv(output_path_ann, sep="\t", index=False, encoding="utf-8")
 
 
     if os.path.exists(output_path_req_zip):
-        df_req = pd.read_csv(output_path_req_zip,sep="\t", low_memory=False)
+        df_req = pd.read_csv(output_path_req_zip,sep="\t", low_memory=False, encoding="utf-8")
     elif os.path.exists(output_path_req):
-        df_req = pd.read_csv(output_path_req,sep="\t", low_memory=False)
+        df_req = pd.read_csv(output_path_req,sep="\t", low_memory=False, encoding="utf-8")
     else:
         # ファイルが存在しない場合、新規作成
         print(f"Creating new req dataframe with columns from df_new")
@@ -1047,7 +1047,7 @@ if __name__ == "__main__":
             "資格・条件": "['INIT']"
         })
         # 保存
-        df_req.to_csv(output_path_req, sep="\t", index=False)
+        df_req.to_csv(output_path_req, sep="\t", index=False, encoding="utf-8")
 
     if not df_ann["document_id"].equals(df_req["document_id"]):
         raise ValueError("The document_id columns in df_ann and df_req are not identical.")
@@ -1562,7 +1562,13 @@ if __name__ == "__main__":
                 original_col = new_col[:-4]  # "_new" を除去
                 df_ann[original_col] = df_ann[new_col]
                 df_ann.drop(columns=[new_col], inplace=True)
-        
+
+
+        df_ann.to_csv(output_path_ann, sep="\t", index=False, encoding="utf-8")
+        df_ann.to_csv(output_path_ann_zip, sep="\t", compression="zip", index=False, encoding="utf-8")
+
+
+
         if req_results.shape[0] > 0:
             req_results[req_results["result"].str.contains("ERROR", na=False)]
 
@@ -1619,6 +1625,9 @@ if __name__ == "__main__":
                     # df_ann[df_ann["document_id"]==document_id]
 
             df_req[df_req["資格・条件"].str.contains("ERROR", na=False)]
+
+        df_req.to_csv(output_path_req, sep="\t", index=False, encoding="utf-8")
+        df_req.to_csv(output_path_req_zip, sep="\t", compression="zip", index=False, encoding="utf-8")
 
         if False:
             # JSON列をリストに展開
@@ -1909,7 +1918,7 @@ if __name__ == "__main__":
 
     # 保存
     if False:
-        df_ann.to_csv(output_path_ann, sep="\t", index=False)
-        df_ann.to_csv(output_path_ann_zip, sep="\t", compression="zip", index=False)
-        df_req.to_csv(output_path_req, sep="\t", index=False)
-        df_req.to_csv(output_path_req_zip, sep="\t", compression="zip", index=False)
+        df_ann.to_csv(output_path_ann, sep="\t", index=False, encoding="utf-8")
+        df_ann.to_csv(output_path_ann_zip, sep="\t", compression="zip", index=False, encoding="utf-8")
+        df_req.to_csv(output_path_req, sep="\t", index=False, encoding="utf-8")
+        df_req.to_csv(output_path_req_zip, sep="\t", compression="zip", index=False, encoding="utf-8")
