@@ -79,6 +79,12 @@ def gcs_upload_from_bytes(gcs_path, data):
         raise ValueError(f"Invalid GCS path: {gcs_path}")
     client = storage.Client()
     bucket = client.bucket(bucket_name)
+
+    # Create bucket if it doesn't exist
+    if not bucket.exists():
+        bucket.create()
+        print(f"Created GCS bucket: {bucket_name}")
+
     blob = bucket.blob(blob_name)
     blob.upload_from_string(data)
 
