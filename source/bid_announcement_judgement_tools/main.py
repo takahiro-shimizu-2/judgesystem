@@ -3531,9 +3531,11 @@ class BidJudgementSan:
         current_shortage_detail_no = max_shortage_detail_no + 1
         
         # 部分的に(chunk_sizeごとに)実行。
-        chunk_size = 1000
+        chunk_size = 1000000
         # req_df はひとまず一括取得
         req_df0 = db_operator.selectToTable(tablename=fr"{tablename_requirements}")
+        # announcement_noでgroupbyして辞書化（高速化のため）
+        req_df_map = dict(tuple(req_df0.groupby("announcement_no")))
         for start in range(0, len(df0), chunk_size):
             print(fr"start : {start}")
             df = df0.iloc[start:start+chunk_size]
@@ -3559,10 +3561,10 @@ class BidJudgementSan:
                 # req_df = db_operator.selectToTable(tablename=fr"{tablename_requirements}", where_clause=fr"where announcement_no = {announcement_no}")
 
                 # 毎回 DataFrame filter しているので遅い
-                req_df = req_df0[req_df0["announcement_no"]==announcement_no]
-                # req_df = req_df_map.get(announcement_no)
+                # req_df = req_df0[req_df0["announcement_no"]==announcement_no]
+                req_df = req_df_map.get(announcement_no)
 
-                if req_df.shape[0] == 0:
+                if req_df is None or req_df.shape[0] == 0:
                     print(fr"   announcement_no={announcement_no}: No requirement found. Skip anyway.")
                     continue
 
