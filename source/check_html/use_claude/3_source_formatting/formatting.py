@@ -407,13 +407,14 @@ if __name__ == "__main__":
 
     # announcements_document 用に整形。
 
+    ext = df_merged["pdf_full_url"].str.extract(r'\.([^.]+)$')[0].str.lower()
     df_new = pd.DataFrame({
         "announcement_id": df_merged["announcement_id"],
         "document_id":     df_merged["document_id"],
         "type":            [None]*df_merged.shape[0],
         "title":           df_merged["link_text"],
-        "fileFormat":      df_merged["pdf_full_url"].str.extract(r'\.([^.]+)$')[0].fillna(""),
-        "pageCount":       np.where(df_merged["pdf_full_url"].str.extract(r'\.([^.]+)$')[0].fillna(""), -2, -1),
+        "fileFormat":      ext.fillna(""),
+        "pageCount":       np.where(ext == "pdf", -1, -2),
         "extractedAt":     [args.extracted_at]*df_merged.shape[0],
         "url":             df_merged["pdf_full_url"],
         "content":         ["dummy"]*df_merged.shape[0],
