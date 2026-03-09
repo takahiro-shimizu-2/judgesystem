@@ -1548,8 +1548,8 @@ if __name__ == "__main__":
             # 元の df_ann にマージ
             df_ann = df_ann.merge(df_records, on="document_id", how="left", suffixes=("", "_new"))
 
-            # 更新された行を判定
-            df_ann["done"] = df_ann["done_new"].fillna(False).astype("boolean")
+            # 更新された行を判定（元がTrueなら維持、done_newがTrueなら更新）
+            df_ann["done"] = (df_ann["done"] | df_ann["done_new"].fillna(False)).astype("boolean")
             # df_ann["done"].value_counts()
 
             # 不要になった列を削除
