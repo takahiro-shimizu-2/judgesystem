@@ -646,13 +646,13 @@ async def call_parallel(params, max_concurrency=5, gcp_vm=True):
                     break
 
                 except Exception as e:
-                    if ("429" in str(e) or "503" in str(e)) and attempt < 2:
+                    if ("429" in str(e) or "500" in str(e) or "503" in str(e)) and attempt < 2:
                         await asyncio.sleep(2 ** (attempt+1) + random.random())
                     else:
                         results.append({
                             "document_id": document_id,
                             "result": None,
-                            "error": str(e),
+                            "error": getattr(e, "code", None),
                             "type": type2
                         })
                         break
@@ -1023,15 +1023,11 @@ if __name__ == "__main__":
             "申請書及び競争参加資格確認資料の提出期限___終了日": None,
             "入札書の提出期間___開始日": None,
             "入札書の提出期間___終了日": None,
-            "url": df_new["url"]
+            "done": False
         })
         # 保存
         df_ann.to_csv(output_path_ann, sep="\t", index=False)
 
-    if os.path.exists(output_path_ann):
-        df_ann0 = pd.read_csv(output_path_ann,sep="\t", low_memory=False)
-    else:
-        df_ann0 = df_ann.copy()
 
     if os.path.exists(output_path_req_zip):
         df_req = pd.read_csv(output_path_req_zip,sep="\t", low_memory=False)
@@ -1042,22 +1038,13 @@ if __name__ == "__main__":
         print(f"Creating new req dataframe with columns from df_new")
         df_req = pd.DataFrame({
             "document_id": df_new["document_id"],
-            "資格・条件": None
+            "資格・条件": "['INIT']"
         })
         # 保存
         df_req.to_csv(output_path_req, sep="\t", index=False)
 
-    if not (df_ann["document_id"]==df_req["document_id"]).all():
+    if not df_ann["document_id"].equals(df_req["document_id"]):
         raise ValueError("The document_id columns in df_ann and df_req are not identical.")
-
-    if False:
-        for document_id in date_df2["document_id"]:
-            f_txt = fr"../4_get_documents/output_v3/pdf_txt_all_py/pdf_{document_id.split('_')[0]}/{document_id}.txt"
-            if os.path.exists(f_txt):
-                with open(f_txt, "r", encoding="utf-8") as f0:
-                    data_txt = f0.read()
-                if data_txt.find("TESSERACT") >= 0:
-                    break
 
     ##########################################
     # 新しい document_id を追加する。
@@ -1072,7 +1059,6 @@ if __name__ == "__main__":
     rows_ann["url"] = new_ids["url"]
     df_ann = pd.concat([df_ann, rows_ann], ignore_index=True)
     df_ann = df_ann.sort_values("document_id")
-    df_ann["document_id"].reset_index(drop=True).equals(df_new["document_id"].reset_index(drop=True))
 
     new_ids = df_new[~df_new["document_id"].isin(df_req["document_id"])]
     new_ids = new_ids.reset_index(drop=True)
@@ -1087,71 +1073,89 @@ if __name__ == "__main__":
     df_req["document_id"].reset_index(drop=True).equals(df_new["document_id"].reset_index(drop=True))
     ##########################################
 
+    if not df_ann["document_id"].equals(df_req["document_id"]):
+        raise ValueError("The document_id columns in df_ann and df_req are not identical.")
+    
     if stop_processing:
         exit(1)
 
 
     # 抽出結果を取り出すだけの処理。
     if False:
+        df_ann_updated = []
         #for i, row in tqdm(date_df2.iterrows(), total=len(date_df2)):
         for i, row in tqdm(df_ann.iterrows(), total=len(df_ann)):
             document_id = row["document_id"]
             try:
                 url = df_ann[df_ann["document_id"]==document_id]["url"].values[0]
-                if True:
-                    # announcements
-                    if document_id in df_ann["document_id"].values:
-                        # df_ann から取得して整形...
-                        dict2 = df_ann[df_ann["document_id"]==document_id]
-                        dict1 = {
-                            "工事場所": dict2["工事場所"].values[0],
-                            "入札手続等担当部局": {
-                                "郵便番号": dict2["入札手続等担当部局___郵便番号"].values[0],
-                                "住所": dict2["入札手続等担当部局___住所"].values[0],
-                                "担当部署名": dict2["入札手続等担当部局___担当部署名"].values[0],
-                                "担当者名": dict2["入札手続等担当部局___担当者名"].values[0],
-                                "電話番号": dict2["入札手続等担当部局___電話番号"].values[0],
-                                "FAX番号": dict2["入札手続等担当部局___FAX番号"].values[0],
-                                "メールアドレス": dict2["入札手続等担当部局___メールアドレス"].values[0]
-                            },
-                            "公告日": dict2["公告日"].values[0],
-                            "入札方式": dict2["入札方式"].values[0],
-                            "資料種類": dict2["資料種類"].values[0],
-                            "category": dict2["category"].values[0],
-                            "pagecount": dict2["pagecount"].values[0],
-                            "入札説明書の交付期間": {
-                                "開始日": dict2["入札説明書の交付期間___開始日"].values[0],
-                                "終了日": dict2["入札説明書の交付期間___終了日"].values[0]
-                            },
-                            "申請書及び競争参加資格確認資料の提出期限": {
-                                "開始日": dict2["申請書及び競争参加資格確認資料の提出期限___開始日"].values[0],
-                                "終了日": dict2["申請書及び競争参加資格確認資料の提出期限___終了日"].values[0]
-                            },
-                            "入札書の提出期間": {
-                                "開始日": dict2["入札書の提出期間___開始日"].values[0],
-                                "終了日": dict2["入札書の提出期間___終了日"].values[0]
-                            }
+                # announcements
+                if document_id in df_ann["document_id"].values:
+                    # df_ann から取得して整形...
+                    dict2 = df_ann[df_ann["document_id"]==document_id]
+                    dict1 = {
+                        "工事場所": dict2["工事場所"].values[0],
+                        "入札手続等担当部局": {
+                            "郵便番号": dict2["入札手続等担当部局___郵便番号"].values[0],
+                            "住所": dict2["入札手続等担当部局___住所"].values[0],
+                            "担当部署名": dict2["入札手続等担当部局___担当部署名"].values[0],
+                            "担当者名": dict2["入札手続等担当部局___担当者名"].values[0],
+                            "電話番号": dict2["入札手続等担当部局___電話番号"].values[0],
+                            "FAX番号": dict2["入札手続等担当部局___FAX番号"].values[0],
+                            "メールアドレス": dict2["入札手続等担当部局___メールアドレス"].values[0]
+                        },
+                        "公告日": dict2["公告日"].values[0],
+                        "入札方式": dict2["入札方式"].values[0],
+                        "資料種類": dict2["資料種類"].values[0],
+                        "category": dict2["category"].values[0],
+                        "pagecount": dict2["pagecount"].values[0],
+                        "入札説明書の交付期間": {
+                            "開始日": dict2["入札説明書の交付期間___開始日"].values[0],
+                            "終了日": dict2["入札説明書の交付期間___終了日"].values[0]
+                        },
+                        "申請書及び競争参加資格確認資料の提出期限": {
+                            "開始日": dict2["申請書及び競争参加資格確認資料の提出期限___開始日"].values[0],
+                            "終了日": dict2["申請書及び競争参加資格確認資料の提出期限___終了日"].values[0]
+                        },
+                        "入札書の提出期間": {
+                            "開始日": dict2["入札書の提出期間___開始日"].values[0],
+                            "終了日": dict2["入札書の提出期間___終了日"].values[0]
                         }
-                        new_json = convertJson(json_value=dict1)
-                        df_ann_updated.append(new_json)
+                    }
+                    new_json = convertJson(json_value=dict1)
+                    df_ann_updated.append(new_json)
 
-                if True:
-                    # requirements
-                    if document_id in df_req["document_id"].values:
-                        dict2 = df_req[df_req["document_id"]==document_id]
-                        if dict2["資格・条件"].isna().all():
-                            requirement_texts = {
-                                "資格・条件": ["Missing requirements."]
-                            }
-                        else:
-                            requirement_texts = {
-                                "資格・条件": dict2["資格・条件"].apply(ast.literal_eval).values[0]
-                            }
-                    dic = convertRequirementTextDict(requirement_texts=requirement_texts)
-                    df_req_updated.append(dic)
             except Exception as e:
                 print(e)
                 #time.sleep(60)
+
+
+
+        # document_id から df_req 行を辞書でまとめておく（高速アクセス用）
+        req_dict = {row.document_id: row for row in df_req.itertuples(index=False)}
+        df_req_updated = []
+        for row in tqdm(df_req.itertuples(index=False), total=len(df_req), desc="processing"):
+            document_id = row.document_id
+            try:
+                if document_id in req_dict:
+                    dict2 = req_dict[document_id]
+
+                    # 資格・条件列がNaNかどうか
+                    if pd.isna(dict2[1]):
+                        requirement_texts = {"資格・条件": ["Missing requirements."]}
+                    else:
+                        # ast.literal_evalを使う場合
+                        requirement_texts = {"資格・条件": ast.literal_eval(dict2[1])}
+                    
+                    dic = convertRequirementTextDict(requirement_texts=requirement_texts)
+                    df_req_updated.append(dic)
+
+            except Exception as e:
+                #print(f"Error for document_id={document_id}: {e}")
+                pass
+
+
+
+
         df_ann_updated_df = pd.DataFrame(df_ann_updated)
         df_req_updated_df = pd.DataFrame(df_req_updated)
         
@@ -1163,10 +1167,7 @@ if __name__ == "__main__":
         df_ann_updated_df.shape
         df_req_updated_df.shape
         
-        
         df_req_updated_df = df_req_updated_df.explode(list(df_req_updated_df.columns), ignore_index=True)
-
-
 
         ret = is_document_id_value_nan(document_id, df_ann, df_req)
 
@@ -1425,17 +1426,18 @@ if __name__ == "__main__":
 
 
     # gemini逐次実行の並列化検討
-    if False:
+    if True:
         # まず params 作成。
         params = []
         print("Check target document_id and make triples of parameters.")
+        count = 0
         for i, row in tqdm(df_ann.iterrows(), total=len(df_ann)):
             document_id = row["document_id"]
 
-            if i <= 6000:
+            if row["done"]:
                 continue
 
-            if i >= 6010:
+            if count >= 1000:
                 break
 
             if gcp_vm:
@@ -1461,6 +1463,7 @@ if __name__ == "__main__":
                 continue
 
             params.append( [PROMPT_ANN, document_id, "pdf", "gemini-2.5-flash-lite", "ann"] )
+            count += 1
             # params.append( [PROMPT_REQ, document_id, "pdf", "gemini-2.5-flash-lite", "req"] )
 
             # pdf_file = client.files.upload(file=f_pdf)
@@ -1473,72 +1476,232 @@ if __name__ == "__main__":
         print(f"処理時間: {end - start:.4f} 秒")
         # 処理時間: 23044.9809 秒
         # pickle 保存
-        with open(fr"../4_get_documents/output_v3/gemini_results_{yyyymmdd}.pkl", "wb") as f:
-            pickle.dump(results, f)
-
-
-
+        #with open(fr"../4_get_documents/output_v3/gemini_results_{yyyymmdd}.pkl", "wb") as f:
+        #    pickle.dump(results, f)
 
     if True:
+        # 'ann' のみ
+        ann_results = [r for r in results if r.get("type") == "ann"]
+        # 'req' のみ
+        req_results = [r for r in results if r.get("type") == "req"]
+
+        ann_results = pd.DataFrame(ann_results)
+        req_results = pd.DataFrame(req_results)
+
+        if ann_results.shape[0] > 0:
+            # 集計用リスト
+            records = []
+
+            for row in tqdm(ann_results.itertuples(index=False)):
+                document_id = getattr(row, "document_id", None)
+                if not document_id:
+                    continue
+                try:
+                    # JSON 部分を安全に抽出
+                    json_str = row.result.replace('\n','').replace('```json','').replace('```','')
+                    dict0 = json.loads(json_str)
+
+                    dict0["document_id"] = document_id
+
+                    record = {
+                        "document_id": document_id,
+                        "工事場所": dict0.get("工事場所"),
+                        "入札手続等担当部局___郵便番号": dict0.get("入札手続等担当部局", {}).get("郵便番号"),
+                        "入札手続等担当部局___住所": dict0.get("入札手続等担当部局", {}).get("住所"),
+                        "入札手続等担当部局___担当部署名": dict0.get("入札手続等担当部局", {}).get("担当部署名"),
+                        "入札手続等担当部局___担当者名": dict0.get("入札手続等担当部局", {}).get("担当者名"),
+                        "入札手続等担当部局___電話番号": dict0.get("入札手続等担当部局", {}).get("電話番号"),
+                        "入札手続等担当部局___FAX番号": dict0.get("入札手続等担当部局", {}).get("FAX番号"),
+                        "入札手続等担当部局___メールアドレス": dict0.get("入札手続等担当部局", {}).get("メールアドレス"),
+                        "公告日": dict0.get("公告日"),
+                        "入札方式": dict0.get("入札方式"),
+                        "資料種類": dict0.get("資料種類"),
+                        "category": dict0.get("category"),
+                        "pagecount": dict0.get("pagecount"),
+                        "入札説明書の交付期間___開始日": dict0.get("入札説明書の交付期間", {}).get("開始日"),
+                        "入札説明書の交付期間___終了日": dict0.get("入札説明書の交付期間", {}).get("終了日"),
+                        "申請書及び競争参加資格確認資料の提出期限___開始日": dict0.get("申請書及び競争参加資格確認資料の提出期限", {}).get("開始日"),
+                        "申請書及び競争参加資格確認資料の提出期限___終了日": dict0.get("申請書及び競争参加資格確認資料の提出期限", {}).get("終了日"),
+                        "入札書の提出期間___開始日": dict0.get("入札書の提出期間", {}).get("開始日"),
+                        "入札書の提出期間___終了日": dict0.get("入札書の提出期間", {}).get("終了日"),
+                        "done":True
+                    }
+
+                    records.append(record)
+
+                except Exception as e:
+                    # print(f"Error at document_id={document_id}: {e}")
+                    continue
+
+            # 最後にまとめて DataFrame 化
+            df_records = pd.DataFrame(records)
+            df_records = df_records.drop_duplicates(subset="document_id", keep="first")
+
+            # 元の df_ann にマージ
+            df_ann = df_ann.merge(df_records, on="document_id", how="left", suffixes=("", "_new"))
+
+            # 更新された行を判定
+            df_ann["done"] = df_ann["done_new"].fillna(False).astype("boolean")
+            # df_ann["done"].value_counts()
+
+            # 不要になった列を削除
+            df_ann.drop(columns=["done_new"], inplace=True)
+            df_records.drop(columns=["done"], inplace=True)
+
+            # 必要なら "_new" の列を元の列に上書き
+            new_cols = [col for col in df_ann.columns if col.endswith("_new")]
+            for new_col in new_cols:
+                original_col = new_col[:-4]  # "_new" を除去
+                df_ann[original_col] = df_ann[new_col]
+                df_ann.drop(columns=[new_col], inplace=True)
+        
+        if req_results.shape[0] > 0:
+            req_results[req_results["result"].str.contains("ERROR", na=False)]
+
+            # JSON列をリストに展開
+            # すでにある結果で置換したいなら。
+            # req_results = req_results.rename(columns={"資格・条件": "result"})
+            # req_results = req_results.dropna(subset=["result"])
+            for row in tqdm(req_results.itertuples(index=False), total=len(req_results)):
+                document_id = row.document_id
+                if True:
+                    try:
+                        #text2 = row["result"].replace('\n', '').replace('```json', '').replace("```","")
+                        text2 = row.result.replace('\n', '').replace('```json', '').replace("```","")
+                    except Exception as e:
+                        text2 = row.error
+                        # text2 = "ERROR"
+                    try:
+                        requirement_texts = json.loads(text2)
+                    except json.decoder.JSONDecodeError:
+                        text2 = text2.replace('"',"'")
+                        requirement_texts = json.loads('{"資格・条件" : ["' + text2 + '"]}')
+                else:
+                    requirement_texts = row.result
+
+                try:
+                    # LLM の出力 (list) なのか、
+                    # 過去結果 (listをすでにstr化したもの) なのかに注意。
+                    if isinstance(requirement_texts, dict) and "資格・条件" in requirement_texts:
+                        dict2 = {
+                            "document_id" : document_id,
+                            "資格・条件" : str(requirement_texts["資格・条件"])
+                        }
+                    elif isinstance(requirement_texts, str):
+                        dict2 = {
+                            "document_id" : document_id,
+                            "資格・条件" : requirement_texts
+                        }
+                except Exception as e:
+                    print(e)
+                    dict2 = {
+                        "document_id" : document_id,
+                        "資格・条件" : "['String format error.']"
+                    }
+
+                # tmpdict2 = pd.DataFrame(dict2, index=[0])
+                # tmpdict2 = pd.DataFrame([dict2])
+                #df_req = pd.concat([df_req, tmpdict2], axis=0, ignore_index=True)
+                tmpdict2 = pd.DataFrame(dict2, index=[0])
+                if True:
+                    keys = list(tmpdict2.keys())
+                    keys = [k for k in keys if k not in ["document_id","url"] ]
+                    for key in keys:
+                        df_req.loc[df_req["document_id"] == document_id, key] = dict2[key]
+                    # df_ann[df_ann["document_id"]==document_id]
+
+            df_req[df_req["資格・条件"].str.contains("ERROR", na=False)]
+
+        if False:
+            # JSON列をリストに展開
+            dict_list_0 = []
+            dict_list_1 = []
+            for row in tqdm(ann_results.itertuples(index=False)):
+                try:
+                    document_id = row.document_id
+                    dict0 = row.result.replace('\n','').replace('```json','').replace('```','')
+                    dict0 = json.loads(dict0)
+                    #dict1 = convertJson(dict0)
+
+                    dict0["document_id"] = document_id
+                    #dict1["document_id"] = document_id
+
+                    dict2_0 = {
+                        "document_id": document_id,
+                        "工事場所": dict0.get("工事場所"),
+                        "入札手続等担当部局___郵便番号": dict0.get("入札手続等担当部局", {}).get("郵便番号"),
+                        "入札手続等担当部局___住所": dict0.get("入札手続等担当部局", {}).get("住所"),
+                        "入札手続等担当部局___担当部署名": dict0.get("入札手続等担当部局", {}).get("担当部署名"),
+                        "入札手続等担当部局___担当者名": dict0.get("入札手続等担当部局", {}).get("担当者名"),
+                        "入札手続等担当部局___電話番号": dict0.get("入札手続等担当部局", {}).get("電話番号"),
+                        "入札手続等担当部局___FAX番号": dict0.get("入札手続等担当部局", {}).get("FAX番号"),
+                        "入札手続等担当部局___メールアドレス": dict0.get("入札手続等担当部局", {}).get("メールアドレス"),
+                        "公告日": dict0.get("公告日"),
+                        "入札方式": dict0.get("入札方式"),
+                        "資料種類": dict0.get("資料種類"),
+                        "category": dict0.get("category"),
+                        "pagecount": dict0.get("pagecount"),
+                        "入札説明書の交付期間___開始日": dict0.get("入札説明書の交付期間", {}).get("開始日"),
+                        "入札説明書の交付期間___終了日": dict0.get("入札説明書の交付期間", {}).get("終了日"),
+                        "申請書及び競争参加資格確認資料の提出期限___開始日": dict0.get("申請書及び競争参加資格確認資料の提出期限", {}).get("開始日"),
+                        "申請書及び競争参加資格確認資料の提出期限___終了日": dict0.get("申請書及び競争参加資格確認資料の提出期限", {}).get("終了日"),
+                        "入札書の提出期間___開始日": dict0.get("入札書の提出期間", {}).get("開始日"),
+                        "入札書の提出期間___終了日": dict0.get("入札書の提出期間", {}).get("終了日"),
+                        "url": None
+                    }
+                except Exception as e:
+                    continue
+                tmpdict2 = pd.DataFrame(dict2_0, index=[0])
+                keys = list(tmpdict2.keys())
+                keys = [k for k in keys if k not in ["document_id","url"] ]
+                for key in keys:
+                    df_ann.loc[df_ann["document_id"] == document_id, key] = dict2_0[key]
+
+
+
+
+
+
+
+
+
+
+    if False:
         with open(fr"../4_get_documents/output_v3/gemini_results_20260307.pkl", "rb") as f:
             results_1 = pickle.load(f)
             ann_results_1 = [r for r in results_1 if r["type"] == "ann"]
             req_results_1 = [r for r in results_1 if r["type"] == "req"]
-        with open(fr"../4_get_documents/output_v3/gemini_results_20260308.pkl", "rb") as f:
+        with open(fr"../4_get_documents/output_v3/gemini_results_20260308_1.pkl", "rb") as f:
+            results_1 = pickle.load(f)
+        with open(fr"../4_get_documents/output_v3/gemini_results_20260308_2.pkl", "rb") as f:
             results_2 = pickle.load(f)
 
-        results = ann_results_1 + results_2
+        #results = ann_results_1 + results_2
+        results = ann_results_1 + results_1 + results_2
         ann_results = results
         req_results = req_results_1
-
+        ann_results = pd.DataFrame(results)
+        req_results = pd.DataFrame(req_results)
 
         # エラーのみ抽出
         err_ann = [r for r in results if r["type"] == "ann" and r["error"] is not None]
-
         # エラー数の確認
         print(f"ann エラー数: {len(err_ann)} / {len([r for r in results if r['type'] == 'ann'])}")
-
         # エラー内容の確認
         print("Check error just 1 record.")
         for e in err_ann[:1]:  # 最初の5件
             print(f"document_id: {e['document_id']}, error: {e['error']}")
-
-
-        ann_results = pd.DataFrame(results)
-        if False:
-            ann_results_2 = []
-            print("Process result(ann).")
-            for i,row in ann_results.iterrows():
-                aa = process_result(row)
-                ann_results_2.append(aa[1])
-            ann_results_2 = pd.DataFrame(ann_results_2)
-
-
-        req_results = pd.DataFrame(req_results)
-        if False:
-            req_results_2 = []
-            print("Process result(req).")
-            for i,row in req_results.iterrows():
-                aa = process_result(row)
-                req_results_2.append(aa[1])
-            req_results_2 = pd.DataFrame(req_results_2)
-
-        if False:
-            (df_ann["document_id"]==df_req["document_id"]).all()
-            (df_ann["document_id"].iloc[0:ann_results_2.shape[0]].to_numpy() == ann_results_2["document_id"].to_numpy()).all()
-            # df_ann に存在するかどうかのブール列を作る
-            ann_results_2["exists_in_df"] = ann_results_2["document_id"].isin(df_ann["document_id"])
-
-            # 集計
-            counts = ann_results_2["exists_in_df"].value_counts()
-            print(counts)
-
         err_ann_2 = [r["error"] for r in results if r["type"] == "ann" and r["error"] is not None and r["error"].find("No such object:")==-1]
         counts = Counter(err_ann_2)
-        print(counts)
+        # print(counts)
+        error_set_1 = list({r["error"] for r in err_ann})
+        print(fr"len(error_set_1)={len(error_set_1)}")
+        error_set_2 = [i for i in error_set_1 if i.find("No such object:") == -1]
+        print(fr"len(error_set_2)={len(error_set_2)}")
+        error_set_3 = [i for i in error_set_2 if i.find("429 RESOURCE_EXHAUSTED.") == -1]
+        print(fr"len(error_set_3)={len(error_set_3)}")
 
-        error_set = list({r["error"] for r in err_ann})
-        error_set = [i for i in error_set if i.find("No such object:") == -1]
+
 
 
         # JSON列をリストに展開
@@ -1610,16 +1773,18 @@ if __name__ == "__main__":
             except Exception as e:
                 continue
 
+
+
+        # 一括でDataFrame化
+        df0 = pd.DataFrame(dict_list_0)
+        df1 = pd.DataFrame(dict_list_1)
         # 必要な列だけ抽出
         columns_to_keep = [
             'document_id', '公告日', '入札説明書の交付期間___開始日', '入札説明書の交付期間___終了日', 
             '申請書及び競争参加資格確認資料の提出期限___開始日', '申請書及び競争参加資格確認資料の提出期限___終了日', 
             '入札書の提出期間___開始日', '入札書の提出期間___終了日'
         ]
-        # 一括でDataFrame化
-        df0 = pd.DataFrame(dict_list_0)
         df0 = df0[columns_to_keep]
-        df1 = pd.DataFrame(dict_list_1)
         df1 = df1[columns_to_keep]
 
         cols_0 = [
@@ -1646,7 +1811,7 @@ if __name__ == "__main__":
         )
         xx = list(set(vals_0))
         xx = [x for x in xx if x != ""]
-        print(xx)
+        # print(xx)
         # df0[df0.isin(xx[33:34]).any(axis=1)]
         # df1[df1.isin(xx[33:34]).any(axis=1)]
         # df0[df0.astype(str).apply(lambda col: col.str.startswith("同月", na=False)).any(axis=1)]
@@ -1740,42 +1905,3 @@ if __name__ == "__main__":
         df_ann.to_csv(output_path_ann_zip, sep="\t", compression="zip", index=False)
         df_req.to_csv(output_path_req, sep="\t", index=False)
         df_req.to_csv(output_path_req_zip, sep="\t", compression="zip", index=False)
-
-    if False:
-        tmp_ann_df = pd.concat(tmp_ann_df_list)
-        tmp_ann_df = tmp_ann_df.reset_index(drop=True)
-        tmp_req_df = pd.concat(tmp_req_df_list)
-        tmp_req_df = tmp_req_df.reset_index(drop=True)
-
-        xxx = tmp_req_df[tmp_req_df["資格・条件"].str.len() <= 10]
-        xxx = tmp_req_df[tmp_req_df["資格・条件"].str.len() <= 30]
-        xxx = tmp_req_df[tmp_req_df["資格・条件"].str.contains("ERROR")]
-        xxx["資格・条件"].value_counts()
-
-
-
-    if False:
-        df_ann_updated = pd.DataFrame(df_ann_updated)
-        df_ann_updated["zipcode"].value_counts()
-        df_ann_updated["bidenddate"].value_counts()
-        df_ann_updated.columns
-
-        df_req_updated = pd.DataFrame(df_req_updated)
-        # こいつらは保存し (て）ない。
-
-    if False:
-        df_ann_updated_latest = df_ann_updated["2026-01-01" <= df_ann_updated["publishdate"]]
-        df_ann_updated_latest.shape
-        df_ann_updated_latest["publishdate"].value_counts()
-        df_ann_updated_latest["bidenddate"].value_counts()
-
-        df_ann_updated_latest = df_ann_updated["2026-03-01" <= df_ann_updated["submissionend"]]
-        df_ann_updated_latest.shape
-        df_ann_updated_latest["publishdate"].value_counts()
-        df_ann_updated_latest["bidenddate"].value_counts()
-
-
-
-
-
-
