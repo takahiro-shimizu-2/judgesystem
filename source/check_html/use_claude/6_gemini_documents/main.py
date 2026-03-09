@@ -1539,6 +1539,11 @@ if __name__ == "__main__":
 
                 except Exception as e:
                     # print(f"Error at document_id={document_id}: {e}")
+                    record = {
+                        "document_id": document_id,
+                        "done": True
+                    }
+                    records.append(record)
                     continue
 
             # 最後にまとめて DataFrame 化
