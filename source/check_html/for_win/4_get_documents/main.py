@@ -587,9 +587,9 @@ if __name__ == "__main__":
     # GCP VM環境の場合、save_pathをGCSパスに変換
     if gcp_vm:
         df["save_path"] = df["save_path"].apply(
-            lambda x: x.replace("output_v3/pdf/", "gs://win-files/pdf/") if pd.notna(x) else x
+            lambda x: x.replace("output_v3/pdf/", "gs://bid-win-files/pdf/") if pd.notna(x) else x
         )
-        print("Converted save_path to GCS format (gs://win-files/pdf/...)")
+        print("Converted save_path to GCS format (gs://bid-win-files/pdf/...)")
 
     df["pdf_is_saved_date"].value_counts(dropna=False)
 
@@ -695,10 +695,10 @@ if __name__ == "__main__":
                 continue
 
             if gcp_vm and p.startswith("gs://"):
-                # GCSパスからディレクトリ部分を抽出 (例: gs://win-files/pdf/pdf_00001/)
+                # GCSパスからディレクトリ部分を抽出 (例: gs://bid-win-files/pdf/pdf_00001/)
                 parts = p.split("/")
                 if len(parts) >= 5:  # gs://bucket/pdf/pdf_XXXXX/...
-                    dir_key = "/".join(parts[:5]) + "/"  # gs://win-files/pdf/pdf_00001/
+                    dir_key = "/".join(parts[:5]) + "/"  # gs://bid-win-files/pdf/pdf_00001/
 
                     # キャッシュにない場合はディレクトリ内のファイル一覧を取得
                     if dir_key not in file_cache:
