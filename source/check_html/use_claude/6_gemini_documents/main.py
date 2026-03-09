@@ -997,8 +997,12 @@ if __name__ == "__main__":
     # 既にファイルがあるか確認
     if os.path.exists(output_path_ann_zip):
         df_ann = pd.read_csv(output_path_ann_zip,sep="\t", low_memory=False)
+        if "done" in df_ann.columns:
+            df_ann["done"] = df_ann["done"].fillna(False).astype(bool)
     elif os.path.exists(output_path_ann):
         df_ann = pd.read_csv(output_path_ann,sep="\t", low_memory=False)
+        if "done" in df_ann.columns:
+            df_ann["done"] = df_ann["done"].fillna(False).astype(bool)
     else:
         # ファイルが存在しない場合、新規作成
         print(f"Creating new ann dataframe with columns from df_new")
@@ -1057,6 +1061,8 @@ if __name__ == "__main__":
     })
     rows_ann["document_id"] = new_ids["document_id"]
     rows_ann["url"] = new_ids["url"]
+    if "done" in rows_ann.columns:
+        rows_ann["done"] = False
     df_ann = pd.concat([df_ann, rows_ann], ignore_index=True)
     df_ann = df_ann.sort_values("document_id")
 
@@ -1434,7 +1440,7 @@ if __name__ == "__main__":
         for i, row in tqdm(df_ann.iterrows(), total=len(df_ann)):
             document_id = row["document_id"]
 
-            if row["done"]:
+            if row["done"] is True:
                 continue
 
             if count >= 1000:
