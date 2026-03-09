@@ -3547,11 +3547,11 @@ class BidJudgementSan:
             # req_df_map = dict(tuple(req_df0.groupby("announcement_no")))
 
             # df.itertuples()
-            for index, row1 in tqdm(df.iterrows(), total=len(df)):
-                announcement_no = row1["announcement_no"]
+            for row1 in tqdm(df.itertuples(), total=len(df)):
+                announcement_no = row1.announcement_no
                 # print(fr"announcement_no={announcement_no}")
-                company_no = row1["company_no"]
-                office_no = row1["office_no"]
+                company_no = row1.company_no
+                office_no = row1.office_no
                 tmp_result_judgement_list = []
                 if False:
                     announcement_no = int(df["announcement_no"][0])
@@ -3568,14 +3568,14 @@ class BidJudgementSan:
                     print(fr"   announcement_no={announcement_no}: No requirement found. Skip anyway.")
                     continue
 
-                for jndex, row2 in req_df.iterrows():
+                for row2 in req_df.itertuples():
                     if False:
                         i = 0
                         row2 = req_df.iloc[i]
 
-                    requirement_type = row2["requirement_type"]
-                    requirement_text = row2["requirement_text"]
-                    requirement_no = row2["requirement_no"]
+                    requirement_type = row2.requirement_type
+                    requirement_text = row2.requirement_text
+                    requirement_no = row2.requirement_no
 
                     requirementText = requirement_text
                     companyNo = company_no
