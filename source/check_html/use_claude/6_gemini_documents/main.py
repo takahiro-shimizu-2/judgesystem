@@ -646,13 +646,15 @@ async def call_parallel(params, max_concurrency=5, gcp_vm=True):
                     break
 
                 except Exception as e:
-                    if ("429" in str(e) or "500" in str(e) or "503" in str(e)) and attempt < 2:
+                    error_code = getattr(e, "code", None)
+                    retry_codes = [429, 500, 502, 503, 504]
+                    if error_code in retry_codes and attempt < 2:
                         await asyncio.sleep(2 ** (attempt+1) + random.random())
                     else:
                         results.append({
                             "document_id": document_id,
                             "result": None,
-                            "error": getattr(e, "code", None),
+                            "error": error_code,
                             "type": type2
                         })
                         break
