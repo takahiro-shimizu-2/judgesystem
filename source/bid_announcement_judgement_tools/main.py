@@ -68,9 +68,11 @@ import argparse
 import re
 import json
 import time
+import uuid
 from datetime import datetime
 from dataclasses import dataclass
 from abc import ABC, abstractmethod
+from multiprocessing import Pool, cpu_count
 
 import pandas as pd
 import numpy as np
@@ -1280,7 +1282,7 @@ class DBOperatorGCPVM(DBOperator):
     def createCompanyBidJudgements(self, company_bid_judgement_tablename):
         sql = fr"""
         create table `{self.project_id}.{self.dataset_name}.{company_bid_judgement_tablename}` (
-            evaluation_no int64,
+            evaluation_no string,
             announcement_no int64,
             company_no int64,
             office_no int64,
@@ -1303,8 +1305,8 @@ class DBOperatorGCPVM(DBOperator):
     def createSufficientRequirements(self, sufficient_requirements_tablename):
         sql = fr"""
         create table `{self.project_id}.{self.dataset_name}.{sufficient_requirements_tablename}` (
-            sufficiency_detail_no int64,
-            evaluation_no int64,
+            sufficiency_detail_no string,
+            evaluation_no string,
             announcement_no int64,
             requirement_no int64,
             company_no int64,
@@ -1320,8 +1322,8 @@ class DBOperatorGCPVM(DBOperator):
     def createInsufficientRequirements(self, insufficient_requirements_tablename):
         sql = fr"""
         create table `{self.project_id}.{self.dataset_name}.{insufficient_requirements_tablename}` (
-            shortage_detail_no int64,
-            evaluation_no int64,
+            shortage_detail_no string,
+            evaluation_no string,
             announcement_no int64,
             requirement_no int64,
             company_no int64,
@@ -2656,7 +2658,7 @@ class DBOperatorSQLITE3(DBOperator):
     def createCompanyBidJudgements(self, company_bid_judgement_tablename):
         sql = fr"""
         create table {company_bid_judgement_tablename} (
-            evaluation_no integer,
+            evaluation_no text,
             announcement_no integer,
             company_no integer,
             office_no integer,
@@ -2680,8 +2682,8 @@ class DBOperatorSQLITE3(DBOperator):
     def createSufficientRequirements(self, sufficient_requirements_tablename):
         sql = fr"""
         create table {sufficient_requirements_tablename} (
-            sufficiency_detail_no integer,
-            evaluation_no integer,
+            sufficiency_detail_no text,
+            evaluation_no text,
             announcement_no integer,
             requirement_no integer,
             company_no integer,
@@ -2698,8 +2700,8 @@ class DBOperatorSQLITE3(DBOperator):
     def createInsufficientRequirements(self, insufficient_requirements_tablename):
         sql = fr"""
         create table {insufficient_requirements_tablename} (
-            shortage_detail_no integer,
-            evaluation_no integer,
+            shortage_detail_no text,
+            evaluation_no text,
             announcement_no integer,
             requirement_no integer,
             company_no integer,
@@ -2927,6 +2929,209 @@ class DBOperatorSQLITE3(DBOperator):
 
     def createBackendPartners(self, tablename):
         raise NotImplementedError
+
+
+def _process_judgement_chunk(args):
+    """
+    チャンク単位で要件判定を処理（multiprocessing用グローバル関数）
+
+    Args:
+        args: タプル (df_chunk, req_df_map, master_data_dict)
+
+    Returns:
+        dict: 処理結果（judgement_list, sufficient_list, insufficient_list）
+    """
+    df_chunk, req_df_map, master_data_dict = args
+
+    # マスターデータを取り出し
+    master_data_company = master_data_dict['company']
+    master_data_office = master_data_dict['office']
+    master_data_office_registration_authorization = master_data_dict['office_registration_authorization']
+    master_data_office_registration_authorization_with_converter = master_data_dict['office_registration_authorization_with_converter']
+    master_data_agency = master_data_dict['agency']
+    master_data_construction = master_data_dict['construction']
+    master_data_office_work_achivements = master_data_dict['office_work_achivements']
+    master_data_employee = master_data_dict['employee']
+    master_data_employee_qualification = master_data_dict['employee_qualification']
+    master_data_technician_qualification = master_data_dict['technician_qualification']
+    master_data_employee_experience = master_data_dict['employee_experience']
+
+    # requirements モジュールの関数をimport（ワーカープロセス内で確実に利用可能にする）
+    try:
+        from source.bid_announcement_judgement_tools.requirements.ineligibility import checkIneligibilityDynamic
+        from source.bid_announcement_judgement_tools.requirements.experience import checkExperienceRequirement
+        from source.bid_announcement_judgement_tools.requirements.location import checkLocationRequirement
+        from source.bid_announcement_judgement_tools.requirements.grade_item import checkGradeAndItemRequirement
+        from source.bid_announcement_judgement_tools.requirements.technician import checkTechnicianRequirement
+    except ModuleNotFoundError:
+        from requirements.ineligibility import checkIneligibilityDynamic
+        from requirements.experience import checkExperienceRequirement
+        from requirements.location import checkLocationRequirement
+        from requirements.grade_item import checkGradeAndItemRequirement
+        from requirements.technician import checkTechnicianRequirement
+
+    result_judgement_list = []
+    result_sufficient_requirements_list = []
+    result_insufficient_requirements_list = []
+
+    # チャンク内の各行を処理
+    for row1 in df_chunk.itertuples():
+        announcement_no = row1.announcement_no
+        company_no = row1.company_no
+        office_no = row1.office_no
+        tmp_result_judgement_list = []
+
+        req_df = req_df_map.get(announcement_no)
+
+        if req_df is None or req_df.shape[0] == 0:
+            print(f"   announcement_no={announcement_no}: No requirement found. Skip anyway.")
+            continue
+
+        # UUIDを生成
+        evaluation_no = str(uuid.uuid4())
+
+        for row2 in req_df.itertuples():
+            requirement_type = row2.requirement_type
+            requirement_text = row2.requirement_text
+            requirement_no = row2.requirement_no
+
+            if requirement_type == "欠格要件":
+                val = checkIneligibilityDynamic(
+                    requirementText=requirement_text,
+                    companyNo=company_no,
+                    officeNo=office_no,
+                    company_data=master_data_company,
+                    office_registration_authorization_data=master_data_office_registration_authorization
+                )
+            elif requirement_type == "業種・等級要件":
+                val = checkGradeAndItemRequirement(
+                    requirementText=requirement_text,
+                    officeNo=office_no,
+                    licenseData=master_data_office_registration_authorization_with_converter,
+                    agencyData=master_data_agency,
+                    constructionData=master_data_construction
+                )
+            elif requirement_type == "所在地要件":
+                val = checkLocationRequirement(
+                    requirementText=requirement_text,
+                    officeNo=office_no,
+                    agencyData=master_data_agency,
+                    officeData=master_data_office
+                )
+            elif requirement_type == "実績要件":
+                val = checkExperienceRequirement(
+                    requirementText=requirement_text,
+                    officeNo=office_no,
+                    office_experience_data=master_data_office_work_achivements,
+                    agency_data=master_data_agency,
+                    construction_data=master_data_construction
+                )
+            elif requirement_type == "技術者要件":
+                val = checkTechnicianRequirement(
+                    requirementText=requirement_text,
+                    companyNo=company_no,
+                    officeNo=office_no,
+                    employeeData=master_data_employee,
+                    qualData=master_data_employee_qualification,
+                    qualMasterData=master_data_technician_qualification,
+                    expData=master_data_employee_experience
+                )
+            else:
+                val = {"is_ok":False, "reason":"その他要件があります。確認してください"}
+
+            tmp_result_judgement_list.append({
+                "evaluation_no":evaluation_no,
+                "requirement_no":requirement_no,
+                "company_no":company_no,
+                "office_no":office_no,
+                "requirementType":requirement_type,
+                "is_ok":val["is_ok"],
+                "result":val["reason"]
+            })
+
+            if val["is_ok"]:
+                result_sufficient_requirements_list.append({
+                    "sufficiency_detail_no":str(uuid.uuid4()),
+                    "evaluation_no":evaluation_no,
+                    "announcement_no":announcement_no,
+                    "requirement_no":requirement_no,
+                    "company_no":company_no,
+                    "office_no":office_no,
+                    "requirement_type":requirement_type,
+                    "requirement_description":val["reason"],
+                    "createdDate":datetime.now(),
+                    "updatedDate":datetime.now()
+                })
+            else:
+                result_insufficient_requirements_list.append({
+                    "shortage_detail_no":str(uuid.uuid4()),
+                    "evaluation_no":evaluation_no,
+                    "announcement_no":announcement_no,
+                    "requirement_no":requirement_no,
+                    "company_no":company_no,
+                    "office_no":office_no,
+                    "requirement_type":requirement_type,
+                    "requirement_description":val["reason"],
+                    "suggestions_for_improvement":"",
+                    "final_comment":"",
+                    "createdDate":datetime.now(),
+                    "updatedDate":datetime.now()
+                })
+
+        # サマリー化
+        tmp_result_judgement_df = pd.DataFrame(tmp_result_judgement_list)
+
+        checked_requirement = {
+            "evaluation_no":evaluation_no,
+            "announcement_no":announcement_no,
+            "company_no":company_no,
+            "office_no":office_no,
+            "requirement_ineligibility":True,
+            "requirement_grade_item":True,
+            "requirement_location":True,
+            "requirement_experience":True,
+            "requirement_technician":True,
+            "requirement_other":True,
+            "deficit_requirement_message":"",
+            "final_status":True,
+            "message":"",
+            "remarks":"",
+            "createdDate":datetime.now(),
+            "updatedDate":datetime.now()
+        }
+        requirement_type_map = {
+            "欠格要件":"requirement_ineligibility",
+            "業種・等級要件":"requirement_grade_item",
+            "所在地要件":"requirement_location",
+            "実績要件":"requirement_experience",
+            "技術者要件":"requirement_technician"
+        }
+
+        is_ok_false = tmp_result_judgement_df[~tmp_result_judgement_df["is_ok"]]
+
+        if is_ok_false.shape[0] > 0:
+            ng_req_types = is_ok_false["requirementType"].unique()
+            for type_ in ng_req_types:
+                type_name = requirement_type_map.get(type_, "requirement_other")
+                checked_requirement[type_name] = False
+                is_ok_false_type = is_ok_false[is_ok_false["requirementType"] == type_]
+                result_values = is_ok_false_type["result"].str.replace(rf"{type_}[:：]", "", regex=True).unique()
+                result_values = "[" + type_ + "]" + "|".join(result_values)
+
+                if checked_requirement["deficit_requirement_message"] == "":
+                    checked_requirement["deficit_requirement_message"] = result_values
+                else:
+                    checked_requirement["deficit_requirement_message"] = checked_requirement["deficit_requirement_message"] + " " + result_values
+            checked_requirement["final_status"] = False
+
+        result_judgement_list.append(checked_requirement)
+
+    return {
+        'judgement': result_judgement_list,
+        'sufficient': result_sufficient_requirements_list,
+        'insufficient': result_insufficient_requirements_list
+    }
+
 
 class BidJudgementSan:
     """
@@ -3509,252 +3714,97 @@ class BidJudgementSan:
         # df0 = db_operator.selectToTable(tablename=fr"{tablename_company_bid_judgement}", where_clause="where final_status is NULL")
         print(fr"Target of checking requirement : {df0.shape[0]}")
 
-        max_evaluation_no = db_operator.getMaxOfColumn(tablename=tablename_company_bid_judgement,column_name="evaluation_no")
-        if max_evaluation_no.iloc[0,0] is None or pd.isna(max_evaluation_no.iloc[0,0]):
-            max_evaluation_no = 0
-        else:
-            max_evaluation_no = max_evaluation_no.iloc[0,0]
-        current_evaluation_no = max_evaluation_no + 1
+        # UUID化により連番採番は不要
 
-        max_sufficiency_detail_no = db_operator.getMaxOfColumn(tablename=tablename_sufficient_requirement_master,column_name="sufficiency_detail_no")
-        if max_sufficiency_detail_no.iloc[0,0] is None or pd.isna(max_sufficiency_detail_no.iloc[0,0]):
-            max_sufficiency_detail_no = 0
-        else:
-            max_sufficiency_detail_no = max_sufficiency_detail_no.iloc[0,0]
-        current_sufficiency_detail_no = max_sufficiency_detail_no + 1
-
-        max_shortage_detail_no = db_operator.getMaxOfColumn(tablename=tablename_insufficient_requirement_master,column_name="shortage_detail_no")
-        if max_shortage_detail_no.iloc[0,0] is None or pd.isna(max_shortage_detail_no.iloc[0,0]):
-            max_shortage_detail_no = 0
-        else:
-            max_shortage_detail_no = max_shortage_detail_no.iloc[0,0]
-        current_shortage_detail_no = max_shortage_detail_no + 1
-        
-        # 部分的に(chunk_sizeごとに)実行。
-        chunk_size = 1000000
         # req_df はひとまず一括取得
         req_df0 = db_operator.selectToTable(tablename=fr"{tablename_requirements}")
         # announcement_noでgroupbyして辞書化（高速化のため）
         req_df_map = dict(tuple(req_df0.groupby("announcement_no")))
-        for start in range(0, len(df0), chunk_size):
-            print(fr"start : {start}")
-            df = df0.iloc[start:start+chunk_size]
-            result_judgement_list = []
-            result_sufficient_requirements_list = []
-            result_insufficient_requirements_list = []
+        # 並列処理設定
+        n_processes = cpu_count()
+        print(f"Using {n_processes} processes for parallel execution")
 
-            # 事前に
-            # req_df_map = dict(tuple(req_df0.groupby("announcement_no")))
+        # マスターデータを辞書にまとめる
+        master_data_dict = {
+            'company': master_data_company,
+            'office': master_data_office,
+            'office_registration_authorization': master_data_office_registration_authorization,
+            'office_registration_authorization_with_converter': master_data_office_registration_authorization_with_converter,
+            'agency': master_data_agency,
+            'construction': master_data_construction,
+            'office_work_achivements': master_data_office_work_achivements,
+            'employee': master_data_employee,
+            'employee_qualification': master_data_employee_qualification,
+            'technician_qualification': master_data_technician_qualification,
+            'employee_experience': master_data_employee_experience
+        }
 
-            # df.itertuples()
-            for row1 in tqdm(df.itertuples(), total=len(df)):
-                announcement_no = row1.announcement_no
-                # print(fr"announcement_no={announcement_no}")
-                company_no = row1.company_no
-                office_no = row1.office_no
-                tmp_result_judgement_list = []
-                if False:
-                    announcement_no = int(df["announcement_no"][0])
-                    company_no = int(df["company_no"][0])
-                    office_no = int(df["office_no"][0])
+        # df0をn_processes個のチャンクに分割
+        df_chunks = np.array_split(df0, n_processes)
 
-                # req_df = db_operator.selectToTable(tablename=fr"{tablename_requirements}", where_clause=fr"where announcement_no = {announcement_no}")
+        # 各チャンクに対するタスクを準備
+        tasks = []
+        for df_chunk in df_chunks:
+            if len(df_chunk) > 0:  # 空のチャンクをスキップ
+                tasks.append((df_chunk, req_df_map, master_data_dict))
 
-                # 毎回 DataFrame filter しているので遅い
-                # req_df = req_df0[req_df0["announcement_no"]==announcement_no]
-                req_df = req_df_map.get(announcement_no)
+        # 並列実行
+        print(f"Starting parallel processing with {len(tasks)} tasks...")
+        with Pool(processes=n_processes) as pool:
+            chunk_results = list(tqdm(pool.imap(_process_judgement_chunk, tasks), total=len(tasks), desc="Processing chunks"))
 
-                if req_df is None or req_df.shape[0] == 0:
-                    print(fr"   announcement_no={announcement_no}: No requirement found. Skip anyway.")
-                    continue
+        # 結果を集約
+        print("Aggregating results from all processes...")
+        result_judgement_list = []
+        result_sufficient_requirements_list = []
+        result_insufficient_requirements_list = []
 
-                for row2 in req_df.itertuples():
-                    if False:
-                        i = 0
-                        row2 = req_df.iloc[i]
+        for result in chunk_results:
+            result_judgement_list.extend(result['judgement'])
+            result_sufficient_requirements_list.extend(result['sufficient'])
+            result_insufficient_requirements_list.extend(result['insufficient'])
 
-                    requirement_type = row2.requirement_type
-                    requirement_text = row2.requirement_text
-                    requirement_no = row2.requirement_no
+        print(f"Aggregation complete: {len(result_judgement_list)} judgements, {len(result_sufficient_requirements_list)} sufficient, {len(result_insufficient_requirements_list)} insufficient")
 
-                    requirementText = requirement_text
-                    companyNo = company_no
-                    officeNo = office_no
-                    
-                    if requirement_type == "欠格要件":
-                        val = checkIneligibilityDynamic(
-                            requirementText=requirement_text,
-                            companyNo=company_no,
-                            officeNo=office_no,
-                            company_data=master_data_company,
-                            office_registration_authorization_data=master_data_office_registration_authorization
-                        )
-                    elif requirement_type == "業種・等級要件":
-                        val = checkGradeAndItemRequirement(
-                            requirementText=requirement_text,
-                            officeNo=office_no,
-                            licenseData=master_data_office_registration_authorization_with_converter,
-                            agencyData=master_data_agency,
-                            constructionData=master_data_construction
-                        )
-                    elif requirement_type == "所在地要件":
-                        val = checkLocationRequirement(
-                            requirementText=requirement_text,
-                            officeNo=office_no,
-                            agencyData=master_data_agency,
-                            officeData=master_data_office
-                        )
+        # DataFrameに変換してDB書き込み
+        result_judgement = pd.DataFrame(result_judgement_list)
+        result_insufficient_requirements = pd.DataFrame(result_insufficient_requirements_list)
+        result_sufficient_requirements = pd.DataFrame(result_sufficient_requirements_list)
 
-                    elif requirement_type == "実績要件":
-                        val = checkExperienceRequirement(
-                            requirementText=requirement_text,
-                            officeNo=office_no,
-                            office_experience_data=master_data_office_work_achivements,
-                            agency_data=master_data_agency,
-                            construction_data=master_data_construction
-                        )
-                    elif requirement_type == "技術者要件":
-                        val = checkTechnicianRequirement(
-                            requirementText=requirement_text,
-                            companyNo=company_no,
-                            officeNo=office_no,
-                            employeeData=master_data_employee,
-                            qualData=master_data_employee_qualification,
-                            qualMasterData=master_data_technician_qualification,
-                            expData=master_data_employee_experience
-                        )
-                    else:
-                        val = {"is_ok":False, "reason":"その他要件があります。確認してください"}
-                    
-                    tmp_result_judgement_list.append({
-                        "evaluation_no":current_evaluation_no,
-                        "requirement_no":requirement_no,
-                        "company_no":company_no,
-                        "office_no":office_no,
-                        "requirementType":requirement_type,
-                        "is_ok":val["is_ok"],
-                        "result":val["reason"]
-                    })
+        if result_judgement.shape[0] > 0:
+            tmp_result_judgement_table = "tmp_result_judgement"
+            #max_evaluation_no = db_operator.any_query(sql = fr"SELECT max(evaluation_no) FROM {tablename_company_bid_judgement}")
 
-                    if val["is_ok"]:
-                        result_sufficient_requirements_list.append({
-                            "sufficiency_detail_no":current_sufficiency_detail_no,
-                            "evaluation_no":current_evaluation_no,
-                            "announcement_no":announcement_no,
-                            "requirement_no":requirement_no,
-                            "company_no":company_no,
-                            "office_no":office_no,
-                            "requirement_type":requirement_type,
-                            "requirement_description":val["reason"],
-                            "createdDate":datetime.now(),
-                            "updatedDate":datetime.now()
-                        })
-                        current_sufficiency_detail_no += 1
-                    else:
-                        result_insufficient_requirements_list.append({
-                            "shortage_detail_no":current_shortage_detail_no,
-                            "evaluation_no":current_evaluation_no,
-                            "announcement_no":announcement_no,
-                            "requirement_no":requirement_no,
-                            "company_no":company_no,
-                            "office_no":office_no,
-                            "requirement_type":requirement_type,
-                            "requirement_description":val["reason"],
-                            "suggestions_for_improvement":"",
-                            "final_comment":"",
-                            "createdDate":datetime.now(),
-                            "updatedDate":datetime.now()
-                        })
-                        current_shortage_detail_no += 1
+            print(fr"Upload {tmp_result_judgement_table}")
+            db_operator.uploadDataToTable(data=result_judgement, tablename=tmp_result_judgement_table, chunksize=5000)
+            print(fr"Update {tablename_company_bid_judgement}")
+            db_operator.updateCompanyBidJudgement(
+                company_bid_judgement_tablename=tablename_company_bid_judgement, 
+                company_bid_judgement_tablename_for_update=tmp_result_judgement_table
+            )
+            db_operator.dropTable(tablename=tmp_result_judgement_table)
 
-                tmp_result_judgement_df = pd.DataFrame(tmp_result_judgement_list)
-                def summarize_result(evaluation_no, announcement_no, company_no, office_no, tmp_result_df):
-                    checked_requirement = {
-                        "evaluation_no":evaluation_no,
-                        "announcement_no":announcement_no,
-                        "company_no":company_no,
-                        "office_no":office_no,
-                        "requirement_ineligibility":True,
-                        "requirement_grade_item":True,
-                        "requirement_location":True,
-                        "requirement_experience":True,
-                        "requirement_technician":True,
-                        "requirement_other":True,
-                        "deficit_requirement_message":"",
-                        "final_status":True,
-                        "message":"",
-                        "remarks":"",
-                        "createdDate":datetime.now(),
-                        "updatedDate":datetime.now()
-                    }
-                    requirement_type_map = {
-                        "欠格要件":"requirement_ineligibility",
-                        "業種・等級要件":"requirement_grade_item",
-                        "所在地要件":"requirement_location",
-                        "実績要件":"requirement_experience",
-                        "技術者要件":"requirement_technician"
-                    }
+        if result_insufficient_requirements.shape[0] > 0:
+            tmp_result_insufficient_requirements_master_table = "tmp_result_insufficient_requirements"
+            print(fr"Upload {tmp_result_insufficient_requirements_master_table}")
+            db_operator.uploadDataToTable(data=result_insufficient_requirements, tablename=tmp_result_insufficient_requirements_master_table, chunksize=5000)
+            print(fr"Update {tablename_insufficient_requirement_master}")
+            db_operator.updateInsufficientRequirements(
+                insufficient_requirements_tablename=tablename_insufficient_requirement_master, 
+                insufficient_requirements_tablename_for_update=tmp_result_insufficient_requirements_master_table
+            )
+            db_operator.dropTable(tablename=tmp_result_insufficient_requirements_master_table)
 
-                    is_ok_false = tmp_result_df[~tmp_result_df["is_ok"]]
-
-                    if is_ok_false.shape[0] > 0:
-                        ng_req_types = is_ok_false["requirementType"].unique()
-                        for type_ in ng_req_types:
-                            type_name = requirement_type_map.get(type_, "requirement_other")
-                            checked_requirement[type_name] = False
-                            is_ok_false_type = is_ok_false[is_ok_false["requirementType"] == type_]
-                            result_values = is_ok_false_type["result"].str.replace(rf"{type_}[:：]", "", regex=True).unique()
-                            result_values = "[" + type_ + "]" + "|".join(result_values)
-
-                            if checked_requirement["deficit_requirement_message"] == "":
-                                checked_requirement["deficit_requirement_message"] = result_values
-                            else:
-                                checked_requirement["deficit_requirement_message"] = checked_requirement["deficit_requirement_message"] + " " + result_values
-                        checked_requirement["final_status"] = False
-
-                    return checked_requirement
-
-                result_judgement_list.append(summarize_result(evaluation_no=current_evaluation_no, announcement_no=announcement_no, company_no=company_no, office_no=office_no, tmp_result_df=tmp_result_judgement_df))
-                current_evaluation_no += 1
-
-            result_judgement = pd.DataFrame(result_judgement_list)
-            result_insufficient_requirements = pd.DataFrame(result_insufficient_requirements_list)
-            result_sufficient_requirements = pd.DataFrame(result_sufficient_requirements_list)
-
-            if result_judgement.shape[0] > 0:
-                tmp_result_judgement_table = "tmp_result_judgement"
-                #max_evaluation_no = db_operator.any_query(sql = fr"SELECT max(evaluation_no) FROM {tablename_company_bid_judgement}")
-
-                print(fr"Upload {tmp_result_judgement_table}")
-                db_operator.uploadDataToTable(data=result_judgement, tablename=tmp_result_judgement_table, chunksize=5000)
-                print(fr"Update {tablename_company_bid_judgement}")
-                db_operator.updateCompanyBidJudgement(
-                    company_bid_judgement_tablename=tablename_company_bid_judgement, 
-                    company_bid_judgement_tablename_for_update=tmp_result_judgement_table
-                )
-                db_operator.dropTable(tablename=tmp_result_judgement_table)
-
-            if result_insufficient_requirements.shape[0] > 0:
-                tmp_result_insufficient_requirements_master_table = "tmp_result_insufficient_requirements"
-                print(fr"Upload {tmp_result_insufficient_requirements_master_table}")
-                db_operator.uploadDataToTable(data=result_insufficient_requirements, tablename=tmp_result_insufficient_requirements_master_table, chunksize=5000)
-                print(fr"Update {tablename_insufficient_requirement_master}")
-                db_operator.updateInsufficientRequirements(
-                    insufficient_requirements_tablename=tablename_insufficient_requirement_master, 
-                    insufficient_requirements_tablename_for_update=tmp_result_insufficient_requirements_master_table
-                )
-                db_operator.dropTable(tablename=tmp_result_insufficient_requirements_master_table)
-
-            if result_sufficient_requirements.shape[0] > 0:
-                tmp_result_sufficient_requirements_master_table = "tmp_result_sufficient_requirements"
-                print(fr"Upload {tmp_result_sufficient_requirements_master_table}")
-                db_operator.uploadDataToTable(data=result_sufficient_requirements, tablename=tmp_result_sufficient_requirements_master_table, chunksize=5000)
-                print(fr"Update {tablename_sufficient_requirement_master}")
-                db_operator.updateSufficientRequirements(
-                    sufficient_requirements_tablename=tablename_sufficient_requirement_master, 
-                    sufficient_requirements_tablename_for_update=tmp_result_sufficient_requirements_master_table
-                )
-                db_operator.dropTable(tablename=tmp_result_sufficient_requirements_master_table)
+        if result_sufficient_requirements.shape[0] > 0:
+            tmp_result_sufficient_requirements_master_table = "tmp_result_sufficient_requirements"
+            print(fr"Upload {tmp_result_sufficient_requirements_master_table}")
+            db_operator.uploadDataToTable(data=result_sufficient_requirements, tablename=tmp_result_sufficient_requirements_master_table, chunksize=5000)
+            print(fr"Update {tablename_sufficient_requirement_master}")
+            db_operator.updateSufficientRequirements(
+                sufficient_requirements_tablename=tablename_sufficient_requirement_master, 
+                sufficient_requirements_tablename_for_update=tmp_result_sufficient_requirements_master_table
+            )
+            db_operator.dropTable(tablename=tmp_result_sufficient_requirements_master_table)
 
 
 
