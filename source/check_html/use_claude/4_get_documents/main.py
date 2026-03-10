@@ -676,8 +676,8 @@ if __name__ == "__main__":
             if pdfurl is None:
                 continue
 
-            # Skip if file already exists
-            if df.loc[i,"pdf_is_saved"] == True:
+            # Skip if already checked (saved or failed)
+            if pd.notna(df.loc[i,"pdf_is_saved"]):
                 continue
 
             # ディレクトリが存在しない場合は作成
