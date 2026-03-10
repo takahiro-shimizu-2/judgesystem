@@ -543,6 +543,16 @@ if __name__ == "__main__":
         print(f"Creating _merged.txt as copy of current output (--no_merge mode)")
         df_new.to_csv(merged_output_path, sep="\t", index=False)
 
+    # _merged_updated.txtも同時に作成（6_gemini_documents/main.pyが参照）
+    merged_updated_path = output_dir / f"announcements_document_{timestamp}_merged_updated.txt"
+    if not merged_updated_path.exists():
+        # _merged.txtと同じ内容で_merged_updated.txtを作成
+        df_merged = pd.read_csv(merged_output_path, sep="\t")
+        df_merged.to_csv(merged_updated_path, sep="\t", index=False)
+        print(f"Also saved as: {merged_updated_path}")
+    else:
+        print(f"_merged_updated.txt already exists, skipping: {merged_updated_path}")
+
     if False:
         1
 

@@ -1002,43 +1002,9 @@ if __name__ == "__main__":
         df_new_path = input_timestamp_dir / f"announcements_document_{timestamp}_merged.txt"
     df_new = pd.read_csv(df_new_path, sep="\t")
 
-    # 既にファイルがあるか確認
-    if os.path.exists(output_path_ann_zip):
-        df_ann = pd.read_csv(output_path_ann_zip,sep="\t", low_memory=False, encoding="utf-8")
-        if "done" in df_ann.columns:
-            df_ann["done"] = df_ann["done"].fillna(False).astype(bool)
-    elif os.path.exists(output_path_ann):
-        df_ann = pd.read_csv(output_path_ann,sep="\t", low_memory=False, encoding="utf-8")
-        if "done" in df_ann.columns:
-            df_ann["done"] = df_ann["done"].fillna(False).astype(bool)
-    else:
-        # ファイルが存在しない場合、新規作成
-        print(f"Creating new ann dataframe with columns from df_new")
-        df_ann = pd.DataFrame({
-            "document_id": df_new["document_id"],
-            "workplace": None,
-            "zipcode": None,
-            "address": None,
-            "department": None,
-            "assigneename": None,
-            "telephone": None,
-            "fax": None,
-            "mail": None,
-            "publishdate": None,
-            "bidType": None,
-            "type": None,
-            "category": None,
-            "pagecount": None,
-            "docdiststart": None,
-            "docdistend": None,
-            "submissionstart": None,
-            "submissionend": None,
-            "bidstartdate": None,
-            "bidenddate": None,
-            "done": False
-        })
-        # 保存
-        df_ann.to_csv(output_path_ann, sep="\t", index=False, encoding="utf-8")
+    # df_newに必要な列がない場合は初期化
+    if "done" not in df_new.columns:
+        df_new["done"] = False
 
 
     if os.path.exists(output_path_req_zip):
@@ -1505,7 +1471,7 @@ if __name__ == "__main__":
     params = []
     print("Check target document_id and make triples of parameters.")
     count = 0
-    for i, row in tqdm(df_ann.iterrows(), total=len(df_ann)):
+    for i, row in tqdm(df_new.iterrows(), total=len(df_new)):
         document_id = row["document_id"]
 
         if row["done"] is True:
@@ -1641,27 +1607,23 @@ if __name__ == "__main__":
         df_records = pd.DataFrame(records)
         df_records = df_records.drop_duplicates(subset="document_id", keep="first")
 
-        # 元の df_ann にマージ
-        df_ann = df_ann.merge(df_records, on="document_id", how="left", suffixes=("", "_new"))
+        # 元の df_new にマージ
+        df_new = df_new.merge(df_records, on="document_id", how="left", suffixes=("", "_new"))
 
         # 更新された行を判定（元がTrueなら維持、done_newがTrueなら更新）
-        df_ann["done"] = (df_ann["done"] | df_ann["done_new"].fillna(False)).astype("boolean")
-        # df_ann["done"].value_counts()
+        df_new["done"] = (df_new["done"] | df_new["done_new"].fillna(False)).astype("boolean")
+        # df_new["done"].value_counts()
 
         # 不要になった列を削除
-        df_ann.drop(columns=["done_new"], inplace=True)
+        df_new.drop(columns=["done_new"], inplace=True)
         df_records.drop(columns=["done"], inplace=True)
 
         # 必要なら "_new" の列を元の列に上書き
-        new_cols = [col for col in df_ann.columns if col.endswith("_new")]
+        new_cols = [col for col in df_new.columns if col.endswith("_new")]
         for new_col in new_cols:
             original_col = new_col[:-4]  # "_new" を除去
-            df_ann[original_col] = df_ann[new_col].fillna(df_ann[original_col])
-            df_ann.drop(columns=[new_col], inplace=True)
-
-
-    df_ann.to_csv(output_path_ann, sep="\t", index=False, encoding="utf-8")
-    df_ann.to_csv(output_path_ann_zip, sep="\t", compression="zip", index=False, encoding="utf-8")
+            df_new[original_col] = df_new[new_col].fillna(df_new[original_col])
+            df_new.drop(columns=[new_col], inplace=True)
 
 
 
@@ -1724,6 +1686,11 @@ if __name__ == "__main__":
 
     df_req.to_csv(output_path_req, sep="\t", index=False, encoding="utf-8")
     df_req.to_csv(output_path_req_zip, sep="\t", compression="zip", index=False, encoding="utf-8")
+
+    # df_newを保存（Gemini処理結果を含む更新版）
+    output_path = input_timestamp_dir / f"announcements_document_{timestamp}_merged_updated.txt"
+    df_new.to_csv(output_path, sep="\t", index=False, encoding="utf-8")
+    print(f"Updated df_new saved to: {output_path}")
 
     if False:
         # JSON列をリストに展開
