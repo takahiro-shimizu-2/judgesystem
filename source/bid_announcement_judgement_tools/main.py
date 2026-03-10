@@ -10,58 +10,124 @@
 
 処理のステップ：
 
-- step0 : 判定前公告一覧表アップロード  
+- step0 : 公告ドキュメント準備処理（オプション）
+  - HTML取得、リンク抽出、フォーマット処理を実行
+  - announcements_document_merged_updated.txt を生成
 - step1 : 転写処理
 - step2 : OCR処理
 - step3 : 要件判定
 
 Usage example:
 
-    python source/bid_announcement_judgement_tools/main.py --bid_announcements_pre_file data/bid_announcements_pre/all.txt --google_ai_studio_api_key_filepath data/sec/google_ai_studio_api_key.txt --bigquery_location "LOCATION" --bigquery_project_id PROJECT_ID --bigquery_dataset_name DATASET_NAME --use_gcp_vm  --step1_transfer_remove_table --step3_remove_table
+    # Step0のみ実行（テスト用・データベース不要）
+    python source/bid_announcement_judgement_tools/main.py \\
+        --run_step0_prepare_documents \\
+        --run_step0_only \\
+        --input_list_file data/urllistリスト_防衛省入札_1.txt \\
+        --step0_output_base_dir output
+
+    # Step0を含む完全な実行例
+    python source/bid_announcement_judgement_tools/main.py \\
+        --run_step0_prepare_documents \\
+        --input_list_file data/urllistリスト_防衛省入札_1.txt \\
+        --step0_output_base_dir output \\
+        --google_ai_studio_api_key_filepath data/sec/google_ai_studio_api_key.txt \\
+        --sqlite3_db_file_path data/example.db \\
+        --step1_transfer_remove_table \\
+        --step3_remove_table
+
+    # Step0をスキップして既存のファイルを使用
+    python source/bid_announcement_judgement_tools/main.py \\
+        --announcements_documents_file output/202603101234/announcements_document_merged_updated.txt \\
+        --google_ai_studio_api_key_filepath data/sec/google_ai_studio_api_key.txt \\
+        --sqlite3_db_file_path data/example.db
+
+    # GCP VM での実行例
+    python source/bid_announcement_judgement_tools/main.py \\
+        --bid_announcements_pre_file data/bid_announcements_pre/all.txt \\
+        --google_ai_studio_api_key_filepath data/sec/google_ai_studio_api_key.txt \\
+        --bigquery_location "LOCATION" \\
+        --bigquery_project_id PROJECT_ID \\
+        --bigquery_dataset_name DATASET_NAME \\
+        --use_gcp_vm \\
+        --step1_transfer_remove_table \\
+        --step3_remove_table
 
 Arguments:
 
-- --use_gcp_vm: (フラグ引数) 
+- --use_gcp_vm: (フラグ引数)
 
   GCP VM で動作させる場合に指定する。指定した場合、データベースを操作するオブジェクトとして、DBOperatorGCPVMを使う。指定しない場合、DBOperatorSQLITE3 を使う。
 
-- --bid_announcements_pre_file: (パラメータ引数) 
+- --bid_announcements_pre_file: (パラメータ引数)
 
   判定前公告一覧表のファイルパス。
 
-- --google_ai_studio_api_key_filepath: (パラメータ引数) 
+- --google_ai_studio_api_key_filepath: (パラメータ引数)
 
   OCRのための、google ai studio gemini api キーを記載したファイルパス。
 
-- --stop_processing: (フラグ引数) 
+- --stop_processing: (フラグ引数)
 
   指定した場合、変数を設定するが一連の処理は行わず exit する。
 
-- --sqlite3_db_file_path: (パラメータ引数) 
+- --sqlite3_db_file_path: (パラメータ引数)
 
   SQLITE3 のデータベースファイルパス。
 
-- --bigquery_location: (パラメータ引数) 
+- --bigquery_location: (パラメータ引数)
 
   google cloud platform の bigquery の location。
 
-- --bigquery_project_id: (パラメータ引数) 
+- --bigquery_project_id: (パラメータ引数)
 
   google cloud platform の project_id。
 
-- --bigquery_dataset_name: (パラメータ引数) 
-  
+- --bigquery_dataset_name: (パラメータ引数)
+
   google cloud platform の bigquery の dataset_name。
 
-- --step1_transfer_remove_table: (フラグ引数) 
+- --input_list_file: (パラメータ引数)
+
+  リスト_防衛省入札_1.txt のパス（step0_prepare_documentsの入力）。
+  --run_step0_prepare_documents を指定する場合は必須。
+
+- --run_step0_prepare_documents: (フラグ引数)
+
+  step0_prepare_documents（HTML取得・リンク抽出・フォーマット）を実行する。
+
+- --run_step0_only: (フラグ引数)
+
+  step0のみ実行して終了する（データベース不要でテスト可能）。
+  このフラグを指定すると、step1以降は実行されない。
+
+- --step0_output_base_dir: (パラメータ引数)
+
+  step0の出力ベースディレクトリ（デフォルト: output）。
+
+- --step0_topAgencyName: (パラメータ引数)
+
+  トップ機関名（デフォルト: 防衛省）。
+
+- --step0_no_merge: (フラグ引数)
+
+  過去の結果とマージしない。
+
+- --announcements_documents_file: (パラメータ引数)
+
+  announcements_document ファイルのパス（step1_transfer_v2で使用）。
+  step0_prepare_documents を実行した場合は自動的に設定される。
+
+- --step1_transfer_remove_table: (フラグ引数)
 
   step1の転写処理で、公告マスターと要件マスターを削除するかどうか。
 
-- --step3_remove_table: (フラグ引数) 
+- --step3_remove_table: (フラグ引数)
 
   step3の要件判定処理で、企業公告マスター・充足要件マスター・不足要件マスターを削除するかどうか。
 """
 
+import pdb
 import sqlite3  # sqlite3使わない想定でもimport
 import os
 import argparse
@@ -69,10 +135,15 @@ import re
 import json
 import time
 import uuid
+import sys
+import csv
+import warnings
 from datetime import datetime
 from dataclasses import dataclass
 from abc import ABC, abstractmethod
 from multiprocessing import Pool, cpu_count
+from pathlib import Path, PurePosixPath
+from urllib.parse import urlparse, urljoin
 
 import pandas as pd
 import numpy as np
@@ -85,6 +156,17 @@ import httpx
 import requests
 import ast
 from tqdm import tqdm
+from bs4 import BeautifulSoup, Comment, Doctype
+from ftfy import fix_encoding
+from ftfy.badness import badness
+import fitz  # PyMuPDF for page counting
+import io
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
+import asyncio
+import random
+
+# Suppress FutureWarning for cleaner output
+warnings.simplefilter(action="ignore", category=FutureWarning)
 
 try:
     from google.cloud import bigquery
@@ -100,6 +182,13 @@ try:
 except Exception as e:
     print(e)
 
+# GCS support for PDF storage
+try:
+    from google.cloud import storage
+    GCS_AVAILABLE = True
+except ImportError:
+    GCS_AVAILABLE = False
+
 try:
     from source.bid_announcement_judgement_tools.requirements.ineligibility import checkIneligibilityDynamic
     from source.bid_announcement_judgement_tools.requirements.experience import checkExperienceRequirement
@@ -112,6 +201,116 @@ except ModuleNotFoundError:
     from requirements.location import checkLocationRequirement
     from requirements.grade_item import checkGradeAndItemRequirement
     from requirements.technician import checkTechnicianRequirement
+
+
+# GCS helper functions
+def parse_gcs_path(gcs_path):
+    """Parse gs://bucket/path into (bucket, path)"""
+    if not gcs_path.startswith("gs://"):
+        return None, None
+    parts = gcs_path[5:].split("/", 1)
+    if len(parts) == 2:
+        return parts[0], parts[1]
+    return parts[0], ""
+
+
+def gcs_exists(gcs_path):
+    """Check if GCS object exists"""
+    if not GCS_AVAILABLE:
+        return False
+    bucket_name, blob_name = parse_gcs_path(gcs_path)
+    if not bucket_name or not blob_name:
+        return False
+    try:
+        client = storage.Client()
+        bucket = client.bucket(bucket_name)
+        blob = bucket.blob(blob_name)
+        return blob.exists()
+    except Exception:
+        return False
+
+
+def gcs_upload_from_bytes(gcs_path, data):
+    """Upload bytes to GCS"""
+    if not GCS_AVAILABLE:
+        raise RuntimeError("google-cloud-storage not installed")
+    bucket_name, blob_name = parse_gcs_path(gcs_path)
+    if not bucket_name or not blob_name:
+        raise ValueError(f"Invalid GCS path: {gcs_path}")
+    client = storage.Client()
+    bucket = client.bucket(bucket_name)
+
+    # Create bucket if it doesn't exist
+    if not bucket.exists():
+        bucket.create()
+        print(f"Created GCS bucket: {bucket_name}")
+
+    blob = bucket.blob(blob_name)
+    blob.upload_from_string(data)
+
+
+def gcs_download_as_bytes(gcs_path):
+    """Download GCS object as bytes"""
+    if not GCS_AVAILABLE:
+        raise RuntimeError("google-cloud-storage not installed")
+    bucket_name, blob_name = parse_gcs_path(gcs_path)
+    if not bucket_name or not blob_name:
+        raise ValueError(f"Invalid GCS path: {gcs_path}")
+    client = storage.Client()
+    bucket = client.bucket(bucket_name)
+    blob = bucket.blob(blob_name)
+    return blob.download_as_bytes()
+
+
+def list_gcs_files_in_prefix(gcs_prefix):
+    """List all files under a GCS prefix and return as a set of full paths"""
+    if not GCS_AVAILABLE:
+        return set()
+    bucket_name, prefix = parse_gcs_path(gcs_prefix)
+    if not bucket_name:
+        return set()
+
+    client = storage.Client()
+    bucket = client.bucket(bucket_name)
+    blobs = bucket.list_blobs(prefix=prefix)
+
+    # Return full gs:// paths as a set for O(1) lookup
+    return {f"gs://{bucket_name}/{blob.name}" for blob in blobs}
+
+
+def file_exists_gcs_or_local(file_path):
+    """Check if file exists (local or GCS)"""
+    if file_path.startswith("gs://"):
+        return gcs_exists(file_path)
+    else:
+        return os.path.exists(file_path)
+
+
+def get_pages(path):
+    """
+    Get page count of a PDF file (supports both GCS and local paths)
+
+    Args:
+        path: PDF file path (local or gs://)
+
+    Returns:
+        int: Page count, or -2 if error/not PDF
+    """
+    if not path.lower().endswith(".pdf"):
+        return -2
+
+    try:
+        if path.startswith("gs://"):
+            # GCS path - download to memory
+            pdf_bytes = gcs_download_as_bytes(path)
+            with fitz.open(stream=pdf_bytes, filetype="pdf") as doc:
+                return doc.page_count
+        else:
+            # Local path
+            with fitz.open(path) as doc:
+                return doc.page_count
+    except Exception:
+        return -2
 
 
 class Master:
@@ -1158,6 +1357,23 @@ class DBOperatorGCPVM(DBOperator):
             pdfUrl3, pdfUrl3_type, document_id3,
             pdfUrl4, pdfUrl4_type, document_id4,
             pdfUrl5, pdfUrl5_type, document_id5,
+
+            workPlace,
+            zipcode,
+            address,
+            department,
+            assigneeName,
+            telephone,
+            fax,
+            mail,
+            publishDate,
+            docDistStart,
+            docDistEnd,
+            submissionStart,
+            submissionEnd,
+            bidStartDate,
+            bidEndDate,
+
             doneOCR,
             createdDate,
             updatedDate,
@@ -1201,7 +1417,23 @@ class DBOperatorGCPVM(DBOperator):
             MAX(CASE WHEN o.rn = 5 THEN o.type END) AS pdfUrl5_type,
             MAX(CASE WHEN o.rn = 5 THEN o.document_id END) AS document_id5,
 
-            FALSE AS doneOCR,
+            MAX(CASE WHEN o.rn = 1 THEN o.workplace END) AS workPlace,
+            MAX(CASE WHEN o.rn = 1 THEN o.zipcode END) AS zipcode,
+            MAX(CASE WHEN o.rn = 1 THEN o.address END) AS address,
+            MAX(CASE WHEN o.rn = 1 THEN o.department END) AS department,
+            MAX(CASE WHEN o.rn = 1 THEN o.assigneename END) AS assigneeName,
+            MAX(CASE WHEN o.rn = 1 THEN o.telephone END) AS telephone,
+            MAX(CASE WHEN o.rn = 1 THEN o.fax END) AS fax,
+            MAX(CASE WHEN o.rn = 1 THEN o.mail END) AS mail,
+            MAX(CASE WHEN o.rn = 1 THEN o.publishdate END) AS publishDate,
+            MAX(CASE WHEN o.rn = 1 THEN o.docdiststart END) AS docDistStart,
+            MAX(CASE WHEN o.rn = 1 THEN o.docdistend END) AS docDistEnd,
+            MAX(CASE WHEN o.rn = 1 THEN o.submissionstart END) AS submissionStart,
+            MAX(CASE WHEN o.rn = 1 THEN o.submissionend END) AS submissionEnd,
+            MAX(CASE WHEN o.rn = 1 THEN o.bidstartdate END) AS bidStartDate,
+            MAX(CASE WHEN o.rn = 1 THEN o.bidenddate END) AS bidEndDate,
+
+            MAX(CASE WHEN o.rn = 1 THEN o.done END) AS doneOCR,
             FORMAT_TIMESTAMP('%Y-%m-%d %H:%M:%S', CURRENT_TIMESTAMP()) AS createdDate,
             FORMAT_TIMESTAMP('%Y-%m-%d %H:%M:%S', CURRENT_TIMESTAMP()) AS updatedDate,
 
@@ -3176,6 +3408,1559 @@ class BidJudgementSan:
         self.db_operator=db_operator
 
 
+    def step0_prepare_documents(
+        self,
+        input_list_file,
+        output_base_dir="bid_announcement_judgement_tools/output",
+        timestamp=None,
+        topAgencyName="防衛省",
+        extracted_at=None,
+        base_digits=5,
+        no_merge=False,
+        use_gcp_vm=False,
+        do_fetch_html=True,
+        do_extract_links=True,
+        do_format_documents=True,
+        do_download_pdfs=True,
+        do_count_pages=True,
+        do_ocr=True,
+        google_ai_studio_api_key_filepath="data/sec/google_ai_studio_api_key_mizu.txt",
+        ocr_max_concurrency=5,
+        ocr_max_api_calls_per_run=1000
+    ):
+        """
+        step0 : 公告ドキュメント準備処理
+
+        公告リストファイルから以下を実行：
+        1. HTMLページ取得（オプション）
+        2. ドキュメントリンク抽出（オプション）
+        3. announcements_document_merged_updated.txt を生成（オプション）
+        4. PDFダウンロード（オプション）
+        5. PDFページ数カウント（オプション）
+        6. Gemini OCR 実行（オプション）
+
+        出力ディレクトリ構造：
+            {timestamp}/
+            ├── step0_html_DL/                  各公告HTMLダウンロード先
+            │   └── {index}_{topAgencyName}_{subAgencyName}.html
+            ├── step0_html_list/                リスト・リンク抽出結果
+            │   ├── input_list_converted.txt
+            │   ├── input_list_converted.html
+            │   └── announcements_links.txt
+            ├── announcements_document_merged_updated.txt
+            └── req_announcements_document.txt  (OCR実行時)
+
+        Args:
+            input_list_file: リスト_防衛省入札_1.txt のパス
+            output_base_dir: 出力ベースディレクトリ
+            timestamp: タイムスタンプ (YYYYMMDDHHMM形式)。Noneなら現在時刻
+            topAgencyName: トップ機関名
+            extracted_at: 抽出日 (YYYY-MM-DD形式)。Noneなら現在日付
+            base_digits: announcement_id のグルーピング桁数
+            no_merge: 過去の結果とマージしないフラグ
+            use_gcp_vm: GCS (gs://) を使用する場合 True
+            do_fetch_html: HTML ページを取得する場合 True
+            do_extract_links: ドキュメントリンクを抽出する場合 True
+            do_format_documents: ドキュメント情報をフォーマットする場合 True
+            do_download_pdfs: PDF をダウンロードする場合 True
+            do_count_pages: PDF のページ数をカウントする場合 True
+            do_ocr: Gemini OCR を実行する場合 True
+            google_ai_studio_api_key_filepath: Google AI Studio API キーファイルのパス
+            ocr_max_concurrency: OCR 実行時の最大並列数
+            ocr_max_api_calls_per_run: 1回の実行での最大API呼び出し数（デフォルト: 1000）
+
+        Returns:
+            str: 生成された announcements_document_merged_updated.txt のパス
+        """
+        print("=" * 60)
+        print("Step0: Document Preparation")
+        print("=" * 60)
+
+        # タイムスタンプとextracted_atの設定
+        if timestamp is None:
+            timestamp = datetime.now().strftime("%Y%m%d%H%M")
+        if extracted_at is None:
+            extracted_at = datetime.now().strftime("%Y-%m-%d")
+
+        # 出力ディレクトリの設定
+        script_dir = Path(__file__).parent
+        print(fr"script_dir={script_dir}")
+        
+        project_root = script_dir.parent.parent  # judgesystem/
+        output_base = project_root / output_base_dir
+        output_dir = output_base / timestamp
+        output_dir_html_DL = output_dir / "step0_html_DL"
+        output_dir_html_list = output_dir / "step0_html_list"
+
+        # ディレクトリ作成
+        os.makedirs(output_dir_html_DL, exist_ok=True)
+        os.makedirs(output_dir_html_list, exist_ok=True)
+
+        print(f"Output directory: {output_dir}")
+        print(f"Timestamp: {timestamp}")
+        print(f"Extracted at: {extracted_at}")
+
+        # ステップ数の計算
+        total_steps = (1 if do_fetch_html else 0) + \
+                     (1 if do_extract_links else 0) + \
+                     (1 if do_format_documents else 0) + \
+                     (1 if do_download_pdfs else 0) + \
+                     (1 if do_count_pages else 0) + \
+                     (1 if do_ocr else 0)
+        step_num = 0
+
+        # 1. HTML取得処理
+        if do_fetch_html:
+            step_num += 1
+            print(f"\n[{step_num}/{total_steps}] Fetching HTML pages...")
+            input_list2_path = self._step0_convert_input_list(input_list_file, output_dir_html_list)
+            self._step0_fetch_html_pages(input_list2_path, output_dir_html_DL, topAgencyName)
+        else:
+            print("\n[Skipped] Fetching HTML pages (using existing files)...")
+            input_list2_path = output_dir_html_list / "input_list_converted.txt"
+            if not Path(input_list2_path).exists():
+                raise FileNotFoundError(f"Required file not found: {input_list2_path}")
+
+        # 2. リンク抽出処理
+        if do_extract_links:
+            step_num += 1
+            print(f"\n[{step_num}/{total_steps}] Extracting document links...")
+            links_file = self._step0_extract_links(output_dir_html_DL, output_dir_html_list)
+        else:
+            print("\n[Skipped] Extracting document links (using existing file)...")
+            links_file = str(output_dir_html_list / "announcements_links.txt")
+            if not Path(links_file).exists():
+                raise FileNotFoundError(f"Required file not found: {links_file}")
+
+        # 3. フォーマット処理
+        if do_format_documents:
+            step_num += 1
+            print(f"\n[{step_num}/{total_steps}] Formatting documents...")
+            merged_updated_file = self._step0_format_documents(
+                input_list2_path,
+                links_file,
+                output_dir,
+                output_base,
+                timestamp,
+                extracted_at,
+                base_digits,
+                no_merge
+            )
+        else:
+            print("\n[Skipped] Formatting documents (using existing file)...")
+            merged_updated_file = str(output_dir / "announcements_document_merged_updated.txt")
+            if not Path(merged_updated_file).exists():
+                raise FileNotFoundError(f"Required file not found: {merged_updated_file}")
+
+        # 4. PDFダウンロード（オプション）
+        if do_download_pdfs:
+            step_num += 1
+            print(f"\n[{step_num}/{total_steps}] Downloading PDFs...")
+            df = pd.read_csv(merged_updated_file, sep="\t")
+            df = self._step0_download_pdfs(df, use_gcp_vm=use_gcp_vm)
+            df.to_csv(merged_updated_file, sep="\t", index=False)
+            print(f"Updated file with pdf_is_saved info: {merged_updated_file}")
+
+        # 5. PDFページ数カウント（オプション）
+        if do_count_pages:
+            step_num += 1
+            print(f"\n[{step_num}/{total_steps}] Counting PDF pages...")
+            df = pd.read_csv(merged_updated_file, sep="\t")
+            df = self._step0_count_pages(df)
+            df.to_csv(merged_updated_file, sep="\t", index=False)
+            print(f"Updated file with pageCount info: {merged_updated_file}")
+
+        # 6. Gemini OCR 実行（オプション）
+        req_file_path = None
+        if do_ocr:
+            step_num += 1
+            print(f"\n[{step_num}/{total_steps}] Running Gemini OCR...")
+            req_file_path = str(output_dir / "req_announcements_document.txt")
+            df, req_file_path = self._step0_ocr_with_gemini(
+                merged_updated_file=merged_updated_file,
+                req_file_path=req_file_path,
+                use_gcp_vm=use_gcp_vm,
+                google_ai_studio_api_key_filepath=google_ai_studio_api_key_filepath,
+                max_concurrency=ocr_max_concurrency,
+                max_api_calls_per_run=ocr_max_api_calls_per_run
+            )
+            # 保存は _step0_ocr_with_gemini 内部で行われる
+            print(f"OCR completed. Updated file: {merged_updated_file}")
+            if req_file_path:
+                print(f"Requirements file: {req_file_path}")
+        else:
+            print("\n[Skipped] Running Gemini OCR (using existing files)...")
+            # OCR結果ファイルの確認
+            req_file_path = str(output_dir / "req_announcements_document.txt")
+            if Path(req_file_path).exists():
+                print(f"Found existing requirements file: {req_file_path}")
+            else:
+                print(f"Warning: Requirements file not found: {req_file_path}")
+                req_file_path = None
+            # merged_updated_file は既にステップ3で作成されているはず
+            # OCRによる更新がスキップされただけなので、ファイルは存在する
+
+        print("=" * 60)
+        print(f"Step0 completed successfully!")
+        print(f"Output file: {merged_updated_file}")
+        if req_file_path:
+            print(f"Requirements file: {req_file_path}")
+        print("=" * 60)
+
+        return merged_updated_file
+
+
+    def _step0_convert_input_list(self, input_list1, output_dir):
+        """
+        入力リストファイルを変換（TinyURL展開など）
+
+        Args:
+            input_list1: 元のリストファイルパス
+            output_dir: 出力ディレクトリ（step0_html_list）
+
+        Returns:
+            str: 変換後のリストファイルパス
+        """
+        output_list2 = output_dir / "input_list_converted.txt"
+
+        if output_list2.exists():
+            print(f"Converted list already exists: {output_list2}")
+            return str(output_list2)
+
+        print(f"Converting input list: {input_list1}")
+        df = pd.read_csv(input_list1, sep="\t")
+
+        # TinyURL展開処理
+        def expand_tinyurl(url):
+            if isinstance(url, str) and url.startswith("https://tinyurl"):
+                time.sleep(1)
+                try:
+                    r = requests.get(url, allow_redirects=True, timeout=5)
+                    if r.url.startswith("https://tinyurl"):
+                        return None
+                    return r.url
+                except Exception:
+                    return None
+            return url
+
+        # 落札情報列に対して処理
+        if "落札情報（過去）" in df.columns:
+            tmp_df = df["落札情報（過去）"]
+            df["落札情報（過去）"] = df["落札情報（過去）"].apply(
+                lambda x: f"<a href='{x}'>{x}</a>" if isinstance(x, str) else x
+            )
+            df.insert(df.columns.get_loc('落札情報（過去）')+1, "落札情報（過去）2", tmp_df.apply(expand_tinyurl))
+
+        # 入札公告列に対して処理
+        if "入札公告（現在募集中）" in df.columns:
+            tmp_df = df["入札公告（現在募集中）"]
+            df["入札公告（現在募集中）"] = df["入札公告（現在募集中）"].apply(
+                lambda x: f"<a href='{x}'>{x}</a>" if isinstance(x, str) else x
+            )
+            df.insert(df.columns.get_loc('入札公告（現在募集中）')+1, "入札公告（現在募集中）2", tmp_df.apply(expand_tinyurl))
+
+        df.to_csv(output_list2, sep="\t", index=False)
+        df.to_html(output_list2.with_suffix(".html"), escape=False)
+        print(f"Converted list saved: {output_list2}")
+        print(f"HTML list saved: {output_list2.with_suffix('.html')}")
+
+        return str(output_list2)
+
+
+    def _step0_fetch_html_pages(self, input_list_file, output_dir_html, topAgencyName):
+        """
+        公告ページのHTMLを取得
+
+        Args:
+            input_list_file: 変換済みリストファイル
+            output_dir_html: HTML出力ディレクトリ（step0_html_DL）
+            topAgencyName: トップ機関名
+        """
+        df = pd.read_csv(input_list_file, sep="\t")
+
+        # 落札情報（過去）2列を使用
+        target_column = "落札情報（過去）2" if "落札情報（過去）2" in df.columns else "落札情報（過去）"
+
+        fetch_count = 0
+        skip_count = 0
+
+        for i, row in tqdm(df.iterrows(), total=len(df), desc="Fetching HTML"):
+            target_index = row["index"]
+            subAgencyName = row.get("Unnamed: 0", "unknown")
+            target_url = row[target_column]
+
+            output_file = f"{target_index:05d}_{topAgencyName}_{subAgencyName}.html"
+            output_path = output_dir_html / output_file
+
+            # 既に存在する場合はスキップ
+            if output_path.exists():
+                skip_count += 1
+                continue
+
+            # URLチェック
+            if not isinstance(target_url, str) or not target_url.startswith("https"):
+                skip_count += 1
+                continue
+
+            if target_url.endswith(".pdf"):
+                skip_count += 1
+                continue
+
+            time.sleep(1)
+
+            try:
+                html_content = self._fetch_html_content(target_url)
+                if html_content:
+                    with open(output_path, "w", encoding="utf-8") as f:
+                        f.write(html_content)
+                    fetch_count += 1
+            except Exception as e:
+                tqdm.write(f"Error fetching index={target_index}: {e}")
+                skip_count += 1
+
+        print(f"HTML fetch completed: {fetch_count} fetched, {skip_count} skipped")
+
+
+    def _fetch_html_content(self, target_url):
+        """
+        指定URLからHTMLコンテンツを取得・クリーニング
+
+        Args:
+            target_url: 取得するURL
+
+        Returns:
+            str: クリーニング済みHTML、またはNone
+        """
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.5993.90 Safari/537.36",
+            "Accept-Language": "ja,en-US;q=0.9,en;q=0.8",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp",
+            "Connection": "keep-alive",
+        }
+
+        # TinyURL処理
+        if target_url.startswith("https://tinyurl.com"):
+            response = requests.head(target_url, allow_redirects=True)
+            if response.url.startswith("https://tinyurl.com") or response.url.endswith(".pdf"):
+                return None
+            target_url = response.url
+
+        response = requests.get(url=target_url, headers=headers)
+        soup = BeautifulSoup(response.text, "html.parser")
+
+        # エンコーディング判定
+        charset = None
+        meta = soup.find("meta", attrs={"charset": True})
+        if meta:
+            charset = meta["charset"]
+        else:
+            meta = soup.find("meta", attrs={"http-equiv": "Content-Type"})
+            if meta and "charset=" in meta.get("content", ""):
+                charset = meta["content"]
+
+        # エンコーディング推測
+        charset_dict = {
+            "shift_jis": ["cp932", "shift-jis", "shift_jis"],
+            "utf-8": ["utf-8"]
+        }
+        charset_guess = None
+        if charset is not None:
+            for key, value in charset_dict.items():
+                for v in value:
+                    if re.search(v, charset, flags=re.IGNORECASE):
+                        charset_guess = key
+                        break
+
+        if charset_guess is not None:
+            response.encoding = charset_guess
+        else:
+            # スコアベースで判定
+            enc_list = list(set([i.lower() for i in [response.encoding, response.apparent_encoding, "shift_jis", "utf-8"]]))
+            score_list = []
+            for enc in enc_list:
+                response.encoding = enc
+                soup = BeautifulSoup(response.text, "html.parser")
+                score = badness(response.text)
+                score_list.append(score)
+            charset_guess = enc_list[score_list.index(min(score_list))]
+            response.encoding = charset_guess
+
+        # 再度BeautifulSoupで処理
+        soup = BeautifulSoup(response.text, "html.parser")
+
+        # クリーニング
+        for tag in soup(["script", "style"]):
+            tag.decompose()
+
+        for comment in soup.find_all(string=lambda text: isinstance(text, Comment)):
+            comment.extract()
+
+        html = str(soup)
+        # 空白の正規化
+        html = re.sub(r"\s+", " ", html)
+        html = html.strip()
+
+        return html
+
+
+    def _step0_extract_links(self, input_dir_html, output_dir_links):
+        """
+        HTMLファイルから公告ドキュメントのリンクを抽出
+
+        Args:
+            input_dir_html: HTML入力ディレクトリ（step0_html_DL）
+            output_dir_links: リンク出力ディレクトリ（step0_html_list）
+
+        Returns:
+            str: 生成されたリンクファイルパス
+        """
+        output_file = output_dir_links / "announcements_links.txt"
+
+        html_files = sorted(Path(input_dir_html).glob('*.html'))
+
+        if not html_files:
+            raise FileNotFoundError(f"No HTML files found in {input_dir_html}")
+
+        print(f"Found {len(html_files)} HTML files")
+
+        # 出力ファイルを開く
+        with open(output_file, 'w', encoding='utf-8') as out_f:
+            # ヘッダー
+            out_f.write("target_link\tpre_announcement_id\tannouncement_name\tlink_text\tpdf_link\n")
+
+            total_announcements = 0
+            total_links = 0
+
+            for html_file in tqdm(html_files, desc="Extracting links"):
+                try:
+                    announcements = self._extract_links_from_html(html_file)
+
+                    file_links = 0
+                    for announcement_id, announcement_name, row_links in announcements:
+                        for link_text, pdf_link in row_links:
+                            out_f.write(f"{html_file.name}\t{announcement_id}\t{announcement_name}\t{link_text}\t{pdf_link}\n")
+                            file_links += 1
+
+                    total_announcements += len(announcements)
+                    total_links += file_links
+
+                except Exception as e:
+                    tqdm.write(f"Error processing {html_file.name}: {e}")
+                    continue
+
+        print(f"Link extraction completed: {total_announcements} announcements, {total_links} links")
+        print(f"Output: {output_file}")
+
+        return str(output_file)
+
+
+    def _extract_links_from_html(self, html_file_path):
+        """
+        単一のHTMLファイルから公告リンクを抽出
+
+        Args:
+            html_file_path: HTMLファイルパス
+
+        Returns:
+            list: (announcement_id, announcement_name, [(link_text, pdf_link), ...])
+        """
+        with open(html_file_path, 'r', encoding='utf-8') as f:
+            html_content = f.read()
+
+        # 改行を削除して正規表現マッチを容易に
+        html_content = re.sub(r'<([^>]+)\n', lambda m: '<' + m.group(1).replace('\n', ' '), html_content)
+
+        # テーブル行を検索
+        tr_pattern = r'<tr[^>]*>(.*?)</tr>'
+        rows = re.findall(tr_pattern, html_content, re.DOTALL | re.IGNORECASE)
+
+        announcements = []
+        announcement_id = 1
+
+        for row_content in rows:
+            # 各行の<a>タグを検索
+            a_pattern = r'<a[^>]*href=["\']([^"\']+)["\'][^>]*>(.*?)</a>'
+            links = re.findall(a_pattern, row_content, re.DOTALL | re.IGNORECASE)
+
+            if not links:
+                continue
+
+            # ドキュメントを指すリンクをフィルタ
+            doc_links = []
+            for href, link_text in links:
+                if re.search(r'\.(pdf|xlsx?|zip|docx?|txt)$', href, re.IGNORECASE):
+                    # リンクテキストをクリーニング
+                    clean_text = re.sub(r'<[^>]+>', '', link_text)
+                    clean_text = re.sub(r'\s+', ' ', clean_text).strip()
+                    doc_links.append((href, clean_text))
+
+            if not doc_links:
+                continue
+
+            # 最初のリンクのテキストを公告名として使用
+            announcement_name = doc_links[0][1]
+
+            # すべてのリンクを収集
+            row_links = []
+            for href, link_text in doc_links:
+                row_links.append((link_text, href))
+
+            announcements.append((announcement_id, announcement_name, row_links))
+            announcement_id += 1
+
+        return announcements
+
+
+    def _step0_format_documents(
+        self,
+        input_list2_path,
+        links_file,
+        output_dir,
+        output_base,
+        timestamp,
+        extracted_at,
+        base_digits,
+        no_merge
+    ):
+        """
+        ドキュメント情報をフォーマットし、最終的なファイルを生成
+
+        Args:
+            input_list2_path: 変換済みリストファイル
+            links_file: リンク抽出ファイル
+            output_dir: 出力ディレクトリ
+            output_base: 出力ベースディレクトリ
+            timestamp: タイムスタンプ
+            extracted_at: 抽出日
+            base_digits: グルーピング桁数
+            no_merge: マージ無効フラグ
+
+        Returns:
+            str: 生成された announcements_document_merged_updated.txt のパス
+        """
+        # 入力ファイル読み込み
+        df1 = pd.read_csv(input_list2_path, sep="\t")
+        df2 = pd.read_csv(links_file, sep="\t", quoting=csv.QUOTE_NONE)
+
+        # クォート削除
+        df2["announcement_name"] = df2["announcement_name"].str.replace('"', '', regex=False)
+        df2["link_text"] = df2["link_text"].str.replace('"', '', regex=False)
+
+        # target_link から index 取得
+        df2.insert(0, "index", df2["target_link"].str.split("_").str[0].astype(int))
+        df2["adhoc_index"] = df2["target_link"].apply(lambda x: f"{int(x.split('_')[0]):05d}")
+
+        # df1 から base_link 情報を取得
+        df1_sub = df1[["index", "入札公告（現在募集中）2"]].copy() if "入札公告（現在募集中）2" in df1.columns else df1[["index"]].copy()
+
+        def parent_url(url):
+            if not isinstance(url, str) or not url.startswith("https://"):
+                return None
+            parsed = urlparse(url)
+            parent_path = os.path.dirname(parsed.path)
+            return f"{parsed.scheme}://{parsed.netloc}{parent_path}"
+
+        if "入札公告（現在募集中）2" in df1_sub.columns:
+            df1_sub["base_link_parent"] = df1_sub["入札公告（現在募集中）2"].apply(parent_url)
+            df1_sub = df1_sub.rename(columns={"入札公告（現在募集中）2": "base_link"})
+        else:
+            df1_sub["base_link_parent"] = None
+            df1_sub["base_link"] = None
+
+        # マージ
+        df_merged = df2.merge(df1_sub, on="index", how="left")
+
+        # PDF完全URLを生成
+        df_merged["pdf_full_url"] = df_merged.apply(
+            lambda row: urljoin(row["base_link_parent"] + "/", row["pdf_link"])
+            if row["base_link_parent"] is not None else row["pdf_link"],
+            axis=1
+        )
+
+        # announcement_id 生成
+        df_merged["index"] = df_merged["index"] * 100000
+        df_merged["announcement_id"] = df_merged["pre_announcement_id"] + df_merged["index"]
+
+        # save_path と document_id 設定
+        save_path_list = []
+        for i, row in df_merged.iterrows():
+            index = row["adhoc_index"]
+            pdfurl = row["pdf_full_url"]
+            target_url = row["base_link_parent"]
+
+            if pdfurl is None or pd.isna(pdfurl) or target_url is None or pd.isna(target_url):
+                if pdfurl is not None and not pd.isna(pdfurl):
+                    pname = pdfurl
+                else:
+                    pname = f"unknown_{i}"
+            else:
+                common = os.path.commonprefix([pdfurl, target_url])
+                pname = pdfurl[len(common):]
+
+            pname = pname[1:] if pname.startswith('/') else pname
+            p = PurePosixPath(pname)
+            no_ext = str(p.with_suffix(""))
+            no_ext = no_ext.replace(".", "_").replace("\\", "_").replace("/", "_").replace(":", "_")
+            pname2 = no_ext + p.suffix
+
+            output_file_pdf = f"output/pdf/pdf_{index}/{index}_{pname2}"
+            save_path = Path(output_file_pdf)
+            save_path_list.append(save_path)
+
+        df_merged["save_path"] = [p.as_posix() for p in save_path_list]
+        df_merged["document_id"] = df_merged["save_path"].apply(lambda p: Path(p).stem)
+
+        # https: で始まらないレコードを除外
+        before_filter_count = len(df_merged)
+        df_merged = df_merged[df_merged["pdf_full_url"].str.startswith("https:", na=False)].copy()
+        after_filter_count = len(df_merged)
+        excluded_count = before_filter_count - after_filter_count
+        if excluded_count > 0:
+            print(f"Excluded {excluded_count} records where pdf_full_url does not start with 'https:'")
+
+        # 重複チェック
+        tmpdf2 = df_merged.duplicated(subset=["link_text", "announcement_id", "document_id"])
+        df_merged["dup"] = tmpdf2
+
+        # 最終データフレーム作成
+        ext = df_merged["pdf_full_url"].str.extract(r'\.([^.]+)$')[0].str.lower()
+        df_new = pd.DataFrame({
+            "announcement_id": df_merged["announcement_id"],
+            "document_id": df_merged["document_id"],
+            "type": [None] * df_merged.shape[0],
+            "title": df_merged["link_text"],
+            "fileFormat": ext.fillna(""),
+            "pageCount": np.where(ext == "pdf", -1, -2),
+            "extractedAt": [extracted_at] * df_merged.shape[0],
+            "url": df_merged["pdf_full_url"],
+            "content": ["dummy"] * df_merged.shape[0],
+            "adhoc_index": df_merged["adhoc_index"],
+            "base_link_parent": df_merged["base_link_parent"],
+            "base_link": df_merged["base_link"],
+            "dup": df_merged["dup"],
+            "save_path": df_merged["save_path"],
+            "pdf_is_saved": [None] * df_merged.shape[0],
+            "pdf_is_saved_date": [None] * df_merged.shape[0],
+            "orderer_id": [None] * df_merged.shape[0],
+            "topAgencyName": [None] * df_merged.shape[0],
+            "category": [None] * df_merged.shape[0],
+            "bidType": [None] * df_merged.shape[0],
+            "workplace": [None] * df_merged.shape[0],
+            "zipcode": [None] * df_merged.shape[0],
+            "address": [None] * df_merged.shape[0],
+            "department": [None] * df_merged.shape[0],
+            "assigneename": [None] * df_merged.shape[0],
+            "telephone": [None] * df_merged.shape[0],
+            "fax": [None] * df_merged.shape[0],
+            "mail": [None] * df_merged.shape[0],
+            "publishdate": [None] * df_merged.shape[0],
+            "docdiststart": [None] * df_merged.shape[0],
+            "docdistend": [None] * df_merged.shape[0],
+            "submissionstart": [None] * df_merged.shape[0],
+            "submissionend": [None] * df_merged.shape[0],
+            "bidstartdate": [None] * df_merged.shape[0],
+            "bidenddate": [None] * df_merged.shape[0],
+            "done": [False] * df_merged.shape[0]
+        })
+
+        # ソート
+        df_new["_sort_fileformat"] = df_new["fileFormat"].apply(lambda x: 0 if x == "pdf" else 1)
+        df_new.sort_values(["announcement_id", "_sort_fileformat", "document_id"], inplace=True)
+        df_new = df_new.drop(columns=["_sort_fileformat"])
+
+        # 出力ファイルパス
+        output_path1 = output_dir / "announcements_document.txt"
+        merged_output_path = output_dir / "announcements_document_merged.txt"
+        merged_updated_path = output_dir / "announcements_document_merged_updated.txt"
+
+        # 今回実行分のみを保存
+        df_new.to_csv(output_path1, sep="\t", index=False)
+        print(f"Current output saved: {output_path1}")
+
+        # 過去の結果とマージ
+        if not no_merge:
+            previous_file = self._find_previous_merged_file(output_base, timestamp)
+
+            if previous_file:
+                print(f"Merging with previous result: {previous_file}")
+                df_merged_result = self._append_new_documents_by_group(
+                    file1=previous_file,
+                    file2=str(output_path1),
+                    base_digits=base_digits
+                )
+                df_merged_result.to_csv(merged_output_path, sep="\t", index=False)
+                print(f"Merged output saved: {merged_output_path}")
+            else:
+                print("No previous result found. Using current output as merged result.")
+                df_new.to_csv(merged_output_path, sep="\t", index=False)
+        else:
+            print("Skipping merge (--no_merge specified)")
+            df_new.to_csv(merged_output_path, sep="\t", index=False)
+
+        # _merged_updated.txt を作成
+        df_merged = pd.read_csv(merged_output_path, sep="\t")
+
+        # orderer_id と topAgencyName を更新
+        print("Updating orderer_id and topAgencyName...")
+        ord = df1[["Unnamed: 0", "Unnamed: 1", "入札公告（現在募集中）2"]].copy()
+        ord["orderer_id"] = topAgencyName + ord["Unnamed: 0"].astype(str) + ord["Unnamed: 1"].astype(str)
+        mapping = dict(zip(ord["入札公告（現在募集中）2"], ord["orderer_id"]))
+        df_merged["orderer_id"] = df_merged["base_link"].map(mapping)
+        df_merged["topAgencyName"] = topAgencyName
+
+        df_merged.to_csv(merged_updated_path, sep="\t", index=False)
+        print(f"Final output saved: {merged_updated_path}")
+
+        return str(merged_updated_path)
+
+
+    def _find_previous_merged_file(self, output_base, current_timestamp):
+        """
+        過去の merged ファイルを検索
+
+        優先順位:
+        1. announcements_document_merged_updated.txt
+        2. announcements_document_merged.txt
+        3. announcements_document.txt
+        """
+        if not output_base.exists():
+            return None
+
+        # タイムスタンプディレクトリを取得（現在のディレクトリを除く）
+        all_dirs = [d for d in output_base.iterdir() if d.is_dir() and d.name.isdigit()]
+        all_dirs = [d for d in all_dirs if d.name != current_timestamp]
+
+        if not all_dirs:
+            return None
+
+        # 最新のディレクトリを取得
+        latest_dir = sorted(all_dirs, reverse=True)[0]
+
+        # 優先順位で検索
+        for filename in ["announcements_document_merged_updated.txt",
+                        "announcements_document_merged.txt",
+                        "announcements_document.txt"]:
+            candidate = latest_dir / filename
+            if candidate.exists():
+                return str(candidate)
+
+        return None
+
+
+    def _append_new_documents_by_group(self, file1, file2, base_digits=5):
+        """
+        df1 に存在しない document_id を持つ df2 のレコードを追加する
+        announcement_id は group ごとに再採番
+        """
+        df1 = pd.read_csv(file1, sep="\t", quoting=csv.QUOTE_NONE)
+        df2 = pd.read_csv(file2, sep="\t", quoting=csv.QUOTE_NONE)
+
+        df1 = df1.copy()
+        df2 = df2.copy()
+
+        divisor = 10 ** base_digits
+        df1["announcement_group"] = df1["announcement_id"] // divisor
+        df2["announcement_group"] = df2["announcement_id"] // divisor
+
+        result_list = []
+
+        for group in df2["announcement_group"].unique():
+            df1_g = df1[df1["announcement_group"] == group]
+            df2_g = df2[df2["announcement_group"] == group]
+
+            if df2_g.empty:
+                continue
+
+            # df1 に存在しない document_id だけ抽出
+            existing_docs = set(df1_g["document_id"])
+            df2_new = df2_g[~df2_g["document_id"].isin(existing_docs)].copy()
+
+            if df2_new.empty:
+                continue
+
+            # group ごとの最大 announcement_id を基準に再採番
+            group_max_id = df1_g["announcement_id"].max() if not df1_g.empty else group * divisor
+            new_id_counter = group_max_id
+
+            # 元 announcement_id ごとに新IDを割り当て
+            unique_old_ids = df2_new["announcement_id"].unique()
+            id_map = {}
+            for old_id in unique_old_ids:
+                new_id_counter += 1
+                id_map[old_id] = new_id_counter
+
+            df2_new["announcement_id"] = df2_new["announcement_id"].map(id_map)
+            result_list.append(df2_new)
+
+        # 結合
+        if result_list:
+            df_append = pd.concat(result_list, ignore_index=True)
+            final_df = pd.concat([df1, df_append], ignore_index=True)
+        else:
+            final_df = df1.copy()
+
+        # helper列削除
+        final_df = final_df.drop(columns=["announcement_group"])
+
+        # ソート
+        final_df["_sort_fileformat"] = final_df["fileFormat"].apply(lambda x: 0 if x == "pdf" else 1)
+        final_df.sort_values(["announcement_id", "_sort_fileformat", "document_id"], inplace=True)
+        final_df = final_df.drop(columns=["_sort_fileformat"])
+
+        return final_df
+
+
+    def _step0_download_pdfs(self, df, use_gcp_vm=False):
+        """
+        PDF を URL からダウンロードして保存
+
+        Args:
+            df: announcements_document DataFrame (url, save_path, pdf_is_saved columns必要)
+            use_gcp_vm: True なら GCS (gs://) へ、False ならローカルへ保存
+
+        Returns:
+            pd.DataFrame: pdf_is_saved, pdf_is_saved_date が更新された DataFrame
+        """
+        # Sleep time parameters
+        SLEEP_AFTER_REQUEST = 0.4
+        SLEEP_ON_HTTP_ERROR = 0.4
+        SLEEP_ON_REQUEST_ERROR = 0.4
+
+        today_str = datetime.now().strftime("%Y-%m-%d")
+
+        # GCS/local パスへの変換
+        if use_gcp_vm:
+            df["save_path"] = df["save_path"].apply(
+                lambda x: x.replace("output/pdf/", "gs://ann-files/pdf/") if pd.notna(x) else x
+            )
+            print("Converted save_path to GCS format (gs://ann-files/pdf/...)")
+
+        # Skip URLs
+        pdf_requests_skip_urls = ["dummy"]
+
+        # Check pdf_is_saved before downloading
+        print("Check pdf_is_saved (before url_requests).")
+        file_cache = {}
+
+        for i, row in tqdm(df.iterrows(), total=len(df), desc="Checking existing PDFs"):
+            p = row["save_path"]
+            if p is None or pd.isna(p):
+                df.loc[i, "pdf_is_saved"] = False
+                continue
+
+            if use_gcp_vm and p.startswith("gs://"):
+                # GCS path
+                parts = p.split("/")
+                if len(parts) >= 5:
+                    dir_key = "/".join(parts[:5]) + "/"
+                    if dir_key not in file_cache:
+                        tqdm.write(f"Loading file list for: {dir_key}")
+                        file_cache[dir_key] = list_gcs_files_in_prefix(dir_key)
+                    df.loc[i, "pdf_is_saved"] = p in file_cache[dir_key]
+                else:
+                    df.loc[i, "pdf_is_saved"] = gcs_exists(p)
+            else:
+                # Local path
+                p_normalized = os.path.normpath(p)
+                dir_key = os.path.dirname(p_normalized)
+                if dir_key not in file_cache:
+                    if os.path.exists(dir_key):
+                        file_cache[dir_key] = {
+                            os.path.join(dir_key, f)
+                            for f in os.listdir(dir_key)
+                            if os.path.isfile(os.path.join(dir_key, f))
+                        }
+                    else:
+                        file_cache[dir_key] = set()
+                df.loc[i, "pdf_is_saved"] = p_normalized in file_cache[dir_key]
+
+        print(f"pdf_is_saved status: {df['pdf_is_saved'].value_counts(dropna=False).to_dict()}")
+
+        # Download PDFs
+        print("Save pdf by requests.")
+        for i, row in tqdm(df.iterrows(), total=len(df), desc="Downloading PDFs"):
+            pdfurl = row["url"]
+            save_path = row["save_path"]
+
+            if pdfurl is None or pd.isna(pdfurl):
+                continue
+
+            # Skip if file already exists
+            if df.loc[i, "pdf_is_saved"] == True:
+                continue
+
+            # Create directory if it doesn't exist (local only)
+            save_path_dirname = os.path.dirname(save_path)
+            if not use_gcp_vm and not os.path.exists(save_path_dirname):
+                os.makedirs(save_path_dirname, exist_ok=True)
+
+            # Skip certain URLs
+            skip_this_url = False
+            for skipurl in pdf_requests_skip_urls:
+                if pdfurl.startswith(skipurl):
+                    tqdm.write(fr"Skip url: {skipurl}...")
+                    skip_this_url = True
+                    break
+            if skip_this_url:
+                continue
+
+            if pdfurl is not None and not pdfurl.startswith("https://tinyurl"):
+                df.loc[i, "pdf_is_saved_date"] = today_str
+
+                try:
+                    # Download PDF
+                    response = requests.get(pdfurl, headers={
+                        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.5993.90 Safari/537.36",
+                        "Accept-Language": "ja,en-US;q=0.9,en;q=0.8",
+                        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp",
+                        "Connection": "keep-alive",
+                    })
+                    response.raise_for_status()
+                except requests.exceptions.HTTPError as e:
+                    tqdm.write(f"HTTP エラー: {pdfurl} -> {e}")
+                    time.sleep(SLEEP_ON_HTTP_ERROR)
+                    continue
+                except requests.exceptions.RequestException as e:
+                    tqdm.write(f"通信エラー: {pdfurl} -> {e}")
+                    time.sleep(SLEEP_ON_REQUEST_ERROR)
+                    continue
+
+                try:
+                    if use_gcp_vm and save_path.startswith("gs://"):
+                        gcs_upload_from_bytes(save_path, response.content)
+                        tqdm.write(fr"Saved {save_path}.")
+                        df.loc[i, "pdf_is_saved"] = True
+                    else:
+                        Path(save_path).write_bytes(response.content)
+                        tqdm.write(fr"Saved {save_path}.")
+                        df.loc[i, "pdf_is_saved"] = True
+                except Exception as e:
+                    tqdm.write(str(e))
+
+                # Sleep after successful request
+                time.sleep(SLEEP_AFTER_REQUEST)
+
+        return df
+
+
+    def _step0_count_pages(self, df):
+        """
+        PDF のページ数をカウント
+
+        Args:
+            df: announcements_document DataFrame (save_path, pageCount columns必要)
+
+        Returns:
+            pd.DataFrame: pageCount が更新された DataFrame
+        """
+        print("pagecount.")
+        cpu_count_value = os.cpu_count()
+        max_workers = min(8, cpu_count_value)
+
+        mask = df["pageCount"] == -1
+        files = df.loc[mask, "save_path"].values
+
+        with ProcessPoolExecutor(max_workers=max_workers) as ex:
+            results = list(
+                tqdm(
+                    ex.map(get_pages, files, chunksize=200),
+                    total=len(files),
+                    desc="Counting pages"
+                )
+            )
+        df.loc[mask, "pageCount"] = results
+        print(f"pageCount status: {df['pageCount'].value_counts(dropna=False).to_dict()}")
+
+        return df
+
+
+    def _step0_ocr_with_gemini(
+        self,
+        merged_updated_file,
+        req_file_path,
+        use_gcp_vm=False,
+        google_ai_studio_api_key_filepath=None,
+        max_concurrency=5,
+        max_api_calls_per_run=1000
+    ):
+        """
+        Gemini APIを使用してPDFからOCR処理を実行
+
+        Args:
+            merged_updated_file: announcements_document_merged_updated.txt のパス
+            req_file_path: 要件文ファイルのパス (req_announcements_document.txt)
+            use_gcp_vm: GCS (gs://) を使用する場合 True
+            google_ai_studio_api_key_filepath: Google AI Studio API key filepath
+            max_concurrency: 並列実行数
+            max_api_calls_per_run: 1回の実行での最大API呼び出し数（デフォルト: 1000）
+
+        Returns:
+            tuple: (df_main, req_file_path) 更新されたメインDataFrameと要件文ファイルパス
+        """
+        print("=" * 60)
+        print("Step0-6: OCR with Gemini")
+        print("=" * 60)
+
+        # API key読み込み
+        if google_ai_studio_api_key_filepath is None:
+            raise ValueError("google_ai_studio_api_key_filepath is required for OCR processing")
+
+        with open(google_ai_studio_api_key_filepath, "r") as f:
+            api_key = f.read().strip()
+
+        client = genai.Client(api_key=api_key)
+
+        # DataFrameを読み込み
+        df_main = pd.read_csv(merged_updated_file, sep="\t", low_memory=False)
+
+        # done列の初期化
+        if "done" not in df_main.columns:
+            df_main["done"] = False
+
+        # 要件文DataFrame初期化
+        req_file_path = Path(req_file_path)
+        if req_file_path.exists():
+            df_req = pd.read_csv(req_file_path, sep="\t", low_memory=False, encoding="utf-8")
+            # done列がなければ追加
+            if "done" not in df_req.columns:
+                df_req["done"] = False
+        else:
+            df_req = pd.DataFrame({
+                "document_id": df_main["document_id"],
+                "資格・条件": "['INIT']",
+                "done": False
+            })
+
+        # df_reqを df_mainの順番に合わせる
+        df_req = df_req.drop_duplicates(subset="document_id", keep="first")
+        df_req_dict = df_req.set_index("document_id").to_dict("index")
+        new_req_data = []
+        for doc_id in df_main["document_id"]:
+            if doc_id in df_req_dict:
+                new_req_data.append(df_req_dict[doc_id])
+            else:
+                new_req_data.append({"資格・条件": "['INIT']", "done": False})
+        df_req = pd.DataFrame(new_req_data)
+        df_req.insert(0, "document_id", df_main["document_id"].values)
+
+        # パラメータリスト作成
+        params = []
+        print("Preparing parameters for Gemini API calls...")
+
+
+        for i, row in tqdm(df_main.iterrows(), total=len(df_main), desc="Checking documents"):
+            if row.get("done") == True:
+                continue
+
+            document_id = row["document_id"]
+
+            # PDFファイルパス確認
+            if use_gcp_vm:
+                pdf_path = f"gs://ann-files/pdf/pdf_{document_id.split('_')[0]}/{document_id}.pdf"
+                pdf_exists = True  # GCSの場合は存在チェックスキップ
+            else:
+                pdf_path = f"output/pdf/pdf_{document_id.split('_')[0]}/{document_id}.pdf"
+                pdf_exists = os.path.exists(pdf_path)
+
+            if not pdf_exists:
+                continue
+
+            # 公告情報抽出用パラメータ
+            params.append([
+                self._PROMPT_ANN,
+                document_id,
+                "pdf",
+                "gemini-2.5-flash",
+                "ann",
+                use_gcp_vm
+            ])
+
+            # 要件文抽出用パラメータ
+            params.append([
+                self._PROMPT_REQ,
+                document_id,
+                "pdf",
+                "gemini-2.5-flash",
+                "req",
+                use_gcp_vm
+            ])
+
+            # 1回の実行での処理数制限チェック
+            if len(params) >= max_api_calls_per_run:
+                print(f"\nReached batch processing limit: {len(params)} calls ({len(params)//2} documents)")
+                print("Remaining documents will be processed in the next run.")
+                break
+
+        print(f"Found {len(params)//2} documents to process ({len(params)} API calls)")
+
+        # 並列実行
+        if len(params) > 0:
+            print(f"Calling Gemini API with max_concurrency={max_concurrency}...")
+            start_time = time.time()
+            results = asyncio.run(self._call_parallel(client, params, max_concurrency))
+            elapsed_time = time.time() - start_time
+            print(f"Gemini API processing completed in {elapsed_time:.2f} seconds")
+
+            # 公告情報結果処理
+            ann_results = [r for r in results if r.get("type") == "ann" and r.get("error") is None]
+
+            if len(ann_results) > 0:
+                records = []
+                for res in tqdm(ann_results, desc="Processing announcement results"):
+                    document_id = res["document_id"]
+                    try:
+                        json_str = res["result"].replace('\n', '').replace('```json', '').replace('```', '')
+                        dict0 = json.loads(json_str)
+                        dict0 = self._convertJson(dict0)
+
+                        record = {
+                            "document_id": document_id,
+                            "workplace": dict0.get("workplace"),
+                            "zipcode": dict0.get("zipcode"),
+                            "address": dict0.get("address"),
+                            "department": dict0.get("department"),
+                            "assigneename": dict0.get("assigneename"),
+                            "telephone": dict0.get("telephone"),
+                            "fax": dict0.get("fax"),
+                            "mail": dict0.get("mail"),
+                            "publishdate": dict0.get("publishdate"),
+                            "bidType": dict0.get("bidType"),
+                            "type": dict0.get("type"),
+                            "category": dict0.get("category"),
+                            "pagecount": dict0.get("pagecount"),
+                            "docdiststart": dict0.get("docdiststart"),
+                            "docdistend": dict0.get("docdistend"),
+                            "submissionstart": dict0.get("submissionstart"),
+                            "submissionend": dict0.get("submissionend"),
+                            "bidstartdate": dict0.get("bidstartdate"),
+                            "bidenddate": dict0.get("bidenddate"),
+                            "done": True
+                        }
+                        records.append(record)
+                    except Exception as e:
+                        tqdm.write(f"Error processing {document_id}: {e}")
+                        records.append({"document_id": document_id, "done": True})
+
+                # DataFrameにマージ
+                df_records = pd.DataFrame(records)
+                df_records = df_records.drop_duplicates(subset="document_id", keep="first")
+
+                df_main = df_main.merge(df_records, on="document_id", how="left", suffixes=("", "_new"))
+
+                # done列の更新
+                df_main["done"] = (df_main["done"] | df_main["done_new"].fillna(False)).astype("boolean")
+                df_main.drop(columns=["done_new"], inplace=True, errors="ignore")
+
+                # その他の列を更新
+                new_cols = [col for col in df_main.columns if col.endswith("_new")]
+                for new_col in new_cols:
+                    original_col = new_col[:-4]
+                    df_main[original_col] = df_main[new_col].fillna(df_main[original_col])
+                    df_main.drop(columns=[new_col], inplace=True)
+
+                print(f"Updated {len(records)} documents with announcement data")
+
+            # 要件文結果処理
+            req_results = [r for r in results if r.get("type") == "req"]
+
+            if len(req_results) > 0:
+                for res in tqdm(req_results, desc="Processing requirement results"):
+                    document_id = res["document_id"]
+                    try:
+                        if res.get("error") is not None:
+                            text2 = str(res["error"])
+                        else:
+                            text2 = res["result"].replace('\n', '').replace('```json', '').replace('```', '')
+
+                        try:
+                            requirement_texts = json.loads(text2)
+                        except json.decoder.JSONDecodeError:
+                            text2 = text2.replace('"', "'")
+                            requirement_texts = json.loads('{"資格・条件" : ["' + text2 + '"]}')
+
+                        if isinstance(requirement_texts, dict) and "資格・条件" in requirement_texts:
+                            dict2 = {
+                                "document_id": document_id,
+                                "資格・条件": str(requirement_texts["資格・条件"])
+                            }
+                        elif isinstance(requirement_texts, str):
+                            dict2 = {
+                                "document_id": document_id,
+                                "資格・条件": requirement_texts
+                            }
+                        else:
+                            dict2 = {
+                                "document_id": document_id,
+                                "資格・条件": "['Error fetching requirements.']"
+                            }
+
+                        # df_reqを更新
+                        df_req.loc[df_req["document_id"] == document_id, "資格・条件"] = dict2["資格・条件"]
+                        df_req.loc[df_req["document_id"] == document_id, "done"] = True
+
+                    except Exception as e:
+                        tqdm.write(f"Error processing requirements for {document_id}: {e}")
+                        df_req.loc[df_req["document_id"] == document_id, "資格・条件"] = "['Error fetching requirements.']"
+                        df_req.loc[df_req["document_id"] == document_id, "done"] = True
+
+                print(f"Updated {len(req_results)} documents with requirement data")
+
+        # ファイル保存
+        df_main.to_csv(merged_updated_file, sep="\t", index=False, encoding="utf-8")
+        print(f"Main OCR results saved to: {merged_updated_file}")
+
+        df_req.to_csv(req_file_path, sep="\t", index=False, encoding="utf-8")
+        df_req.to_csv(str(req_file_path) + ".zip", sep="\t", compression="zip", index=False, encoding="utf-8")
+        print(f"Requirement results saved to: {req_file_path}")
+
+        return df_main, str(req_file_path)
+
+
+    async def _call_parallel(self, client, params, max_concurrency=5):
+        """
+        Gemini APIを並列で呼び出し
+        """
+        queue = asyncio.Queue()
+        results = []
+
+        for p in params:
+            await queue.put(p)
+
+        async def worker():
+            while True:
+                item = await queue.get()
+                if item is None:
+                    break
+
+                prompt, document_id, data_type, model, type2, gcp_vm = item
+
+                for attempt in range(3):
+                    try:
+                        result = await asyncio.to_thread(
+                            self._call_gemini,
+                            client,
+                            prompt,
+                            document_id,
+                            data_type,
+                            model,
+                            gcp_vm
+                        )
+
+                        results.append({
+                            "document_id": document_id,
+                            "result": result,
+                            "error": None,
+                            "type": type2
+                        })
+                        break
+
+                    except Exception as e:
+                        error_code = getattr(e, "code", None)
+                        retry_codes = [429, 500, 502, 503, 504]
+                        if error_code in retry_codes and attempt < 2:
+                            await asyncio.sleep(2 ** (attempt + 1) + random.random())
+                        else:
+                            results.append({
+                                "document_id": document_id,
+                                "result": None,
+                                "error": error_code,
+                                "type": type2
+                            })
+                            break
+
+                queue.task_done()
+
+        workers = [asyncio.create_task(worker()) for _ in range(max_concurrency)]
+
+        await queue.join()
+
+        for _ in workers:
+            await queue.put(None)
+
+        await asyncio.gather(*workers)
+
+        return results
+
+
+    def _call_gemini(self, client, prompt, document_id, data_type, model="gemini-2.5-flash", gcp_vm=True):
+        """
+        Gemini APIを呼び出してPDFを解析
+        """
+        # PDFデータ取得
+        if gcp_vm:
+            from google.cloud import storage
+            storage_client = storage.Client()
+            bucket_name = "ann-files"
+            blob_path = f"pdf/pdf_{document_id.split('_')[0]}/{document_id}.pdf"
+            bucket = storage_client.bucket(bucket_name)
+            blob = bucket.blob(blob_path)
+            data = blob.download_as_bytes()
+        else:
+            pdf_path = f"output/pdf/pdf_{document_id.split('_')[0]}/{document_id}.pdf"
+            with open(pdf_path, "rb") as f:
+                data = f.read()
+
+        # Gemini API呼び出し
+        if data_type == "pdf":
+            response = client.models.generate_content(
+                model=model,
+                contents=[
+                    types.Part.from_bytes(
+                        data=data,
+                        mime_type='application/pdf',
+                    ),
+                    prompt
+                ]
+            )
+        else:
+            raise ValueError(f"Unsupported data_type: {data_type}")
+
+        return response.text
+
+
+    def _convertJson(self, json_value):
+        """
+        Geminiから取得したJSONを整形
+        """
+        def _modifyDate(datestr, handle_same_year=None, handle_same_month=None):
+            try:
+                datestr = datestr.replace(" ", "").replace("　", "")
+                datestr = datestr.replace("令和元年", "令和1年")
+
+                if "同年" in datestr:
+                    datestr = datestr.replace("同年", f"{handle_same_year}年")
+
+                m = re.search(r"同月(\d+)日", datestr)
+                if m and handle_same_month:
+                    y, mth = handle_same_month.split("-")
+                    return f"{y}-{mth}-{int(m.group(1)):02}"
+
+                m = re.search(r"令和(\d+)年(\d+)月(\d+)日", datestr)
+                if m:
+                    return f"{int(m.group(1))+2018:04}-{int(m.group(2)):02}-{int(m.group(3)):02}"
+
+                m = re.search(r"(\d{4})年(\d+)月(\d+)日", datestr)
+                if m:
+                    return f"{int(m.group(1))}-{int(m.group(2)):02}-{int(m.group(3)):02}"
+
+                m = re.search(r"(\d{1,2})年(\d+)月(\d+)日", datestr)
+                if m:
+                    year = int(m.group(1))
+                    if year < 100:
+                        return f"{year+2018:04}-{int(m.group(2)):02}-{int(m.group(3)):02}"
+                    else:
+                        return f"{year}-{int(m.group(2)):02}-{int(m.group(3)):02}"
+
+                m = re.search(r"R(\d+)\.(\d{1,2})\.(\d{1,2})", datestr)
+                if m:
+                    return f"{int(m.group(1))+2018:04}-{int(m.group(2)):02}-{int(m.group(3)):02}"
+
+                m = re.search(r"\b(\d+)\.(\d{1,2})\.(\d{1,2})\b", datestr)
+                if m:
+                    return f"{int(m.group(1))+2018:04}-{int(m.group(2)):02}-{int(m.group(3)):02}"
+
+                m = re.search(r"(\d{4})/(\d{1,2})/(\d{1,2})", datestr)
+                if m:
+                    return f"{int(m.group(1))}-{int(m.group(2)):02}-{int(m.group(3)):02}"
+
+                return datestr
+            except Exception:
+                return None
+
+        def extract_year(s: str) -> str:
+            if not s:
+                return ""
+            try:
+                dt = datetime.strptime(s, "%Y-%m-%d")
+                return str(dt.year)
+            except ValueError:
+                return ""
+
+        def extract_same_year_month(s: str) -> str:
+            if not s:
+                return ""
+            try:
+                dt = datetime.strptime(s, "%Y-%m-%d")
+                return f"{dt.year}-{dt.month:02}"
+            except ValueError:
+                return ""
+
+        new_json = {}
+        new_json["workplace"] = json_value.get("工事場所", None)
+
+        tmp_json = json_value.get("入札手続等担当部局", None)
+        if isinstance(tmp_json, dict):
+            new_json["zipcode"] = tmp_json.get("郵便番号", None)
+            new_json["address"] = tmp_json.get("住所", None)
+            new_json["department"] = tmp_json.get("担当部署名", None)
+            new_json["assigneename"] = tmp_json.get("担当者名", None)
+            new_json["telephone"] = tmp_json.get("電話番号", None)
+            new_json["fax"] = tmp_json.get("FAX番号", None)
+            new_json["mail"] = tmp_json.get("メールアドレス", None)
+
+        tmp_val = json_value.get("公告日", None)
+        if isinstance(tmp_val, str):
+            new_json["publishdate"] = _modifyDate(datestr=tmp_val)
+        else:
+            new_json["publishdate"] = None
+
+        new_json["bidType"] = json_value.get("入札方式", None)
+        new_json["type"] = json_value.get("資料種類", None)
+        new_json["category"] = json_value.get("category", None)
+        new_json["pagecount"] = json_value.get("pagecount", None)
+
+        tmp_json = json_value.get("入札説明書の交付期間", None)
+        if isinstance(tmp_json, dict):
+            new_json["docdiststart"] = _modifyDate(datestr=tmp_json.get("開始日", None))
+            new_json["docdistend"] = _modifyDate(
+                datestr=tmp_json.get("終了日", None),
+                handle_same_year=extract_year(new_json.get("docdiststart")),
+                handle_same_month=extract_same_year_month(new_json.get("docdiststart"))
+            )
+
+        tmp_json = json_value.get("申請書及び競争参加資格確認資料の提出期限", None)
+        if isinstance(tmp_json, dict):
+            new_json["submissionstart"] = _modifyDate(datestr=tmp_json.get("開始日", None))
+            new_json["submissionend"] = _modifyDate(
+                datestr=tmp_json.get("終了日", None),
+                handle_same_year=extract_year(new_json.get("submissionstart")),
+                handle_same_month=extract_same_year_month(new_json.get("submissionstart"))
+            )
+
+        tmp_json = json_value.get("入札書の提出期間", None)
+        if isinstance(tmp_json, dict):
+            new_json["bidstartdate"] = _modifyDate(datestr=tmp_json.get("開始日", None))
+            new_json["bidenddate"] = _modifyDate(
+                datestr=tmp_json.get("終了日", None),
+                handle_same_year=extract_year(new_json.get("bidstartdate")),
+                handle_same_month=extract_same_year_month(new_json.get("bidstartdate"))
+            )
+
+        return new_json
+
+
+    # Gemini プロンプト定義
+    _PROMPT_ANN = """
+Goal: Extract specific information related to construction projects and bidding procedures from the provided context.
+
+Steps (T1 → T2 → T3):
+T1: Thoroughly read and understand the entire context.
+T2: Identify and locate the following fields within the context.  If a field is not present, its value will be "".
+T3: Return the extracted information in a valid JSON format, adhering to the specified rules.
+
+JSON Structure:
+
+```json
+{
+"工事場所": "",
+"入札手続等担当部局": {
+"郵便番号": "",
+"住所": "",
+"担当部署名": "",
+"担当者名": "",
+"電話番号": "",
+"FAX番号": "",
+"メールアドレス": ""
+},
+"公告日" : "",
+"入札方式" : "",
+"資料種類" : "",
+"category" : "",
+"pagecount" : "",
+"入札説明書の交付期間": {
+"開始日": "",
+"終了日": ""
+},
+"申請書及び競争参加資格確認資料の提出期限": {
+"開始日": "",
+"終了日": ""
+},
+"入札書の提出期間": {
+"開始日": "",
+"終了日": ""
+}
+}
+```
+
+Rules:
+1.  **Exact Text:** Use the exact original text from the context for all extracted data.  Do not modify or translate the text.
+1-1. As to the "入札方式" field, please set one from: open_competitive, designated_competitive, negotiated_contract, planning_competition, preferred_designation, open_counter, document_request, opinion_request, unknown, other.
+1-2. As to the "資料種類" field, please set one from: "公募", "一般競争入札", "指名停止措置", "入札公告", "変更公告/注意事項公告/訂正公告/再公告", "中止", "企画競争実施の公示", "企画競争に係る手続開始の公示", "競争参加者の資格に関する公示", "見積書", "見積依頼書", "品目等内訳書", "入札書", "入札結果", "公告結果", "仕様書", "情報提案要求書", "業者の選定", "その他".
+1-3. As to the "category" field, please set one from: '土木一式工事', '建築一式工事', '大工工事', '左官工事', 'とび・土工・コンクリート工事', '石工事', '屋根工事', '電気工事', '管工事', 'タイル・れんが・ブロック工事', '鋼構造物工事', '鉄筋工事', '舗装工事', 'しゅんせつ工事', '板金工事', 'ガラス工事', '塗装工事', '防水工事', '内装仕上工事', '機械器具設置工事', '熱絶縁工事', '電気通信工事', '造園工事', 'さく井工事', '建具工事', '水道施設工事', '消防施設工事', '清掃施設工事', '解体工事', 'その他'.
+2.  **Completeness:**  Extract all requested fields. If a field is not found in the context, represent it with an empty string (`""`). No omissions are allowed.
+3.  **Limited Output:** Only include the specified fields in the JSON output. Do not add any extra information or labels.
+4.  **Hide Steps:** Do not display the internal steps (T1 or T2). Only the final JSON output (T3) should be shown.
+5.  **Prefix Exclusion:** Exclude prefixes like "〒", "TEL", "FAX", and "E-mail:" from the extracted values.
+6.  **Output Language:** The output (field names and extracted text if applicable) should be in Japanese.
+7. **Data Structure:** Maintain the nested structure shown in the JSON Structure above.  "入札手続等担当部局", "入札説明書の交付期間", "申請書及び競争参加資格確認資料の提出期限" and "入札書の提出期間" are objects containing their respective sub-fields.
+"""
+
+    _PROMPT_REQ = """
+# Goal Seek Prompt for Bid Qualification Extraction
+
+[Input]
+→ [Extract bidding qualifications from document]
+→ [Intent](identify, extract, format, maintain original text, output JSON)
+
+[Input]
+→ [User Intent]
+→ [Want or need Intent](accurate extraction, complete requirements, properly formatted JSON, faithful text reproduction)
+
+[抽象化オブジェクト]
+-> Legal Document Parser for Bid Qualifications
+Why
+<User Input>
+I need to automatically extract all bidding and competition participation qualifications/requirements from legal documents and format them in a structured JSON output while preserving the original text exactly.
+</User Input>
+[Fixed User want intent] = Extract and structure bidding qualification requirements from legal documents
+
+Achieve Goal == Need Tasks[Qualification Extraction]=[Tasks](
+Read and comprehend document,
+Identify qualification sections,
+Determine primary qualification headings,
+Extract qualification text blocks,
+Maintain text integrity,
+Handle dependent requirements,
+Format as specified JSON
+)
+
+To Do Task Execute need Prompt And (Text Analysis Tool)
+assign Agent
+LegalDocumentParser
+
+Agent Task Execute Feed back loop:
+1. Read entire document to understand context
+2. Locate all sections related to "competition participation qualifications
+3. Identify primary qualification sections and related subsections
+4. Extract complete text blocks for each qualification item
+5. Preserve original formatting including numbering and indentation
+6. Group dependent requirements together
+7. Structure output in specified JSON format
+8. Verify all qualification requirements are captured
+
+Then Task Complete
+Execute
+====================
+
+### Important Output Instructions
+1. The JSON key name must be exactly "資格・条件" - do not change this key name even if similar terms appear in the document
+2. Preserve the original text of qualifications exactly as they appear in the document, including numbering and formatting
+3. Extract all qualifications completely without omission
+4. Ensure the output is valid JSON format
+
+### Output Format
+```json
+{
+"資格・条件" : [
+"(1) ・・・本文・・・",
+"(2) ・・・本文・・・",
+...
+]
+}
+```
+"""
+
+
     def step0_create_bid_announcements_pre(self, bid_announcements_pre_file=None):
         """
         step0 : 判定前公告表アップロード
@@ -3306,20 +5091,23 @@ class BidJudgementSan:
         # val = db_operator.selectToTable(tablename=tablename)
 
 
-    def step1_transfer_v2(self, announcements_documents_file="source/check_html/use_claude/3_source_formatting/output/announcements_document_202602162218_updated.txt.zip", remove_table=False):
+    def step1_transfer_v2(self, announcements_documents_file=None, remove_table=False):
         """
         step1 : 転写処理
 
         公告マスターが無ければ公告マスターを作成する。要件マスターが無ければ要件マスターを作成する。
 
         引数 remove_table に応じて、事前に公告マスター・要件マスターを削除する。
-        
+
         判定前公告を公告マスターにコピーする。
 
         Args:
 
-        - remove_table=False: 
-        
+        - announcements_documents_file: announcements_document ファイルのパス。
+          Noneの場合は処理をスキップ。
+
+        - remove_table=False:
+
           処理前に、公告マスター・要件マスターを削除するかどうか。
         """
 
@@ -3329,6 +5117,15 @@ class BidJudgementSan:
 
         db_operator = self.db_operator
 
+        # announcements_documents_file が指定されていない場合は警告
+        if announcements_documents_file is None:
+            print("Warning: announcements_documents_file is not specified. Skipping step1_transfer_v2.")
+            return
+
+        # ファイルの存在確認
+        if not Path(announcements_documents_file).exists():
+            print(f"Error: announcements_documents_file not found: {announcements_documents_file}")
+            return
 
         # テーブル 'bid_announcements' の存在確認。
         tmpcheck = db_operator.ifTableExists(tablename=tablename_announcements)
@@ -3348,7 +5145,7 @@ class BidJudgementSan:
             print(fr"ALREADY EXISTS: {tablename_announcements}.")
 
 
-        # 同様に bid_requirements 
+        # 同様に bid_requirements
         # テーブル 'bid_requirements' の存在確認。
         tmpcheck = db_operator.ifTableExists(tablename=tablename_requirements)
 
@@ -3367,25 +5164,65 @@ class BidJudgementSan:
         else:
             print(fr"ALREADY EXISTS: {tablename_requirements}.")
 
+        # announcements_documents ファイルを読み込み
+        print(f"Loading announcements_documents_file: {announcements_documents_file}")
+        df_new = pd.read_csv(announcements_documents_file, sep="\t")
+        print(f"Loaded {len(df_new)} records from announcements_documents_file")
 
+        # announcements_document_table の処理
+        # テーブルの存在確認
+        tmpcheck_document_table = db_operator.ifTableExists(tablename=tablename_bid_announcements_document_table)
 
-        if True:
-            announcements_documents_file = 'source/check_html/use_claude/3_source_formatting/output/announcements_document_202603031408_merged_updated.txt'
-            df_new = pd.read_csv(announcements_documents_file,sep="\t")
-            #df_target = pd.read_csv("source/check_html/use_claude/3_source_formatting/output/announcements_document_202602162218_date_df_target_did.txt", sep="\t")
-            #announcement_ids = df_new.loc[df_new["document_id"].isin(df_target["document_id"]), "announcement_id"]
-            #df_new = df_new[df_new["announcement_id"].isin(announcement_ids)]
-            col = "announcement_id"
-            df_new = df_new[df_new[col] <= 100000]
-            df_new = df_new.reset_index(drop=True)
+        if not tmpcheck_document_table:
+            # テーブルが存在しない場合は新規作成
+            print(f"Creating new table: {tablename_bid_announcements_document_table}")
+            db_operator.uploadDataToTable(data=df_new, tablename=tablename_bid_announcements_document_table, chunksize=5000)
+            print(f"NEWLY CREATED: {tablename_bid_announcements_document_table} with {len(df_new)} records")
         else:
-            df_new = pd.read_csv(announcements_documents_file,sep="\t")
-            df_new.head(6)
-            col = "announcement_id"
-            df_new = df_new[df_new[col] <= 300000]
-        # df_new = df_new[df_new[col] >= 300143]
-        df_new.head(6)
-        db_operator.uploadDataToTable(data=df_new, tablename=tablename_bid_announcements_document_table, chunksize=5000)
+            # テーブルが存在する場合は、一時テーブルを使ってMERGE処理
+            print(f"Table already exists: {tablename_bid_announcements_document_table}")
+            print("Using MERGE to insert only new records...")
+
+            # 一時テーブル名
+            tmp_tablename = f"tmp_{tablename_bid_announcements_document_table}"
+
+            # 一時テーブルにデータをアップロード（既存テーブルがあれば削除して再作成）
+            print(f"Uploading {len(df_new)} records to temporary table: {tmp_tablename}")
+            db_operator.uploadDataToTable(
+                data=df_new,
+                tablename=tmp_tablename,
+                chunksize=5000,
+                if_exists='replace'
+            )
+
+            # MERGE文を実行（announcement_id と document_id で重複チェック）
+            print(f"Executing MERGE statement to insert new records...")
+
+            # 列名を取得（announcement_id, document_id を含む全ての列）
+            columns = df_new.columns.tolist()
+            columns_str = ", ".join(columns)
+            values_str = ", ".join([f"S.{col}" for col in columns])
+
+            # MERGE文を構築
+            merge_sql = f"""
+            MERGE `{db_operator.project_id}.{db_operator.dataset_name}.{tablename_bid_announcements_document_table}` AS T
+            USING `{db_operator.project_id}.{db_operator.dataset_name}.{tmp_tablename}` AS S
+            ON T.announcement_id = S.announcement_id AND T.document_id = S.document_id
+            WHEN NOT MATCHED THEN
+              INSERT ({columns_str})
+              VALUES ({values_str})
+            """
+
+            # MERGE文を実行
+            print(f"Executing MERGE query...")
+            try:
+                query_job = db_operator.client.query(merge_sql)
+                query_job.result()  # 完了を待つ
+                print(f"MERGE completed: {query_job.num_dml_affected_rows} rows inserted")
+            finally:
+                # エラーが発生しても一時テーブルは削除
+                print(f"Dropping temporary table: {tmp_tablename}")
+                db_operator.dropTable(tablename=tmp_tablename)
 
 
         db_operator.transferAnnouncementsV2(
@@ -3835,6 +5672,44 @@ if __name__ == "__main__":
     parser.add_argument("--bigquery_project_id", default=None)
     parser.add_argument("--bigquery_dataset_name", default=None)
 
+    # Step0 関連の引数
+    parser.add_argument("--input_list_file", default=None,
+                       help="リスト_防衛省入札_1.txt のパス（step0_prepare_documentsの入力）")
+    parser.add_argument("--run_step0_prepare_documents", action="store_true",
+                       help="step0_prepare_documents（HTML取得・リンク抽出・フォーマット）を実行")
+    parser.add_argument("--run_step0_only", action="store_true",
+                       help="step0のみ実行して終了（データベース不要でテスト可能）")
+    parser.add_argument("--stop_after_step1", action="store_true",
+                       help="step1まで実行して終了")
+    parser.add_argument("--step0_output_base_dir", default="output",
+                       help="step0の出力ベースディレクトリ（デフォルト: output）")
+    parser.add_argument("--step0_topAgencyName", default="防衛省",
+                       help="トップ機関名（デフォルト: 防衛省）")
+    parser.add_argument("--step0_no_merge", action="store_true",
+                       help="過去の結果とマージしない")
+    parser.add_argument("--step0_timestamp", default=None,
+                       help="既存のタイムスタンプディレクトリを使用（YYYYMMDDHHMM形式）")
+    parser.add_argument("--step0_do_fetch_html", action="store_true",
+                       help="HTML取得処理を実行")
+    parser.add_argument("--step0_do_extract_links", action="store_true",
+                       help="リンク抽出処理を実行")
+    parser.add_argument("--step0_do_format_documents", action="store_true",
+                       help="フォーマット処理を実行")
+    parser.add_argument("--step0_do_download_pdfs", action="store_true",
+                       help="PDFダウンロード処理を実行")
+    parser.add_argument("--step0_do_count_pages", action="store_true",
+                       help="ページ数カウント処理を実行")
+    parser.add_argument("--step0_do_ocr", action="store_true",
+                       help="Gemini OCR処理を実行")
+    parser.add_argument("--step0_google_api_key", default="data/sec/google_ai_studio_api_key_mizu.txt",
+                       help="Google AI Studio API キーファイルのパス")
+    parser.add_argument("--step0_ocr_max_concurrency", type=int, default=5,
+                       help="OCR並列実行数")
+    parser.add_argument("--step0_ocr_max_api_calls_per_run", type=int, default=1000,
+                       help="1回の実行での最大API呼び出し数")
+    parser.add_argument("--announcements_documents_file", default=None,
+                       help="announcements_document ファイルのパス（step1_transfer_v2で使用）")
+
     parser.add_argument("--step1_transfer_remove_table", action="store_true")
     parser.add_argument("--step3_remove_table", action="store_true")
 
@@ -3852,6 +5727,26 @@ if __name__ == "__main__":
         bigquery_project_id = args.bigquery_project_id
         bigquery_dataset_name = args.bigquery_dataset_name
 
+        # Step0 関連の引数
+        input_list_file = args.input_list_file
+        run_step0_prepare_documents = args.run_step0_prepare_documents
+        run_step0_only = args.run_step0_only
+        stop_after_step1 = args.stop_after_step1
+        step0_output_base_dir = args.step0_output_base_dir
+        step0_topAgencyName = args.step0_topAgencyName
+        step0_no_merge = args.step0_no_merge
+        step0_timestamp = args.step0_timestamp
+        step0_do_fetch_html = args.step0_do_fetch_html
+        step0_do_extract_links = args.step0_do_extract_links
+        step0_do_format_documents = args.step0_do_format_documents
+        step0_do_download_pdfs = args.step0_do_download_pdfs
+        step0_do_count_pages = args.step0_do_count_pages
+        step0_do_ocr = args.step0_do_ocr
+        step0_google_api_key = args.step0_google_api_key
+        step0_ocr_max_concurrency = args.step0_ocr_max_concurrency
+        step0_ocr_max_api_calls_per_run = args.step0_ocr_max_api_calls_per_run
+        announcements_documents_file = args.announcements_documents_file
+
         step1_transfer_remove_table = args.step1_transfer_remove_table
         step3_remove_table = args.step3_remove_table
 
@@ -3861,6 +5756,20 @@ if __name__ == "__main__":
         use_bigquery = False
         stop_processing = True
 
+        input_list_file = None
+        run_step0_prepare_documents = False
+        run_step0_only = False
+        step0_output_base_dir = "output"
+        step0_topAgencyName = "防衛省"
+        step0_no_merge = False
+        step0_timestamp = None
+        step0_do_fetch_html = False
+        step0_do_extract_links = False
+        step0_do_format_documents = False
+        step0_do_download_pdfs = False
+        step0_do_count_pages = False
+        announcements_documents_file = None
+
         step1_transfer_remove_table = False
         step3_remove_table = False
 
@@ -3869,10 +5778,46 @@ if __name__ == "__main__":
         bid_announcements_pre_file = "data/bid_announcements_pre/bid_announcements_pre_1.txt"
         print(fr"Set bid_announcements_pre_file = {bid_announcements_pre_file}")
 
+    # Step0のみ実行モード（データベース不要）
+    if run_step0_only:
+        if input_list_file is None:
+            print("Error: --input_list_file is required when --run_step0_only is specified")
+            exit(1)
+
+        # db_operatorなしでオブジェクト作成（step0のみ使用）
+        obj = BidJudgementSan(
+            bid_announcements_pre_file=bid_announcements_pre_file,
+            tablenamesconfig=TablenamesConfig,
+            db_operator=None
+        )
+
+        # Step0のみ実行
+        announcements_documents_file = obj.step0_prepare_documents(
+            input_list_file=input_list_file,
+            output_base_dir=step0_output_base_dir,
+            timestamp=step0_timestamp,
+            topAgencyName=step0_topAgencyName,
+            no_merge=step0_no_merge,
+            use_gcp_vm=use_gcp_vm,
+            do_fetch_html=step0_do_fetch_html,
+            do_extract_links=step0_do_extract_links,
+            do_format_documents=step0_do_format_documents,
+            do_download_pdfs=step0_do_download_pdfs,
+            do_count_pages=step0_do_count_pages,
+            do_ocr=step0_do_ocr,
+            google_ai_studio_api_key_filepath=step0_google_api_key,
+            ocr_max_concurrency=step0_ocr_max_concurrency,
+            ocr_max_api_calls_per_run=step0_ocr_max_api_calls_per_run
+        )
+        print(f"\nGenerated announcements_documents_file: {announcements_documents_file}")
+        print("\n--run_step0_only specified. Exiting after step0.")
+        exit(0)
+
+    # 通常モード：データベース必要
     if use_gcp_vm:
         db_operator = DBOperatorGCPVM(
-            bigquery_location=bigquery_location, 
-            bigquery_project_id=bigquery_project_id, 
+            bigquery_location=bigquery_location,
+            bigquery_project_id=bigquery_project_id,
             bigquery_dataset_name=bigquery_dataset_name
         )
     else:
@@ -3881,19 +5826,53 @@ if __name__ == "__main__":
         )
 
     obj = BidJudgementSan(
-        bid_announcements_pre_file=bid_announcements_pre_file, 
-        tablenamesconfig=TablenamesConfig, 
+        bid_announcements_pre_file=bid_announcements_pre_file,
+        tablenamesconfig=TablenamesConfig,
         db_operator=db_operator
     )
 
     if stop_processing:
         exit(1)
 
+    # Step0: 公告ドキュメント準備処理（オプション）
+    if run_step0_prepare_documents:
+        if input_list_file is None:
+            print("Error: --input_list_file is required when --run_step0_prepare_documents is specified")
+            exit(1)
+
+        announcements_documents_file = obj.step0_prepare_documents(
+            input_list_file=input_list_file,
+            output_base_dir=step0_output_base_dir,
+            timestamp=step0_timestamp,
+            topAgencyName=step0_topAgencyName,
+            no_merge=step0_no_merge,
+            use_gcp_vm=use_gcp_vm,
+            do_fetch_html=step0_do_fetch_html,
+            do_extract_links=step0_do_extract_links,
+            do_format_documents=step0_do_format_documents,
+            do_download_pdfs=step0_do_download_pdfs,
+            do_count_pages=step0_do_count_pages,
+            do_ocr=step0_do_ocr,
+            google_ai_studio_api_key_filepath=step0_google_api_key,
+            ocr_max_concurrency=step0_ocr_max_concurrency,
+            ocr_max_api_calls_per_run=step0_ocr_max_api_calls_per_run
+        )
+        print(f"\nGenerated announcements_documents_file: {announcements_documents_file}")
+
     # obj.step0_create_bid_announcements_pre(bid_announcements_pre_file=bid_announcements_pre_file)
     # obj.step1_transfer(remove_table=step1_transfer_remove_table)
-    obj.step1_transfer_v2(remove_table=step1_transfer_remove_table)
+    obj.step1_transfer_v2(
+        announcements_documents_file=announcements_documents_file,
+        remove_table=step1_transfer_remove_table
+    )
+
+    # step1で止まる場合
+    if stop_after_step1:
+        print("\n--stop_after_step1 specified. Exiting after step1.")
+        exit(0)
+
     obj.step2_ocr(
-        ocr_utils = OCRutils(google_ai_studio_api_key_filepath=google_ai_studio_api_key_filepath), 
+        ocr_utils = OCRutils(google_ai_studio_api_key_filepath=google_ai_studio_api_key_filepath),
         condition_doneOCR=condition_doneOCR
     )
     obj.step3(remove_table=step3_remove_table)
