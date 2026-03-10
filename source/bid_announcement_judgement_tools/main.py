@@ -3634,7 +3634,7 @@ class BidJudgementSan:
         # TinyURL展開処理
         def expand_tinyurl(url):
             if isinstance(url, str) and url.startswith("https://tinyurl"):
-                time.sleep(1)
+                time.sleep(0.2)
                 try:
                     r = requests.get(url, allow_redirects=True, timeout=5)
                     if r.url.startswith("https://tinyurl"):
