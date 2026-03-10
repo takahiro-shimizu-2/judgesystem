@@ -783,7 +783,7 @@ if __name__ == "__main__":
         cpu_count_value = os.cpu_count()
         max_workers = min(8, cpu_count_value)
 
-        mask = df["pageCount"] == -1
+        mask = df["pagecount"] == -1
         files = df.loc[mask, "save_path"].values
         with ProcessPoolExecutor(max_workers=max_workers) as ex:
             results = list(
@@ -792,8 +792,8 @@ if __name__ == "__main__":
                     total=len(files)
                 )
             )
-        df.loc[mask, "pageCount"] = results
-        df["pageCount"].value_counts(dropna=False)
+        df.loc[mask, "pagecount"] = results
+        df["pagecount"].value_counts(dropna=False)
 
     if do_output:
         # ord <- baseinfo[,c("Unnamed..0" ,"Unnamed..1","入札公告.現在募集中.2")]
