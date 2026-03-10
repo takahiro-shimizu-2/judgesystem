@@ -411,7 +411,7 @@ if __name__ == "__main__":
     df_new = pd.DataFrame({
         "announcement_id": df_merged["announcement_id"],
         "document_id":     df_merged["document_id"],
-        "type":            [None]*df_merged.shape[0],
+        "type":            [None]*df_merged.shape[0], # 仕様書 etc
         "title":           df_merged["link_text"],
         "fileFormat":      ext.fillna(""),
         "pageCount":       np.where(ext == "pdf", -1, -2),
@@ -427,9 +427,26 @@ if __name__ == "__main__":
         "pdf_is_saved_date":[None]*df_merged.shape[0],
         "orderer_id":[None]*df_merged.shape[0],
         "topAgencyName":[None]*df_merged.shape[0],
-        "category":[None]*df_merged.shape[0],
-        "bidType":[None]*df_merged.shape[0]
+        "category":[None]*df_merged.shape[0], # 工事種別
+        "bidType":[None]*df_merged.shape[0], # open_competitive, etc
+        "workplace": [None]*df_merged.shape[0], 
+        "zipcode": [None]*df_merged.shape[0],
+        "address": [None]*df_merged.shape[0],
+        "department": [None]*df_merged.shape[0],
+        "assigneename": [None]*df_merged.shape[0],
+        "telephone": [None]*df_merged.shape[0],
+        "fax": [None]*df_merged.shape[0],
+        "mail": [None]*df_merged.shape[0],
+        "publishdate": [None]*df_merged.shape[0],
+        "docdiststart": [None]*df_merged.shape[0],
+        "docdistend": [None]*df_merged.shape[0],
+        "submissionstart": [None]*df_merged.shape[0],
+        "submissionend": [None]*df_merged.shape[0],
+        "bidstartdate": [None]*df_merged.shape[0],
+        "bidenddate": [None]*df_merged.shape[0],
+        "done": [False]*df_merged.shape[0]
     })
+
 
     #df_new.shape
     #df_new["fileFormat"].value_counts().reset_index(name="count")
