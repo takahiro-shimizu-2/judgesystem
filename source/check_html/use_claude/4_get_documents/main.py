@@ -522,14 +522,22 @@ if __name__ == "__main__":
         # 最新のディレクトリを取得（ディレクトリ名でソート）
         latest_dir = sorted(all_dirs, reverse=True)[0]
 
-        # そのディレクトリ内の*_merged.txtを優先的に探す
-        pattern_merged = "announcements_document_*_merged.txt"
-        matching_files = sorted(latest_dir.glob(pattern_merged), key=lambda p: p.stat().st_mtime, reverse=True)
+        # そのディレクトリ内のファイルを優先順位で探す
+        # 優先順位1: _merged_updated.txt
+        pattern_merged_updated = "announcements_document_*_merged_updated.txt"
+        matching_files = sorted(latest_dir.glob(pattern_merged_updated), key=lambda p: p.stat().st_mtime, reverse=True)
 
         if not matching_files:
-            # _merged.txt がなければ announcements_document_*.txt を探す
+            # 優先順位2: _merged.txt
+            pattern_merged = "announcements_document_*_merged.txt"
+            matching_files = sorted(latest_dir.glob(pattern_merged), key=lambda p: p.stat().st_mtime, reverse=True)
+
+        if not matching_files:
+            # 優先順位3: その他の announcements_document_*.txt
             pattern = "announcements_document_*.txt"
             matching_files = sorted(latest_dir.glob(pattern), key=lambda p: p.stat().st_mtime, reverse=True)
+            # _merged.txt と _merged_updated.txt を除外
+            matching_files = [f for f in matching_files if not (f.name.endswith("_merged.txt") or f.name.endswith("_merged_updated.txt"))]
 
         if not matching_files:
             raise FileNotFoundError(f"No announcements_document file found in {latest_dir}")
@@ -539,8 +547,8 @@ if __name__ == "__main__":
     else:
         input_file1 = args.input_file1
 
-    base, ext = os.path.splitext(input_file1)
-    output_file1 = base + "_updated" + ext
+    # 出力ファイルは入力ファイルと同じ（上書き）
+    output_file1 = input_file1
     type_df_output_file = input_file1.replace(".txt","_type_df.txt")
     date_df_output_file = input_file1.replace(".txt","_date_df.txt")
 
