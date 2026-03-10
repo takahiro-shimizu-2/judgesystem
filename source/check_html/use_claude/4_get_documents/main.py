@@ -641,8 +641,8 @@ if __name__ == "__main__":
                 if len(parts) >= 5:
                     dir_key = "/".join(parts[:5]) + "/"
                     if dir_key not in file_cache:
-                        # Print with \r to overwrite same line and avoid flooding tqdm progress
-                        print(f"Loading file list for: {dir_key}", end='\r', flush=True)
+                        # Use tqdm.write to avoid breaking progress bar
+                        tqdm.write(f"Loading file list for: {dir_key}")
                         file_cache[dir_key] = list_gcs_files_in_prefix(dir_key)
                     df.loc[i,"pdf_is_saved"] = p in file_cache[dir_key]
                 else:
@@ -687,7 +687,7 @@ if __name__ == "__main__":
 
             for skipurl in pdf_requests_skip_urls:
                 if pdfurl.startswith(skipurl):
-                    print(fr"Skip url: {skipurl}...")
+                    tqdm.write(fr"Skip url: {skipurl}...")
                     continue
 
             if pdfurl is not None and not pdfurl.startswith("https://tinyurl"):
@@ -703,23 +703,23 @@ if __name__ == "__main__":
                     })
                     response.raise_for_status()
                 except requests.exceptions.HTTPError as e:
-                    print(f"HTTP エラー: {pdfurl} -> {e}")
+                    tqdm.write(f"HTTP エラー: {pdfurl} -> {e}")
                     time.sleep(SLEEP_ON_HTTP_ERROR)
                     continue
                 except requests.exceptions.RequestException as e:
-                    print(f"通信エラー: {pdfurl} -> {e}")
+                    tqdm.write(f"通信エラー: {pdfurl} -> {e}")
                     time.sleep(SLEEP_ON_REQUEST_ERROR)
                     continue
 
                 try:
                     if gcp_vm and save_path.startswith("gs://"):
                         gcs_upload_from_bytes(save_path, response.content)
-                        print(fr"Saved {save_path}.")
+                        tqdm.write(fr"Saved {save_path}.")
                     else:
                         Path(save_path).write_bytes(response.content)
-                        print(fr"Saved {save_path}.")
+                        tqdm.write(fr"Saved {save_path}.")
                 except Exception as e:
-                    print(e)
+                    tqdm.write(str(e))
 
                 # Sleep after successful request to avoid overwhelming servers
                 time.sleep(SLEEP_AFTER_REQUEST)
@@ -744,8 +744,8 @@ if __name__ == "__main__":
 
                     # キャッシュにない場合はディレクトリ内のファイル一覧を取得
                     if dir_key not in file_cache:
-                        # Print with \r to overwrite same line and avoid flooding tqdm progress
-                        print(f"Loading file list for: {dir_key}", end='\r', flush=True)
+                        # Use tqdm.write to avoid breaking progress bar
+                        tqdm.write(f"Loading file list for: {dir_key}")
                         file_cache[dir_key] = list_gcs_files_in_prefix(dir_key)
 
                     # キャッシュされたセットでO(1)検索
