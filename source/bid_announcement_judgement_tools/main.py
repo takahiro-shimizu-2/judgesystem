@@ -3510,16 +3510,22 @@ class BidJudgementSan:
         step_num = 0
 
         # 1. HTML取得処理
+        input_list2_file = output_dir_html_list / "input_list_converted.txt"
         if do_fetch_html:
-            step_num += 1
-            print(f"\n[{step_num}/{total_steps}] Fetching HTML pages...")
-            input_list2_path = self._step0_convert_input_list(input_list_file, output_dir_html_list)
-            self._step0_fetch_html_pages(input_list2_path, output_dir_html_DL, topAgencyName)
+            if input_list2_file.exists():
+                print(f"\n[Skipped] Fetching HTML pages (do_fetch_html=True but reuse existing {input_list2_file})")
+                input_list2_path = str(input_list2_file)
+            else:
+                step_num += 1
+                print(f"\n[{step_num}/{total_steps}] Fetching HTML pages...")
+                input_list2_path = self._step0_convert_input_list(input_list_file, output_dir_html_list)
+                self._step0_fetch_html_pages(input_list2_path, output_dir_html_DL, topAgencyName)
         else:
             print("\n[Skipped] Fetching HTML pages (using existing files)...")
-            input_list2_path = output_dir_html_list / "input_list_converted.txt"
+            input_list2_path = input_list2_file
             if not Path(input_list2_path).exists():
                 raise FileNotFoundError(f"Required file not found: {input_list2_path}")
+            input_list2_path = str(input_list2_path)
 
         # 2. リンク抽出処理
         if do_extract_links:
