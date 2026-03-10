@@ -619,6 +619,46 @@ if __name__ == "__main__":
             except requests.RequestException:
                 return False
 
+    # do_url_requests の前に pdf_is_saved をチェック
+    if do_url_requests:
+        print("Check pdf_is_saved (before url_requests).")
+
+        file_cache = {}
+
+        for i, row in tqdm(df.iterrows(), total=len(df)):
+            p = row["save_path"]
+            if p is None or pd.isna(p):
+                df.loc[i,"pdf_is_saved"] = False
+                continue
+
+            if gcp_vm and p.startswith("gs://"):
+                # GCSパスからディレクトリ部分を抽出
+                parts = p.split("/")
+                if len(parts) >= 5:
+                    dir_key = "/".join(parts[:5]) + "/"
+                    if dir_key not in file_cache:
+                        print(f"Loading file list for: {dir_key}")
+                        file_cache[dir_key] = list_gcs_files_in_prefix(dir_key)
+                    df.loc[i,"pdf_is_saved"] = p in file_cache[dir_key]
+                else:
+                    df.loc[i,"pdf_is_saved"] = gcs_exists(p)
+            else:
+                # ローカルパス
+                p_normalized = os.path.normpath(p)
+                dir_key = os.path.dirname(p_normalized)
+                if dir_key not in file_cache:
+                    if os.path.exists(dir_key):
+                        file_cache[dir_key] = {
+                            os.path.join(dir_key, f)
+                            for f in os.listdir(dir_key)
+                            if os.path.isfile(os.path.join(dir_key, f))
+                        }
+                    else:
+                        file_cache[dir_key] = set()
+                df.loc[i,"pdf_is_saved"] = p_normalized in file_cache[dir_key]
+
+        print(f"pdf_is_saved status: {df['pdf_is_saved'].value_counts(dropna=False).to_dict()}")
+
     # pdf 保存処理
     if do_url_requests:
         print("Save pdf by requests.")
@@ -631,27 +671,14 @@ if __name__ == "__main__":
             if pdfurl is None:
                 continue
 
-            # Skip if already attempted download
-            if pd.notna(df.loc[i,"pdf_is_saved_date"]):
+            # Skip if file already exists
+            if df.loc[i,"pdf_is_saved"] == True:
                 continue
 
-            # GCS or local path handling
-            if gcp_vm and save_path.startswith("gs://"):
-                # GCS path
-                if gcs_exists(save_path):
-                    if pd.isna(df.loc[i,"pdf_is_saved_date"]):
-                        df.loc[i,"pdf_is_saved_date"] = today_str
-                    continue
-            else:
-                # Local path
-                save_path_dirname = os.path.dirname(save_path)
-                if not os.path.exists(save_path_dirname):
-                    os.makedirs(save_path_dirname, exist_ok=True)
-
-                if os.path.exists(save_path):
-                    if pd.isna(df.loc[i,"pdf_is_saved_date"]):
-                        df.loc[i,"pdf_is_saved_date"] = today_str
-                    continue
+            # ディレクトリが存在しない場合は作成
+            save_path_dirname = os.path.dirname(save_path)
+            if not gcp_vm and not os.path.exists(save_path_dirname):
+                os.makedirs(save_path_dirname, exist_ok=True)
 
             for skipurl in pdf_requests_skip_urls:
                 if pdfurl.startswith(skipurl):
