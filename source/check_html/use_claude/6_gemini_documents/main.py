@@ -1000,7 +1000,7 @@ if __name__ == "__main__":
     df_new_path = input_timestamp_dir / f"announcements_document_{timestamp}_merged_updated.txt"
     if not df_new_path.exists():
         df_new_path = input_timestamp_dir / f"announcements_document_{timestamp}_merged.txt"
-    df_new = pd.read_csv(df_new_path, sep="\t")
+    df_new = pd.read_csv(df_new_path, sep="\t", low_memory=False)
 
     # df_newに必要な列がない場合は初期化
     if "done" not in df_new.columns:
@@ -1021,40 +1021,28 @@ if __name__ == "__main__":
         # 保存
         df_req.to_csv(output_path_req, sep="\t", index=False, encoding="utf-8")
 
-    if not df_ann["document_id"].equals(df_req["document_id"]):
-        raise ValueError("The document_id columns in df_ann and df_req are not identical.")
-
     ##########################################
-    # 新しい document_id を追加する。
-    new_ids = df_new[~df_new["document_id"].isin(df_ann["document_id"])]
-    new_ids = new_ids.reset_index(drop=True)
+    # df_reqに新しい document_id を追加する（df_newの順番に合わせる）
+    # df_newの順番でdf_reqを再構築
+    # document_idの重複は拡張子の違いで起こるはず。pdfではないならOCRしないのでdocument_idは一つ保持でよい。(ただし単純な列方向の参照はできない)
+    df_req = df_req.drop_duplicates(subset="document_id", keep="first")
+    df_req_dict = df_req.set_index("document_id").to_dict("index")
 
-    rows_ann = pd.DataFrame({
-        col: [None] * len(new_ids)
-        for col in df_ann.columns
-    })
-    rows_ann["document_id"] = new_ids["document_id"]
-    rows_ann["url"] = new_ids["url"]
-    if "done" in rows_ann.columns:
-        rows_ann["done"] = False
-    df_ann = pd.concat([df_ann, rows_ann], ignore_index=True)
-    df_ann = df_ann.sort_values("document_id")
+    new_req_data = []
+    for doc_id in df_new["document_id"]:
+        if doc_id in df_req_dict:
+            new_req_data.append(df_req_dict[doc_id])
+        else:
+            # 新しいdocument_idの場合
+            new_req_data.append({"資格・条件": "['INIT']"})
 
-    new_ids = df_new[~df_new["document_id"].isin(df_req["document_id"])]
-    new_ids = new_ids.reset_index(drop=True)
+    df_req = pd.DataFrame(new_req_data)
+    df_req.insert(0, "document_id", df_new["document_id"].values)
 
-    rows_req = pd.DataFrame({
-        col: [None] * len(new_ids)
-        for col in df_req.columns
-    })
-    rows_req["document_id"] = new_ids["document_id"]
-    df_req = pd.concat([df_req, rows_req], ignore_index=True)
-    df_req = df_req.sort_values("document_id")
-    df_req["document_id"].reset_index(drop=True).equals(df_new["document_id"].reset_index(drop=True))
+    # df_newとdf_reqが同じdocument_idを持っているか確認（順序は問わない）
+    if set(df_new["document_id"]) != set(df_req["document_id"]):
+        raise ValueError("The document_id sets in df_new and df_req are not identical.")
     ##########################################
-
-    if not df_ann["document_id"].equals(df_req["document_id"]):
-        raise ValueError("The document_id columns in df_ann and df_req are not identical.")
     
     if stop_processing:
         exit(1)
@@ -1611,7 +1599,7 @@ if __name__ == "__main__":
         df_new = df_new.merge(df_records, on="document_id", how="left", suffixes=("", "_new"))
 
         # 更新された行を判定（元がTrueなら維持、done_newがTrueなら更新）
-        df_new["done"] = (df_new["done"] | df_new["done_new"].fillna(False)).astype("boolean")
+        df_new["done"] = (df_new["done"] | df_new["done_new"].fillna(False)).infer_objects(copy=False).astype("boolean")
         # df_new["done"].value_counts()
 
         # 不要になった列を削除
@@ -1622,7 +1610,7 @@ if __name__ == "__main__":
         new_cols = [col for col in df_new.columns if col.endswith("_new")]
         for new_col in new_cols:
             original_col = new_col[:-4]  # "_new" を除去
-            df_new[original_col] = df_new[new_col].fillna(df_new[original_col])
+            df_new[original_col] = df_new[new_col].fillna(df_new[original_col]).infer_objects(copy=False)
             df_new.drop(columns=[new_col], inplace=True)
 
 

@@ -414,7 +414,7 @@ if __name__ == "__main__":
         "type":            [None]*df_merged.shape[0], # 仕様書 etc
         "title":           df_merged["link_text"],
         "fileFormat":      ext.fillna(""),
-        "pageCount":       np.where(ext == "pdf", -1, -2),
+        "pagecount":       np.where(ext == "pdf", -1, -2),
         "extractedAt":     [args.extracted_at]*df_merged.shape[0],
         "url":             df_merged["pdf_full_url"],
         "content":         ["dummy"]*df_merged.shape[0],
