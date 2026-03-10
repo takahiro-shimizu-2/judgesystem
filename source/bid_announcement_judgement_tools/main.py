@@ -3544,7 +3544,8 @@ class BidJudgementSan:
                 timestamp,
                 extracted_at,
                 base_digits,
-                no_merge
+                no_merge,
+                topAgencyName
             )
         else:
             print("\n[Skipped] Formatting documents (using existing file)...")
@@ -3920,7 +3921,8 @@ class BidJudgementSan:
         timestamp,
         extracted_at,
         base_digits,
-        no_merge
+        no_merge,
+        topAgencyName
     ):
         """
         ドキュメント情報をフォーマットし、最終的なファイルを生成
@@ -3934,6 +3936,7 @@ class BidJudgementSan:
             extracted_at: 抽出日
             base_digits: グルーピング桁数
             no_merge: マージ無効フラグ
+            topAgencyName: トップ機関名
 
         Returns:
             str: 生成された announcements_document_merged_updated.txt のパス
