@@ -3679,8 +3679,8 @@ class BidJudgementSan:
         """
         df = pd.read_csv(input_list_file, sep="\t")
 
-        # 落札情報（過去）2列を使用
-        target_column = "落札情報（過去）2" if "落札情報（過去）2" in df.columns else "落札情報（過去）"
+        # 入札公告（現在募集中）2列を使用
+        target_column = "入札公告（現在募集中）2" if "入札公告（現在募集中）2" in df.columns else "入札公告（現在募集中）"
 
         fetch_count = 0
         skip_count = 0
