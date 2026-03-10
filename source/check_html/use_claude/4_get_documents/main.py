@@ -42,6 +42,10 @@ new_path = r"C:\Program Files\Tesseract-OCR"
 if 'PATH' in os.environ:
     os.environ['PATH'] = new_path + os.pathsep + os.environ['PATH']
 
+# Sleep time parameters to avoid overwhelming servers
+SLEEP_AFTER_REQUEST = 0.4   # Sleep after successful PDF download
+SLEEP_ON_HTTP_ERROR = 0.4   # Sleep after HTTP error
+SLEEP_ON_REQUEST_ERROR = 0.4  # Sleep after request exception
 
 # GCS helper functions
 def parse_gcs_path(gcs_path):
@@ -637,7 +641,8 @@ if __name__ == "__main__":
                 if len(parts) >= 5:
                     dir_key = "/".join(parts[:5]) + "/"
                     if dir_key not in file_cache:
-                        print(f"Loading file list for: {dir_key}")
+                        # Print with \r to overwrite same line and avoid flooding tqdm progress
+                        print(f"Loading file list for: {dir_key}", end='\r', flush=True)
                         file_cache[dir_key] = list_gcs_files_in_prefix(dir_key)
                     df.loc[i,"pdf_is_saved"] = p in file_cache[dir_key]
                 else:
@@ -690,7 +695,6 @@ if __name__ == "__main__":
 
                 try:
                     # PDF をダウンロード
-                    time.sleep(0.7)
                     response = requests.get(pdfurl, headers = {
                         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.5993.90 Safari/537.36",
                         "Accept-Language": "ja,en-US;q=0.9,en;q=0.8",
@@ -700,11 +704,11 @@ if __name__ == "__main__":
                     response.raise_for_status()
                 except requests.exceptions.HTTPError as e:
                     print(f"HTTP エラー: {pdfurl} -> {e}")
-                    time.sleep(1)
+                    time.sleep(SLEEP_ON_HTTP_ERROR)
                     continue
                 except requests.exceptions.RequestException as e:
                     print(f"通信エラー: {pdfurl} -> {e}")
-                    time.sleep(1)
+                    time.sleep(SLEEP_ON_REQUEST_ERROR)
                     continue
 
                 try:
@@ -716,6 +720,9 @@ if __name__ == "__main__":
                         print(fr"Saved {save_path}.")
                 except Exception as e:
                     print(e)
+
+                # Sleep after successful request to avoid overwhelming servers
+                time.sleep(SLEEP_AFTER_REQUEST)
 
     if do_pdf_is_saved:
         print("Check pdf_is_saved.")
@@ -737,7 +744,8 @@ if __name__ == "__main__":
 
                     # キャッシュにない場合はディレクトリ内のファイル一覧を取得
                     if dir_key not in file_cache:
-                        print(f"Loading file list for: {dir_key}")
+                        # Print with \r to overwrite same line and avoid flooding tqdm progress
+                        print(f"Loading file list for: {dir_key}", end='\r', flush=True)
                         file_cache[dir_key] = list_gcs_files_in_prefix(dir_key)
 
                     # キャッシュされたセットでO(1)検索
