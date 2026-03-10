@@ -5194,8 +5194,7 @@ Execute
             db_operator.uploadDataToTable(
                 data=df_new,
                 tablename=tmp_tablename,
-                chunksize=5000,
-                if_exists='replace'
+                chunksize=5000
             )
 
             # MERGE文を実行（announcement_id と document_id で重複チェック）
