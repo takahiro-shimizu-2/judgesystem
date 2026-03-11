@@ -4511,13 +4511,19 @@ class BidJudgementSan:
             print(f"Gemini API processing completed in {elapsed_time:.2f} seconds")
 
             # 公告情報結果処理
-            ann_results = [r for r in results if r.get("type") == "ann" and r.get("error") is None]
+            ann_results = [r for r in results if r.get("type") == "ann"]
 
             if len(ann_results) > 0:
                 records = []
                 for res in tqdm(ann_results, desc="Processing announcement results"):
                     document_id = res["document_id"]
                     try:
+                        # エラーチェック
+                        if res.get("error") is not None:
+                            tqdm.write(f"API error for {document_id}: {res.get('error')}")
+                            records.append({"document_id": document_id, "done": True})
+                            continue
+
                         json_str = res["result"].replace('\n', '').replace('```json', '').replace('```', '')
                         dict0 = json.loads(json_str)
                         dict0 = self._convertJson(dict0)
