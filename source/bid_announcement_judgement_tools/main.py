@@ -4524,13 +4524,17 @@ class BidJudgementSan:
 
             # 1回の実行での処理数制限チェック
             if len(params) >= max_api_calls_per_run:
+                ann_calls = len([p for p in params if p[4] == "ann"])
+                req_calls = len([p for p in params if p[4] == "req"])
                 unique_docs = len({p[1] for p in params})
-                print(f"\nReached batch processing limit: {len(params)} calls ({unique_docs} documents)")
+                print(f"\nReached batch processing limit: {len(params)} API calls for {unique_docs} documents (ann: {ann_calls}, req: {req_calls})")
                 print("Remaining documents will be processed in the next run.")
                 break
 
+        ann_calls_total = len([p for p in params if p[4] == "ann"])
+        req_calls_total = len([p for p in params if p[4] == "req"])
         unique_docs_total = len({p[1] for p in params})
-        print(f"Found {unique_docs_total} documents to process ({len(params)} API calls)")
+        print(f"Found {len(params)} API calls for {unique_docs_total} documents (ann: {ann_calls_total}, req: {req_calls_total})")
 
         # 並列実行
         if len(params) > 0:
