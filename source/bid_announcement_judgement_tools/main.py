@@ -4582,11 +4582,16 @@ class BidJudgementSan:
 
             # 要件文結果処理
             req_results = [r for r in results if r.get("type") == "req"]
-            req_done_updates = 0
+            req_records = []
 
             if len(req_results) > 0:
                 for res in tqdm(req_results, desc="Processing requirement results"):
                     document_id = res["document_id"]
+                    record = {
+                        "document_id": document_id,
+                        "資格・条件": "['Error fetching requirements.']",
+                        "done": True
+                    }
                     try:
                         if res.get("error") is not None:
                             text2 = str(res["error"])
@@ -4600,34 +4605,33 @@ class BidJudgementSan:
                             requirement_texts = json.loads('{"資格・条件" : ["' + text2 + '"]}')
 
                         if isinstance(requirement_texts, dict) and "資格・条件" in requirement_texts:
-                            dict2 = {
-                                "document_id": document_id,
-                                "資格・条件": str(requirement_texts["資格・条件"])
-                            }
+                            record["資格・条件"] = str(requirement_texts["資格・条件"])
                         elif isinstance(requirement_texts, str):
-                            dict2 = {
-                                "document_id": document_id,
-                                "資格・条件": requirement_texts
-                            }
+                            record["資格・条件"] = requirement_texts
                         else:
-                            dict2 = {
-                                "document_id": document_id,
-                                "資格・条件": "['Error fetching requirements.']"
-                            }
-
-                        # df_reqを更新
-                        df_req.loc[df_req["document_id"] == document_id, "資格・条件"] = dict2["資格・条件"]
-                        df_req.loc[df_req["document_id"] == document_id, "done"] = True
-                        req_done_updates += 1
+                            record["資格・条件"] = "['Error fetching requirements.']"
 
                     except Exception as e:
                         tqdm.write(f"Error processing requirements for {document_id}: {e}")
-                        df_req.loc[df_req["document_id"] == document_id, "資格・条件"] = "['Error fetching requirements.']"
-                        df_req.loc[df_req["document_id"] == document_id, "done"] = True
-                        req_done_updates += 1
+                        record["資格・条件"] = "['Error fetching requirements.']"
 
-                print(f"Updated {len(req_results)} documents with requirement data")
-                print(f"Set df_req.done=True for {req_done_updates} documents in this batch")
+                    req_records.append(record)
+
+                if req_records:
+                    df_req_updates = pd.DataFrame(req_records)
+                    df_req_updates = df_req_updates.drop_duplicates(subset="document_id", keep="first")
+
+                    df_req = df_req.merge(df_req_updates, on="document_id", how="left", suffixes=("", "_new"))
+                    df_req["done"] = (df_req["done"] | df_req["done_new"].fillna(False)).astype("boolean")
+                    df_req.drop(columns=["done_new"], inplace=True, errors="ignore")
+
+                    if "資格・条件_new" in df_req.columns:
+                        df_req["資格・条件"] = df_req["資格・条件_new"].fillna(df_req["資格・条件"])
+                        df_req.drop(columns=["資格・条件_new"], inplace=True)
+
+                    updated_req_docs = df_req_updates["document_id"].nunique()
+                    print(f"Updated {len(req_records)} documents with requirement data")
+                    print(f"Set df_req.done=True for {updated_req_docs} documents in this batch")
 
         # ファイル保存
         df_main.to_csv(merged_updated_file, sep="\t", index=False, encoding="utf-8")
