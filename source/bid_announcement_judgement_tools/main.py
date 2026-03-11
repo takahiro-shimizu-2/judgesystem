@@ -4424,7 +4424,14 @@ class BidJudgementSan:
         df_main["document_id"] = df_main["document_id"].astype(str).str.strip()
 
         # done列の初期化
-        if "done" not in df_main.columns:
+        if "done" in df_main.columns:
+            df_main["done"] = (
+                df_main["done"]
+                .map({True: True, False: False, "True": True, "False": False})
+                .fillna(False)
+                .astype(bool)
+            )
+        else:
             df_main["done"] = False
 
         # 要件文DataFrame初期化
@@ -4432,8 +4439,14 @@ class BidJudgementSan:
         if req_file_path.exists():
             df_req = pd.read_csv(req_file_path, sep="\t", low_memory=False, encoding="utf-8")
             df_req["document_id"] = df_req["document_id"].astype(str).str.strip()
-            # done列がなければ追加
-            if "done" not in df_req.columns:
+            if "done" in df_req.columns:
+                df_req["done"] = (
+                    df_req["done"]
+                    .map({True: True, False: False, "True": True, "False": False})
+                    .fillna(False)
+                    .astype(bool)
+                )
+            else:
                 df_req["done"] = False
         else:
             df_req = pd.DataFrame({
@@ -4454,6 +4467,14 @@ class BidJudgementSan:
         df_req = pd.DataFrame(new_req_data)
         df_req.insert(0, "document_id", df_main["document_id"].values)
         df_req["document_id"] = df_req["document_id"].astype(str).str.strip()
+        df_req["done"] = (
+            df_req["done"]
+            .map({True: True, False: False, "True": True, "False": False})
+            .fillna(False)
+            .astype(bool)
+        )
+
+        req_done_lookup = df_req.set_index("document_id")["done"].to_dict()
 
         # パラメータリスト作成
         params = []
@@ -4461,10 +4482,12 @@ class BidJudgementSan:
 
 
         for i, row in tqdm(df_main.iterrows(), total=len(df_main), desc="Checking documents"):
-            if row.get("done") == True:
-                continue
-
             document_id = row["document_id"]
+            ann_done = bool(row.get("done"))
+            req_done = bool(req_done_lookup.get(document_id, False))
+
+            if ann_done and req_done:
+                continue
 
             # PDFファイルパス確認
             if use_gcp_vm:
@@ -4478,32 +4501,36 @@ class BidJudgementSan:
                 continue
 
             # 公告情報抽出用パラメータ
-            params.append([
-                self._PROMPT_ANN,
-                document_id,
-                "pdf",
-                "gemini-2.5-flash",
-                "ann",
-                use_gcp_vm
-            ])
+            if not ann_done:
+                params.append([
+                    self._PROMPT_ANN,
+                    document_id,
+                    "pdf",
+                    "gemini-2.5-flash",
+                    "ann",
+                    use_gcp_vm
+                ])
 
             # 要件文抽出用パラメータ
-            params.append([
-                self._PROMPT_REQ,
-                document_id,
-                "pdf",
-                "gemini-2.5-flash",
-                "req",
-                use_gcp_vm
-            ])
+            if not req_done:
+                params.append([
+                    self._PROMPT_REQ,
+                    document_id,
+                    "pdf",
+                    "gemini-2.5-flash",
+                    "req",
+                    use_gcp_vm
+                ])
 
             # 1回の実行での処理数制限チェック
             if len(params) >= max_api_calls_per_run:
-                print(f"\nReached batch processing limit: {len(params)} calls ({len(params)//2} documents)")
+                unique_docs = len({p[1] for p in params})
+                print(f"\nReached batch processing limit: {len(params)} calls ({unique_docs} documents)")
                 print("Remaining documents will be processed in the next run.")
                 break
 
-        print(f"Found {len(params)//2} documents to process ({len(params)} API calls)")
+        unique_docs_total = len({p[1] for p in params})
+        print(f"Found {unique_docs_total} documents to process ({len(params)} API calls)")
 
         # 並列実行
         if len(params) > 0:
@@ -4625,15 +4652,19 @@ class BidJudgementSan:
                     df_req_updates = df_req_updates.drop_duplicates(subset="document_id", keep="first")
                     df_req_updates["document_id"] = df_req_updates["document_id"].astype(str).str.strip()
 
-                    df_req = df_req.merge(df_req_updates, on="document_id", how="left", suffixes=("", "_new"))
-                    df_req["done"] = (df_req["done"] | df_req["done_new"].fillna(False)).astype("boolean")
-                    df_req.drop(columns=["done_new"], inplace=True, errors="ignore")
+                    df_req = df_req.set_index("document_id")
+                    df_req_updates = df_req_updates.set_index("document_id")
 
-                    if "資格・条件_new" in df_req.columns:
-                        df_req["資格・条件"] = df_req["資格・条件_new"].fillna(df_req["資格・条件"])
-                        df_req.drop(columns=["資格・条件_new"], inplace=True)
+                    missing_ids = df_req_updates.index.difference(df_req.index)
+                    if len(missing_ids) > 0:
+                        df_missing = df_req_updates.loc[missing_ids].copy()
+                        df_req = pd.concat([df_req, df_missing], axis=0)
 
-                    updated_req_docs = df_req_updates["document_id"].nunique()
+                    df_req.loc[df_req_updates.index, "資格・条件"] = df_req_updates["資格・条件"]
+                    df_req.loc[df_req_updates.index, "done"] = True
+                    df_req.reset_index(inplace=True)
+
+                    updated_req_docs = df_req_updates.index.nunique()
                     print(f"Updated {len(req_records)} documents with requirement data")
                     print(f"Set df_req.done=True for {updated_req_docs} documents in this batch")
 
