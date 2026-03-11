@@ -4421,6 +4421,7 @@ class BidJudgementSan:
 
         # DataFrameを読み込み
         df_main = pd.read_csv(merged_updated_file, sep="\t", low_memory=False)
+        df_main["document_id"] = df_main["document_id"].astype(str).str.strip()
 
         # done列の初期化
         if "done" not in df_main.columns:
@@ -4430,6 +4431,7 @@ class BidJudgementSan:
         req_file_path = Path(req_file_path)
         if req_file_path.exists():
             df_req = pd.read_csv(req_file_path, sep="\t", low_memory=False, encoding="utf-8")
+            df_req["document_id"] = df_req["document_id"].astype(str).str.strip()
             # done列がなければ追加
             if "done" not in df_req.columns:
                 df_req["done"] = False
@@ -4451,6 +4453,7 @@ class BidJudgementSan:
                 new_req_data.append({"資格・条件": "['INIT']", "done": False})
         df_req = pd.DataFrame(new_req_data)
         df_req.insert(0, "document_id", df_main["document_id"].values)
+        df_req["document_id"] = df_req["document_id"].astype(str).str.strip()
 
         # パラメータリスト作成
         params = []
@@ -4620,6 +4623,7 @@ class BidJudgementSan:
                 if req_records:
                     df_req_updates = pd.DataFrame(req_records)
                     df_req_updates = df_req_updates.drop_duplicates(subset="document_id", keep="first")
+                    df_req_updates["document_id"] = df_req_updates["document_id"].astype(str).str.strip()
 
                     df_req = df_req.merge(df_req_updates, on="document_id", how="left", suffixes=("", "_new"))
                     df_req["done"] = (df_req["done"] | df_req["done_new"].fillna(False)).astype("boolean")
