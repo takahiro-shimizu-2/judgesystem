@@ -4512,6 +4512,7 @@ class BidJudgementSan:
 
             # 公告情報結果処理
             ann_results = [r for r in results if r.get("type") == "ann"]
+            ann_done_updates = 0
 
             if len(ann_results) > 0:
                 records = []
@@ -4522,6 +4523,7 @@ class BidJudgementSan:
                         if res.get("error") is not None:
                             tqdm.write(f"API error for {document_id}: {res.get('error')}")
                             records.append({"document_id": document_id, "done": True})
+                            ann_done_updates += 1
                             continue
 
                         json_str = res["result"].replace('\n', '').replace('```json', '').replace('```', '')
@@ -4552,9 +4554,11 @@ class BidJudgementSan:
                             "done": True
                         }
                         records.append(record)
+                        ann_done_updates += 1
                     except Exception as e:
                         tqdm.write(f"Error processing {document_id}: {e}")
                         records.append({"document_id": document_id, "done": True})
+                        ann_done_updates += 1
 
                 # DataFrameにマージ
                 df_records = pd.DataFrame(records)
@@ -4574,9 +4578,11 @@ class BidJudgementSan:
                     df_main.drop(columns=[new_col], inplace=True)
 
                 print(f"Updated {len(records)} documents with announcement data")
+                print(f"Set df_main.done=True for {ann_done_updates} documents in this batch")
 
             # 要件文結果処理
             req_results = [r for r in results if r.get("type") == "req"]
+            req_done_updates = 0
 
             if len(req_results) > 0:
                 for res in tqdm(req_results, desc="Processing requirement results"):
@@ -4612,13 +4618,16 @@ class BidJudgementSan:
                         # df_reqを更新
                         df_req.loc[df_req["document_id"] == document_id, "資格・条件"] = dict2["資格・条件"]
                         df_req.loc[df_req["document_id"] == document_id, "done"] = True
+                        req_done_updates += 1
 
                     except Exception as e:
                         tqdm.write(f"Error processing requirements for {document_id}: {e}")
                         df_req.loc[df_req["document_id"] == document_id, "資格・条件"] = "['Error fetching requirements.']"
                         df_req.loc[df_req["document_id"] == document_id, "done"] = True
+                        req_done_updates += 1
 
                 print(f"Updated {len(req_results)} documents with requirement data")
+                print(f"Set df_req.done=True for {req_done_updates} documents in this batch")
 
         # ファイル保存
         df_main.to_csv(merged_updated_file, sep="\t", index=False, encoding="utf-8")
