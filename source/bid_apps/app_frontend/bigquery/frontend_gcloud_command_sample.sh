@@ -64,9 +64,9 @@ LOCATION=asia-northeast1
 # プロジェクト設定
 gcloud config set project $PROJECT_ID
 # リポジトリ名
-REPO_NAME=bidapp-frontend
+REPO_NAME=bidapp-frontend-bigquery
 # イメージ名
-IMAGE_NAME=bidapp-frontend
+IMAGE_NAME=bidapp-frontend-bigquery
 # タグ名
 TAG_NAME=v1
 
