@@ -469,425 +469,6 @@ class TablenamesConfig:
     bid_announcements_document_table:str = "announcements_documents_master"
 
 
-class OCRutils:
-    """
-    OCRを行うクラス。
-
-    Attributes:
-
-    - client
-
-      gemini とやりとりするための genai の client
-
-    """
-
-    def __init__(self, google_ai_studio_api_key_filepath=None):
-        """ 
-        google ai studio の api キーが記載されたファイルパスを受け取り、genai の client を設定する。
-
-        Args:
-
-        - google_ai_studio_api_key_filepath
-
-          OCRのための、google ai studio gemini api キーを記載したファイルパス。
-        """
-
-        # google ai studio の api キー
-        if google_ai_studio_api_key_filepath is None:
-            key = ""
-        else:
-            with open(google_ai_studio_api_key_filepath,"r") as f:
-                key = f.read()
-
-        try:
-            self.client = genai.Client(api_key=key)
-        except Exception as e:
-            print(fr"    OCRutils: {str(e)}")
-            self.client = None
-
-    def getPDFDataFromUrl(self, pdfurl):
-        """ 
-        pdfurl を受け取りデータを読み込む。
-
-        Args:
-
-        - pdfurl
-
-          公告url
-        """
-
-        # Retrieve and encode the PDF byte
-        # doc_data = httpx.get(pdfurl).content
-        # httpx は HTTP/2 周りで、(無言で)落ちることがある？
-        r = requests.get(pdfurl)
-        doc_data = r.content
-
-        return doc_data
-
-    def getJsonFromDocData(self, doc_data):
-        """ 
-        公告データ doc_data を受け取り、gemini に渡して、公告情報を json ライクな形式で受け取る。
-
-        gemini 用プロンプトはハードコードされている。
-
-        Args:
-
-        - doc_data
-
-          公告データ
-        """
-
-        client = self.client
-
-        prompt = """
-        Goal: Extract specific information related to construction projects and bidding procedures from the provided context.
-
-        Steps (T1 → T2 → T3):
-        T1: Thoroughly read and understand the entire context.
-        T2: Identify and locate the following fields within the context.  If a field is not present, its value will be "".
-        T3: Return the extracted information in a valid JSON format, adhering to the specified rules.
-
-        JSON Structure:
-
-        ```json
-        {
-        "工事場所": "",
-        "入札手続等担当部局": {
-            "郵便番号": "",
-            "住所": "",
-            "担当部署名": "",
-            "担当者名": "",
-            "電話番号": "",
-            "FAX番号": "",
-            "メールアドレス": ""
-        },
-        "公告日" : "",
-        "入札説明書の交付期間": {
-            "開始日": "",
-            "終了日": ""
-        },
-        "申請書及び競争参加資格確認資料の提出期限": {
-            "開始日": "",
-            "終了日": ""
-        },
-        "入札書の提出期間": {
-            "開始日": "",
-            "終了日": ""
-        }
-        }
-        ```
-
-        Rules:
-        1.  **Exact Text:** Use the exact original text from the context for all extracted data.  Do not modify or translate the text.
-        2.  **Completeness:**  Extract all requested fields. If a field is not found in the context, represent it with an empty string (`""`). No omissions are allowed.
-        3.  **Limited Output:** Only include the specified fields in the JSON output. Do not add any extra information or labels.
-        4.  **Hide Steps:** Do not display the internal steps (T1 or T2). Only the final JSON output (T3) should be shown.
-        5.  **Prefix Exclusion:** Exclude prefixes like "〒", "TEL", "FAX", and "E-mail:" from the extracted values.
-        6.  **Output Language:** The output (field names and extracted text if applicable) should be in Japanese.
-        7. **Data Structure:** Maintain the nested structure shown in the JSON Structure above.  "入札手続等担当部局", "入札説明書の交付期間", "申請書及び競争参加資格確認資料の提出期限" and "入札書の提出期間" are objects containing their respective sub-fields.
-        """
-        response = client.models.generate_content(
-            model="gemini-2.5-flash",
-            contents=[
-                types.Part.from_bytes(
-                    data=doc_data,
-                    mime_type='application/pdf',
-                ),
-                prompt
-            ]
-        )
-        # print(response.text)
-
-        text=response.text
-        #json_text = extract_json(text=response.text)
-        text2 = text.replace('\n', '').replace('```json', '').replace("```","")
-        dict1 = json.loads(text2)
-        return dict1
-
-    def convertJson(self, json_value):
-        """ 
-        公告データから取得した json ライクな公告情報を整形して json とする。
-
-        Args:
-
-        - json_value
-
-          json ライクな公告データ
-        """
-
-        def _modifyDate(datestr, handle_same_year=None, handle_same_month=None):
-            try:
-                # スペースを除去してから処理
-                datestr = datestr.replace(" ", "").replace("　", "")
-
-                datestr = datestr.replace("令和元年", "令和1年")
-                if "同年" in datestr:
-                    datestr = datestr.replace("同年", fr"{handle_same_year}年")
-
-                # 同月25日
-                m = re.search(r"同月(\d+)日", datestr)
-                if m and handle_same_month:
-                    y, mth = handle_same_month.split("-")
-                    return f"{y}-{mth}-{int(m.group(1)):02}"
-
-                # 令和7年3月18日
-                m = re.search(r"令和(\d+)年(\d+)月(\d+)日", datestr)
-                if m:
-                    return fr"{int(m.group(1))+2018:04}-{int(m.group(2)):02}-{int(m.group(3)):02}"
-
-                # 2025年3月18日 (4桁の年号)
-                m = re.search(r"(\d{4})年(\d+)月(\d+)日", datestr)
-                if m:
-                    return fr"{int(m.group(1))}-{int(m.group(2)):02}-{int(m.group(3)):02}"
-
-                # 7年4月14日 → 令和7年として扱う (1-2桁の年号は令和とみなす)
-                m = re.search(r"(\d{1,2})年(\d+)月(\d+)日", datestr)
-                if m:
-                    year = int(m.group(1))
-                    # 年が100未満なら令和として扱う
-                    if year < 100:
-                        return fr"{year+2018:04}-{int(m.group(2)):02}-{int(m.group(3)):02}"
-                    else:
-                        return fr"{year}-{int(m.group(2)):02}-{int(m.group(3)):02}"
-
-                # R7.7.2 → 令和7年7月2日
-                m = re.search(r"R(\d+)\.(\d{1,2})\.(\d{1,2})", datestr)
-                if m:
-                    return fr"{int(m.group(1))+2018:04}-{int(m.group(2)):02}-{int(m.group(3)):02}"
-
-                # 7.3.18 → 令和7年3月18日
-                m = re.search(r"\b(\d+)\.(\d{1,2})\.(\d{1,2})\b", datestr)
-                if m:
-                    return fr"{int(m.group(1))+2018:04}-{int(m.group(2)):02}-{int(m.group(3)):02}"
-
-                # 2025/5/12 → 2025-05-12
-                m = re.search(r"(\d{4})/(\d{1,2})/(\d{1,2})", datestr)
-                if m:
-                    return fr"{int(m.group(1))}-{int(m.group(2)):02}-{int(m.group(3)):02}"
-
-                return datestr
-            except Exception as e:
-                # print(e)
-                return None
-
-        def extract_year(s: str) -> str:
-            if not s:
-                return ""
-            try:
-                dt = datetime.strptime(s, "%Y-%m-%d")
-                return str(dt.year)
-            except ValueError:
-                return ""
-
-
-        new_json = {}
-        new_json["announcement_no"] = json_value.get("announcement_no")
-        new_json["workplace"] = json_value.get("工事場所", None)
-
-        tmp_json = json_value.get("入札手続等担当部局", None)
-        if isinstance(tmp_json, dict):
-            new_json["zipcode"] = tmp_json.get("郵便番号", None)
-            new_json["address"] = tmp_json.get("住所", None)
-            new_json["department"] = tmp_json.get("担当部署名", None)
-            new_json["assigneename"] = tmp_json.get("担当者名", None)
-            new_json["telephone"] = tmp_json.get("電話番号", None)
-            new_json["fax"] = tmp_json.get("FAX番号", None)
-            new_json["mail"] = tmp_json.get("メールアドレス", None)
-
-        tmp_val = json_value.get("公告日", None)
-        if isinstance(tmp_val, str):
-            new_json["publishdate"] = _modifyDate(datestr=tmp_val)
-        else:
-            new_json["publishdate"] = None
-
-
-        tmp_json = json_value.get("入札説明書の交付期間", None)
-        if isinstance(tmp_json, dict):
-            new_json["docdiststart"] = _modifyDate(datestr=tmp_json.get("開始日", None))
-            new_json["docdistend"] = _modifyDate(datestr=tmp_json.get("終了日", None), handle_same_year=extract_year(new_json["docdiststart"]))
-
-        tmp_json = json_value.get("申請書及び競争参加資格確認資料の提出期限", None)
-        if isinstance(tmp_json, dict):
-            new_json["submissionstart"] = _modifyDate(datestr=tmp_json.get("開始日", None))
-            new_json["submissionend"] = _modifyDate(datestr=tmp_json.get("終了日", None), handle_same_year=extract_year(new_json["submissionstart"]))
-
-        tmp_json = json_value.get("入札書の提出期間", None)
-        if isinstance(tmp_json, dict):
-            new_json["bidstartdate"] = _modifyDate(datestr=tmp_json.get("開始日", None))
-            new_json["bidenddate"] = _modifyDate(datestr=tmp_json.get("終了日", None), handle_same_year=extract_year(new_json["bidstartdate"]))
-
-        return new_json
-
-
-    def getRequirementText(self, doc_data):
-        """ 
-        公告データ doc_data を受け取り、gemini に渡して、公告の要件文を json ライクな形式で受け取る。
-
-        gemini 用プロンプトはハードコードされている。
-
-        Args:
-
-        - doc_data
-
-          公告データ
-        """
-
-        client = self.client
-
-        prompt = """
-        # Goal Seek Prompt for Bid Qualification Extraction
-
-        [Input] 
-        → [Extract bidding qualifications from document]
-        → [Intent](identify, extract, format, maintain original text, output JSON)
-
-        [Input]
-        → [User Intent]
-        → [Want or need Intent](accurate extraction, complete requirements, properly formatted JSON, faithful text reproduction)
-
-        [抽象化オブジェクト]
-        -> Legal Document Parser for Bid Qualifications
-        Why
-        <User Input>
-        I need to automatically extract all bidding and competition participation qualifications/requirements from legal documents and format them in a structured JSON output while preserving the original text exactly.
-        </User Input>
-        [Fixed User want intent] = Extract and structure bidding qualification requirements from legal documents
-
-        Achieve Goal == Need Tasks[Qualification Extraction]=[Tasks](
-        Read and comprehend document,
-        Identify qualification sections,
-        Determine primary qualification headings, 
-        Extract qualification text blocks, 
-        Maintain text integrity, 
-        Handle dependent requirements, 
-        Format as specified JSON
-        )
-        
-        To Do Task Execute need Prompt And (Text Analysis Tool)
-        assign Agent
-        LegalDocumentParser
-        
-        Agent Task Execute Feed back loop:
-        1. Read entire document to understand context
-        2. Locate all sections related to "competition participation qualifications
-        3. Identify primary qualification sections and related subsections
-        4. Extract complete text blocks for each qualification item
-        5. Preserve original formatting including numbering and indentation
-        6. Group dependent requirements together
-        7. Structure output in specified JSON format
-        8. Verify all qualification requirements are captured
-        
-        Then Task Complete
-        Execute
-        ====================
-        
-        ### Important Output Instructions
-        1. The JSON key name must be exactly "資格・条件" - do not change this key name even if similar terms appear in the document
-        2. Preserve the original text of qualifications exactly as they appear in the document, including numbering and formatting
-        3. Extract all qualifications completely without omission
-        4. Ensure the output is valid JSON format
-
-        ### Output Format
-        ```json
-        {
-        "資格・条件" : [
-        "(1) ・・・本文・・・",
-        "(2) ・・・本文・・・",
-        ...
-        ]
-        }
-        ```
-        """
-        response = client.models.generate_content(
-            model="gemini-2.5-flash",
-            contents=[
-                types.Part.from_bytes(
-                    data=doc_data,
-                    mime_type='application/pdf',
-                ),
-                prompt
-            ]
-        )
-        # print(response.text)
-        text=response.text
-        #json_text = extract_json(text=response.text)
-        text2 = text.replace('\n', '').replace('```json', '').replace("```","")
-        try:
-            dict1 = json.loads(text2)
-        except json.decoder.JSONDecodeError:
-            text2 = text2.replace('"',"'")
-            dict1 = json.loads('{"資格・条件" : ["' + text2 + '"]}')
-        
-        return dict1
-
-    def convertRequirementTextDict(self, requirement_texts):
-        """ 
-        公告データから取得した json ライクな公告情報を整形して json とする。
-
-        Args:
-
-        - requirement_texts
-
-          json ライクな要件文
-        """
-
-        # requirement_texts = {"announcement_no":1, "資格・条件":["(2)令和07・08・09年度防衛省競争参加資格(全省庁統一資格)の「役務の提供等」において、開札時までに「C」又は「D」の等級に格付けされ北海道地域の競争参加を希望する者であること(会社更生法(平成14年法律第154号)に基づき更生手続開始の申立てがなされている者又は民事再生法(平成11年法律第225号)に基づき再生手続開始の申立てがなされている者については、手続開始の決定後、再度級別の格付けを受けていること。)。"]}
-        announcement_no = requirement_texts["announcement_no"]
-        announcement_no_list = []
-        requirement_no_list = []
-        requirement_type_list = []
-        requirement_text_list = []
-        createdDate_list = []
-        updatedDate_list = []
-        # req_type_list = ["欠格要件","業種・等級要件","所在地要件","技術者要件","実績要件","その他"]
-        req_type_list_search_list = {
-            "欠格要件":[
-                "70条","71条","会社更生法","民事再生法","更生手続",
-                "再生手続","情報保全","資本関係","人的関係","滞納",
-                "外国法","取引停止","破産","暴力団","指名停止",
-                "後見人","法人格取消"
-            ],
-            "業種・等級要件":["競争参加資格","一般競争","指名競争","等級","総合審査"],
-            "所在地要件":["所在","県内","市内","防衛局管内","本店が","支店が"],
-            "技術者要件":[
-                "施工管理技士","技術士","資格者証","電気工事士","建築士",
-                "基幹技能者","監理技術者","主任技術者","監理技術者資格者証","監理技術者講習修了証"
-            ],
-            "実績要件":[
-                "実績","工事成績","元請けとして","元請として","点以上",
-                "jv比率","過去実績"
-            ],
-            "その他要件":["jv","共同企業体","出資比率"] # JV, 共同企業体, or 不明
-        }
-        for i, text in enumerate(requirement_texts["資格・条件"]):
-            # TODO
-            # text は、"改行分割" が必要？
-            # 未処理。
-
-            has_other_req = True
-            text_lower = text.lower()
-            for req_type, search_list in req_type_list_search_list.items():
-                search_str = "|".join(search_list)
-                if (req_type != "その他要件" and re.search(search_str, text_lower)) or (req_type == "その他要件" and re.search(search_str, text_lower)) or (req_type == "その他要件" and not re.search(search_str, text_lower) and has_other_req):
-                    announcement_no_list.append(announcement_no)
-                    requirement_no_list.append(i)
-                    requirement_type_list.append(req_type)
-                    requirement_text_list.append(text)
-                    createdDate_list.append(datetime.now())
-                    updatedDate_list.append(datetime.now())
-                    has_other_req = False
-
-        new_dict = {
-            "announcement_no":announcement_no_list,
-            "requirement_no":requirement_no_list,
-            "requirement_type":requirement_type_list,
-            "requirement_text":requirement_text_list,
-            "createdDate":createdDate_list,
-            "updatedDate":updatedDate_list
-        }
-        return new_dict
-
-
 class DBOperator:
     """
     データベースを操作するクラス。
@@ -3614,7 +3195,7 @@ class BidJudgementSan:
             print(f"Requirements file: {req_file_path}")
         print("=" * 60)
 
-        return merged_updated_file
+        return merged_updated_file, req_file_path
 
 
     def _step0_convert_input_list(self, input_list1, output_dir):
@@ -5299,143 +4880,144 @@ Execute
         # val = db_operator.selectToTable(tablename=tablename)
 
 
-    def step2_ocr(self, ocr_utils, condition_doneOCR):
+    def convertRequirementTextDict(self, requirement_texts):
         """
-        step2 : OCR処理
-    
-        公告pdfに対してOCRを行い、公告マスターと要件マスターを更新する。
-
-        OCRは、公告マスターのうち、OCRをしていない公告(doneOCR=False)に対して行う。
-
-        公告対象の pdf を data/pdf 以下に、{announcement_no}.pdf で保存する。
-
-        OCR結果を、data/ocr 以下に、ocr_announcements_{announcement_no}.json, ocr_requirements_{announcement_no}.json として保存する。
-
-        OCR処理は ocr_utils に行わせる。
-
-        annoucements, requirements に対する OCR結果をデータフレームにまとめ、いったんデータベースに中間テーブルとしてアップロードし、公告マスターと要件マスターを更新する。更新後、中間テーブルは削除する。
+        公告データから取得した json ライクな公告情報を整形して json とする。
 
         Args:
 
-        - ocr_utils: 
-        
-          OCRを行うオブジェクト。
+        - requirement_texts
+
+          json ライクな要件文
+        """
+
+        # requirement_texts = {"announcement_no":1, "資格・条件":["(2)令和07・08・09年度防衛省競争参加資格(全省庁統一資格)の「役務の提供等」において、開札時までに「C」又は「D」の等級に格付けされ北海道地域の競争参加を希望する者であること(会社更生法(平成14年法律第154号)に基づき更生手続開始の申立てがなされている者又は民事再生法(平成11年法律第225号)に基づき再生手続開始の申立てがなされている者については、手続開始の決定後、再度級別の格付けを受けていること。)。"]}
+        announcement_no = requirement_texts["announcement_no"]
+        announcement_no_list = []
+        requirement_no_list = []
+        requirement_type_list = []
+        requirement_text_list = []
+        createdDate_list = []
+        updatedDate_list = []
+        # req_type_list = ["欠格要件","業種・等級要件","所在地要件","技術者要件","実績要件","その他"]
+        req_type_list_search_list = {
+            "欠格要件":[
+                "70条","71条","会社更生法","民事再生法","更生手続",
+                "再生手続","情報保全","資本関係","人的関係","滞納",
+                "外国法","取引停止","破産","暴力団","指名停止",
+                "後見人","法人格取消"
+            ],
+            "業種・等級要件":["競争参加資格","一般競争","指名競争","等級","総合審査"],
+            "所在地要件":["所在","県内","市内","防衛局管内","本店が","支店が"],
+            "技術者要件":[
+                "施工管理技士","技術士","資格者証","電気工事士","建築士",
+                "基幹技能者","監理技術者","主任技術者","監理技術者資格者証","監理技術者講習修了証"
+            ],
+            "実績要件":[
+                "実績","工事成績","元請けとして","元請として","点以上",
+                "jv比率","過去実績"
+            ],
+            "その他要件":["jv","共同企業体","出資比率"] # JV, 共同企業体, or 不明
+        }
+        for i, text in enumerate(requirement_texts["資格・条件"]):
+            # TODO
+            # text は、"改行分割" が必要？
+            # 未処理。
+
+            has_other_req = True
+            text_lower = text.lower()
+            for req_type, search_list in req_type_list_search_list.items():
+                search_str = "|".join(search_list)
+                if (req_type != "その他要件" and re.search(search_str, text_lower)) or (req_type == "その他要件" and re.search(search_str, text_lower)) or (req_type == "その他要件" and not re.search(search_str, text_lower) and has_other_req):
+                    announcement_no_list.append(announcement_no)
+                    requirement_no_list.append(i)
+                    requirement_type_list.append(req_type)
+                    requirement_text_list.append(text)
+                    createdDate_list.append(datetime.now())
+                    updatedDate_list.append(datetime.now())
+                    has_other_req = False
+
+        new_dict = {
+            "announcement_no":announcement_no_list,
+            "requirement_no":requirement_no_list,
+            "requirement_type":requirement_type_list,
+            "requirement_text":requirement_text_list,
+            "createdDate":createdDate_list,
+            "updatedDate":updatedDate_list
+        }
+        return new_dict
+
+
+    def step2_ocr(self, ocr_req_file_path=None):
+        """
+        step2 : 要件処理
+
+        step0のOCR結果を使用して要件マスターを作成・更新する。
+
+        OCR結果（req_announcements_document.txt）から要件データを読み込み、
+        公告マスターの各公告に対応する要件を変換して要件マスターに格納する。
+
+        要件データを中間テーブルとしてアップロードし、要件マスターを更新する。
+        更新後、中間テーブルは削除する。
+
+        Args:
+            ocr_req_file_path: 要件OCR結果ファイルのパス。
+                              Noneの場合、output/の最新タイムスタンプフォルダから自動検出
         """
 
         tablename_announcements = self.tablenamesconfig.bid_announcements
-        tmp_tablename_announcements = fr"tmp_{tablename_announcements}"
         tablename_requirements = self.tablenamesconfig.bid_requirements
         tmp_tablename_requirements = fr"tmp_{tablename_requirements}"
         db_operator = self.db_operator
 
-        # OCR
-        if condition_doneOCR == "FALSE":
-            df1 = db_operator.selectToTable(tablename=fr"{tablename_announcements}", where_clause="where doneOCR = FALSE order by announcement_no")
-        elif condition_doneOCR == "TRUE":
-            df1 = db_operator.selectToTable(tablename=fr"{tablename_announcements}", where_clause="where doneOCR = TRUE order by announcement_no")
-        elif condition_doneOCR == "all":
-            df1 = db_operator.selectToTable(tablename=fr"{tablename_announcements}")
+        # OCR結果ファイルパスの決定
+        if ocr_req_file_path is None:
+            # output/ の最新フォルダを自動検出
+            output_base = Path("output")
+            if not output_base.exists():
+                raise FileNotFoundError(f"Output directory not found: {output_base}")
+
+            timestamp_dirs = [d for d in output_base.iterdir()
+                             if d.is_dir() and d.name.isdigit() and len(d.name) == 12]
+            if not timestamp_dirs:
+                raise FileNotFoundError(f"No timestamp folders found in {output_base}/")
+
+            latest_dir = max(timestamp_dirs, key=lambda d: d.name)
+            ocr_req_file_path = latest_dir / "req_announcements_document.txt"
+            print(f"Auto-detected OCR requirements file: {ocr_req_file_path}")
         else:
-            raise ValueError(fr"Unknown condition_doneOCR = {condition_doneOCR}")
+            ocr_req_file_path = Path(ocr_req_file_path)
+            print(f"Using specified OCR requirements file: {ocr_req_file_path}")
 
-        #output_path_ann = "../4_get_documents/output_v3/pdf_txt_all_gemini_ann/ann.txt"
-        #output_path_ann_zip = "../4_get_documents/output_v3/pdf_txt_all_gemini_ann/ann.txt.zip"
-        #output_path_req = "../4_get_documents/output_v3/pdf_txt_all_gemini_req/req.txt"
-        #output_path_req_zip = "../4_get_documents/output_v3/pdf_txt_all_gemini_req/req.txt.zip"
+        # 公告マスターから全公告を取得
+        df_announcements = db_operator.selectToTable(
+            tablename=fr"{tablename_announcements}",
+            where_clause="order by announcement_no"
+        )
 
-        output_path_ann = "data/ocr/ann.txt"
-        output_path_ann_zip = "data/ocr/ann.txt.zip"
-        output_path_req = "data/ocr/req.txt"
-        output_path_req_zip = "data/ocr/req.txt.zip"
+        # OCR結果ファイルからrequirementsデータを読み込み（zip優先）
+        ocr_req_file_path_zip = Path(str(ocr_req_file_path) + ".zip")
 
-        # 既にファイルがある前提になっていることに注意。
-        if os.path.exists(output_path_ann_zip):
-            df_ann = pd.read_csv(output_path_ann_zip,sep="\t")
+        if ocr_req_file_path_zip.exists():
+            df_req = pd.read_csv(ocr_req_file_path_zip, sep="\t")
+            print(f"Loaded requirements from: {ocr_req_file_path_zip}")
+        elif ocr_req_file_path.exists():
+            df_req = pd.read_csv(ocr_req_file_path, sep="\t")
+            print(f"Loaded requirements from: {ocr_req_file_path}")
         else:
-            df_ann = pd.read_csv(output_path_ann,sep="\t")
+            raise FileNotFoundError(f"Requirements file not found: {ocr_req_file_path}")
 
-        if os.path.exists(output_path_req_zip):
-            df_req = pd.read_csv(output_path_req_zip,sep="\t")
-        else:
-            df_req = pd.read_csv(output_path_req,sep="\t")
-
-
-        all_announcements = []
         all_requirement_texts = []
-        # Processing OCR for announcement_no=300144...
-        # 00003_2025_0204a
-        for index, row in tqdm(df1.iterrows(), total=len(df1)):
-            # row = df1.loc[index]
-            announcement_no = row["announcement_no"]
-            # print(f"Processing OCR for announcement_no={announcement_no}...")
 
-            pdfurl = row["pdfUrl"]
+        # 各公告の要件を処理
+        for index, row in tqdm(df_announcements.iterrows(), total=len(df_announcements)):
+            announcement_no = row["announcement_no"]
             document_id = row["document_id"]
 
             try:
-                # announcements
-                doc_data = None
-                if document_id in df_ann["document_id"].values:
-                    dict2 = df_ann[df_ann["document_id"]==document_id]
-                    dict1 = {
-                        "工事場所": dict2["工事場所"].values[0],
-                        "入札手続等担当部局": {
-                            "郵便番号": dict2["入札手続等担当部局___郵便番号"].values[0],
-                            "住所": dict2["入札手続等担当部局___住所"].values[0],
-                            "担当部署名": dict2["入札手続等担当部局___担当部署名"].values[0],
-                            "担当者名": dict2["入札手続等担当部局___担当者名"].values[0],
-                            "電話番号": dict2["入札手続等担当部局___電話番号"].values[0],
-                            "FAX番号": dict2["入札手続等担当部局___FAX番号"].values[0],
-                            "メールアドレス": dict2["入札手続等担当部局___メールアドレス"].values[0]
-                        },
-                        "公告日": dict2["公告日"].values[0],
-                        "入札説明書の交付期間": {
-                            "開始日": dict2["入札説明書の交付期間___開始日"].values[0],
-                            "終了日": dict2["入札説明書の交付期間___終了日"].values[0]
-                        },
-                        "申請書及び競争参加資格確認資料の提出期限": {
-                            "開始日": dict2["申請書及び競争参加資格確認資料の提出期限___開始日"].values[0],
-                            "終了日": dict2["申請書及び競争参加資格確認資料の提出期限___終了日"].values[0]
-                        },
-                        "入札書の提出期間": {
-                            "開始日": dict2["入札書の提出期間___開始日"].values[0],
-                            "終了日": dict2["入札書の提出期間___終了日"].values[0]
-                        }
-                    }
-                else:
-                    print(document_id)
-                    time.sleep(0.5)
-                    doc_data = ocr_utils.getPDFDataFromUrl(pdfurl)
-                    dict1 = ocr_utils.getJsonFromDocData(doc_data=doc_data)
-                    dict2 = {
-                        "document_id" : document_id,
-                        "工事場所" : dict1["工事場所"],
-                        "入札手続等担当部局___郵便番号" : dict1["入札手続等担当部局"]["郵便番号"],
-                        "入札手続等担当部局___住所" : dict1["入札手続等担当部局"]["住所"],
-                        "入札手続等担当部局___担当部署名" : dict1["入札手続等担当部局"]["担当部署名"],
-                        "入札手続等担当部局___担当者名" : dict1["入札手続等担当部局"]["担当者名"],
-                        "入札手続等担当部局___電話番号" : dict1["入札手続等担当部局"]["電話番号"],
-                        "入札手続等担当部局___FAX番号" : dict1["入札手続等担当部局"]["FAX番号"],
-                        "入札手続等担当部局___メールアドレス" : dict1["入札手続等担当部局"]["メールアドレス"],
-                        "公告日" : dict1["公告日"],
-                        "入札説明書の交付期間___開始日" : dict1["入札説明書の交付期間"]["開始日"],
-                        "入札説明書の交付期間___終了日" : dict1["入札説明書の交付期間"]["終了日"],
-                        "申請書及び競争参加資格確認資料の提出期限___開始日" : dict1["申請書及び競争参加資格確認資料の提出期限"]["開始日"],
-                        "申請書及び競争参加資格確認資料の提出期限___終了日" : dict1["申請書及び競争参加資格確認資料の提出期限"]["終了日"],
-                        "入札書の提出期間___開始日" : dict1["入札書の提出期間"]["開始日"],
-                        "入札書の提出期間___終了日" : dict1["入札書の提出期間"]["終了日"]
-                    }
-                    tmpdict2 = pd.DataFrame(dict2, index=[0])
-                    #df_ann = pd.concat([df_ann, tmpdict2], axis=0, ignore_index=True)
-                    #df_ann.to_csv(output_path_ann, sep="\t", index=False)
-                    #df_ann.to_csv(output_path_ann_zip, sep="\t", compression="zip", index=False)
-                dict1["announcement_no"] = announcement_no
-                new_json = ocr_utils.convertJson(json_value=dict1)
-
-
                 # requirements
                 if document_id in df_req["document_id"].values:
-                    dict2 = df_req[df_req["document_id"]==document_id]
+                    dict2 = df_req[df_req["document_id"] == document_id]
                     if dict2["資格・条件"].isna().all():
                         requirement_texts = {
                             "資格・条件": ["Missing requirements."]
@@ -5444,56 +5026,16 @@ Execute
                         requirement_texts = {
                             "資格・条件": dict2["資格・条件"].apply(ast.literal_eval).values[0]
                         }
+
+                    requirement_texts["announcement_no"] = announcement_no
+                    dic = self.convertRequirementTextDict(requirement_texts=requirement_texts)
+                    all_requirement_texts.append(pd.DataFrame(dic))
                 else:
-                    print(document_id)
-                    if doc_data is None:
-                        doc_data = ocr_utils.getPDFDataFromUrl(pdfurl)
+                    print(f"Warning: No requirements data found for document_id={document_id}")
 
-                    time.sleep(0.5)
-                    requirement_texts = ocr_utils.getRequirementText(doc_data=doc_data)
-                    dict2 = {
-                        "document_id" : document_id,
-                        "資格・条件" : str(requirement_texts["資格・条件"])
-                    }
-                    # tmpdict2 = pd.DataFrame(dict2, index=[0])
-                    tmpdict2 = pd.DataFrame([dict2])
-                    #df_req = pd.concat([df_req, tmpdict2], axis=0, ignore_index=True)
-                    #df_req.to_csv(output_path_req, sep="\t", index=False)
-                    #df_req.to_csv(output_path_req_zip, sep="\t", compression="zip", index=False)
-                requirement_texts["announcement_no"] = announcement_no
-                dic = ocr_utils.convertRequirementTextDict(requirement_texts=requirement_texts)
-
-
-
-                all_announcements.append(new_json)
-                all_requirement_texts.append(pd.DataFrame(dic))
-            except ClientError as e:
-                # print(e)
-                break
-
-
-        ######################################
-        # まずは bid_announcements を更新。   #
-        ######################################
-
-        df1 = pd.DataFrame(all_announcements)
-        if df1.shape[0] > 0:
-            df1["fax"] = df1["fax"].astype("string")
-            print(fr"Upload {tmp_tablename_announcements}")
-            db_operator.uploadDataToTable(data=df1, tablename=tmp_tablename_announcements, chunksize=5000)
-
-            if False:
-                val = db_operator.selectToTable(tablename=tmp_tablename_announcements)
-                print(val)
-            if False:
-                val_pre = db_operator.selectToTable(tablename=tablename_announcements)
-                print(val_pre)
-
-            print(fr"Update {tablename_announcements}")
-            db_operator.updateAnnouncements(bid_announcements_tablename=tablename_announcements, bid_announcements_tablename_for_update=tmp_tablename_announcements)
-
-        # 中間テーブル削除
-        db_operator.dropTable(tablename=tmp_tablename_announcements)
+            except Exception as e:
+                print(f"Error processing announcement_no={announcement_no}: {e}")
+                continue
 
         ######################################
         # bid_requirements を更新。           #
@@ -5501,11 +5043,11 @@ Execute
 
         if all_requirement_texts != []:
             df2 = pd.concat(all_requirement_texts, ignore_index=True)
-            max_requirement_no = db_operator.getMaxOfColumn(tablename=tablename_requirements,column_name="requirement_no")
-            if max_requirement_no.iloc[0,0] is None or pd.isna(max_requirement_no.iloc[0,0]):
+            max_requirement_no = db_operator.getMaxOfColumn(tablename=tablename_requirements, column_name="requirement_no")
+            if max_requirement_no.iloc[0, 0] is None or pd.isna(max_requirement_no.iloc[0, 0]):
                 max_requirement_no = 0
             else:
-                max_requirement_no = max_requirement_no.iloc[0,0]
+                max_requirement_no = max_requirement_no.iloc[0, 0]
             current_requirement_no = max_requirement_no + 1
             df2["requirement_no"] = range(current_requirement_no, current_requirement_no + df2.shape[0])
 
@@ -5734,6 +5276,8 @@ if __name__ == "__main__":
                        help="step0のみ実行して終了（データベース不要でテスト可能）")
     parser.add_argument("--stop_after_step1", action="store_true",
                        help="step1まで実行して終了")
+    parser.add_argument("--stop_after_step2", action="store_true",
+                       help="step2まで実行して終了")
     parser.add_argument("--step0_output_base_dir", default="output",
                        help="step0の出力ベースディレクトリ（デフォルト: output）")
     parser.add_argument("--step0_topAgencyName", default="防衛省",
@@ -5766,8 +5310,6 @@ if __name__ == "__main__":
     parser.add_argument("--step1_transfer_remove_table", action="store_true")
     parser.add_argument("--step3_remove_table", action="store_true")
 
-    parser.add_argument("--condition_doneOCR", default="FALSE")
-
     try:
         args = parser.parse_args()
         bid_announcements_pre_file = args.bid_announcements_pre_file
@@ -5785,6 +5327,7 @@ if __name__ == "__main__":
         run_step0_prepare_documents = args.run_step0_prepare_documents
         run_step0_only = args.run_step0_only
         stop_after_step1 = args.stop_after_step1
+        stop_after_step2 = args.stop_after_step2
         step0_output_base_dir = args.step0_output_base_dir
         step0_topAgencyName = args.step0_topAgencyName
         step0_no_merge = args.step0_no_merge
@@ -5802,8 +5345,6 @@ if __name__ == "__main__":
 
         step1_transfer_remove_table = args.step1_transfer_remove_table
         step3_remove_table = args.step3_remove_table
-
-        condition_doneOCR = args.condition_doneOCR
     except:
         bid_announcements_pre_file = "data/bid_announcements_pre/bid_announcements_pre_1.txt"
         use_bigquery = False
@@ -5812,6 +5353,8 @@ if __name__ == "__main__":
         input_list_file = None
         run_step0_prepare_documents = False
         run_step0_only = False
+        stop_after_step1 = False
+        stop_after_step2 = False
         step0_output_base_dir = "output"
         step0_topAgencyName = "防衛省"
         step0_no_merge = False
@@ -5825,8 +5368,6 @@ if __name__ == "__main__":
 
         step1_transfer_remove_table = False
         step3_remove_table = False
-
-        condition_doneOCR = "FALSE"
     if bid_announcements_pre_file is None:
         bid_announcements_pre_file = "data/bid_announcements_pre/bid_announcements_pre_1.txt"
         print(fr"Set bid_announcements_pre_file = {bid_announcements_pre_file}")
@@ -5845,7 +5386,7 @@ if __name__ == "__main__":
         )
 
         # Step0のみ実行
-        announcements_documents_file = obj.step0_prepare_documents(
+        announcements_documents_file, req_file_path = obj.step0_prepare_documents(
             input_list_file=input_list_file,
             output_base_dir=step0_output_base_dir,
             timestamp=step0_timestamp,
@@ -5863,6 +5404,8 @@ if __name__ == "__main__":
             ocr_max_api_calls_per_run=step0_ocr_max_api_calls_per_run
         )
         print(f"\nGenerated announcements_documents_file: {announcements_documents_file}")
+        if req_file_path:
+            print(f"Generated requirements_file: {req_file_path}")
         print("\n--run_step0_only specified. Exiting after step0.")
         exit(0)
 
@@ -5887,13 +5430,16 @@ if __name__ == "__main__":
     if stop_processing:
         exit(1)
 
+    # Step0の出力ファイルパス（step0をスキップする場合はNone）
+    req_file_path = None
+
     # Step0: 公告ドキュメント準備処理（オプション）
     if run_step0_prepare_documents:
         if input_list_file is None:
             print("Error: --input_list_file is required when --run_step0_prepare_documents is specified")
             exit(1)
 
-        announcements_documents_file = obj.step0_prepare_documents(
+        announcements_documents_file, req_file_path = obj.step0_prepare_documents(
             input_list_file=input_list_file,
             output_base_dir=step0_output_base_dir,
             timestamp=step0_timestamp,
@@ -5911,6 +5457,8 @@ if __name__ == "__main__":
             ocr_max_api_calls_per_run=step0_ocr_max_api_calls_per_run
         )
         print(f"\nGenerated announcements_documents_file: {announcements_documents_file}")
+        if req_file_path:
+            print(f"Generated requirements_file: {req_file_path}")
 
     # obj.step0_create_bid_announcements_pre(bid_announcements_pre_file=bid_announcements_pre_file)
     # obj.step1_transfer(remove_table=step1_transfer_remove_table)
@@ -5924,10 +5472,13 @@ if __name__ == "__main__":
         print("\n--stop_after_step1 specified. Exiting after step1.")
         exit(0)
 
-    obj.step2_ocr(
-        ocr_utils = OCRutils(google_ai_studio_api_key_filepath=google_ai_studio_api_key_filepath),
-        condition_doneOCR=condition_doneOCR
-    )
+    obj.step2_ocr(ocr_req_file_path=req_file_path)
+
+    # step2で止まる場合
+    if stop_after_step2:
+        print("\n--stop_after_step2 specified. Exiting after step2.")
+        exit(0)
+
     obj.step3(remove_table=step3_remove_table)
     print("Ended step3.")
 
