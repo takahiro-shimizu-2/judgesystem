@@ -1,6 +1,0 @@
-# VPC Connector 経由で Private IP 接続する場合（推奨）
-# --pg_host には Cloud SQL の Private IP (10.1.0.5) を指定
-# --cloud_sql_instance は不要（Unix socket接続用のため）
-# --pg_sslmode は require を指定（disable だと内部実装がSSL前提のため動作しない）
-# VPC Connector (cloudrun-connector) が作成済みであること
-./backend_gcloud_command_sample.sh --frontend_url https://frontend-xxxxxxxx.a.run.app --project_id mizu-api-457906 --dataset_name biddb --pg_host 10.1.0.5 --pg_user postgres --pg_password 'xxxx-xxx-xxxxxx' --pg_database biddb --pg_port 5432 --pg_sslmode require
