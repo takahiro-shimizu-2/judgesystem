@@ -4948,7 +4948,7 @@ Execute
         return new_dict
 
 
-    def step2_ocr(self, ocr_req_file_path=None):
+    def step2_process_requirements(self, ocr_req_file_path=None):
         """
         step2 : 要件処理
 
@@ -5010,6 +5010,7 @@ Execute
         all_requirement_texts = []
 
         # 各公告の要件を処理
+        print(f"Processing requirements for {len(df_announcements)} announcements...")
         for index, row in tqdm(df_announcements.iterrows(), total=len(df_announcements)):
             announcement_no = row["announcement_no"]
             document_id = row["document_id"]
@@ -5472,7 +5473,7 @@ if __name__ == "__main__":
         print("\n--stop_after_step1 specified. Exiting after step1.")
         exit(0)
 
-    obj.step2_ocr(ocr_req_file_path=req_file_path)
+    obj.step2_process_requirements(ocr_req_file_path=req_file_path)
 
     # step2で止まる場合
     if stop_after_step2:
