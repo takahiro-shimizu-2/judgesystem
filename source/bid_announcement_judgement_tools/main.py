@@ -1831,7 +1831,7 @@ class DBOperatorGCPVM(DBOperator):
             SELECT
                 announcement_id,
                 ARRAY_AGG(
-                    STRUCT(
+                        STRUCT(
                         document_id as id,
                         type,
                         title,
@@ -1840,7 +1840,7 @@ class DBOperatorGCPVM(DBOperator):
                         extractedAt,
                         url,
                         content
-                    )
+                        )
                 ) AS documents
             FROM {self.project_id}.{self.dataset_name}.announcements_documents_master
             GROUP BY announcement_id
@@ -2016,7 +2016,7 @@ class DBOperatorGCPVM(DBOperator):
                     type,
                     title,
                     fileFormat,
-                    pageCount,
+                        pageCount,
                     extractedAt,
                     url,
                     content
@@ -4362,7 +4362,7 @@ class BidJudgementSan:
         Returns:
             pd.DataFrame: pageCount が更新された DataFrame
         """
-        print("pagecount.")
+        print("pageCount.")
         cpu_count_value = os.cpu_count()
         max_workers = min(8, cpu_count_value)
 
@@ -4578,7 +4578,7 @@ class BidJudgementSan:
                             "bidType": dict0.get("bidType"),
                             "type": dict0.get("type"),
                             "category": dict0.get("category"),
-                            "pagecount": dict0.get("pagecount"),
+                            "pageCount": dict0.get("pageCount"),
                             "docdiststart": dict0.get("docdiststart"),
                             "docdistend": dict0.get("docdistend"),
                             "submissionstart": dict0.get("submissionstart"),
@@ -4874,7 +4874,7 @@ class BidJudgementSan:
         new_json["bidType"] = json_value.get("入札方式", None)
         new_json["type"] = json_value.get("資料種類", None)
         new_json["category"] = json_value.get("category", None)
-        new_json["pagecount"] = json_value.get("pagecount", None)
+        new_json["pageCount"] = json_value.get("pageCount", None)
 
         tmp_json = json_value.get("入札説明書の交付期間", None)
         if isinstance(tmp_json, dict):
@@ -4933,7 +4933,7 @@ JSON Structure:
 "入札方式" : "",
 "資料種類" : "",
 "category" : "",
-"pagecount" : "",
+"pageCount" : "",
 "入札説明書の交付期間": {
 "開始日": "",
 "終了日": ""
