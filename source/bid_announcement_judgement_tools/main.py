@@ -5319,7 +5319,7 @@ Execute
         # df0 = db_operator.selectToTable(tablename=fr"{tablename_company_bid_judgement}", where_clause="where final_status is NULL")
         print(fr"Target of checking requirement : {df0.shape[0]}")
 
-        # UUID化により連番採番は不要
+        # 並列処理では連番採番時に重複が発生するため UUID を使用
 
         # req_df はひとまず一括取得
         req_df0 = db_operator.selectToTable(tablename=fr"{tablename_requirements}")
