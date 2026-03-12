@@ -1058,14 +1058,9 @@ class DBOperatorGCPVM(DBOperator):
         self.client.query(sql).result()
 
     def updateRequirements(self, bid_requirements_tablename, bid_requirements_tablename_for_update):
-        sql = fr"""MERGE `{self.project_id}.{self.dataset_name}.{bid_requirements_tablename}` AS target
-        USING `{self.project_id}.{self.dataset_name}.{bid_requirements_tablename_for_update}` AS source
-        ON 
-        target.announcement_no = source.announcement_no 
-        and target.requirement_no = source.requirement_no
-        and target.requirement_type = source.requirement_type
-        when not matched then
-        insert (
+        # step2で事前フィルタリング済みなので、単純なINSERTでOK
+        sql = f"""
+        INSERT INTO `{self.project_id}.{self.dataset_name}.{bid_requirements_tablename}` (
             announcement_no,
             requirement_no,
             requirement_type,
@@ -1074,15 +1069,15 @@ class DBOperatorGCPVM(DBOperator):
             createdDate,
             updatedDate
         )
-        values (
-            source.announcement_no,
-            source.requirement_no,
-            source.requirement_type,
-            source.requirement_text,
+        SELECT
+            announcement_no,
+            requirement_no,
+            requirement_type,
+            requirement_text,
             FALSE,
-            FORMAT_TIMESTAMP('%Y-%m-%d %H:%M:%S', source.createdDate),
-            FORMAT_TIMESTAMP('%Y-%m-%d %H:%M:%S', source.updatedDate)
-        )
+            createdDate,
+            updatedDate
+        FROM `{self.project_id}.{self.dataset_name}.{bid_requirements_tablename_for_update}`
         """
         self.client.query(sql).result()
 
@@ -2435,7 +2430,9 @@ class DBOperatorSQLITE3(DBOperator):
         self.cur.execute(sql)
 
     def updateRequirements(self, bid_requirements_tablename, bid_requirements_tablename_for_update):
-        sql = fr"""insert into {bid_requirements_tablename} (
+        # step2で事前フィルタリング済みなので、単純なINSERTでOK
+        sql = fr"""
+        INSERT INTO {bid_requirements_tablename} (
             requirement_no,
             announcement_no,
             requirement_type,
@@ -2444,22 +2441,15 @@ class DBOperatorSQLITE3(DBOperator):
             createdDate,
             updatedDate
         )
-        select 
-        requirement_no,
-        announcement_no,
-        requirement_type,
-        requirement_text,
-        0,
-        createdDate,
-        updatedDate
-        from {bid_requirements_tablename_for_update} source where true
-        ON CONFLICT(announcement_no, requirement_no, requirement_type) DO UPDATE SET
-            announcement_no = excluded.announcement_no,
-            requirement_no = excluded.requirement_no,
-            requirement_type = excluded.requirement_type,
-            requirement_text = excluded.requirement_text,
-            createdDate = excluded.createddate,
-            updatedDate = excluded.updateddate
+        SELECT
+            requirement_no,
+            announcement_no,
+            requirement_type,
+            requirement_text,
+            0,
+            createdDate,
+            updatedDate
+        FROM {bid_requirements_tablename_for_update}
         """
         self.cur.execute(sql)
 
@@ -2742,6 +2732,138 @@ class DBOperatorSQLITE3(DBOperator):
 
     def createBackendPartners(self, tablename):
         raise NotImplementedError
+
+
+# グローバル変数（ワーカープロセスで使用）
+_req_dict_global = None
+
+
+def _init_requirements_worker(req_dict):
+    """ワーカープロセス初期化時に要件辞書をグローバル変数にセット"""
+    global _req_dict_global
+    _req_dict_global = req_dict
+
+
+def _convert_requirement_text_dict(requirement_texts):
+    """
+    要件テキストを変換してDataFrame用の辞書を作成（multiprocessing用グローバル関数）
+
+    Args:
+        requirement_texts: {"announcement_no": int, "資格・条件": list}
+
+    Returns:
+        dict: DataFrame作成用の辞書
+    """
+    announcement_no = requirement_texts["announcement_no"]
+
+    # 資格・条件が空の場合はデフォルトレコードを返す
+    if not requirement_texts["資格・条件"] or len(requirement_texts["資格・条件"]) == 0:
+        return {
+            "announcement_no": [announcement_no],
+            "requirement_no": [0],
+            "requirement_type": ["その他要件"],
+            "requirement_text": ["No requirements specified"],
+            "createdDate": [datetime.now().strftime('%Y-%m-%d %H:%M:%S')],
+            "updatedDate": [datetime.now().strftime('%Y-%m-%d %H:%M:%S')]
+        }
+
+    announcement_no_list = []
+    requirement_no_list = []
+    requirement_type_list = []
+    requirement_text_list = []
+    createdDate_list = []
+    updatedDate_list = []
+
+    req_type_list_search_list = {
+        "欠格要件":[
+            "70条","71条","会社更生法","民事再生法","更生手続",
+            "再生手続","情報保全","資本関係","人的関係","滞納",
+            "外国法","取引停止","破産","暴力団","指名停止",
+            "後見人","法人格取消"
+        ],
+        "業種・等級要件":["競争参加資格","一般競争","指名競争","等級","総合審査"],
+        "所在地要件":["所在","県内","市内","防衛局管内","本店が","支店が"],
+        "技術者要件":[
+            "施工管理技士","技術士","資格者証","電気工事士","建築士",
+            "基幹技能者","監理技術者","主任技術者","監理技術者資格者証","監理技術者講習修了証"
+        ],
+        "実績要件":[
+            "実績","工事成績","元請けとして","元請として","点以上",
+            "jv比率","過去実績"
+        ],
+        "その他要件":["jv","共同企業体","出資比率"]
+    }
+
+    for i, text in enumerate(requirement_texts["資格・条件"]):
+        has_other_req = True
+        text_lower = text.lower()
+        for req_type, search_list in req_type_list_search_list.items():
+            search_str = "|".join(search_list)
+            if (req_type != "その他要件" and re.search(search_str, text_lower)) or (req_type == "その他要件" and re.search(search_str, text_lower)) or (req_type == "その他要件" and not re.search(search_str, text_lower) and has_other_req):
+                announcement_no_list.append(announcement_no)
+                requirement_no_list.append(i)
+                requirement_type_list.append(req_type)
+                requirement_text_list.append(text)
+                createdDate_list.append(datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
+                updatedDate_list.append(datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
+                has_other_req = False
+
+    new_dict = {
+        "announcement_no":announcement_no_list,
+        "requirement_no":requirement_no_list,
+        "requirement_type":requirement_type_list,
+        "requirement_text":requirement_text_list,
+        "createdDate":createdDate_list,
+        "updatedDate":updatedDate_list
+    }
+    return new_dict
+
+
+def _process_requirements_chunk(df_chunk):
+    """
+    チャンク単位で要件処理（multiprocessing用グローバル関数）
+
+    Args:
+        df_chunk: 処理対象の公告データチャンク（announcement_no, document_idを含むDataFrame）
+
+    Returns:
+        list: DataFrame作成用の辞書リスト
+    """
+    global _req_dict_global
+    result_list = []
+
+    for _, row in df_chunk.iterrows():
+        announcement_no = row['announcement_no']
+        document_id = row['document_id']
+
+        try:
+            if document_id in _req_dict_global:
+                req_data = _req_dict_global[document_id]
+
+                # 資格・条件の取得
+                if pd.isna(req_data):
+                    requirement_texts = {
+                        "資格・条件": ["Missing requirements."]
+                    }
+                else:
+                    # 文字列からリストに変換
+                    if isinstance(req_data, str):
+                        req_conditions = ast.literal_eval(req_data)
+                    else:
+                        req_conditions = req_data
+                    requirement_texts = {
+                        "資格・条件": req_conditions
+                    }
+
+                requirement_texts["announcement_no"] = announcement_no
+                dic = _convert_requirement_text_dict(requirement_texts)
+                result_list.append(dic)
+
+        except Exception as e:
+            print(f"Error processing announcement_no={announcement_no}: {e}")
+            continue
+
+    return result_list
 
 
 def _process_judgement_chunk(args):
@@ -4847,8 +4969,10 @@ Execute
 
             # 列名を取得（announcement_id, document_id を含む全ての列）
             columns = df_new.columns.tolist()
-            columns_str = ", ".join(columns)
-            values_str = ", ".join([f"S.{col}" for col in columns])
+            # BigQueryでは `:` を含むカラム名はバッククォートで囲む必要がある
+            columns_escaped = [f"`{col}`" for col in columns]
+            columns_str = ", ".join(columns_escaped)
+            values_str = ", ".join([f"S.`{col}`" for col in columns])
 
             # MERGE文を構築
             merge_sql = f"""
@@ -4893,6 +5017,18 @@ Execute
 
         # requirement_texts = {"announcement_no":1, "資格・条件":["(2)令和07・08・09年度防衛省競争参加資格(全省庁統一資格)の「役務の提供等」において、開札時までに「C」又は「D」の等級に格付けされ北海道地域の競争参加を希望する者であること(会社更生法(平成14年法律第154号)に基づき更生手続開始の申立てがなされている者又は民事再生法(平成11年法律第225号)に基づき再生手続開始の申立てがなされている者については、手続開始の決定後、再度級別の格付けを受けていること。)。"]}
         announcement_no = requirement_texts["announcement_no"]
+
+        # 資格・条件が空の場合はデフォルトレコードを返す
+        if not requirement_texts["資格・条件"] or len(requirement_texts["資格・条件"]) == 0:
+            return {
+                "announcement_no": [announcement_no],
+                "requirement_no": [0],
+                "requirement_type": ["その他要件"],
+                "requirement_text": ["No requirements specified"],
+                "createdDate": [datetime.now().strftime('%Y-%m-%d %H:%M:%S')],
+                "updatedDate": [datetime.now().strftime('%Y-%m-%d %H:%M:%S')]
+            }
+
         announcement_no_list = []
         requirement_no_list = []
         requirement_type_list = []
@@ -4933,8 +5069,8 @@ Execute
                     requirement_no_list.append(i)
                     requirement_type_list.append(req_type)
                     requirement_text_list.append(text)
-                    createdDate_list.append(datetime.now())
-                    updatedDate_list.append(datetime.now())
+                    createdDate_list.append(datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
+                    updatedDate_list.append(datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
                     has_other_req = False
 
         new_dict = {
@@ -4989,11 +5125,33 @@ Execute
             ocr_req_file_path = Path(ocr_req_file_path)
             print(f"Using specified OCR requirements file: {ocr_req_file_path}")
 
-        # 公告マスターから全公告を取得
-        df_announcements = db_operator.selectToTable(
-            tablename=fr"{tablename_announcements}",
-            where_clause="order by announcement_no"
-        )
+        # 公告マスターから必要な列のみ取得（announcement_no, document_id）
+        query = f"""
+        SELECT announcement_no, document_id
+        FROM `{db_operator.project_id}.{db_operator.dataset_name}.{tablename_announcements}`
+        ORDER BY announcement_no
+        """
+        df_announcements = db_operator.any_query(query)
+
+        # 既に requirements が存在する announcement_no を除外
+        if db_operator.ifTableExists(tablename=tablename_requirements):
+            query_existing = f"""
+            SELECT DISTINCT announcement_no
+            FROM `{db_operator.project_id}.{db_operator.dataset_name}.{tablename_requirements}`
+            """
+            df_existing = db_operator.any_query(query_existing)
+
+            if len(df_existing) > 0:
+                original_count = len(df_announcements)
+                df_announcements = df_announcements[
+                    ~df_announcements['announcement_no'].isin(df_existing['announcement_no'])
+                ]
+                filtered_count = original_count - len(df_announcements)
+                print(f"Filtered out {filtered_count} announcements that already have requirements")
+
+                if len(df_announcements) == 0:
+                    print("No new announcements to process. Skipping requirements processing.")
+                    return
 
         # OCR結果ファイルからrequirementsデータを読み込み（zip優先）
         ocr_req_file_path_zip = Path(str(ocr_req_file_path) + ".zip")
@@ -5007,36 +5165,37 @@ Execute
         else:
             raise FileNotFoundError(f"Requirements file not found: {ocr_req_file_path}")
 
-        all_requirement_texts = []
-
-        # 各公告の要件を処理
-        print(f"Processing requirements for {len(df_announcements)} announcements...")
-        for index, row in tqdm(df_announcements.iterrows(), total=len(df_announcements)):
-            announcement_no = row["announcement_no"]
+        # df_reqをdocument_idでインデックスした辞書に変換（高速化のため）
+        print("Converting requirements data to dictionary...")
+        req_dict = {}
+        for _, row in df_req.iterrows():
             document_id = row["document_id"]
+            req_value = row["資格・条件"]
+            req_dict[document_id] = req_value
 
-            try:
-                # requirements
-                if document_id in df_req["document_id"].values:
-                    dict2 = df_req[df_req["document_id"] == document_id]
-                    if dict2["資格・条件"].isna().all():
-                        requirement_texts = {
-                            "資格・条件": ["Missing requirements."]
-                        }
-                    else:
-                        requirement_texts = {
-                            "資格・条件": dict2["資格・条件"].apply(ast.literal_eval).values[0]
-                        }
+        print(f"Processing requirements for {len(df_announcements)} announcements...")
 
-                    requirement_texts["announcement_no"] = announcement_no
-                    dic = self.convertRequirementTextDict(requirement_texts=requirement_texts)
-                    all_requirement_texts.append(pd.DataFrame(dic))
-                else:
-                    print(f"Warning: No requirements data found for document_id={document_id}")
+        # 並列処理設定
+        n_processes = cpu_count()
+        print(f"Using {n_processes} processes for parallel execution")
 
-            except Exception as e:
-                print(f"Error processing announcement_no={announcement_no}: {e}")
-                continue
+        # df_announcementsをn_processes個のチャンクに分割
+        df_chunks = np.array_split(df_announcements, n_processes)
+
+        # 空のチャンクを除外
+        df_chunks = [chunk for chunk in df_chunks if len(chunk) > 0]
+
+        # 並列実行（initializerでreq_dictをワーカープロセスのグローバル変数にセット）
+        print(f"Starting parallel processing with {len(df_chunks)} tasks...")
+        with Pool(processes=n_processes, initializer=_init_requirements_worker, initargs=(req_dict,)) as pool:
+            chunk_results = list(tqdm(pool.imap(_process_requirements_chunk, df_chunks), total=len(df_chunks), desc="Processing chunks"))
+
+        # 結果を集約（辞書からDataFrameに変換）
+        print("Aggregating results from all processes...")
+        all_requirement_texts = []
+        for result in chunk_results:
+            for dic in result:
+                all_requirement_texts.append(pd.DataFrame(dic))
 
         ######################################
         # bid_requirements を更新。           #
