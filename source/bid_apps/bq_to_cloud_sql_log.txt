@@ -221,28 +221,28 @@ psql "host=/cloudsql/mizu-api-457906:asia-east1:bid-judgement-asia-east1 dbname=
 DROP TABLE IF EXISTS backend_announcements CASCADE;
 CREATE TABLE backend_announcements (
     id TEXT PRIMARY KEY,
-    no BIGINT,
-    orderer_id TEXT,
+    "no" BIGINT,
+    "ordererId" TEXT,
     title TEXT,
     organization TEXT,
     category TEXT,
-    bid_type TEXT,
-    work_location TEXT,
+    "bidType" TEXT,
+    "workLocation" TEXT,
     department JSONB,
-    publish_date TEXT,
-    explanation_start_date TEXT,
-    explanation_end_date TEXT,
-    application_start_date TEXT,
-    application_end_date TEXT,
-    bid_start_date TEXT,
-    bid_end_date TEXT,
+    "publishDate" TEXT,
+    "explanationStartDate" TEXT,
+    "explanationEndDate" TEXT,
+    "applicationStartDate" TEXT,
+    "applicationEndDate" TEXT,
+    "bidStartDate" TEXT,
+    "bidEndDate" TEXT,
     deadline TEXT,
-    estimated_amount_min NUMERIC,
-    estimated_amount_max NUMERIC,
+    "estimatedAmountMin" NUMERIC,
+    "estimatedAmountMax" NUMERIC,
     status TEXT,
-    actual_amount NUMERIC,
-    winning_company_id TEXT,
-    winning_company_name TEXT,
+    "actualAmount" NUMERIC,
+    "winningCompanyId" TEXT,
+    "winningCompanyName" TEXT,
     competing_companies JSONB,
     documents JSONB
 );
@@ -356,10 +356,10 @@ gcloud projects add-iam-policy-binding mizu-api-457906  --member="serviceAccount
 
 
 ## GCS にあるデータの cloud sql への import
-gcloud sql import csv ${INSTANCE} gs://${BUCKET}/backend/announcements/date=${RUN_DATE}/part-*.csv.gz  --database=${DBNAME} --table=backend_announcements --columns=id,no,orderer_id,title,organization,category,bid_type,work_location,department,publish_date,explanation_start_date,explanation_end_date,application_start_date,application_end_date,bid_start_date,bid_end_date,deadline,estimated_amount_min,estimated_amount_max,status,actual_amount,winning_company_id,winning_company_name,competing_companies,documents
-gcloud sql import csv bid-judgement-asia-east1 gs://bigquery-to-front-asia-east1/backend/announcements/date=20260311/part-*.csv.gz  --database=biddb --table=backend_announcements --columns=id,no,orderer_id,title,organization,category,bid_type,work_location,department,publish_date,explanation_start_date,explanation_end_date,application_start_date,application_end_date,bid_start_date,bid_end_date,deadline,estimated_amount_min,estimated_amount_max,status,actual_amount,winning_company_id,winning_company_name,competing_companies,documents
+gcloud sql import csv ${INSTANCE} gs://${BUCKET}/backend/announcements/date=${RUN_DATE}/part-*.csv.gz  --database=${DBNAME} --table=backend_announcements --columns=id,no,ordererId,title,organization,category,bidType,workLocation,department,publishDate,explanationStartDate,explanationEndDate,applicationStartDate,applicationEndDate,bidStartDate,bidEndDate,deadline,estimatedAmountMin,estimatedAmountMax,status,actualAmount,winningCompanyId,winningCompanyName,competing_companies,documents
+gcloud sql import csv bid-judgement-asia-east1 gs://bigquery-to-front-asia-east1/backend/announcements/date=20260311/part-*.csv.gz  --database=biddb --table=backend_announcements --columns=id,no,ordererId,title,organization,category,bidType,workLocation,department,publishDate,explanationStartDate,explanationEndDate,applicationStartDate,applicationEndDate,bidStartDate,bidEndDate,deadline,estimatedAmountMin,estimatedAmountMax,status,actualAmount,winningCompanyId,winningCompanyName,competing_companies,documents
 ワイルドカード不可
-gcloud sql import csv bid-judgement-asia-east1 gs://bigquery-to-front-asia-east1/backend/announcements/date=20260311/part-000000000000.csv.gz  --database=biddb --table=backend_announcements --columns=id,no,orderer_id,title,organization,category,bid_type,work_location,department,publish_date,explanation_start_date,explanation_end_date,application_start_date,application_end_date,bid_start_date,bid_end_date,deadline,estimated_amount_min,estimated_amount_max,status,actual_amount,winning_company_id,winning_company_name,competing_companies,documents
+gcloud sql import csv bid-judgement-asia-east1 gs://bigquery-to-front-asia-east1/backend/announcements/date=20260311/part-000000000000.csv.gz  --database=biddb --table=backend_announcements --columns=id,no,ordererId,title,organization,category,bidType,workLocation,department,publishDate,explanationStartDate,explanationEndDate,applicationStartDate,applicationEndDate,bidStartDate,bidEndDate,deadline,estimatedAmountMin,estimatedAmountMax,status,actualAmount,winningCompanyId,winningCompanyName,competing_companies,documents
 gcloud sql import csv bid-judgement-asia-east1 gs://bigquery-to-front-asia-east1/backend/evaluations/date=20260311/part-000000000000.csv.gz  --database=biddb --table=backend_evaluations --columns=id,evaluationNo,announcement,company,branch,requirements,status,workStatus,currentStep,evaluatedAt
 gcloud sql import csv bid-judgement-asia-east1 gs://bigquery-to-front-asia-east1/backend/companies/date=20260311/part-000000000000.csv.gz  --database=biddb --table=backend_companies --columns=id,no,name,address,grade,priority,phone,email,representative,established,capital,employeeCount,branches,certifications
 gcloud sql import csv bid-judgement-asia-east1 gs://bigquery-to-front-asia-east1/backend/orderers/date=20260311/part-000000000000.csv.gz  --database=biddb --table=backend_orderers --columns=id,no,name,category,address,phone,fax,email,departments,announcementCount,awardCount,averageAmount,lastAnnouncementDate
