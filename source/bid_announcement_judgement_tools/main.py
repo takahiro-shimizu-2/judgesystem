@@ -1231,15 +1231,9 @@ class DBOperatorGCPVM(DBOperator):
 
 
     def updateCompanyBidJudgement(self, company_bid_judgement_tablename, company_bid_judgement_tablename_for_update):
-        sql = fr"""MERGE `{self.project_id}.{self.dataset_name}.{company_bid_judgement_tablename}` AS target
-        USING `{self.project_id}.{self.dataset_name}.{company_bid_judgement_tablename_for_update}` AS source
-        ON 
-        target.evaluation_no = source.evaluation_no and
-        target.announcement_no = source.announcement_no and
-        target.company_no = source.company_no and
-        target.office_no = source.office_no
-        when not matched then
-        INSERT (
+        # preselectCompanyBidJudgementで未判定のみ取得済み、かつUUID使用のため単純INSERTでOK
+        sql = f"""
+        INSERT INTO `{self.project_id}.{self.dataset_name}.{company_bid_judgement_tablename}` (
             evaluation_no,
             announcement_no,
             company_no,
@@ -1257,40 +1251,31 @@ class DBOperatorGCPVM(DBOperator):
             createdDate,
             updatedDate
         )
-        VALUES (
-            source.evaluation_no,
-            source.announcement_no,
-            source.company_no,
-            source.office_no,
-            source.requirement_ineligibility,
-            source.requirement_grade_item,
-            source.requirement_location,
-            source.requirement_experience,
-            source.requirement_technician,
-            source.requirement_other,
-            source.deficit_requirement_message,
-            source.final_status,
-            source.message,
-            source.remarks,
-            FORMAT_TIMESTAMP('%Y-%m-%d %H:%M:%S', source.createdDate),
-            FORMAT_TIMESTAMP('%Y-%m-%d %H:%M:%S', source.updatedDate)
-        )
+        SELECT
+            evaluation_no,
+            announcement_no,
+            company_no,
+            office_no,
+            requirement_ineligibility,
+            requirement_grade_item,
+            requirement_location,
+            requirement_experience,
+            requirement_technician,
+            requirement_other,
+            deficit_requirement_message,
+            final_status,
+            message,
+            remarks,
+            FORMAT_TIMESTAMP('%Y-%m-%d %H:%M:%S', createdDate),
+            FORMAT_TIMESTAMP('%Y-%m-%d %H:%M:%S', updatedDate)
+        FROM `{self.project_id}.{self.dataset_name}.{company_bid_judgement_tablename_for_update}`
         """
         self.client.query(sql).result()
 
     def updateSufficientRequirements(self, sufficient_requirements_tablename, sufficient_requirements_tablename_for_update):
-        sql = fr"""MERGE `{self.project_id}.{self.dataset_name}.{sufficient_requirements_tablename}` AS target
-        USING `{self.project_id}.{self.dataset_name}.{sufficient_requirements_tablename_for_update}` AS source
-        ON 
-        target.sufficiency_detail_no = source.sufficiency_detail_no and
-        target.evaluation_no = source.evaluation_no and
-        target.announcement_no = source.announcement_no and
-        target.requirement_no = source.requirement_no and
-        target.company_no = source.company_no and
-        target.office_no = source.office_no and
-        target.requirement_type = source.requirement_type
-        when not matched then
-        insert (
+        # UUID使用のため単純INSERTでOK
+        sql = f"""
+        INSERT INTO `{self.project_id}.{self.dataset_name}.{sufficient_requirements_tablename}` (
             sufficiency_detail_no,
             evaluation_no,
             announcement_no,
@@ -1302,34 +1287,25 @@ class DBOperatorGCPVM(DBOperator):
             createdDate,
             updatedDate
         )
-        values (
-            source.sufficiency_detail_no,
-            source.evaluation_no,
-            source.announcement_no,
-            source.requirement_no,
-            source.company_no,
-            source.office_no,
-            source.requirement_type,
-            source.requirement_description,
-            FORMAT_TIMESTAMP('%Y-%m-%d %H:%M:%S', source.createdDate),
-            FORMAT_TIMESTAMP('%Y-%m-%d %H:%M:%S', source.updatedDate)
-        )
+        SELECT
+            sufficiency_detail_no,
+            evaluation_no,
+            announcement_no,
+            requirement_no,
+            company_no,
+            office_no,
+            requirement_type,
+            requirement_description,
+            FORMAT_TIMESTAMP('%Y-%m-%d %H:%M:%S', createdDate),
+            FORMAT_TIMESTAMP('%Y-%m-%d %H:%M:%S', updatedDate)
+        FROM `{self.project_id}.{self.dataset_name}.{sufficient_requirements_tablename_for_update}`
         """
         self.client.query(sql).result()
 
     def updateInsufficientRequirements(self, insufficient_requirements_tablename, insufficient_requirements_tablename_for_update):
-        sql = fr"""MERGE `{self.project_id}.{self.dataset_name}.{insufficient_requirements_tablename}` AS target
-        USING `{self.project_id}.{self.dataset_name}.{insufficient_requirements_tablename_for_update}` AS source
-        ON 
-        target.shortage_detail_no = source.shortage_detail_no and
-        target.evaluation_no = source.evaluation_no and
-        target.announcement_no = source.announcement_no and
-        target.requirement_no = source.requirement_no and
-        target.company_no = source.company_no and
-        target.office_no = source.office_no and
-        target.requirement_type = source.requirement_type
-        WHEN NOT MATCHED THEN
-        INSERT (
+        # UUID使用のため単純INSERTでOK
+        sql = f"""
+        INSERT INTO `{self.project_id}.{self.dataset_name}.{insufficient_requirements_tablename}` (
             shortage_detail_no,
             evaluation_no,
             announcement_no,
@@ -1343,20 +1319,20 @@ class DBOperatorGCPVM(DBOperator):
             createdDate,
             updatedDate
         )
-        VALUES (
-            source.shortage_detail_no,
-            source.evaluation_no,
-            source.announcement_no,
-            source.requirement_no,
-            source.company_no,
-            source.office_no,
-            source.requirement_type,
-            source.requirement_description,
-            source.suggestions_for_improvement,
-            source.final_comment,
-            FORMAT_TIMESTAMP('%Y-%m-%d %H:%M:%S', source.createdDate),
-            FORMAT_TIMESTAMP('%Y-%m-%d %H:%M:%S', source.updatedDate)
-        )
+        SELECT
+            shortage_detail_no,
+            evaluation_no,
+            announcement_no,
+            requirement_no,
+            company_no,
+            office_no,
+            requirement_type,
+            requirement_description,
+            suggestions_for_improvement,
+            final_comment,
+            FORMAT_TIMESTAMP('%Y-%m-%d %H:%M:%S', createdDate),
+            FORMAT_TIMESTAMP('%Y-%m-%d %H:%M:%S', updatedDate)
+        FROM `{self.project_id}.{self.dataset_name}.{insufficient_requirements_tablename_for_update}`
         """
         self.client.query(sql).result()
 
@@ -2591,7 +2567,9 @@ class DBOperatorSQLITE3(DBOperator):
         return ret
 
     def updateCompanyBidJudgement(self, company_bid_judgement_tablename, company_bid_judgement_tablename_for_update):
-        sql = fr"""insert into {company_bid_judgement_tablename} (
+        # preselectCompanyBidJudgementで未判定のみ取得済み、かつUUID使用のため単純INSERTでOK
+        sql = f"""
+        INSERT INTO {company_bid_judgement_tablename} (
             evaluation_no,
             announcement_no,
             company_no,
@@ -2608,8 +2586,8 @@ class DBOperatorSQLITE3(DBOperator):
             remarks,
             createdDate,
             updatedDate
-        ) 
-        select 
+        )
+        SELECT
             evaluation_no,
             announcement_no,
             company_no,
@@ -2626,13 +2604,12 @@ class DBOperatorSQLITE3(DBOperator):
             remarks,
             createdDate,
             updatedDate
-        from {company_bid_judgement_tablename_for_update} where true
-        ON CONFLICT(evaluation_no, announcement_no, company_no, office_no) 
-        DO NOTHING
+        FROM {company_bid_judgement_tablename_for_update}
         """
         self.cur.execute(sql)
 
     def updateSufficientRequirements(self, sufficient_requirements_tablename, sufficient_requirements_tablename_for_update):
+        # UUID使用のため単純INSERTでOK
         sql = fr"""insert into {sufficient_requirements_tablename} (
             sufficiency_detail_no,
             evaluation_no,
@@ -2655,24 +2632,13 @@ class DBOperatorSQLITE3(DBOperator):
             requirement_type,
             requirement_description,
             createdDate,
-            updatedDate                    
+            updatedDate
         from {sufficient_requirements_tablename_for_update} where true
-        ON CONFLICT(sufficiency_detail_no, evaluation_no, announcement_no, requirement_no, company_no, office_no, requirement_type) 
-        DO UPDATE SET
-            sufficiency_detail_no = {sufficient_requirements_tablename}.sufficiency_detail_no,
-            evaluation_no = {sufficient_requirements_tablename}.evaluation_no,
-            announcement_no = {sufficient_requirements_tablename}.announcement_no,
-            requirement_no = {sufficient_requirements_tablename}.requirement_no,
-            company_no = {sufficient_requirements_tablename}.company_no,
-            office_no = {sufficient_requirements_tablename}.office_no,
-            requirement_type = excluded.requirement_type,
-            requirement_description = excluded.requirement_description,
-            createdDate = excluded.createdDate,
-            updatedDate = excluded.updatedDate
         """
         self.cur.execute(sql)
 
     def updateInsufficientRequirements(self, insufficient_requirements_tablename, insufficient_requirements_tablename_for_update):
+        # UUID使用のため単純INSERTでOK
         sql = fr"""insert into {insufficient_requirements_tablename} (
             shortage_detail_no,
             evaluation_no,
@@ -2701,20 +2667,6 @@ class DBOperatorSQLITE3(DBOperator):
             createdDate,
             updatedDate
         from {insufficient_requirements_tablename_for_update} where true
-        ON CONFLICT(shortage_detail_no, evaluation_no, announcement_no, requirement_no, company_no, office_no, requirement_type) 
-        DO UPDATE SET
-            shortage_detail_no = {insufficient_requirements_tablename}.shortage_detail_no,
-            evaluation_no = {insufficient_requirements_tablename}.evaluation_no,
-            announcement_no = {insufficient_requirements_tablename}.announcement_no,
-            requirement_no = {insufficient_requirements_tablename}.requirement_no,
-            company_no = {insufficient_requirements_tablename}.company_no,
-            office_no = {insufficient_requirements_tablename}.office_no,
-            requirement_type = excluded.requirement_type,
-            requirement_description = excluded.requirement_description,
-            suggestions_for_improvement = excluded.suggestions_for_improvement,
-            final_comment = excluded.final_comment,
-            createdDate = excluded.createdDate,
-            updatedDate = excluded.updatedDate
         """
         self.cur.execute(sql)
 
