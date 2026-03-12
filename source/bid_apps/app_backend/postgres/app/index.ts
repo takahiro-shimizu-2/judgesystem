@@ -3,16 +3,7 @@ import cors from "cors";
 import compression from "compression";
 import { Pool, PoolClient, PoolConfig } from "pg";
 
-const normalizeInt = (value: string | undefined, fallback: number): number => {
-  if (!value) {
-    return fallback;
-  }
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : fallback;
-};
-
-const DEFAULT_LIMIT = normalizeInt(process.env.API_DEFAULT_LIMIT, 10);
-const MAX_LIMIT = normalizeInt(process.env.API_MAX_LIMIT, 1000);
+// LIMIT removed to match BigQuery backend behavior
 
 const shouldEnableSsl = (): boolean => {
   const flag = (process.env.PGSSLMODE ?? process.env.PGSSL ?? "").toLowerCase();
@@ -93,20 +84,6 @@ const TABLES = {
 type TableName = (typeof TABLES)[keyof typeof TABLES];
 const schemaPrefix = process.env.PG_SCHEMA ? `${process.env.PG_SCHEMA}.` : "";
 
-const getLimitFromRequest = (req: Request): number | null => {
-  const raw = req.query.limit;
-  const normalized = Array.isArray(raw)
-    ? raw[0]
-    : typeof raw === "string"
-    ? raw
-    : undefined;
-  const value = normalized === undefined ? DEFAULT_LIMIT : Number(normalized);
-  if (!Number.isInteger(value) || value <= 0 || value > MAX_LIMIT) {
-    return null;
-  }
-  return value;
-};
-
 const respondWithRows = (res: Response, rows: unknown[]): void => {
   res.setHeader("Content-Type", "application/json");
   res.setHeader("Cache-Control", "public, max-age=1800");
@@ -117,18 +94,12 @@ const createTableHandler = (tableName: TableName) => {
   const qualifiedTableName = `${schemaPrefix}${tableName}`;
   return async (req: Request, res: Response): Promise<void> => {
     console.log(`GET ${req.path} hit`);
-    const limit = getLimitFromRequest(req);
-    if (limit === null) {
-      res.status(400).json({ error: "Invalid limit" });
-      return;
-    }
 
     let client: PoolClient | undefined;
     try {
       client = await pool.connect();
       const { rows } = await client.query(
-        `SELECT * FROM ${qualifiedTableName} LIMIT $1`,
-        [limit]
+        `SELECT * FROM ${qualifiedTableName}`
       );
       respondWithRows(res, rows);
     } catch (error) {
