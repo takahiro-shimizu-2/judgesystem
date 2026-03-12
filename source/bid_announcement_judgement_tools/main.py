@@ -5126,32 +5126,31 @@ Execute
             print(f"Using specified OCR requirements file: {ocr_req_file_path}")
 
         # 公告マスターから必要な列のみ取得（announcement_no, document_id）
-        query = f"""
-        SELECT announcement_no, document_id
-        FROM `{db_operator.project_id}.{db_operator.dataset_name}.{tablename_announcements}`
-        ORDER BY announcement_no
-        """
-        df_announcements = db_operator.any_query(query)
-
-        # 既に requirements が存在する announcement_no を除外
+        # SQLレベルで既存の announcement_no を除外（メモリ効率化）
         if db_operator.ifTableExists(tablename=tablename_requirements):
-            query_existing = f"""
-            SELECT DISTINCT announcement_no
-            FROM `{db_operator.project_id}.{db_operator.dataset_name}.{tablename_requirements}`
+            query = f"""
+            SELECT a.announcement_no, a.document_id
+            FROM `{db_operator.project_id}.{db_operator.dataset_name}.{tablename_announcements}` AS a
+            LEFT JOIN (
+                SELECT DISTINCT announcement_no
+                FROM `{db_operator.project_id}.{db_operator.dataset_name}.{tablename_requirements}`
+            ) AS r ON a.announcement_no = r.announcement_no
+            WHERE r.announcement_no IS NULL
+            ORDER BY a.announcement_no
             """
-            df_existing = db_operator.any_query(query_existing)
+        else:
+            query = f"""
+            SELECT announcement_no, document_id
+            FROM `{db_operator.project_id}.{db_operator.dataset_name}.{tablename_announcements}`
+            ORDER BY announcement_no
+            """
 
-            if len(df_existing) > 0:
-                original_count = len(df_announcements)
-                df_announcements = df_announcements[
-                    ~df_announcements['announcement_no'].isin(df_existing['announcement_no'])
-                ]
-                filtered_count = original_count - len(df_announcements)
-                print(f"Filtered out {filtered_count} announcements that already have requirements")
+        df_announcements = db_operator.any_query(query)
+        print(f"Found {len(df_announcements)} announcements to process (after filtering existing requirements)")
 
-                if len(df_announcements) == 0:
-                    print("No new announcements to process. Skipping requirements processing.")
-                    return
+        if len(df_announcements) == 0:
+            print("No new announcements to process. Skipping requirements processing.")
+            return
 
         # OCR結果ファイルからrequirementsデータを読み込み（zip優先）
         ocr_req_file_path_zip = Path(str(ocr_req_file_path) + ".zip")
