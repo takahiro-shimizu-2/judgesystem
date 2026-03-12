@@ -5712,19 +5712,6 @@ Execute
 
 
 if __name__ == "__main__":
-    # GCP bigquery想定
-    # google ai studio に接続しなくてよいなら  --google_ai_studio_api_key_filepath 無しでよい。
-    # python source/bid_announcement_judgement_tools/main.py --google_ai_studio_api_key_filepath data/sec/google_ai_studio_api_key_mizu.txt --bigquery_location SPECIFY_LOCATION --bigquery_project_id SPECIFY_PROJECT_ID --bigquery_dataset_name SPECIFY_DATASET_NAME --use_gcp_vm
-    # 
-    # python source/bid_announcement_judgement_tools/main.py --google_ai_studio_api_key_filepath data/sec/google_ai_studio_api_key_mizu.txt --bigquery_location "asia-northeast1" --bigquery_project_id mizu-api-457906 --bigquery_dataset_name bid_db --use_gcp_vm
-    # python source/bid_announcement_judgement_tools/main.py --google_ai_studio_api_key_filepath data/sec/google_ai_studio_api_key_mizu.txt --bigquery_location "asia-northeast1" --bigquery_project_id mizu-api-457906 --bigquery_dataset_name bid_db --use_gcp_vm
-    # python source/bid_announcement_judgement_tools/main.py --google_ai_studio_api_key_filepath data/sec/google_ai_studio_api_key_mizu.txt --bigquery_location "asia-northeast1" --bigquery_project_id mizu-api-457906 --bigquery_dataset_name bid_db --use_gcp_vm  --step1_transfer_remove_table --step3_remove_table
-    # 
-    # sqlite3想定
-    # python source/bid_announcement_judgement_tools/main.py --bid_announcements_pre_file data/bid_announcements_pre/bid_announcements_pre_1.txt --google_ai_studio_api_key_filepath data/sec/google_ai_studio_api_key.txt --sqlite3_db_file_path data/example.db
-    # python source/bid_announcement_judgement_tools/main.py --bid_announcements_pre_file data/bid_announcements_pre/all.txt --google_ai_studio_api_key_filepath data/sec/google_ai_studio_api_key_mizu.txt --sqlite3_db_file_path data/example.db
-    # python source/bid_announcement_judgement_tools/main.py --bid_announcements_pre_file data/bid_announcements_pre/all.txt --google_ai_studio_api_key_filepath data/sec/google_ai_studio_api_key_mizu.txt --sqlite3_db_file_path data/example.db --step1_transfer_remove_table --step3_remove_table
-    # python -i source/bid_announcement_judgement_tools/main.py --sqlite3_db_file_path data/example.db --stop_processing
 
     parser = argparse.ArgumentParser(description="")
     parser.add_argument("--use_gcp_vm", action="store_true")
