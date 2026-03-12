@@ -1602,7 +1602,7 @@ class DBOperatorGCPVM(DBOperator):
         )
         SELECT
         cast(evaluation_no as string) AS id,
-        LPAD(CAST(evaluation_no AS STRING), 8, '0') AS evaluationNo,
+        cast(evaluation_no as string) AS evaluationNo,
         struct(
             concat('ann-', announcement_no) AS id,
             orderer_id AS ordererId,
