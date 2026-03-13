@@ -35,13 +35,33 @@ export const filterByStatus = (status: EvaluationStatus) =>
 export const findById = (id: string) =>
   mockBidEvaluations.find((evaluation) => evaluation.id === id);
 
-export const updateWorkStatus = (id: string, workStatus: WorkStatus): boolean => {
+export const updateWorkStatus = async (id: string, workStatus: WorkStatus): Promise<boolean> => {
   const evaluation = mockBidEvaluations.find((e) => e.id === id);
-  if (evaluation) {
+  if (!evaluation) {
+    return false;
+  }
+
+  try {
+    const response = await fetch(`/api/evaluations/${evaluation.evaluationNo}`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ workStatus }),
+    });
+
+    if (!response.ok) {
+      console.error(`Failed to update workStatus: ${response.status} ${response.statusText}`);
+      return false;
+    }
+
+    // Update local cache
     evaluation.workStatus = workStatus;
     return true;
+  } catch (error) {
+    console.error('Error updating workStatus:', error);
+    return false;
   }
-  return false;
 };
 
 export const updateCurrentStep = (id: string, currentStep: string): boolean => {

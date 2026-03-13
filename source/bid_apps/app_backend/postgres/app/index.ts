@@ -2,6 +2,7 @@ import express, { Request, Response } from "express";
 import cors from "cors";
 import compression from "compression";
 import { Pool, PoolClient, PoolConfig } from "pg";
+import QueryStream from "pg-query-stream";
 
 // LIMIT removed to match BigQuery backend behavior
 
@@ -59,6 +60,9 @@ app.options("*", cors());
 // gzip圧縮を有効化
 app.use(compression());
 
+// Middleware to parse JSON body (must be before routes)
+app.use(express.json());
+
 // credentials: true なら以下が必要？(未確認)
 //app.options("*", (req, res) => {
 //  res.set("Access-Control-Allow-Origin", "https://frontend-xxxxx.a.run.app");
@@ -84,12 +88,7 @@ const TABLES = {
 type TableName = (typeof TABLES)[keyof typeof TABLES];
 const schemaPrefix = process.env.PG_SCHEMA ? `${process.env.PG_SCHEMA}.` : "";
 
-const respondWithRows = (res: Response, rows: unknown[]): void => {
-  res.setHeader("Content-Type", "application/json");
-  res.setHeader("Cache-Control", "public, max-age=1800");
-  res.status(200).json(rows);
-};
-
+// Streaming table handler to avoid 32MB limit
 const createTableHandler = (tableName: TableName) => {
   const qualifiedTableName = `${schemaPrefix}${tableName}`;
   return async (req: Request, res: Response): Promise<void> => {
@@ -98,10 +97,49 @@ const createTableHandler = (tableName: TableName) => {
     let client: PoolClient | undefined;
     try {
       client = await pool.connect();
-      const { rows } = await client.query(
-        `SELECT * FROM ${qualifiedTableName}`
-      );
-      respondWithRows(res, rows);
+
+      // Set headers
+      res.setHeader("Content-Type", "application/json");
+      res.setHeader("Cache-Control", "public, max-age=1800");
+
+      // Start JSON array
+      res.write("[");
+      let firstRow = true;
+
+      // Create query stream
+      const query = new QueryStream(`SELECT * FROM ${qualifiedTableName}`);
+      const stream = client.query(query);
+
+      stream.on("data", (row: unknown) => {
+        // Add comma before all rows except the first
+        if (!firstRow) {
+          res.write(",");
+        }
+        res.write(JSON.stringify(row));
+        firstRow = false;
+      });
+
+      stream.on("error", (err: Error) => {
+        console.error(`ERROR in ${req.path} stream:`, err);
+        if (!res.headersSent) {
+          res.status(500).json({
+            error: "Internal Server Error",
+            message: err.message,
+            path: req.path,
+            table: qualifiedTableName
+          });
+        } else {
+          // Stream already started, just end it
+          res.end();
+        }
+      });
+
+      stream.on("end", () => {
+        // Close JSON array
+        res.write("]");
+        res.end();
+        client?.release();
+      });
     } catch (error) {
       console.error(`ERROR in ${req.path}:`, error);
       if (!res.headersSent) {
@@ -113,7 +151,6 @@ const createTableHandler = (tableName: TableName) => {
           table: qualifiedTableName
         });
       }
-    } finally {
       client?.release();
     }
   };
@@ -131,6 +168,56 @@ app.get("/api/evaluations", createTableHandler(TABLES.evaluations));
 app.get("/api/companies", createTableHandler(TABLES.companies));
 app.get("/api/orderers", createTableHandler(TABLES.orderers));
 app.get("/api/partners", createTableHandler(TABLES.partners));
+
+// PATCH endpoint for updating workStatus
+app.patch("/api/evaluations/:evaluationNo", async (req: Request, res: Response): Promise<void> => {
+  console.log(`PATCH /api/evaluations/${req.params.evaluationNo} hit`);
+
+  const { evaluationNo } = req.params;
+  const { workStatus } = req.body;
+
+  // Validate workStatus
+  const validStatuses = ["not_started", "in_progress", "completed"];
+  if (!workStatus || !validStatuses.includes(workStatus)) {
+    res.status(400).json({
+      error: "Invalid workStatus",
+      validValues: validStatuses
+    });
+    return;
+  }
+
+  let client: PoolClient | undefined;
+  try {
+    client = await pool.connect();
+    const qualifiedTableName = `${schemaPrefix}${TABLES.evaluations}`;
+
+    const result = await client.query(
+      `UPDATE ${qualifiedTableName}
+       SET "workStatus" = $1, "updatedAt" = NOW()
+       WHERE "evaluationNo" = $2
+       RETURNING *`,
+      [workStatus, evaluationNo]
+    );
+
+    if (result.rowCount === 0) {
+      res.status(404).json({ error: "Evaluation not found" });
+      return;
+    }
+
+    res.setHeader("Content-Type", "application/json");
+    res.status(200).json(result.rows[0]);
+  } catch (error) {
+    console.error(`ERROR in PATCH /api/evaluations/${evaluationNo}:`, error);
+    if (!res.headersSent) {
+      res.status(500).json({
+        error: "Internal Server Error",
+        message: error instanceof Error ? error.message : String(error)
+      });
+    }
+  } finally {
+    client?.release();
+  }
+});
 
 
 

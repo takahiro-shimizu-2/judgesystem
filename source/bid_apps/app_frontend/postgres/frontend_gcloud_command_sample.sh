@@ -42,7 +42,8 @@ cp app_replacement_files_postgres/evaluations.ts   app/src/data/evaluations.ts
 cp app_replacement_files_postgres/index.ts         app/src/data/index.ts
 cp app_replacement_files_postgres/orderers.ts      app/src/data/orderers.ts
 cp app_replacement_files_postgres/partners.ts      app/src/data/partners.ts
-cp app_replacement_files_postgres/staff.ts      app/src/data/staff.ts
+cp app_replacement_files_postgres/staff.ts         app/src/data/staff.ts
+cp app_replacement_files_postgres/BidDetailPage.tsx app/src/pages/BidDetailPage.tsx
 
 echo "Copied relpacement files."
 
