@@ -4891,6 +4891,10 @@ Execute
         df_new = pd.read_csv(announcements_documents_file, sep="\t")
         print(f"Loaded {len(df_new)} records from announcements_documents_file")
 
+        # pageCount を数値型に変換（TSVから読み込むと文字列になるため）
+        if 'pageCount' in df_new.columns:
+            df_new['pageCount'] = pd.to_numeric(df_new['pageCount'], errors='coerce')
+
         # announcements_document_table の処理
         # テーブルの存在確認
         tmpcheck_document_table = db_operator.ifTableExists(tablename=tablename_bid_announcements_document_table)
