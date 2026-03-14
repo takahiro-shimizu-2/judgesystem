@@ -2776,7 +2776,8 @@ def _process_requirements_chunk(df_chunk):
     チャンク単位で要件処理（multiprocessing用グローバル関数）
 
     Args:
-        df_chunk: 処理対象の公告データチャンク（announcement_no, document_idを含むDataFrame）
+        df_chunk: 処理対象の公告ドキュメントデータチャンク（announcement_no, document_idを含むDataFrame）
+                  各行は1つの announcement_no と document_id のペアを表す（縦持ち）
 
     Returns:
         list: DataFrame作成用の辞書リスト
@@ -2812,7 +2813,7 @@ def _process_requirements_chunk(df_chunk):
                 result_list.append(dic)
 
         except Exception as e:
-            print(f"Error processing announcement_no={announcement_no}: {e}")
+            print(f"Error processing announcement_no={announcement_no}, document_id={document_id}: {e}")
             continue
 
     return result_list
@@ -5059,6 +5060,7 @@ Execute
 
         tablename_announcements = self.tablenamesconfig.bid_announcements
         tablename_requirements = self.tablenamesconfig.bid_requirements
+        tablename_announcements_document = self.tablenamesconfig.bid_announcements_document_table
         tmp_tablename_requirements = fr"tmp_{tablename_requirements}"
         db_operator = self.db_operator
 
@@ -5081,28 +5083,30 @@ Execute
             ocr_req_file_path = Path(ocr_req_file_path)
             print(f"Using specified OCR requirements file: {ocr_req_file_path}")
 
-        # 公告マスターから必要な列のみ取得（announcement_no, document_id）
+        # announcements_document_table から announcement_id と document_id のペアを取得（縦持ち）
+        # 横持ちの bid_announcements ではなく、縦持ちの announcements_document_table を使うことで
+        # document_id の数に制限がなくなる
         # SQLレベルで既存の announcement_no を除外（メモリ効率化）
         if db_operator.ifTableExists(tablename=tablename_requirements):
             query = f"""
-            SELECT a.announcement_no, a.document_id
-            FROM `{db_operator.project_id}.{db_operator.dataset_name}.{tablename_announcements}` AS a
+            SELECT ad.announcement_id AS announcement_no, ad.document_id
+            FROM `{db_operator.project_id}.{db_operator.dataset_name}.{tablename_announcements_document}` AS ad
             LEFT JOIN (
                 SELECT DISTINCT announcement_no
                 FROM `{db_operator.project_id}.{db_operator.dataset_name}.{tablename_requirements}`
-            ) AS r ON a.announcement_no = r.announcement_no
+            ) AS r ON ad.announcement_id = r.announcement_no
             WHERE r.announcement_no IS NULL
-            ORDER BY a.announcement_no
+            ORDER BY ad.announcement_id, ad.document_id
             """
         else:
             query = f"""
-            SELECT announcement_no, document_id
-            FROM `{db_operator.project_id}.{db_operator.dataset_name}.{tablename_announcements}`
-            ORDER BY announcement_no
+            SELECT announcement_id AS announcement_no, document_id
+            FROM `{db_operator.project_id}.{db_operator.dataset_name}.{tablename_announcements_document}`
+            ORDER BY announcement_id, document_id
             """
 
         df_announcements = db_operator.any_query(query)
-        print(f"Found {len(df_announcements)} announcements to process (after filtering existing requirements)")
+        print(f"Found {len(df_announcements)} announcement-document pairs to process (after filtering existing requirements)")
 
         if len(df_announcements) == 0:
             print("No new announcements to process. Skipping requirements processing.")
