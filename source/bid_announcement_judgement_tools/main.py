@@ -12,7 +12,7 @@
 
 - step0 : 公告ドキュメント準備処理（オプション）
   - HTML取得、リンク抽出、フォーマット処理を実行
-  - announcements_document_merged_updated.txt を生成
+  - announcements_document_table に DB 保存
 - step1 : 転写処理
 - step2 : OCR処理
 - step3 : 要件判定
@@ -36,9 +36,9 @@ Usage example:
         --step1_transfer_remove_table \\
         --step3_remove_table
 
-    # Step0をスキップして既存のファイルを使用
+    # Step0をスキップして既存のDBデータを使用（announcements_document_table が既に存在する場合）
+    # announcements_documents_file パラメータは非推奨（DBから直接読み込み）
     python source/bid_announcement_judgement_tools/main.py \\
-        --announcements_documents_file output/202603101234/announcements_document_merged_updated.txt \\
         --google_ai_studio_api_key_filepath data/sec/google_ai_studio_api_key.txt \\
         --sqlite3_db_file_path data/example.db
 
@@ -113,10 +113,10 @@ Arguments:
 
   過去の結果とマージしない。
 
-- --announcements_documents_file: (パラメータ引数)
+- --announcements_documents_file: (パラメータ引数) [非推奨]
 
-  announcements_document ファイルのパス（step1_transfer_v2で使用）。
-  step0_prepare_documents を実行した場合は自動的に設定される。
+  announcements_document ファイルのパス。
+  このパラメータは非推奨です。現在の実装では announcements_document_table から DB 経由でデータを読み込みます。
 
 - --step1_transfer_remove_table: (フラグ引数)
 
@@ -624,6 +624,70 @@ class DBOperator:
         raise NotImplementedError
 
     @abstractmethod
+    def mergeAnnouncementsDocumentTable(self, target_tablename, source_tablename, columns):
+        """
+        announcements_document_table に新しいレコードをマージ（UPSERT）する
+
+        announcement_id と document_id の組み合わせで重複チェックを行い、
+        重複しないレコードのみをターゲットテーブルに挿入する。
+
+        Args:
+            target_tablename: マージ先のテーブル名
+            source_tablename: マージ元のテーブル名（一時テーブル）
+            columns: 挿入する列のリスト
+
+        Returns:
+            int: 挿入された行数
+        """
+        raise NotImplementedError
+
+    @abstractmethod
+    def build_new_documents_query(self, tmp_table, existing_table):
+        """
+        一時テーブルと既存テーブルを document_id で比較し、新規レコードを取得するクエリを生成
+
+        Args:
+            tmp_table: 一時テーブル名
+            existing_table: 既存テーブル名
+
+        Returns:
+            str: SQL クエリ
+        """
+        raise NotImplementedError
+
+    @abstractmethod
+    def build_max_announcement_id_query(self, existing_table, divisor):
+        """
+        既存テーブルからグループごとの最大 announcement_id を取得するクエリを生成
+
+        Args:
+            existing_table: 既存テーブル名
+            divisor: グルーピング用の除数（10^base_digits）
+
+        Returns:
+            str: SQL クエリ
+        """
+        raise NotImplementedError
+
+    @abstractmethod
+    def selectUnprocessedAnnouncementDocuments(self, announcements_document_tablename, requirements_tablename, requirements_exists):
+        """
+        未処理の announcement-document ペアを取得する
+
+        requirements テーブルが存在する場合は、既に処理済みの announcement_no を除外し、
+        未処理のものだけを返す。存在しない場合は全ての announcement-document ペアを返す。
+
+        Args:
+            announcements_document_tablename: announcements_document_table のテーブル名
+            requirements_tablename: requirements テーブル名
+            requirements_exists: requirements テーブルが存在するか（True/False）
+
+        Returns:
+            DataFrame: announcement_no, document_id の列を持つ DataFrame
+        """
+        raise NotImplementedError
+
+    @abstractmethod
     def createBackendAnnouncements(self, tablename):
         raise NotImplementedError
 
@@ -666,10 +730,15 @@ class DBOperatorGCPVM(DBOperator):
         self.client.delete_table(fr"{self.project_id}.{self.dataset_name}.{tablename}", not_found_ok=True)
 
     def uploadDataToTable(self, data, tablename, chunksize=1):
+        # デバッグ: データ型を確認
+        if 'pageCount' in data.columns:
+            print(f"[DEBUG uploadDataToTable] pageCount dtype: {data['pageCount'].dtype}")
+            print(f"[DEBUG uploadDataToTable] pageCount sample values: {data['pageCount'].head().tolist()}")
+
         to_gbq(
-            dataframe=data, 
+            dataframe=data,
             destination_table=fr"{self.dataset_name}.{tablename}",  # dataset.table 形式
-            project_id=self.project_id, 
+            project_id=self.project_id,
             if_exists='replace'
         )
 
@@ -1335,6 +1404,106 @@ class DBOperatorGCPVM(DBOperator):
         FROM `{self.project_id}.{self.dataset_name}.{insufficient_requirements_tablename_for_update}`
         """
         self.client.query(sql).result()
+
+    def mergeAnnouncementsDocumentTable(self, target_tablename, source_tablename, columns):
+        """
+        BigQuery MERGE文で announcements_document_table に新しいレコードを挿入
+
+        announcement_id と document_id の組み合わせで重複チェックを行い、
+        重複しないレコードのみをターゲットテーブルに挿入する。
+
+        Args:
+            target_tablename: マージ先のテーブル名
+            source_tablename: マージ元のテーブル名（一時テーブル）
+            columns: 挿入する列のリスト
+
+        Returns:
+            int: 挿入された行数
+        """
+        # BigQueryでは `:` を含むカラム名はバッククォートで囲む必要がある
+        columns_escaped = [f"`{col}`" for col in columns]
+        columns_str = ", ".join(columns_escaped)
+        values_str = ", ".join([f"S.`{col}`" for col in columns])
+
+        # MERGE文を構築
+        merge_sql = f"""
+        MERGE `{self.project_id}.{self.dataset_name}.{target_tablename}` AS T
+        USING `{self.project_id}.{self.dataset_name}.{source_tablename}` AS S
+        ON T.announcement_id = S.announcement_id AND T.document_id = S.document_id
+        WHEN NOT MATCHED THEN
+          INSERT ({columns_str})
+          VALUES ({values_str})
+        """
+
+        # MERGE文を実行
+        query_job = self.client.query(merge_sql)
+        query_job.result()  # 完了を待つ
+        return query_job.num_dml_affected_rows
+
+    def build_new_documents_query(self, tmp_table, existing_table):
+        """
+        DBOperatorGCPVM: 一時テーブルと既存テーブルを document_id で比較し、新規レコードを取得するクエリを生成
+        """
+        query = f"""
+        SELECT n.*
+        FROM `{self.project_id}.{self.dataset_name}.{tmp_table}` n
+        LEFT JOIN `{self.project_id}.{self.dataset_name}.{existing_table}` e
+          ON n.document_id = e.document_id
+        WHERE e.document_id IS NULL
+        """
+        return query
+
+    def build_max_announcement_id_query(self, existing_table, divisor):
+        """
+        DBOperatorGCPVM: 既存テーブルからグループごとの最大 announcement_id を取得するクエリを生成
+        """
+        query = f"""
+        SELECT
+          announcement_group,
+          MAX(announcement_id) as max_id
+        FROM (
+          SELECT
+            announcement_id,
+            CAST(FLOOR(announcement_id / {divisor}) AS INT64) as announcement_group
+          FROM `{self.project_id}.{self.dataset_name}.{existing_table}`
+        )
+        GROUP BY announcement_group
+        """
+        return query
+
+    def selectUnprocessedAnnouncementDocuments(self, announcements_document_tablename, requirements_tablename, requirements_exists):
+        """
+        BigQuery で未処理の announcement-document ペアを取得する
+
+        Args:
+            announcements_document_tablename: announcements_document_table のテーブル名
+            requirements_tablename: requirements テーブル名
+            requirements_exists: requirements テーブルが存在するか（True/False）
+
+        Returns:
+            DataFrame: announcement_no, document_id の列を持つ DataFrame
+        """
+        if requirements_exists:
+            # 既存の announcement_no を除外
+            query = f"""
+            SELECT ad.announcement_id AS announcement_no, ad.document_id
+            FROM `{self.project_id}.{self.dataset_name}.{announcements_document_tablename}` AS ad
+            LEFT JOIN (
+                SELECT DISTINCT announcement_no
+                FROM `{self.project_id}.{self.dataset_name}.{requirements_tablename}`
+            ) AS r ON ad.announcement_id = r.announcement_no
+            WHERE r.announcement_no IS NULL
+            ORDER BY ad.announcement_id, ad.document_id
+            """
+        else:
+            # 全ての announcement-document ペアを取得
+            query = f"""
+            SELECT announcement_id AS announcement_no, document_id
+            FROM `{self.project_id}.{self.dataset_name}.{announcements_document_tablename}`
+            ORDER BY announcement_id, document_id
+            """
+
+        return self.any_query(query)
 
     def createBackendAnnouncements(self, tablename):
         # announcements_competing_companies_master
@@ -2670,6 +2839,105 @@ class DBOperatorSQLITE3(DBOperator):
         """
         self.cur.execute(sql)
 
+    def mergeAnnouncementsDocumentTable(self, target_tablename, source_tablename, columns):
+        """
+        SQLite3で announcements_document_table に新しいレコードを挿入
+
+        announcement_id と document_id の組み合わせで重複チェックを行い、
+        重複しないレコードのみをターゲットテーブルに挿入する。
+
+        Args:
+            target_tablename: マージ先のテーブル名
+            source_tablename: マージ元のテーブル名（一時テーブル）
+            columns: 挿入する列のリスト
+
+        Returns:
+            int: 挿入された行数
+        """
+        # 列名をカンマ区切りで結合
+        columns_str = ", ".join(columns)
+
+        # INSERT ... SELECT ... WHERE NOT EXISTS を使用して重複を避ける
+        sql = f"""
+        INSERT INTO {target_tablename} ({columns_str})
+        SELECT {columns_str}
+        FROM {source_tablename} AS S
+        WHERE NOT EXISTS (
+            SELECT 1
+            FROM {target_tablename} AS T
+            WHERE T.announcement_id = S.announcement_id
+              AND T.document_id = S.document_id
+        )
+        """
+
+        self.cur.execute(sql)
+        # SQLite3では affected rows を取得
+        return self.cur.rowcount
+
+    def build_new_documents_query(self, tmp_table, existing_table):
+        """
+        DBOperatorSQLITE3: 一時テーブルと既存テーブルを document_id で比較し、新規レコードを取得するクエリを生成
+        """
+        query = f"""
+        SELECT n.*
+        FROM {tmp_table} n
+        LEFT JOIN {existing_table} e ON n.document_id = e.document_id
+        WHERE e.document_id IS NULL
+        """
+        return query
+
+    def build_max_announcement_id_query(self, existing_table, divisor):
+        """
+        DBOperatorSQLITE3: 既存テーブルからグループごとの最大 announcement_id を取得するクエリを生成
+        """
+        query = f"""
+        SELECT
+          announcement_group,
+          MAX(announcement_id) as max_id
+        FROM (
+          SELECT
+            announcement_id,
+            CAST(announcement_id / {divisor} AS INTEGER) as announcement_group
+          FROM {existing_table}
+        )
+        GROUP BY announcement_group
+        """
+        return query
+
+    def selectUnprocessedAnnouncementDocuments(self, announcements_document_tablename, requirements_tablename, requirements_exists):
+        """
+        SQLite3 で未処理の announcement-document ペアを取得する
+
+        Args:
+            announcements_document_tablename: announcements_document_table のテーブル名
+            requirements_tablename: requirements テーブル名
+            requirements_exists: requirements テーブルが存在するか（True/False）
+
+        Returns:
+            DataFrame: announcement_no, document_id の列を持つ DataFrame
+        """
+        if requirements_exists:
+            # 既存の announcement_no を除外
+            query = f"""
+            SELECT ad.announcement_id AS announcement_no, ad.document_id
+            FROM {announcements_document_tablename} AS ad
+            LEFT JOIN (
+                SELECT DISTINCT announcement_no
+                FROM {requirements_tablename}
+            ) AS r ON ad.announcement_id = r.announcement_no
+            WHERE r.announcement_no IS NULL
+            ORDER BY ad.announcement_id, ad.document_id
+            """
+        else:
+            # 全ての announcement-document ペアを取得
+            query = f"""
+            SELECT announcement_id AS announcement_no, document_id
+            FROM {announcements_document_tablename}
+            ORDER BY announcement_id, document_id
+            """
+
+        return self.any_query(query)
+
     def createBackendAnnouncements(self, tablename):
         raise NotImplementedError
 
@@ -3090,7 +3358,7 @@ class BidJudgementSan:
         公告リストファイルから以下を実行：
         1. HTMLページ取得（オプション）
         2. ドキュメントリンク抽出（オプション）
-        3. announcements_document_merged_updated.txt を生成（オプション）
+        3. announcements_document_table に DB 保存（オプション）
         4. PDFダウンロード（オプション）
         5. PDFページ数カウント（オプション）
         6. Gemini OCR 実行（オプション）
@@ -3103,8 +3371,9 @@ class BidJudgementSan:
             │   ├── input_list_converted.txt
             │   ├── input_list_converted.html
             │   └── announcements_links.txt
-            ├── announcements_document_merged_updated.txt
             └── req_announcements_document.txt  (OCR実行時)
+
+        注意: announcements_document データは DB に直接保存されます（ファイル出力なし）
 
         Args:
             input_list_file: リスト_防衛省入札_1.txt のパス
@@ -3126,7 +3395,7 @@ class BidJudgementSan:
             ocr_max_api_calls_per_run: 1回の実行での最大API呼び出し数（デフォルト: 1000）
 
         Returns:
-            str: 生成された announcements_document_merged_updated.txt のパス
+            str or None: 生成された req_announcements_document.txt のパス（OCR実行時のみ）
         """
         print("=" * 60)
         print("Step0: Document Preparation")
@@ -3198,7 +3467,7 @@ class BidJudgementSan:
         if do_format_documents:
             step_num += 1
             print(f"\n[{step_num}/{total_steps}] Formatting documents...")
-            merged_updated_file = self._step0_format_documents(
+            df_merged = self._step0_format_documents(
                 input_list2_path,
                 links_file,
                 output_dir,
@@ -3210,28 +3479,23 @@ class BidJudgementSan:
                 topAgencyName
             )
         else:
-            print("\n[Skipped] Formatting documents (using existing file)...")
-            merged_updated_file = str(output_dir / "announcements_document_merged_updated.txt")
-            if not Path(merged_updated_file).exists():
-                raise FileNotFoundError(f"Required file not found: {merged_updated_file}")
+            print("\n[Skipped] Formatting documents")
+            print("Error: do_format_documents must be True for step0")
+            raise ValueError("--step0_do_format_documents is required")
 
         # 4. PDFダウンロード（オプション）
         if do_download_pdfs:
             step_num += 1
             print(f"\n[{step_num}/{total_steps}] Downloading PDFs...")
-            df = pd.read_csv(merged_updated_file, sep="\t")
-            df = self._step0_download_pdfs(df, use_gcp_vm=use_gcp_vm)
-            df.to_csv(merged_updated_file, sep="\t", index=False)
-            print(f"Updated file with pdf_is_saved info: {merged_updated_file}")
+            df_merged = self._step0_download_pdfs(df_merged, use_gcp_vm=use_gcp_vm)
+            print(f"Updated DataFrame with pdf_is_saved info")
 
         # 5. PDFページ数カウント（オプション）
         if do_count_pages:
             step_num += 1
             print(f"\n[{step_num}/{total_steps}] Counting PDF pages...")
-            df = pd.read_csv(merged_updated_file, sep="\t")
-            df = self._step0_count_pages(df)
-            df.to_csv(merged_updated_file, sep="\t", index=False)
-            print(f"Updated file with pageCount info: {merged_updated_file}")
+            df_merged = self._step0_count_pages(df_merged)
+            print(f"Updated DataFrame with pageCount info")
 
         # 6. Gemini OCR 実行（オプション）
         req_file_path = None
@@ -3239,16 +3503,18 @@ class BidJudgementSan:
             step_num += 1
             print(f"\n[{step_num}/{total_steps}] Running Gemini OCR...")
             req_file_path = str(output_dir / "req_announcements_document.txt")
-            df, req_file_path = self._step0_ocr_with_gemini(
-                merged_updated_file=merged_updated_file,
+
+            # DataFrame を直接渡して OCR 処理
+            df_merged, req_file_path = self._step0_ocr_with_gemini(
+                df_main=df_merged,
                 req_file_path=req_file_path,
                 use_gcp_vm=use_gcp_vm,
                 google_ai_studio_api_key_filepath=google_ai_studio_api_key_filepath,
                 max_concurrency=ocr_max_concurrency,
                 max_api_calls_per_run=ocr_max_api_calls_per_run
             )
-            # 保存は _step0_ocr_with_gemini 内部で行われる
-            print(f"OCR completed. Updated file: {merged_updated_file}")
+
+            print(f"OCR completed. Updated DataFrame")
             if req_file_path:
                 print(f"Requirements file: {req_file_path}")
         else:
@@ -3260,17 +3526,20 @@ class BidJudgementSan:
             else:
                 print(f"Warning: Requirements file not found: {req_file_path}")
                 req_file_path = None
-            # merged_updated_file は既にステップ3で作成されているはず
-            # OCRによる更新がスキップされただけなので、ファイルは存在する
+
+        # 7. DB に保存
+        print("\n" + "=" * 60)
+        print("Saving new records to announcements_document_table...")
+        print("=" * 60)
+        self._save_to_announcements_document_table(df_merged)
 
         print("=" * 60)
         print(f"Step0 completed successfully!")
-        print(f"Output file: {merged_updated_file}")
         if req_file_path:
             print(f"Requirements file: {req_file_path}")
         print("=" * 60)
 
-        return merged_updated_file, req_file_path
+        return req_file_path
 
 
     def _step0_convert_input_list(self, input_list1, output_dir):
@@ -3587,7 +3856,7 @@ class BidJudgementSan:
         topAgencyName
     ):
         """
-        ドキュメント情報をフォーマットし、最終的なファイルを生成
+        ドキュメント情報をフォーマットし、DB用の新規レコードを生成
 
         Args:
             input_list2_path: 変換済みリストファイル
@@ -3601,11 +3870,14 @@ class BidJudgementSan:
             topAgencyName: トップ機関名
 
         Returns:
-            str: 生成された announcements_document_merged_updated.txt のパス
+            DataFrame: DB に保存する新規レコードの DataFrame
         """
         # 入力ファイル読み込み
         df1 = pd.read_csv(input_list2_path, sep="\t")
         df2 = pd.read_csv(links_file, sep="\t", quoting=csv.QUOTE_NONE)
+        print(f"[DEBUG] Loaded {len(df1)} rows from input_list_converted.txt")
+        print(f"[DEBUG] df1 columns: {df1.columns.tolist()}")
+        print(f"[DEBUG] Loaded {len(df2)} rows from announcements_links.txt")
 
         # クォート削除
         df2["announcement_name"] = df2["announcement_name"].str.replace('"', '', regex=False)
@@ -3614,6 +3886,7 @@ class BidJudgementSan:
         # target_link から index 取得
         df2.insert(0, "index", df2["target_link"].str.split("_").str[0].astype(int))
         df2["adhoc_index"] = df2["target_link"].apply(lambda x: f"{int(x.split('_')[0]):05d}")
+        print(f"[DEBUG] Extracted index values: {df2['index'].unique().tolist()}")
 
         # df1 から base_link 情報を取得
         df1_sub = df1[["index", "入札公告（現在募集中）2"]].copy() if "入札公告（現在募集中）2" in df1.columns else df1[["index"]].copy()
@@ -3634,6 +3907,8 @@ class BidJudgementSan:
 
         # マージ
         df_merged = df2.merge(df1_sub, on="index", how="left")
+        print(f"[DEBUG] After merge: {len(df_merged)} rows")
+        print(f"[DEBUG] Rows with base_link=None: {df_merged['base_link'].isna().sum()}")
 
         # PDF完全URLを生成
         df_merged["pdf_full_url"] = df_merged.apply(
@@ -3674,14 +3949,17 @@ class BidJudgementSan:
 
         df_merged["save_path"] = [p.as_posix() for p in save_path_list]
         df_merged["document_id"] = df_merged["save_path"].apply(lambda p: Path(p).stem)
+        print(f"[DEBUG] Sample document_id values: {df_merged['document_id'].head(10).tolist()}")
 
         # https: で始まらないレコードを除外
         before_filter_count = len(df_merged)
+        print(f"[DEBUG] Before https: filter: {before_filter_count} rows")
+        print(f"[DEBUG] Sample pdf_full_url values: {df_merged['pdf_full_url'].head(10).tolist()}")
         df_merged = df_merged[df_merged["pdf_full_url"].str.startswith("https:", na=False)].copy()
         after_filter_count = len(df_merged)
         excluded_count = before_filter_count - after_filter_count
         if excluded_count > 0:
-            print(f"Excluded {excluded_count} records where pdf_full_url does not start with 'https:'")
+            print(f"[DEBUG] Excluded {excluded_count} records where pdf_full_url does not start with 'https:'")
 
         # 重複チェック
         tmpdf2 = df_merged.duplicated(subset=["link_text", "announcement_id", "document_id"])
@@ -3695,7 +3973,7 @@ class BidJudgementSan:
             "type": [None] * df_merged.shape[0],
             "title": df_merged["link_text"],
             "fileFormat": ext.fillna(""),
-            "pageCount": np.where(ext == "pdf", -1, -2),
+            "pageCount": np.where(ext == "pdf", -1, -2).astype('int64'),
             "extractedAt": [extracted_at] * df_merged.shape[0],
             "url": df_merged["pdf_full_url"],
             "content": ["dummy"] * df_merged.shape[0],
@@ -3733,146 +4011,174 @@ class BidJudgementSan:
         df_new.sort_values(["announcement_id", "_sort_fileformat", "document_id"], inplace=True)
         df_new = df_new.drop(columns=["_sort_fileformat"])
 
-        # 出力ファイルパス
-        output_path1 = output_dir / "announcements_document.txt"
-        merged_output_path = output_dir / "announcements_document_merged.txt"
-        merged_updated_path = output_dir / "announcements_document_merged_updated.txt"
+        print(f"[DEBUG] df_new columns: {df_new.columns.tolist()}")
 
-        # 今回実行分のみを保存
-        df_new.to_csv(output_path1, sep="\t", index=False)
-        print(f"Current output saved: {output_path1}")
+        # DB ベースのマージ処理
+        existing_table = self.tablenamesconfig.bid_announcements_document_table
+        print(f"[DEBUG] Before DB comparison: {len(df_new)} records (df_new)")
 
-        # 過去の結果とマージ
-        if not no_merge:
-            previous_file = self._find_previous_merged_file(output_base, timestamp)
-
-            if previous_file:
-                print(f"Merging with previous result: {previous_file}")
-                df_merged_result = self._append_new_documents_by_group(
-                    file1=previous_file,
-                    file2=str(output_path1),
-                    base_digits=base_digits
-                )
-                df_merged_result.to_csv(merged_output_path, sep="\t", index=False)
-                print(f"Merged output saved: {merged_output_path}")
-            else:
-                print("No previous result found. Using current output as merged result.")
-                df_new.to_csv(merged_output_path, sep="\t", index=False)
+        if no_merge:
+            # no_merge フラグが True の場合、DB 比較をスキップして全レコードを新規扱い
+            print("\n--- no_merge flag is True: Skipping DB comparison ---")
+            print(f"Treating all {len(df_new)} records as new (no_merge=True)")
+            df_new_only = df_new.copy()
         else:
-            print("Skipping merge (--no_merge specified)")
-            df_new.to_csv(merged_output_path, sep="\t", index=False)
+            # DB ベースのマージ処理
+            print("\n--- DB-based merge processing ---")
+            print(f"[DEBUG] df_new document_id sample: {df_new['document_id'].head(10).tolist()}")
 
-        # _merged_updated.txt を作成
-        df_merged = pd.read_csv(merged_output_path, sep="\t")
+            # 1. df_new を一時テーブルにアップロード
+            tmp_table = "tmp_new_announcements_document"
+            print(f"Uploading {len(df_new)} records to temporary table: {tmp_table}")
+            self.db_operator.uploadDataToTable(df_new, tmp_table, chunksize=5000)
 
-        # orderer_id と topAgencyName を更新
-        print("Updating orderer_id and topAgencyName...")
-        ord = df1[["Unnamed: 0", "Unnamed: 1", "入札公告（現在募集中）2"]].copy()
-        ord["orderer_id"] = topAgencyName + ord["Unnamed: 0"].astype(str) + ord["Unnamed: 1"].astype(str)
-        mapping = dict(zip(ord["入札公告（現在募集中）2"], ord["orderer_id"]))
-        df_merged["orderer_id"] = df_merged["base_link"].map(mapping)
-        df_merged["topAgencyName"] = topAgencyName
+            # 2. 新規レコードのみ取得
+            if self.db_operator.ifTableExists(existing_table):
+                print(f"Comparing with existing table: {existing_table}")
+                df_new_only = self._get_new_documents_from_db(tmp_table, existing_table)
+                print(f"[DEBUG] Found {len(df_new_only)} new records (not in DB)")
+                if len(df_new_only) > 0:
+                    print(f"[DEBUG] New document_id sample: {df_new_only['document_id'].head(10).tolist()}")
+            else:
+                print(f"Table {existing_table} does not exist. All records are new.")
+                df_new_only = df_new.copy()
 
-        df_merged.to_csv(merged_updated_path, sep="\t", index=False)
-        print(f"Final output saved: {merged_updated_path}")
+            # 3. 一時テーブル削除
+            self.db_operator.dropTable(tmp_table)
+            print(f"Dropped temporary table: {tmp_table}")
 
-        return str(merged_updated_path)
+        # 4. announcement_id を採番
+        if len(df_new_only) > 0:
+            print(f"Renumbering announcement_id for {len(df_new_only)} new records...")
+            # no_merge=True の場合は既存DBを参照せず、ゼロから採番
+            table_for_renumber = None if no_merge else existing_table
+            df_new_only = self._renumber_announcement_ids(df_new_only, table_for_renumber, base_digits)
+            print(f"Renumbering completed")
+        else:
+            print("No new records to process. Skipping renumbering.")
+
+        # 5. orderer_id と topAgencyName を更新
+        if len(df_new_only) > 0:
+            print("Updating orderer_id and topAgencyName...")
+            ord = df1[["Unnamed: 0", "Unnamed: 1", "入札公告（現在募集中）2"]].copy()
+            ord["orderer_id"] = topAgencyName + ord["Unnamed: 0"].astype(str) + ord["Unnamed: 1"].astype(str)
+            mapping = dict(zip(ord["入札公告（現在募集中）2"], ord["orderer_id"]))
+            df_new_only["orderer_id"] = df_new_only["base_link"].map(mapping)
+            df_new_only["topAgencyName"] = topAgencyName
+
+        print(f"[DEBUG] df_new_only columns (before return): {df_new_only.columns.tolist()}")
+        return df_new_only
 
 
-    def _find_previous_merged_file(self, output_base, current_timestamp):
+    def _get_new_documents_from_db(self, tmp_table, existing_table):
         """
-        過去の merged ファイルを検索
+        一時テーブルと既存テーブルを document_id で比較し、新規レコードのみ取得
 
-        優先順位:
-        1. announcements_document_merged_updated.txt
-        2. announcements_document_merged.txt
-        3. announcements_document.txt
+        Args:
+            tmp_table: 一時テーブル名（今回の announcements_document）
+            existing_table: 既存テーブル名（announcements_document_table）
+
+        Returns:
+            DataFrame: 既存テーブルに存在しない新規レコード
         """
-        if not output_base.exists():
-            return None
-
-        # タイムスタンプディレクトリを取得（現在のディレクトリを除く）
-        all_dirs = [d for d in output_base.iterdir() if d.is_dir() and d.name.isdigit()]
-        all_dirs = [d for d in all_dirs if d.name != current_timestamp]
-
-        if not all_dirs:
-            return None
-
-        # 最新のディレクトリを取得
-        latest_dir = sorted(all_dirs, reverse=True)[0]
-
-        # 優先順位で検索
-        for filename in ["announcements_document_merged_updated.txt",
-                        "announcements_document_merged.txt",
-                        "announcements_document.txt"]:
-            candidate = latest_dir / filename
-            if candidate.exists():
-                return str(candidate)
-
-        return None
+        query = self.db_operator.build_new_documents_query(tmp_table, existing_table)
+        return self.db_operator.any_query(query)
 
 
-    def _append_new_documents_by_group(self, file1, file2, base_digits=5):
+    def _renumber_announcement_ids(self, df_new, existing_table, base_digits):
         """
-        df1 に存在しない document_id を持つ df2 のレコードを追加する
-        announcement_id は group ごとに再採番
+        adhoc_index グループごとに announcement_id を採番
+        既存テーブルの最大 announcement_id を考慮
+
+        Args:
+            df_new: 新規レコードの DataFrame
+            existing_table: 既存テーブル名（announcements_document_table）。None の場合は DB 参照をスキップ
+            base_digits: グルーピング桁数（デフォルト: 5）
+
+        Returns:
+            DataFrame: announcement_id が採番された DataFrame
         """
-        df1 = pd.read_csv(file1, sep="\t", quoting=csv.QUOTE_NONE)
-        df2 = pd.read_csv(file2, sep="\t", quoting=csv.QUOTE_NONE)
+        if len(df_new) == 0:
+            return df_new
 
-        df1 = df1.copy()
-        df2 = df2.copy()
+        divisor = 10 ** base_digits  # 例: base_digits=5 → 100000
 
-        divisor = 10 ** base_digits
-        df1["announcement_group"] = df1["announcement_id"] // divisor
-        df2["announcement_group"] = df2["announcement_id"] // divisor
+        # announcement_group を計算（announcement_id の上位桁）
+        df_new = df_new.copy()
+        df_new["announcement_group"] = df_new["announcement_id"] // divisor
+
+        # グループごとの最大 announcement_id を DB から取得
+        max_id_map = {}
+        if existing_table is not None and self.db_operator.ifTableExists(existing_table):
+            query = self.db_operator.build_max_announcement_id_query(existing_table, divisor)
+            df_max_ids = self.db_operator.any_query(query)
+            if len(df_max_ids) > 0:
+                max_id_map = dict(zip(df_max_ids['announcement_group'], df_max_ids['max_id']))
 
         result_list = []
 
-        for group in df2["announcement_group"].unique():
-            df1_g = df1[df1["announcement_group"] == group]
-            df2_g = df2[df2["announcement_group"] == group]
+        for group in df_new["announcement_group"].unique():
+            df_group = df_new[df_new["announcement_group"] == group].copy()
 
-            if df2_g.empty:
-                continue
-
-            # df1 に存在しない document_id だけ抽出
-            existing_docs = set(df1_g["document_id"])
-            df2_new = df2_g[~df2_g["document_id"].isin(existing_docs)].copy()
-
-            if df2_new.empty:
-                continue
-
-            # group ごとの最大 announcement_id を基準に再採番
-            group_max_id = df1_g["announcement_id"].max() if not df1_g.empty else group * divisor
+            # このグループの既存最大 ID を取得（なければ group * divisor）
+            group_max_id = max_id_map.get(group, group * divisor)
             new_id_counter = group_max_id
 
-            # 元 announcement_id ごとに新IDを割り当て
-            unique_old_ids = df2_new["announcement_id"].unique()
+            # 元の announcement_id ごとに新しい ID を割り当て
+            unique_old_ids = sorted(df_group["announcement_id"].unique())
             id_map = {}
             for old_id in unique_old_ids:
                 new_id_counter += 1
                 id_map[old_id] = new_id_counter
 
-            df2_new["announcement_id"] = df2_new["announcement_id"].map(id_map)
-            result_list.append(df2_new)
+            df_group["announcement_id"] = df_group["announcement_id"].map(id_map)
+            result_list.append(df_group)
 
-        # 結合
-        if result_list:
-            df_append = pd.concat(result_list, ignore_index=True)
-            final_df = pd.concat([df1, df_append], ignore_index=True)
+        df_result = pd.concat(result_list, ignore_index=True)
+        df_result = df_result.drop(columns=["announcement_group"])
+
+        return df_result
+
+
+    def _save_to_announcements_document_table(self, df):
+        """
+        announcements_document_table に DataFrame を保存
+
+        Args:
+            df: 保存する DataFrame（新規レコードのみ）
+        """
+        tablename = self.tablenamesconfig.bid_announcements_document_table
+
+        if len(df) == 0:
+            print("No new records to save.")
+            return
+
+        # 型を確実に修正（BigQuery対応）
+        df = df.copy()
+        if 'pageCount' in df.columns:
+            df['pageCount'] = pd.to_numeric(df['pageCount'], errors='coerce').fillna(-2).astype('int64')
+        if 'adhoc_index' in df.columns:
+            df['adhoc_index'] = pd.to_numeric(df['adhoc_index'], errors='coerce').fillna(0).astype('int64')
+        if 'announcement_id' in df.columns:
+            df['announcement_id'] = pd.to_numeric(df['announcement_id'], errors='coerce').fillna(0).astype('int64')
+
+        if not self.db_operator.ifTableExists(tablename):
+            # テーブルが存在しない場合は新規作成
+            print(f"Creating new table: {tablename}")
+            self.db_operator.uploadDataToTable(df, tablename, chunksize=5000)
+            print(f"Created {tablename} with {len(df)} records")
         else:
-            final_df = df1.copy()
-
-        # helper列削除
-        final_df = final_df.drop(columns=["announcement_group"])
-
-        # ソート
-        final_df["_sort_fileformat"] = final_df["fileFormat"].apply(lambda x: 0 if x == "pdf" else 1)
-        final_df.sort_values(["announcement_id", "_sort_fileformat", "document_id"], inplace=True)
-        final_df = final_df.drop(columns=["_sort_fileformat"])
-
-        return final_df
+            # 既存テーブルがある場合は MERGE で追加
+            print(f"Merging {len(df)} records into existing table: {tablename}")
+            tmp_table = f"tmp_{tablename}_final"
+            self.db_operator.uploadDataToTable(df, tmp_table, chunksize=5000)
+            affected_rows = self.db_operator.mergeAnnouncementsDocumentTable(
+                target_tablename=tablename,
+                source_tablename=tmp_table,
+                columns=df.columns.tolist()
+            )
+            self.db_operator.dropTable(tmp_table)
+            print(f"Merged: {affected_rows} rows inserted")
 
 
     def _step0_download_pdfs(self, df, use_gcp_vm=False):
@@ -4034,6 +4340,9 @@ class BidJudgementSan:
                 )
             )
         df.loc[mask, "pageCount"] = results
+
+        # 型を確実に int64 に統一
+        df["pageCount"] = df["pageCount"].astype('int64')
         print(f"pageCount status: {df['pageCount'].value_counts(dropna=False).to_dict()}")
 
         return df
@@ -4041,7 +4350,7 @@ class BidJudgementSan:
 
     def _step0_ocr_with_gemini(
         self,
-        merged_updated_file,
+        df_main,
         req_file_path,
         use_gcp_vm=False,
         google_ai_studio_api_key_filepath=None,
@@ -4052,7 +4361,7 @@ class BidJudgementSan:
         Gemini APIを使用してPDFからOCR処理を実行
 
         Args:
-            merged_updated_file: announcements_document_merged_updated.txt のパス
+            df_main: announcements_document の DataFrame
             req_file_path: 要件文ファイルのパス (req_announcements_document.txt)
             use_gcp_vm: GCS (gs://) を使用する場合 True
             google_ai_studio_api_key_filepath: Google AI Studio API key filepath
@@ -4075,8 +4384,8 @@ class BidJudgementSan:
 
         client = genai.Client(api_key=api_key)
 
-        # DataFrameを読み込み
-        df_main = pd.read_csv(merged_updated_file, sep="\t", low_memory=False)
+        # DataFrameのコピーを作成（元のデータを変更しない）
+        df_main = df_main.copy()
         df_main["document_id"] = df_main["document_id"].astype(str).str.strip()
 
         # done列の初期化
@@ -4111,26 +4420,33 @@ class BidJudgementSan:
                 "done": False
             })
 
-        # df_reqを df_mainの順番に合わせる
-        df_req = df_req.drop_duplicates(subset="document_id", keep="first")
-        df_req_dict = df_req.set_index("document_id").to_dict("index")
+        # 既存の df_req を全て保持（過去の結果を失わないため）
+        df_req_all = df_req.drop_duplicates(subset="document_id", keep="first").copy()
+
+        # df_main に対応する部分だけを抽出して処理用 DataFrame を作成
+        df_req_dict = df_req_all.set_index("document_id").to_dict("index")
         new_req_data = []
         for doc_id in df_main["document_id"]:
             if doc_id in df_req_dict:
                 new_req_data.append(df_req_dict[doc_id])
             else:
                 new_req_data.append({"資格・条件": "['INIT']", "done": False})
-        df_req = pd.DataFrame(new_req_data)
-        df_req.insert(0, "document_id", df_main["document_id"].values)
-        df_req["document_id"] = df_req["document_id"].astype(str).str.strip()
-        df_req["done"] = (
-            df_req["done"]
-            .map({True: True, False: False, "True": True, "False": False})
-            .fillna(False)
-            .astype(bool)
-        )
 
-        req_done_lookup = df_req.set_index("document_id")["done"].to_dict()
+        # 新規レコードが0件の場合、done カラムを持つ空の DataFrame を作成
+        if len(new_req_data) == 0:
+            df_req_working = pd.DataFrame(columns=["document_id", "資格・条件", "done"])
+            req_done_lookup = {}
+        else:
+            df_req_working = pd.DataFrame(new_req_data)
+            df_req_working.insert(0, "document_id", df_main["document_id"].values)
+            df_req_working["document_id"] = df_req_working["document_id"].astype(str).str.strip()
+            df_req_working["done"] = (
+                df_req_working["done"]
+                .map({True: True, False: False, "True": True, "False": False})
+                .fillna(False)
+                .astype(bool)
+            )
+            req_done_lookup = df_req_working.set_index("document_id")["done"].to_dict()
 
         # パラメータリスト作成
         params = []
@@ -4312,29 +4628,38 @@ class BidJudgementSan:
                     df_req_updates = df_req_updates.drop_duplicates(subset="document_id", keep="first")
                     df_req_updates["document_id"] = df_req_updates["document_id"].astype(str).str.strip()
 
-                    df_req = df_req.set_index("document_id")
-                    df_req_updates = df_req_updates.set_index("document_id")
+                    # df_req_working を更新
+                    df_req_working = df_req_working.set_index("document_id")
+                    df_req_updates_indexed = df_req_updates.set_index("document_id")
 
-                    missing_ids = df_req_updates.index.difference(df_req.index)
+                    missing_ids = df_req_updates_indexed.index.difference(df_req_working.index)
                     if len(missing_ids) > 0:
-                        df_missing = df_req_updates.loc[missing_ids].copy()
-                        df_req = pd.concat([df_req, df_missing], axis=0)
+                        df_missing = df_req_updates_indexed.loc[missing_ids].copy()
+                        df_req_working = pd.concat([df_req_working, df_missing], axis=0)
 
-                    df_req.loc[df_req_updates.index, "資格・条件"] = df_req_updates["資格・条件"]
-                    df_req.loc[df_req_updates.index, "done"] = True
-                    df_req.reset_index(inplace=True)
+                    df_req_working.loc[df_req_updates_indexed.index, "資格・条件"] = df_req_updates_indexed["資格・条件"]
+                    df_req_working.loc[df_req_updates_indexed.index, "done"] = True
+                    df_req_working.reset_index(inplace=True)  # document_id を index からカラムに戻す
 
-                    updated_req_docs = df_req_updates.index.nunique()
+                    # df_req_all にも同じ更新を反映（過去の結果を保持しつつ新規を追加）
+                    df_req_all = df_req_all.set_index("document_id")
+                    missing_ids_all = df_req_updates_indexed.index.difference(df_req_all.index)
+                    if len(missing_ids_all) > 0:
+                        df_missing_all = df_req_updates_indexed.loc[missing_ids_all].copy()
+                        df_req_all = pd.concat([df_req_all, df_missing_all], axis=0)
+
+                    df_req_all.loc[df_req_updates_indexed.index, "資格・条件"] = df_req_updates_indexed["資格・条件"]
+                    df_req_all.loc[df_req_updates_indexed.index, "done"] = True
+                    df_req_all.reset_index(inplace=True)
+
+                    updated_req_docs = df_req_updates_indexed.index.nunique()
                     print(f"Updated {len(req_records)} documents with requirement data")
-                    print(f"Set df_req.done=True for {updated_req_docs} documents in this batch")
+                    print(f"Set done=True for {updated_req_docs} documents in this batch")
 
-        # ファイル保存
-        df_main.to_csv(merged_updated_file, sep="\t", index=False, encoding="utf-8")
-        print(f"Main OCR results saved to: {merged_updated_file}")
-
-        df_req.to_csv(req_file_path, sep="\t", index=False, encoding="utf-8")
-        df_req.to_csv(str(req_file_path) + ".zip", sep="\t", compression="zip", index=False, encoding="utf-8")
-        print(f"Requirement results saved to: {req_file_path}")
+        # df_req_all（過去の結果を含む全データ）を保存
+        df_req_all.to_csv(req_file_path, sep="\t", index=False, encoding="utf-8")
+        df_req_all.to_csv(str(req_file_path) + ".zip", sep="\t", compression="zip", index=False, encoding="utf-8")
+        print(f"Requirement results saved to: {req_file_path} (total: {len(df_req_all)} records)")
 
         return df_main, str(req_file_path)
 
@@ -4822,12 +5147,12 @@ Execute
 
         引数 remove_table に応じて、事前に公告マスター・要件マスターを削除する。
 
-        判定前公告を公告マスターにコピーする。
+        announcements_document_table (DB) から announcements (DB) に転記する。
 
         Args:
 
-        - announcements_documents_file: announcements_document ファイルのパス。
-          Noneの場合は処理をスキップ。
+        - announcements_documents_file: (非推奨・後方互換性のため残存)
+          step0 で DB に保存済みのため、このパラメータは使用されません。
 
         - remove_table=False:
 
@@ -4840,14 +5165,10 @@ Execute
 
         db_operator = self.db_operator
 
-        # announcements_documents_file が指定されていない場合は警告
-        if announcements_documents_file is None:
-            print("Warning: announcements_documents_file is not specified. Skipping step1_transfer_v2.")
-            return
-
-        # ファイルの存在確認
-        if not Path(announcements_documents_file).exists():
-            print(f"Error: announcements_documents_file not found: {announcements_documents_file}")
+        # announcements_document_table の存在確認
+        if not db_operator.ifTableExists(tablename=tablename_bid_announcements_document_table):
+            print(f"Error: {tablename_bid_announcements_document_table} does not exist.")
+            print("Please run step0_prepare_documents first to create announcements_document_table.")
             return
 
         # テーブル 'bid_announcements' の存在確認。
@@ -4887,72 +5208,8 @@ Execute
         else:
             print(fr"ALREADY EXISTS: {tablename_requirements}.")
 
-        # announcements_documents ファイルを読み込み
-        print(f"Loading announcements_documents_file: {announcements_documents_file}")
-        df_new = pd.read_csv(announcements_documents_file, sep="\t")
-        print(f"Loaded {len(df_new)} records from announcements_documents_file")
-
-        # pageCount を数値型に変換（TSVから読み込むと文字列になるため）
-        if 'pageCount' in df_new.columns:
-            df_new['pageCount'] = pd.to_numeric(df_new['pageCount'], errors='coerce')
-
-        # announcements_document_table の処理
-        # テーブルの存在確認
-        tmpcheck_document_table = db_operator.ifTableExists(tablename=tablename_bid_announcements_document_table)
-
-        if not tmpcheck_document_table:
-            # テーブルが存在しない場合は新規作成
-            print(f"Creating new table: {tablename_bid_announcements_document_table}")
-            db_operator.uploadDataToTable(data=df_new, tablename=tablename_bid_announcements_document_table, chunksize=5000)
-            print(f"NEWLY CREATED: {tablename_bid_announcements_document_table} with {len(df_new)} records")
-        else:
-            # テーブルが存在する場合は、一時テーブルを使ってMERGE処理
-            print(f"Table already exists: {tablename_bid_announcements_document_table}")
-            print("Using MERGE to insert only new records...")
-
-            # 一時テーブル名
-            tmp_tablename = f"tmp_{tablename_bid_announcements_document_table}"
-
-            # 一時テーブルにデータをアップロード（既存テーブルがあれば削除して再作成）
-            print(f"Uploading {len(df_new)} records to temporary table: {tmp_tablename}")
-            db_operator.uploadDataToTable(
-                data=df_new,
-                tablename=tmp_tablename,
-                chunksize=5000
-            )
-
-            # MERGE文を実行（announcement_id と document_id で重複チェック）
-            print(f"Executing MERGE statement to insert new records...")
-
-            # 列名を取得（announcement_id, document_id を含む全ての列）
-            columns = df_new.columns.tolist()
-            # BigQueryでは `:` を含むカラム名はバッククォートで囲む必要がある
-            columns_escaped = [f"`{col}`" for col in columns]
-            columns_str = ", ".join(columns_escaped)
-            values_str = ", ".join([f"S.`{col}`" for col in columns])
-
-            # MERGE文を構築
-            merge_sql = f"""
-            MERGE `{db_operator.project_id}.{db_operator.dataset_name}.{tablename_bid_announcements_document_table}` AS T
-            USING `{db_operator.project_id}.{db_operator.dataset_name}.{tmp_tablename}` AS S
-            ON T.announcement_id = S.announcement_id AND T.document_id = S.document_id
-            WHEN NOT MATCHED THEN
-              INSERT ({columns_str})
-              VALUES ({values_str})
-            """
-
-            # MERGE文を実行
-            print(f"Executing MERGE query...")
-            try:
-                query_job = db_operator.client.query(merge_sql)
-                query_job.result()  # 完了を待つ
-                print(f"MERGE completed: {query_job.num_dml_affected_rows} rows inserted")
-            finally:
-                # エラーが発生しても一時テーブルは削除
-                print(f"Dropping temporary table: {tmp_tablename}")
-                db_operator.dropTable(tablename=tmp_tablename)
-
-
+        # announcements_document_table から announcements への転記処理
+        print(f"\nTransferring from {tablename_bid_announcements_document_table} to {tablename_announcements}...")
         db_operator.transferAnnouncementsV2(
             bid_announcements_tablename=tablename_announcements, 
             bid_announcements_documents_tablename=tablename_bid_announcements_document_table
@@ -5087,25 +5344,12 @@ Execute
         # 横持ちの bid_announcements ではなく、縦持ちの announcements_document_table を使うことで
         # document_id の数に制限がなくなる
         # SQLレベルで既存の announcement_no を除外（メモリ効率化）
-        if db_operator.ifTableExists(tablename=tablename_requirements):
-            query = f"""
-            SELECT ad.announcement_id AS announcement_no, ad.document_id
-            FROM `{db_operator.project_id}.{db_operator.dataset_name}.{tablename_announcements_document}` AS ad
-            LEFT JOIN (
-                SELECT DISTINCT announcement_no
-                FROM `{db_operator.project_id}.{db_operator.dataset_name}.{tablename_requirements}`
-            ) AS r ON ad.announcement_id = r.announcement_no
-            WHERE r.announcement_no IS NULL
-            ORDER BY ad.announcement_id, ad.document_id
-            """
-        else:
-            query = f"""
-            SELECT announcement_id AS announcement_no, document_id
-            FROM `{db_operator.project_id}.{db_operator.dataset_name}.{tablename_announcements_document}`
-            ORDER BY announcement_id, document_id
-            """
-
-        df_announcements = db_operator.any_query(query)
+        requirements_exists = db_operator.ifTableExists(tablename=tablename_requirements)
+        df_announcements = db_operator.selectUnprocessedAnnouncementDocuments(
+            announcements_document_tablename=tablename_announcements_document,
+            requirements_tablename=tablename_requirements,
+            requirements_exists=requirements_exists
+        )
         print(f"Found {len(df_announcements)} announcement-document pairs to process (after filtering existing requirements)")
 
         if len(df_announcements) == 0:
@@ -5424,7 +5668,7 @@ if __name__ == "__main__":
     parser.add_argument("--step0_ocr_max_api_calls_per_run", type=int, default=1000,
                        help="1回の実行での最大API呼び出し数")
     parser.add_argument("--announcements_documents_file", default=None,
-                       help="announcements_document ファイルのパス（step1_transfer_v2で使用）")
+                       help="[非推奨] announcements_document ファイルのパス（DBから直接読み込むため不要）")
 
     parser.add_argument("--step1_transfer_remove_table", action="store_true")
     parser.add_argument("--step3_remove_table", action="store_true")
@@ -5460,7 +5704,6 @@ if __name__ == "__main__":
         step0_google_api_key = args.step0_google_api_key
         step0_ocr_max_concurrency = args.step0_ocr_max_concurrency
         step0_ocr_max_api_calls_per_run = args.step0_ocr_max_api_calls_per_run
-        announcements_documents_file = args.announcements_documents_file
 
         step1_transfer_remove_table = args.step1_transfer_remove_table
         step3_remove_table = args.step3_remove_table
@@ -5483,7 +5726,6 @@ if __name__ == "__main__":
         step0_do_format_documents = False
         step0_do_download_pdfs = False
         step0_do_count_pages = False
-        announcements_documents_file = None
 
         step1_transfer_remove_table = False
         step3_remove_table = False
@@ -5491,44 +5733,7 @@ if __name__ == "__main__":
         bid_announcements_pre_file = "data/bid_announcements_pre/bid_announcements_pre_1.txt"
         print(fr"Set bid_announcements_pre_file = {bid_announcements_pre_file}")
 
-    # Step0のみ実行モード（データベース不要）
-    if run_step0_only:
-        if input_list_file is None:
-            print("Error: --input_list_file is required when --run_step0_only is specified")
-            exit(1)
-
-        # db_operatorなしでオブジェクト作成（step0のみ使用）
-        obj = BidJudgementSan(
-            bid_announcements_pre_file=bid_announcements_pre_file,
-            tablenamesconfig=TablenamesConfig,
-            db_operator=None
-        )
-
-        # Step0のみ実行
-        announcements_documents_file, req_file_path = obj.step0_prepare_documents(
-            input_list_file=input_list_file,
-            output_base_dir=step0_output_base_dir,
-            timestamp=step0_timestamp,
-            topAgencyName=step0_topAgencyName,
-            no_merge=step0_no_merge,
-            use_gcp_vm=use_gcp_vm,
-            do_fetch_html=step0_do_fetch_html,
-            do_extract_links=step0_do_extract_links,
-            do_format_documents=step0_do_format_documents,
-            do_download_pdfs=step0_do_download_pdfs,
-            do_count_pages=step0_do_count_pages,
-            do_ocr=step0_do_ocr,
-            google_ai_studio_api_key_filepath=step0_google_api_key,
-            ocr_max_concurrency=step0_ocr_max_concurrency,
-            ocr_max_api_calls_per_run=step0_ocr_max_api_calls_per_run
-        )
-        print(f"\nGenerated announcements_documents_file: {announcements_documents_file}")
-        if req_file_path:
-            print(f"Generated requirements_file: {req_file_path}")
-        print("\n--run_step0_only specified. Exiting after step0.")
-        exit(0)
-
-    # 通常モード：データベース必要
+    # データベースオペレーターの作成（共通）
     if use_gcp_vm:
         db_operator = DBOperatorGCPVM(
             bigquery_location=bigquery_location,
@@ -5540,6 +5745,7 @@ if __name__ == "__main__":
             sqlite3_db_file_path=sqlite3_db_file_path
         )
 
+    # BidJudgementSan オブジェクト作成（共通）
     obj = BidJudgementSan(
         bid_announcements_pre_file=bid_announcements_pre_file,
         tablenamesconfig=TablenamesConfig,
@@ -5549,16 +5755,13 @@ if __name__ == "__main__":
     if stop_processing:
         exit(1)
 
-    # Step0の出力ファイルパス（step0をスキップする場合はNone）
-    req_file_path = None
-
-    # Step0: 公告ドキュメント準備処理（オプション）
-    if run_step0_prepare_documents:
+    # Step0のみ実行モード
+    if run_step0_only:
         if input_list_file is None:
-            print("Error: --input_list_file is required when --run_step0_prepare_documents is specified")
+            print("Error: --input_list_file is required when --run_step0_only is specified")
             exit(1)
 
-        announcements_documents_file, req_file_path = obj.step0_prepare_documents(
+        req_file_path = obj.step0_prepare_documents(
             input_list_file=input_list_file,
             output_base_dir=step0_output_base_dir,
             timestamp=step0_timestamp,
@@ -5575,14 +5778,44 @@ if __name__ == "__main__":
             ocr_max_concurrency=step0_ocr_max_concurrency,
             ocr_max_api_calls_per_run=step0_ocr_max_api_calls_per_run
         )
-        print(f"\nGenerated announcements_documents_file: {announcements_documents_file}")
+        if req_file_path:
+            print(f"Generated requirements_file: {req_file_path}")
+        print("\n--run_step0_only specified. Exiting after step0.")
+        exit(0)
+
+    # Step0の出力ファイルパス（step0をスキップする場合はNone）
+    req_file_path = None
+
+    # Step0: 公告ドキュメント準備処理（オプション）
+    if run_step0_prepare_documents:
+        if input_list_file is None:
+            print("Error: --input_list_file is required when --run_step0_prepare_documents is specified")
+            exit(1)
+
+        req_file_path = obj.step0_prepare_documents(
+            input_list_file=input_list_file,
+            output_base_dir=step0_output_base_dir,
+            timestamp=step0_timestamp,
+            topAgencyName=step0_topAgencyName,
+            no_merge=step0_no_merge,
+            use_gcp_vm=use_gcp_vm,
+            do_fetch_html=step0_do_fetch_html,
+            do_extract_links=step0_do_extract_links,
+            do_format_documents=step0_do_format_documents,
+            do_download_pdfs=step0_do_download_pdfs,
+            do_count_pages=step0_do_count_pages,
+            do_ocr=step0_do_ocr,
+            google_ai_studio_api_key_filepath=step0_google_api_key,
+            ocr_max_concurrency=step0_ocr_max_concurrency,
+            ocr_max_api_calls_per_run=step0_ocr_max_api_calls_per_run
+        )
         if req_file_path:
             print(f"Generated requirements_file: {req_file_path}")
 
     # obj.step0_create_bid_announcements_pre(bid_announcements_pre_file=bid_announcements_pre_file)
     # obj.step1_transfer(remove_table=step1_transfer_remove_table)
     obj.step1_transfer_v2(
-        announcements_documents_file=announcements_documents_file,
+        announcements_documents_file=None,  # 非推奨パラメータ（DB から読み込むため不要）
         remove_table=step1_transfer_remove_table
     )
 
