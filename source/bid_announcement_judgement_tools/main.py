@@ -1409,8 +1409,7 @@ class DBOperatorGCPVM(DBOperator):
         """
         BigQuery MERGE文で announcements_document_table に新しいレコードを挿入
 
-        announcement_id と document_id の組み合わせで重複チェックを行い、
-        重複しないレコードのみをターゲットテーブルに挿入する。
+        document_id で重複チェックを行い、重複しないレコードのみをターゲットテーブルに挿入する。
 
         Args:
             target_tablename: マージ先のテーブル名
@@ -1425,11 +1424,11 @@ class DBOperatorGCPVM(DBOperator):
         columns_str = ", ".join(columns_escaped)
         values_str = ", ".join([f"S.`{col}`" for col in columns])
 
-        # MERGE文を構築
+        # MERGE文を構築（document_id のみで重複チェック）
         merge_sql = f"""
         MERGE `{self.project_id}.{self.dataset_name}.{target_tablename}` AS T
         USING `{self.project_id}.{self.dataset_name}.{source_tablename}` AS S
-        ON T.announcement_id = S.announcement_id AND T.document_id = S.document_id
+        ON T.document_id = S.document_id
         WHEN NOT MATCHED THEN
           INSERT ({columns_str})
           VALUES ({values_str})
@@ -2843,8 +2842,7 @@ class DBOperatorSQLITE3(DBOperator):
         """
         SQLite3で announcements_document_table に新しいレコードを挿入
 
-        announcement_id と document_id の組み合わせで重複チェックを行い、
-        重複しないレコードのみをターゲットテーブルに挿入する。
+        document_id で重複チェックを行い、重複しないレコードのみをターゲットテーブルに挿入する。
 
         Args:
             target_tablename: マージ先のテーブル名
@@ -2857,7 +2855,7 @@ class DBOperatorSQLITE3(DBOperator):
         # 列名をカンマ区切りで結合
         columns_str = ", ".join(columns)
 
-        # INSERT ... SELECT ... WHERE NOT EXISTS を使用して重複を避ける
+        # INSERT ... SELECT ... WHERE NOT EXISTS を使用して重複を避ける（document_id のみで重複チェック）
         sql = f"""
         INSERT INTO {target_tablename} ({columns_str})
         SELECT {columns_str}
@@ -2865,8 +2863,7 @@ class DBOperatorSQLITE3(DBOperator):
         WHERE NOT EXISTS (
             SELECT 1
             FROM {target_tablename} AS T
-            WHERE T.announcement_id = S.announcement_id
-              AND T.document_id = S.document_id
+            WHERE T.document_id = S.document_id
         )
         """
 
