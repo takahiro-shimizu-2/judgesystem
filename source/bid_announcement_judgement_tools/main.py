@@ -584,10 +584,6 @@ class DBOperator:
         raise NotImplementedError
 
     @abstractmethod
-    def updateRequirements(self, bid_requirements_tablename, bid_requirements_tablename_for_update):
-        raise NotImplementedError
-
-    @abstractmethod
     def getMaxOfColumn(self, tablename, column_name):
         raise NotImplementedError
 
@@ -628,8 +624,7 @@ class DBOperator:
         """
         announcements_document_table に新しいレコードをマージ（UPSERT）する
 
-        announcement_id と document_id の組み合わせで重複チェックを行い、
-        重複しないレコードのみをターゲットテーブルに挿入する。
+        document_id で重複チェックを行い、重複しないレコードのみをターゲットテーブルに挿入する。
 
         Args:
             target_tablename: マージ先のテーブル名
@@ -638,6 +633,37 @@ class DBOperator:
 
         Returns:
             int: 挿入された行数
+        """
+        raise NotImplementedError
+
+    @abstractmethod
+    def mergeRequirements(self, target_tablename, source_tablename):
+        """
+        bid_requirements に新しいレコードをマージ（UPSERT）する
+
+        document_id で重複チェックを行い、重複しないレコードのみをターゲットテーブルに挿入する。
+        同じdocument_idの要件が既に存在する場合、その要件セット全体をスキップする。
+
+        Args:
+            target_tablename: マージ先のテーブル名
+            source_tablename: マージ元のテーブル名（一時テーブル）
+
+        Returns:
+            int: 挿入された行数
+        """
+        raise NotImplementedError
+
+    @abstractmethod
+    def checkRequirementsExist(self, tmp_check_table, requirements_table):
+        """
+        一時テーブルの document_id について、requirements テーブルにレコードが存在するかチェック
+
+        Args:
+            tmp_check_table: チェック対象の document_id を含む一時テーブル
+            requirements_table: チェック先の requirements テーブル
+
+        Returns:
+            DataFrame: document_id と req_exists (bool) の列を持つ DataFrame
         """
         raise NotImplementedError
 
@@ -882,7 +908,9 @@ class DBOperatorGCPVM(DBOperator):
     def createBidRequirements(self, bid_requirements_tablename):
         sql = fr"""
         create table `{self.project_id}.{self.dataset_name}.{bid_requirements_tablename}` (
+        document_id string,
         announcement_no int64,
+        requirement_index int64,
         requirement_no int64,
         requirement_type string,
         requirement_text string,
@@ -1124,30 +1152,6 @@ class DBOperatorGCPVM(DBOperator):
             target.bidenddate = source.bidenddate,
             target.doneocr = TRUE
         """        
-        self.client.query(sql).result()
-
-    def updateRequirements(self, bid_requirements_tablename, bid_requirements_tablename_for_update):
-        # step2で事前フィルタリング済みなので、単純なINSERTでOK
-        sql = f"""
-        INSERT INTO `{self.project_id}.{self.dataset_name}.{bid_requirements_tablename}` (
-            announcement_no,
-            requirement_no,
-            requirement_type,
-            requirement_text,
-            done_judgement,
-            createdDate,
-            updatedDate
-        )
-        SELECT
-            announcement_no,
-            requirement_no,
-            requirement_type,
-            requirement_text,
-            FALSE,
-            createdDate,
-            updatedDate
-        FROM `{self.project_id}.{self.dataset_name}.{bid_requirements_tablename_for_update}`
-        """
         self.client.query(sql).result()
 
     def getMaxOfColumn(self, tablename, column_name):
@@ -1438,6 +1442,74 @@ class DBOperatorGCPVM(DBOperator):
         query_job = self.client.query(merge_sql)
         query_job.result()  # 完了を待つ
         return query_job.num_dml_affected_rows
+
+    def mergeRequirements(self, target_tablename, source_tablename):
+        """
+        BigQuery MERGE文で bid_requirements に新しいレコードを挿入
+
+        announcement_no で重複チェックを行い、重複しないレコードのみをターゲットテーブルに挿入する。
+
+        Args:
+            target_tablename: マージ先のテーブル名
+            source_tablename: マージ元のテーブル名（一時テーブル）
+
+        Returns:
+            int: 挿入された行数
+        """
+        merge_sql = f"""
+        MERGE `{self.project_id}.{self.dataset_name}.{target_tablename}` AS T
+        USING `{self.project_id}.{self.dataset_name}.{source_tablename}` AS S
+        ON T.announcement_no = S.announcement_no
+        WHEN NOT MATCHED THEN
+          INSERT (document_id, announcement_no, requirement_index, requirement_no,
+                  requirement_type, requirement_text, done_judgement, createdDate, updatedDate)
+          VALUES (S.document_id, S.announcement_no, S.requirement_index, S.requirement_no,
+                  S.requirement_type, S.requirement_text, S.done_judgement, S.createdDate, S.updatedDate)
+        """
+
+        query_job = self.client.query(merge_sql)
+        query_job.result()
+        return query_job.num_dml_affected_rows
+
+    def checkRequirementsExist(self, tmp_check_table, requirements_table):
+        """
+        BigQuery で一時テーブルの announcement_id について requirements の存在をチェック
+
+        Args:
+            tmp_check_table: チェック対象の announcement_id を含む一時テーブル
+            requirements_table: チェック先の requirements テーブル
+
+        Returns:
+            DataFrame: announcement_id と req_exists (bool) の列を持つ DataFrame
+        """
+        query = f"""
+        SELECT
+            t.announcement_id,
+            CASE WHEN r.announcement_no IS NOT NULL THEN TRUE ELSE FALSE END as req_exists
+        FROM `{self.project_id}.{self.dataset_name}.{tmp_check_table}` t
+        LEFT JOIN (
+            SELECT DISTINCT announcement_no
+            FROM `{self.project_id}.{self.dataset_name}.{requirements_table}`
+        ) r ON t.announcement_id = r.announcement_no
+        """
+        query_job = self.client.query(query)
+        return query_job.to_dataframe()
+
+    def getDistinctDocumentIds(self, tablename):
+        """
+        BigQuery でテーブルから DISTINCT な document_id を取得
+
+        Args:
+            tablename: テーブル名
+
+        Returns:
+            DataFrame: document_id 列を持つ DataFrame
+        """
+        query = f"""
+        SELECT DISTINCT document_id
+        FROM `{self.project_id}.{self.dataset_name}.{tablename}`
+        """
+        return self.client.query(query).result().to_dataframe()
 
     def build_new_documents_query(self, tmp_table, existing_table):
         """
@@ -2296,14 +2368,16 @@ class DBOperatorSQLITE3(DBOperator):
     def createBidRequirements(self, bid_requirements_tablename):
         sql = fr"""
         create table {bid_requirements_tablename} (
-        requirement_no integer,
+        document_id text,
         announcement_no integer,
-        requirement_type string,
-        requirement_text string,
+        requirement_index integer,
+        requirement_no integer,
+        requirement_type text,
+        requirement_text text,
         done_judgement bool,
-        createdDate string,
-        updatedDate string,
-        UNIQUE(announcement_no, requirement_no, requirement_type)
+        createdDate text,
+        updatedDate text,
+        UNIQUE(announcement_no, requirement_index)
         )
         """
         self.cur.execute(sql)
@@ -2570,30 +2644,6 @@ class DBOperatorSQLITE3(DBOperator):
             remarks = {bid_announcements_tablename}.remarks, 
             createdDate = {bid_announcements_tablename}.createddate,
             updatedDate = {bid_announcements_tablename}.updateddate
-        """
-        self.cur.execute(sql)
-
-    def updateRequirements(self, bid_requirements_tablename, bid_requirements_tablename_for_update):
-        # step2で事前フィルタリング済みなので、単純なINSERTでOK
-        sql = fr"""
-        INSERT INTO {bid_requirements_tablename} (
-            requirement_no,
-            announcement_no,
-            requirement_type,
-            requirement_text,
-            done_judgement,
-            createdDate,
-            updatedDate
-        )
-        SELECT
-            requirement_no,
-            announcement_no,
-            requirement_type,
-            requirement_text,
-            0,
-            createdDate,
-            updatedDate
-        FROM {bid_requirements_tablename_for_update}
         """
         self.cur.execute(sql)
 
@@ -2871,6 +2921,74 @@ class DBOperatorSQLITE3(DBOperator):
         # SQLite3では affected rows を取得
         return self.cur.rowcount
 
+    def mergeRequirements(self, target_tablename, source_tablename):
+        """
+        SQLite3で bid_requirements に新しいレコードを挿入
+
+        announcement_no で重複チェックを行い、重複しないレコードのみをターゲットテーブルに挿入する。
+
+        Args:
+            target_tablename: マージ先のテーブル名
+            source_tablename: マージ元のテーブル名（一時テーブル）
+
+        Returns:
+            int: 挿入された行数
+        """
+        sql = f"""
+        INSERT INTO {target_tablename} (document_id, announcement_no, requirement_index, requirement_no,
+                                         requirement_type, requirement_text, done_judgement, createdDate, updatedDate)
+        SELECT document_id, announcement_no, requirement_index, requirement_no,
+               requirement_type, requirement_text, done_judgement, createdDate, updatedDate
+        FROM {source_tablename} AS S
+        WHERE NOT EXISTS (
+            SELECT 1
+            FROM {target_tablename} AS T
+            WHERE T.announcement_no = S.announcement_no
+        )
+        """
+
+        self.cur.execute(sql)
+        return self.cur.rowcount
+
+    def checkRequirementsExist(self, tmp_check_table, requirements_table):
+        """
+        SQLite3 で一時テーブルの announcement_id について requirements の存在をチェック
+
+        Args:
+            tmp_check_table: チェック対象の announcement_id を含む一時テーブル
+            requirements_table: チェック先の requirements テーブル
+
+        Returns:
+            DataFrame: announcement_id と req_exists (bool) の列を持つ DataFrame
+        """
+        query = f"""
+        SELECT
+            t.announcement_id,
+            CASE WHEN r.announcement_no IS NOT NULL THEN 1 ELSE 0 END as req_exists
+        FROM {tmp_check_table} t
+        LEFT JOIN (
+            SELECT DISTINCT announcement_no
+            FROM {requirements_table}
+        ) r ON t.announcement_id = r.announcement_no
+        """
+        return pd.read_sql_query(query, self.conn)
+
+    def getDistinctDocumentIds(self, tablename):
+        """
+        SQLite3 でテーブルから DISTINCT な document_id を取得
+
+        Args:
+            tablename: テーブル名
+
+        Returns:
+            DataFrame: document_id 列を持つ DataFrame
+        """
+        query = f"""
+        SELECT DISTINCT document_id
+        FROM {tablename}
+        """
+        return pd.read_sql_query(query, self.conn)
+
     def build_new_documents_query(self, tmp_table, existing_table):
         """
         DBOperatorSQLITE3: 一時テーブルと既存テーブルを document_id で比較し、新規レコードを取得するクエリを生成
@@ -2951,16 +3069,6 @@ class DBOperatorSQLITE3(DBOperator):
         raise NotImplementedError
 
 
-# グローバル変数（ワーカープロセスで使用）
-_req_dict_global = None
-
-
-def _init_requirements_worker(req_dict):
-    """ワーカープロセス初期化時に要件辞書をグローバル変数にセット"""
-    global _req_dict_global
-    _req_dict_global = req_dict
-
-
 def _convert_requirement_text_dict(requirement_texts):
     """
     要件テキストを変換してDataFrame用の辞書を作成（multiprocessing用グローバル関数）
@@ -3034,54 +3142,6 @@ def _convert_requirement_text_dict(requirement_texts):
         "updatedDate":updatedDate_list
     }
     return new_dict
-
-
-def _process_requirements_chunk(df_chunk):
-    """
-    チャンク単位で要件処理（multiprocessing用グローバル関数）
-
-    Args:
-        df_chunk: 処理対象の公告ドキュメントデータチャンク（announcement_no, document_idを含むDataFrame）
-                  各行は1つの announcement_no と document_id のペアを表す（縦持ち）
-
-    Returns:
-        list: DataFrame作成用の辞書リスト
-    """
-    global _req_dict_global
-    result_list = []
-
-    for _, row in df_chunk.iterrows():
-        announcement_no = row['announcement_no']
-        document_id = row['document_id']
-
-        try:
-            if document_id in _req_dict_global:
-                req_data = _req_dict_global[document_id]
-
-                # 資格・条件の取得
-                if pd.isna(req_data):
-                    requirement_texts = {
-                        "資格・条件": ["Missing requirements."]
-                    }
-                else:
-                    # 文字列からリストに変換
-                    if isinstance(req_data, str):
-                        req_conditions = ast.literal_eval(req_data)
-                    else:
-                        req_conditions = req_data
-                    requirement_texts = {
-                        "資格・条件": req_conditions
-                    }
-
-                requirement_texts["announcement_no"] = announcement_no
-                dic = _convert_requirement_text_dict(requirement_texts)
-                result_list.append(dic)
-
-        except Exception as e:
-            print(f"Error processing announcement_no={announcement_no}, document_id={document_id}: {e}")
-            continue
-
-    return result_list
 
 
 def _process_judgement_chunk(args):
@@ -3495,36 +3555,25 @@ class BidJudgementSan:
             print(f"Updated DataFrame with pageCount info")
 
         # 6. Gemini OCR 実行（オプション）
-        req_file_path = None
         if do_ocr:
             step_num += 1
             print(f"\n[{step_num}/{total_steps}] Running Gemini OCR...")
-            req_file_path = str(output_dir / "req_announcements_document.txt")
 
             # DataFrame を直接渡して OCR 処理
-            df_merged, req_file_path = self._step0_ocr_with_gemini(
+            df_merged, _ = self._step0_ocr_with_gemini(
                 df_main=df_merged,
-                req_file_path=req_file_path,
+                req_file_path=None,  # ファイル保存は廃止
                 use_gcp_vm=use_gcp_vm,
                 google_ai_studio_api_key_filepath=google_ai_studio_api_key_filepath,
                 max_concurrency=ocr_max_concurrency,
                 max_api_calls_per_run=ocr_max_api_calls_per_run
             )
 
-            print(f"OCR completed. Updated DataFrame")
-            if req_file_path:
-                print(f"Requirements file: {req_file_path}")
+            print(f"OCR completed. Announcements and requirements saved to DB.")
         else:
-            print("\n[Skipped] Running Gemini OCR (using existing files)...")
-            # OCR結果ファイルの確認
-            req_file_path = str(output_dir / "req_announcements_document.txt")
-            if Path(req_file_path).exists():
-                print(f"Found existing requirements file: {req_file_path}")
-            else:
-                print(f"Warning: Requirements file not found: {req_file_path}")
-                req_file_path = None
+            print("\n[Skipped] Running Gemini OCR")
 
-        # 7. DB に保存
+        # 7. DB に保存（announcements_document）
         print("\n" + "=" * 60)
         print("Saving new records to announcements_document_table...")
         print("=" * 60)
@@ -3532,11 +3581,10 @@ class BidJudgementSan:
 
         print("=" * 60)
         print(f"Step0 completed successfully!")
-        if req_file_path:
-            print(f"Requirements file: {req_file_path}")
+        print("Announcements and requirements data saved to DB.")
         print("=" * 60)
 
-        return req_file_path
+        return None  # ファイルパスではなく None を返す
 
 
     def _step0_convert_input_list(self, input_list1, output_dir):
@@ -4348,25 +4396,25 @@ class BidJudgementSan:
     def _step0_ocr_with_gemini(
         self,
         df_main,
-        req_file_path,
+        req_file_path=None,  # 後方互換性のため残すが使用しない
         use_gcp_vm=False,
         google_ai_studio_api_key_filepath=None,
         max_concurrency=5,
         max_api_calls_per_run=1000
     ):
         """
-        Gemini APIを使用してPDFからOCR処理を実行
+        Gemini APIを使用してPDFからOCR処理を実行し、DBに保存
 
         Args:
             df_main: announcements_document の DataFrame
-            req_file_path: 要件文ファイルのパス (req_announcements_document.txt)
+            req_file_path: (廃止、後方互換性のためのみ)
             use_gcp_vm: GCS (gs://) を使用する場合 True
             google_ai_studio_api_key_filepath: Google AI Studio API key filepath
             max_concurrency: 並列実行数
             max_api_calls_per_run: 1回の実行での最大API呼び出し数（デフォルト: 1000）
 
         Returns:
-            tuple: (df_main, req_file_path) 更新されたメインDataFrameと要件文ファイルパス
+            tuple: (df_main, None) 更新されたメインDataFrame
         """
         print("=" * 60)
         print("Step0-6: OCR with Gemini")
@@ -4396,64 +4444,50 @@ class BidJudgementSan:
         else:
             df_main["done"] = False
 
-        # 要件文DataFrame初期化
-        req_file_path = Path(req_file_path)
-        if req_file_path.exists():
-            df_req = pd.read_csv(req_file_path, sep="\t", low_memory=False, encoding="utf-8")
-            df_req["document_id"] = df_req["document_id"].astype(str).str.strip()
-            if "done" in df_req.columns:
-                df_req["done"] = (
-                    df_req["done"]
-                    .map({True: True, False: False, "True": True, "False": False})
-                    .fillna(False)
-                    .astype(bool)
-                )
-            else:
-                df_req["done"] = False
+        # requirements の存在チェック（DB上でJOIN）
+        tablename_requirements = self.tablenamesconfig.bid_requirements
+        tmp_check_table = "tmp_req_check"
+
+        df_check = pd.DataFrame({'announcement_id': df_main['announcement_id'].unique()})
+        self.db_operator.uploadDataToTable(df_check, tmp_check_table, chunksize=5000)
+
+        if self.db_operator.ifTableExists(tablename_requirements):
+            df_req_status = self.db_operator.checkRequirementsExist(tmp_check_table, tablename_requirements)
+            req_done_lookup = df_req_status.set_index('announcement_id')['req_exists'].to_dict()
+            # bool に変換（BigQuery は TRUE/FALSE、SQLite は 1/0）
+            req_done_lookup = {k: bool(v) for k, v in req_done_lookup.items()}
         else:
-            df_req = pd.DataFrame({
-                "document_id": df_main["document_id"],
-                "資格・条件": "['INIT']",
-                "done": False
-            })
+            # テーブルが存在しない場合は全て False
+            req_done_lookup = {ann_id: False for ann_id in df_main['announcement_id']}
 
-        # 既存の df_req を全て保持（過去の結果を失わないため）
-        df_req_all = df_req.drop_duplicates(subset="document_id", keep="first").copy()
+        self.db_operator.dropTable(tmp_check_table)
+        print(f"Checked requirements existence for {len(req_done_lookup)} announcements")
 
-        # df_main に対応する部分だけを抽出して処理用 DataFrame を作成
-        df_req_dict = df_req_all.set_index("document_id").to_dict("index")
-        new_req_data = []
-        for doc_id in df_main["document_id"]:
-            if doc_id in df_req_dict:
-                new_req_data.append(df_req_dict[doc_id])
-            else:
-                new_req_data.append({"資格・条件": "['INIT']", "done": False})
-
-        # 新規レコードが0件の場合、done カラムを持つ空の DataFrame を作成
-        if len(new_req_data) == 0:
-            df_req_working = pd.DataFrame(columns=["document_id", "資格・条件", "done"])
-            req_done_lookup = {}
-        else:
-            df_req_working = pd.DataFrame(new_req_data)
-            df_req_working.insert(0, "document_id", df_main["document_id"].values)
-            df_req_working["document_id"] = df_req_working["document_id"].astype(str).str.strip()
-            df_req_working["done"] = (
-                df_req_working["done"]
-                .map({True: True, False: False, "True": True, "False": False})
-                .fillna(False)
-                .astype(bool)
-            )
-            req_done_lookup = df_req_working.set_index("document_id")["done"].to_dict()
+        # デバッグ: req_done_lookup の内容を表示
+        req_done_true = [k for k, v in req_done_lookup.items() if v]
+        req_done_false = [k for k, v in req_done_lookup.items() if not v]
+        print(f"[DEBUG] req_done=True: {len(req_done_true)} announcements: {req_done_true[:5]}")
+        print(f"[DEBUG] req_done=False: {len(req_done_false)} announcements: {req_done_false[:5]}")
 
         # パラメータリスト作成
         params = []
         print("Preparing parameters for Gemini API calls...")
 
+        # デバッグ: df_mainのdocument_id重複チェック
+        doc_id_counts = df_main['document_id'].value_counts()
+        duplicate_docs = doc_id_counts[doc_id_counts > 1]
+        if len(duplicate_docs) > 0:
+            print(f"[DEBUG] df_main contains {len(duplicate_docs)} duplicate document_ids (same PDF, multiple announcements):")
+            print(f"[DEBUG] Duplicates: {duplicate_docs.to_dict()}")
+
+        # 要件文抽出用に処理済みdocument_idを記録（同じPDFを複数回APIに送らないため）
+        processed_docs = set()
 
         for i, row in tqdm(df_main.iterrows(), total=len(df_main), desc="Checking documents"):
             document_id = row["document_id"]
+            announcement_id = row["announcement_id"]
             ann_done = bool(row.get("done"))
-            req_done = bool(req_done_lookup.get(document_id, False))
+            req_done = bool(req_done_lookup.get(announcement_id, False))
 
             if ann_done and req_done:
                 continue
@@ -4480,8 +4514,9 @@ class BidJudgementSan:
                     use_gcp_vm
                 ])
 
-            # 要件文抽出用パラメータ
-            if not req_done:
+            # 要件文抽出用パラメータ（同じPDFを複数回APIに送らないため、document_idごとに1回のみ）
+            # ただし、結果は同じdocument_idを参照する全てのannouncement_idに保存される
+            if not req_done and document_id not in processed_docs:
                 params.append([
                     self._PROMPT_REQ,
                     document_id,
@@ -4490,6 +4525,7 @@ class BidJudgementSan:
                     "req",
                     use_gcp_vm
                 ])
+                processed_docs.add(document_id)
 
             # 1回の実行での処理数制限チェック
             if len(params) >= max_api_calls_per_run:
@@ -4504,6 +4540,11 @@ class BidJudgementSan:
         req_calls_total = len([p for p in params if p[4] == "req"])
         unique_docs_total = len({p[1] for p in params})
         print(f"Found {len(params)} API calls for {unique_docs_total} documents (ann: {ann_calls_total}, req: {req_calls_total})")
+
+        # デバッグ: req API呼び出しの対象document_idを表示
+        req_docs = [p[1] for p in params if p[4] == "req"]
+        if req_docs:
+            print(f"[DEBUG] Documents for req API calls: {req_docs[:10]}")  # 最初の10件
 
         # 並列実行
         if len(params) > 0:
@@ -4583,18 +4624,18 @@ class BidJudgementSan:
                 print(f"Updated {len(records)} documents with announcement data")
                 print(f"Set df_main.done=True for {ann_done_updates} documents in this batch")
 
-            # 要件文結果処理
+            # 要件文結果処理 → DB に直接保存
             req_results = [r for r in results if r.get("type") == "req"]
-            req_records = []
+            db_req_records = []
 
             if len(req_results) > 0:
+                # document_id → announcement_id のマッピング作成（複数の announcement_id に対応）
+                doc_to_ann_ids = df_main.groupby('document_id')['announcement_id'].apply(list).to_dict()
+
                 for res in tqdm(req_results, desc="Processing requirement results"):
                     document_id = res["document_id"]
-                    record = {
-                        "document_id": document_id,
-                        "資格・条件": "['Error fetching requirements.']",
-                        "done": True
-                    }
+                    announcement_ids = doc_to_ann_ids.get(document_id, [])
+
                     try:
                         if res.get("error") is not None:
                             text2 = str(res["error"])
@@ -4607,58 +4648,102 @@ class BidJudgementSan:
                             text2 = text2.replace('"', "'")
                             requirement_texts = json.loads('{"資格・条件" : ["' + text2 + '"]}')
 
+                        # 資格・条件リストを取得
                         if isinstance(requirement_texts, dict) and "資格・条件" in requirement_texts:
-                            record["資格・条件"] = str(requirement_texts["資格・条件"])
-                        elif isinstance(requirement_texts, str):
-                            record["資格・条件"] = requirement_texts
+                            req_list = requirement_texts["資格・条件"]
+                        elif isinstance(requirement_texts, list):
+                            req_list = requirement_texts
                         else:
-                            record["資格・条件"] = "['Error fetching requirements.']"
+                            req_list = ["Error fetching requirements."]
+
+                        # 各 announcement_id に対して要件を保存（同じPDFを参照する全ての公告に保存）
+                        for announcement_id in announcement_ids:
+                            # リスト展開 + requirement_type 判定 + DB レコード作成
+                            for idx, req_text in enumerate(req_list):
+                                req_type = self._classify_requirement_type(req_text)
+                                db_req_records.append({
+                                    'document_id': document_id,
+                                    'announcement_no': announcement_id,
+                                    'requirement_index': idx,
+                                    'requirement_no': None,  # 後で一括採番
+                                    'requirement_text': req_text,
+                                    'requirement_type': req_type,
+                                    'done_judgement': False,
+                                    'createdDate': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                                    'updatedDate': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                                })
 
                     except Exception as e:
                         tqdm.write(f"Error processing requirements for {document_id}: {e}")
-                        record["資格・条件"] = "['Error fetching requirements.']"
+                        # エラー時もダミーレコードを作成（全ての announcement_id に対して）
+                        for announcement_id in announcement_ids:
+                            db_req_records.append({
+                                'document_id': document_id,
+                                'announcement_no': announcement_id,
+                                'requirement_index': 0,
+                                'requirement_no': None,
+                                'requirement_text': f"Error: {str(e)}",
+                                'requirement_type': "その他要件",
+                                'done_judgement': False,
+                                'createdDate': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                                'updatedDate': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                            })
 
-                    req_records.append(record)
+                # requirement_no を一括採番
+                if db_req_records:
+                    tablename_requirements = self.tablenamesconfig.bid_requirements
 
-                if req_records:
-                    df_req_updates = pd.DataFrame(req_records)
-                    df_req_updates = df_req_updates.drop_duplicates(subset="document_id", keep="first")
-                    df_req_updates["document_id"] = df_req_updates["document_id"].astype(str).str.strip()
+                    # テーブルが存在しない場合は作成
+                    if not self.db_operator.ifTableExists(tablename_requirements):
+                        self.db_operator.createBidRequirements(tablename_requirements)
+                        print(f"Created new table: {tablename_requirements}")
+                        start_requirement_no = 1
+                    else:
+                        # 既存の最大 requirement_no を取得
+                        max_requirement_no = self.db_operator.getMaxOfColumn(tablename_requirements, 'requirement_no')
+                        if max_requirement_no.iloc[0, 0] is None or pd.isna(max_requirement_no.iloc[0, 0]):
+                            start_requirement_no = 1
+                        else:
+                            start_requirement_no = max_requirement_no.iloc[0, 0] + 1
 
-                    # df_req_working を更新
-                    df_req_working = df_req_working.set_index("document_id")
-                    df_req_updates_indexed = df_req_updates.set_index("document_id")
+                    # requirement_no を採番
+                    for idx, record in enumerate(db_req_records):
+                        record['requirement_no'] = start_requirement_no + idx
 
-                    missing_ids = df_req_updates_indexed.index.difference(df_req_working.index)
-                    if len(missing_ids) > 0:
-                        df_missing = df_req_updates_indexed.loc[missing_ids].copy()
-                        df_req_working = pd.concat([df_req_working, df_missing], axis=0)
+                    # DB に保存
+                    df_req_db = pd.DataFrame(db_req_records)
+                    df_req_db['requirement_no'] = df_req_db['requirement_no'].astype('int64')
+                    df_req_db['announcement_no'] = df_req_db['announcement_no'].astype('int64')
 
-                    df_req_working.loc[df_req_updates_indexed.index, "資格・条件"] = df_req_updates_indexed["資格・条件"]
-                    df_req_working.loc[df_req_updates_indexed.index, "done"] = True
-                    df_req_working.reset_index(inplace=True)  # document_id を index からカラムに戻す
+                    tmp_table = 'tmp_bid_requirements'
 
-                    # df_req_all にも同じ更新を反映（過去の結果を保持しつつ新規を追加）
-                    df_req_all = df_req_all.set_index("document_id")
-                    missing_ids_all = df_req_updates_indexed.index.difference(df_req_all.index)
-                    if len(missing_ids_all) > 0:
-                        df_missing_all = df_req_updates_indexed.loc[missing_ids_all].copy()
-                        df_req_all = pd.concat([df_req_all, df_missing_all], axis=0)
+                    # デバッグ: インサート対象の document_id を表示
+                    unique_docs = df_req_db['document_id'].unique()
+                    print(f"[DEBUG] Attempting to insert requirements for {len(unique_docs)} documents:")
+                    print(f"[DEBUG] Document IDs: {list(unique_docs)}")
 
-                    df_req_all.loc[df_req_updates_indexed.index, "資格・条件"] = df_req_updates_indexed["資格・条件"]
-                    df_req_all.loc[df_req_updates_indexed.index, "done"] = True
-                    df_req_all.reset_index(inplace=True)
+                    self.db_operator.uploadDataToTable(df_req_db, tmp_table, chunksize=5000)
 
-                    updated_req_docs = df_req_updates_indexed.index.nunique()
-                    print(f"Updated {len(req_records)} documents with requirement data")
-                    print(f"Set done=True for {updated_req_docs} documents in this batch")
+                    # デバッグ: 既存テーブルに存在する document_id を確認
+                    existing_check = self.db_operator.getDistinctDocumentIds(tablename_requirements)
+                    existing_docs = set(existing_check['document_id'].tolist()) if len(existing_check) > 0 else set()
+                    conflict_docs = [d for d in unique_docs if d in existing_docs]
+                    if conflict_docs:
+                        print(f"[DEBUG] WARNING: {len(conflict_docs)} documents already exist in {tablename_requirements}:")
+                        print(f"[DEBUG] Conflict document IDs: {conflict_docs}")
+                        # デバッグ: 衝突しているdocumentのreq_done_lookup値を確認
+                        for doc_id in conflict_docs[:5]:  # 最初の5件
+                            lookup_val = req_done_lookup.get(doc_id, 'NOT_FOUND')
+                            print(f"[DEBUG] req_done_lookup['{doc_id}'] = {lookup_val}")
 
-        # df_req_all（過去の結果を含む全データ）を保存
-        df_req_all.to_csv(req_file_path, sep="\t", index=False, encoding="utf-8")
-        df_req_all.to_csv(str(req_file_path) + ".zip", sep="\t", compression="zip", index=False, encoding="utf-8")
-        print(f"Requirement results saved to: {req_file_path} (total: {len(df_req_all)} records)")
+                    affected_rows = self.db_operator.mergeRequirements(tablename_requirements, tmp_table)
+                    self.db_operator.dropTable(tmp_table)
 
-        return df_main, str(req_file_path)
+                    print(f"Processed {len(req_results)} documents with requirement data")
+                    print(f"Created {len(db_req_records)} requirement records")
+                    print(f"Merged into {tablename_requirements}: {affected_rows} rows inserted")
+
+        return df_main, None  # req_file_path は不要になった
 
 
     async def _call_parallel(self, client, params, max_concurrency=5):
@@ -5140,11 +5225,13 @@ Execute
         """
         step1 : 転写処理
 
-        公告マスターが無ければ公告マスターを作成する。要件マスターが無ければ要件マスターを作成する。
+        公告マスターが無ければ公告マスターを作成する。
 
-        引数 remove_table に応じて、事前に公告マスター・要件マスターを削除する。
+        引数 remove_table に応じて、事前に公告マスターを削除する。
 
         announcements_document_table (DB) から announcements (DB) に転記する。
+
+        注意: bid_requirements は step0 で作成済みのため、このステップでは処理しません。
 
         Args:
 
@@ -5153,11 +5240,10 @@ Execute
 
         - remove_table=False:
 
-          処理前に、公告マスター・要件マスターを削除するかどうか。
+          処理前に、公告マスターを削除するかどうか。
         """
 
         tablename_announcements = self.tablenamesconfig.bid_announcements
-        tablename_requirements = self.tablenamesconfig.bid_requirements
         tablename_bid_announcements_document_table = self.tablenamesconfig.bid_announcements_document_table
 
         db_operator = self.db_operator
@@ -5185,26 +5271,6 @@ Execute
         else:
             print(fr"ALREADY EXISTS: {tablename_announcements}.")
 
-
-        # 同様に bid_requirements
-        # テーブル 'bid_requirements' の存在確認。
-        tmpcheck = db_operator.ifTableExists(tablename=tablename_requirements)
-
-        # テーブルが存在するなら、削除オプションに応じて削除
-        if tmpcheck:
-            if remove_table:
-                db_operator.dropTable(tablename=tablename_requirements)
-                print(fr"DELETE existing table: {tablename_requirements}.")
-                # テーブル削除したのでフラグ更新
-                tmpcheck = False
-
-        if not tmpcheck:
-            # テーブルが無いなら作成
-            db_operator.createBidRequirements(bid_requirements_tablename=tablename_requirements)
-            print(fr"NEWLY CREATED: {tablename_requirements}.")
-        else:
-            print(fr"ALREADY EXISTS: {tablename_requirements}.")
-
         # announcements_document_table から announcements への転記処理
         print(f"\nTransferring from {tablename_bid_announcements_document_table} to {tablename_announcements}...")
         db_operator.transferAnnouncementsV2(
@@ -5214,6 +5280,45 @@ Execute
         # check
         # val = db_operator.selectToTable(tablename=tablename)
 
+
+    def _classify_requirement_type(self, text):
+        """
+        要件文から requirement_type を判定
+
+        Args:
+            text: 要件文のテキスト
+
+        Returns:
+            str: 要件タイプ（欠格要件、業種・等級要件、所在地要件、技術者要件、実績要件、その他要件）
+        """
+        req_type_list_search_list = {
+            "欠格要件": [
+                "70条", "71条", "会社更生法", "民事再生法", "更生手続",
+                "再生手続", "情報保全", "資本関係", "人的関係", "滞納",
+                "外国法", "取引停止", "破産", "暴力団", "指名停止",
+                "後見人", "法人格取消"
+            ],
+            "業種・等級要件": ["競争参加資格", "一般競争", "指名競争", "等級", "総合審査"],
+            "所在地要件": ["所在", "県内", "市内", "防衛局管内", "本店が", "支店が"],
+            "技術者要件": [
+                "施工管理技士", "技術士", "資格者証", "電気工事士", "建築士",
+                "基幹技能者", "監理技術者", "主任技術者", "監理技術者資格者証", "監理技術者講習修了証"
+            ],
+            "実績要件": [
+                "実績", "工事成績", "元請けとして", "元請として", "点以上",
+                "jv比率", "過去実績"
+            ],
+            "その他要件": ["jv", "共同企業体", "出資比率"]
+        }
+
+        text_lower = text.lower()
+        for req_type, search_list in req_type_list_search_list.items():
+            if req_type == "その他要件":
+                continue
+            search_str = "|".join(search_list)
+            if re.search(search_str, text_lower):
+                return req_type
+        return "その他要件"
 
     def convertRequirementTextDict(self, requirement_texts):
         """
@@ -5293,134 +5398,6 @@ Execute
             "updatedDate":updatedDate_list
         }
         return new_dict
-
-
-    def step2_process_requirements(self, ocr_req_file_path=None):
-        """
-        step2 : 要件処理
-
-        step0のOCR結果を使用して要件マスターを作成・更新する。
-
-        OCR結果（req_announcements_document.txt）から要件データを読み込み、
-        公告マスターの各公告に対応する要件を変換して要件マスターに格納する。
-
-        要件データを中間テーブルとしてアップロードし、要件マスターを更新する。
-        更新後、中間テーブルは削除する。
-
-        Args:
-            ocr_req_file_path: 要件OCR結果ファイルのパス。
-                              Noneの場合、output/の最新タイムスタンプフォルダから自動検出
-        """
-
-        tablename_announcements = self.tablenamesconfig.bid_announcements
-        tablename_requirements = self.tablenamesconfig.bid_requirements
-        tablename_announcements_document = self.tablenamesconfig.bid_announcements_document_table
-        tmp_tablename_requirements = fr"tmp_{tablename_requirements}"
-        db_operator = self.db_operator
-
-        # OCR結果ファイルパスの決定
-        if ocr_req_file_path is None:
-            # output/ の最新フォルダを自動検出
-            output_base = Path("output")
-            if not output_base.exists():
-                raise FileNotFoundError(f"Output directory not found: {output_base}")
-
-            timestamp_dirs = [d for d in output_base.iterdir()
-                             if d.is_dir() and d.name.isdigit() and len(d.name) == 12]
-            if not timestamp_dirs:
-                raise FileNotFoundError(f"No timestamp folders found in {output_base}/")
-
-            latest_dir = max(timestamp_dirs, key=lambda d: d.name)
-            ocr_req_file_path = latest_dir / "req_announcements_document.txt"
-            print(f"Auto-detected OCR requirements file: {ocr_req_file_path}")
-        else:
-            ocr_req_file_path = Path(ocr_req_file_path)
-            print(f"Using specified OCR requirements file: {ocr_req_file_path}")
-
-        # announcements_document_table から announcement_id と document_id のペアを取得（縦持ち）
-        # 横持ちの bid_announcements ではなく、縦持ちの announcements_document_table を使うことで
-        # document_id の数に制限がなくなる
-        # SQLレベルで既存の announcement_no を除外（メモリ効率化）
-        requirements_exists = db_operator.ifTableExists(tablename=tablename_requirements)
-        df_announcements = db_operator.selectUnprocessedAnnouncementDocuments(
-            announcements_document_tablename=tablename_announcements_document,
-            requirements_tablename=tablename_requirements,
-            requirements_exists=requirements_exists
-        )
-        print(f"Found {len(df_announcements)} announcement-document pairs to process (after filtering existing requirements)")
-
-        if len(df_announcements) == 0:
-            print("No new announcements to process. Skipping requirements processing.")
-            return
-
-        # OCR結果ファイルからrequirementsデータを読み込み（zip優先）
-        ocr_req_file_path_zip = Path(str(ocr_req_file_path) + ".zip")
-
-        if ocr_req_file_path_zip.exists():
-            df_req = pd.read_csv(ocr_req_file_path_zip, sep="\t")
-            print(f"Loaded requirements from: {ocr_req_file_path_zip}")
-        elif ocr_req_file_path.exists():
-            df_req = pd.read_csv(ocr_req_file_path, sep="\t")
-            print(f"Loaded requirements from: {ocr_req_file_path}")
-        else:
-            raise FileNotFoundError(f"Requirements file not found: {ocr_req_file_path}")
-
-        # df_reqをdocument_idでインデックスした辞書に変換（高速化のため）
-        print("Converting requirements data to dictionary...")
-        req_dict = {}
-        for _, row in df_req.iterrows():
-            document_id = row["document_id"]
-            req_value = row["資格・条件"]
-            req_dict[document_id] = req_value
-
-        print(f"Processing requirements for {len(df_announcements)} announcements...")
-
-        # 並列処理設定
-        n_processes = cpu_count()
-        print(f"Using {n_processes} processes for parallel execution")
-
-        # df_announcementsをn_processes個のチャンクに分割
-        df_chunks = np.array_split(df_announcements, n_processes)
-
-        # 空のチャンクを除外
-        df_chunks = [chunk for chunk in df_chunks if len(chunk) > 0]
-
-        # 並列実行（initializerでreq_dictをワーカープロセスのグローバル変数にセット）
-        print(f"Starting parallel processing with {len(df_chunks)} tasks...")
-        with Pool(processes=n_processes, initializer=_init_requirements_worker, initargs=(req_dict,)) as pool:
-            chunk_results = list(tqdm(pool.imap(_process_requirements_chunk, df_chunks), total=len(df_chunks), desc="Processing chunks"))
-
-        # 結果を集約（辞書からDataFrameに変換）
-        print("Aggregating results from all processes...")
-        all_requirement_texts = []
-        for result in chunk_results:
-            for dic in result:
-                all_requirement_texts.append(pd.DataFrame(dic))
-
-        ######################################
-        # bid_requirements を更新。           #
-        ######################################
-
-        if all_requirement_texts != []:
-            df2 = pd.concat(all_requirement_texts, ignore_index=True)
-            max_requirement_no = db_operator.getMaxOfColumn(tablename=tablename_requirements, column_name="requirement_no")
-            if max_requirement_no.iloc[0, 0] is None or pd.isna(max_requirement_no.iloc[0, 0]):
-                max_requirement_no = 0
-            else:
-                max_requirement_no = max_requirement_no.iloc[0, 0]
-            current_requirement_no = max_requirement_no + 1
-            df2["requirement_no"] = range(current_requirement_no, current_requirement_no + df2.shape[0])
-
-            df2["announcement_no"] = df2["announcement_no"].astype("Int64")
-            df2["requirement_no"] = df2["requirement_no"].astype("Int64")
-
-            print(fr"Upload {tmp_tablename_requirements}")
-            db_operator.uploadDataToTable(data=df2, tablename=tmp_tablename_requirements, chunksize=5000)
-            print(fr"Update {tablename_requirements}")
-            db_operator.updateRequirements(bid_requirements_tablename=tablename_requirements, bid_requirements_tablename_for_update=tmp_tablename_requirements)
-
-        # 中間テーブル削除
-        db_operator.dropTable(tablename=tmp_tablename_requirements)
 
     def step3(self, remove_table=False):
         """
@@ -5512,12 +5489,15 @@ Execute
                 bid_announcements_tablename=tablename_announcements
             )
         df0 = db_operator.preselectCompanyBidJudgement(
-            company_bid_judgement_tablename=tablename_company_bid_judgement, 
-            office_master_tablename=tablename_office_master, 
+            company_bid_judgement_tablename=tablename_company_bid_judgement,
+            office_master_tablename=tablename_office_master,
             bid_announcements_tablename=tablename_announcements
         )
         # df0 = db_operator.selectToTable(tablename=fr"{tablename_company_bid_judgement}", where_clause="where final_status is NULL")
         print(fr"Target of checking requirement : {df0.shape[0]}")
+        if len(df0) > 0:
+            print(f"[DEBUG] Target combinations (announcement_no, company_no, office_no):")
+            print(df0[['announcement_no', 'company_no', 'office_no']].to_string(index=False, max_rows=20))
 
         # 並列処理では連番採番時に重複が発生するため UUID を使用
 
@@ -5821,15 +5801,15 @@ if __name__ == "__main__":
         print("\n--stop_after_step1 specified. Exiting after step1.")
         exit(0)
 
-    obj.step2_process_requirements(ocr_req_file_path=req_file_path)
-
+    # step2 は削除されました（要件処理は step0 で完結）
     # step2で止まる場合
     if stop_after_step2:
-        print("\n--stop_after_step2 specified. Exiting after step2.")
+        print("\n--stop_after_step2 specified. Exiting after step2 (step2 is now removed, but flag honored).")
         exit(0)
 
     obj.step3(remove_table=step3_remove_table)
     print("Ended step3.")
+    exit(0)
 
     master = Master()
     company_master = master.getCompanyMaster()
