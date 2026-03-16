@@ -1,0 +1,173 @@
+@startuml class
+!theme plain
+skinparam backgroundColor #FEFEFE
+skinparam classAttributeIconSize 0
+
+title 入札可否判定システム UI - 型定義クラス図
+
+package "types/index.ts" #E8F4FC {
+  enum EvaluationStatus {
+    all_met
+    other_only_unmet
+    unmet
+  }
+
+  enum WorkStatus {
+    not_started
+    in_progress
+    completed
+  }
+
+  class Company {
+    +id: string
+    +name: string
+    +address: string
+    +grade: string
+    +priority: CompanyPriority
+  }
+
+  class Announcement {
+    +id: string
+    +title: string
+    +category: string
+    +organization: string
+    +workLocation: string
+    +publishDate: string
+    +deadline: string
+    +estimatedAmountMin?: number
+    +estimatedAmountMax?: number
+  }
+
+  class BidEvaluation {
+    +id: string
+    +evaluationNo: string
+    +announcement: Announcement
+    +company: Company
+    +branch: Branch
+    +requirements: Requirement[]
+    +status: EvaluationStatus
+    +workStatus: WorkStatus
+    +evaluatedAt: string
+  }
+}
+
+package "types/workflow.ts" #FEF3C7 {
+  enum PartnerStatus {
+    selected
+    candidate
+    declined
+    pending
+  }
+
+  class Partner {
+    +id: string
+    +companyName: string
+    +status: PartnerStatus
+    +phone?: string
+    +email?: string
+    +contactPerson?: string
+  }
+
+  class Document {
+    +id: string
+    +title: string
+    +type: DocumentType
+    +url?: string
+    +uploadedAt: string
+  }
+
+  class CheckItem {
+    +id: string
+    +label: string
+    +checked: boolean
+    +note?: string
+  }
+
+  class CallLog {
+    +id: string
+    +datetime: string
+    +content: string
+    +result?: string
+  }
+}
+
+package "types/partner.ts" #ECFDF5 {
+  class PartnerListItem {
+    +id: string
+    +companyName: string
+    +categories: string[]
+    +address: string
+    +phone?: string
+    +email?: string
+    +grade?: string
+    +qualifications: Qualifications
+    +pastProjects: PastProject[]
+  }
+
+  class PastProject {
+    +id: string
+    +title: string
+    +year: number
+    +amount?: number
+  }
+
+  class Qualifications {
+    +licenses: string[]
+    +certifications: string[]
+  }
+}
+
+package "types/orderer.ts" #FEF2F2 {
+  enum OrdererCategory {
+    national
+    agency
+    prefecture
+    city
+  }
+
+  class Orderer {
+    +id: string
+    +name: string
+    +category: OrdererCategory
+    +address: string
+    +phone?: string
+    +email?: string
+    +fax?: string
+    +projectCount: number
+  }
+}
+
+package "types/announcement.ts" #EFF6FF {
+  enum AnnouncementStatus {
+    open
+    closed
+    awarded
+    cancelled
+  }
+
+  class AnnouncementWithStatus {
+    +id: string
+    +title: string
+    +status: AnnouncementStatus
+    +orderer: Orderer
+    +category: string
+    +publishDate: string
+    +deadline: string
+  }
+}
+
+' Relationships
+BidEvaluation --> Announcement
+BidEvaluation --> Company
+BidEvaluation --> EvaluationStatus
+BidEvaluation --> WorkStatus
+
+Partner --> PartnerStatus
+AnnouncementWithStatus --> AnnouncementStatus
+AnnouncementWithStatus --> Orderer
+Orderer --> OrdererCategory
+
+PartnerListItem --> Qualifications
+PartnerListItem --> PastProject
+
+@enduml

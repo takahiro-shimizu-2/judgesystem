@@ -1,0 +1,66 @@
+@startuml architecture
+!theme plain
+skinparam backgroundColor #FEFEFE
+
+title 入札可否判定システム UI - システムアーキテクチャ図
+
+rectangle "Client (Browser)" as client {
+  rectangle "React Application" as react #E8F4FC {
+    rectangle "Presentation Layer" as presentation {
+      component "Pages" as pages
+      component "Components" as components
+      component "Templates" as templates
+    }
+
+    rectangle "State Management" as state #ECFDF5 {
+      component "SidebarContext" as sidebar
+      component "Custom Hooks" as hooks
+      component "localStorage" as local
+    }
+
+    rectangle "Data Layer" as data #FEF3C7 {
+      component "Mock Data" as mock
+      note right of mock
+        現在: モックデータ直接import
+        将来: Service層経由でAPI
+      end note
+    }
+
+    rectangle "Style System" as style #EFF6FF {
+      component "constants/styles.ts" as styles
+      component "constants/icons.ts" as icons
+      component "MUI Theme" as theme
+    }
+  }
+}
+
+rectangle "Server" as server #F1F5F9 {
+  rectangle "Nginx" as nginx {
+    component "Static Files" as static
+  }
+}
+
+rectangle "Container" as container #FEF2F2 {
+  component "Docker" as docker
+}
+
+' Connections
+pages --> components : uses
+pages --> templates : uses
+pages --> hooks : uses
+components --> styles : imports
+components --> icons : imports
+
+hooks --> mock : imports (現在)
+hooks --> local : read/write
+
+react --> nginx : serve
+nginx --> docker : runs in
+
+' Future API connection (dashed)
+rectangle "Future: Backend API" as api #94A3B8 {
+  component "REST API" as rest
+}
+hooks ..> rest : (将来) fetch
+
+@enduml

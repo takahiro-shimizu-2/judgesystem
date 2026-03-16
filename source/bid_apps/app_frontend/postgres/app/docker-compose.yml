@@ -1,0 +1,22 @@
+services:
+  # Production build (default)
+  app:
+    build:
+      context: .
+      target: production
+    ports:
+      - "8080:80"
+    restart: unless-stopped
+
+  # Development with hot reload
+  dev:
+    build:
+      context: .
+      target: development
+    ports:
+      - "5175:5173"
+    volumes:
+      - .:/app
+      - /app/node_modules
+    profiles:
+      - dev

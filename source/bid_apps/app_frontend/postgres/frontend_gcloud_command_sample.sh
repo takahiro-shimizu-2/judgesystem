@@ -34,21 +34,8 @@ done
 
 echo $URL
 
-
-# frontendファイルを置換
-cp app_replacement_files_postgres/announcements.ts app/src/data/announcements.ts
-cp app_replacement_files_postgres/companies.ts     app/src/data/companies.ts
-cp app_replacement_files_postgres/evaluations.ts   app/src/data/evaluations.ts
-cp app_replacement_files_postgres/index.ts         app/src/data/index.ts
-cp app_replacement_files_postgres/orderers.ts      app/src/data/orderers.ts
-cp app_replacement_files_postgres/partners.ts      app/src/data/partners.ts
-cp app_replacement_files_postgres/staff.ts         app/src/data/staff.ts
-cp app_replacement_files_postgres/useBidListState.ts app/src/hooks/useBidListState.ts
-cp app_replacement_files_postgres/BidListPage.tsx app/src/pages/BidListPage.tsx
-cp app_replacement_files_postgres/BidDetailPage.tsx app/src/pages/BidDetailPage.tsx
-
-echo "Copied relpacement files."
-
+# Note: app/ ディレクトリには既に app_replacement_files_postgres の内容が適用済み
+# URL 置換のみ実行
 
 sed -i "s|/api/announcements|$URL/api/announcements|g" app/src/data/announcements.ts
 sed -i "s|/api/companies|$URL/api/companies|g"         app/src/data/companies.ts
@@ -58,7 +45,7 @@ sed -i "s|/api/partners|$URL/api/partners|g"           app/src/data/partners.ts
 sed -i "s|/api/evaluations|$URL/api/evaluations|g"     app/src/hooks/useBidListState.ts
 sed -i "s|/api/evaluations|$URL/api/evaluations|g"     app/src/pages/BidDetailPage.tsx
 
-echo "Replaced mockData url."
+echo "Replaced API URLs with: $URL"
 
 
 # Settings
