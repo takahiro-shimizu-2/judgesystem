@@ -621,6 +621,22 @@ class DBOperator:
         raise NotImplementedError
 
     @abstractmethod
+    def mergeBidAnnouncements(self, target_tablename, source_tablename):
+        """
+        bid_announcements に新しいレコードを挿入する
+
+        announcement_no で重複チェックを行い、重複しないレコードのみをターゲットテーブルに挿入する。
+
+        Args:
+            target_tablename: マージ先のテーブル名
+            source_tablename: マージ元のテーブル名（一時テーブル）
+
+        Returns:
+            int: 挿入された行数
+        """
+        raise NotImplementedError
+
+    @abstractmethod
     def mergeRequirements(self, target_tablename, source_tablename):
         """
         bid_requirements に新しいレコードをマージ（UPSERT）する
@@ -838,13 +854,14 @@ class DBOperatorGCPVM(DBOperator):
         bidEndDate string,
 
         doneOCR bool,
-        remarks string, 
+        remarks string,
         createdDate string,
         updatedDate string,
 
         orderer_id string,
         category string,
-        bidType string
+        bidType string,
+        is_ocr_failed bool
         )
         """
         self.client.query(sql).result()
@@ -899,7 +916,8 @@ class DBOperatorGCPVM(DBOperator):
         requirement_text string,
         done_judgement bool,
         createdDate string,
-        updatedDate string
+        updatedDate string,
+        is_ocr_failed bool
         )
         """
         self.client.query(sql).result()
@@ -1344,9 +1362,43 @@ class DBOperatorGCPVM(DBOperator):
         ON T.announcement_no = S.announcement_no
         WHEN NOT MATCHED THEN
           INSERT (document_id, announcement_no, requirement_no,
-                  requirement_type, requirement_text, done_judgement, createdDate, updatedDate)
+                  requirement_type, requirement_text, is_ocr_failed, done_judgement, createdDate, updatedDate)
           VALUES (S.document_id, S.announcement_no, S.requirement_no,
-                  S.requirement_type, S.requirement_text, S.done_judgement, S.createdDate, S.updatedDate)
+                  S.requirement_type, S.requirement_text, S.is_ocr_failed, S.done_judgement, S.createdDate, S.updatedDate)
+        """
+
+        query_job = self.client.query(merge_sql)
+        query_job.result()
+        return query_job.num_dml_affected_rows
+
+    def mergeBidAnnouncements(self, target_tablename, source_tablename):
+        """
+        BigQuery MERGE文で bid_announcements に新しいレコードを挿入
+
+        announcement_no で重複チェックを行い、重複しないレコードのみをターゲットテーブルに挿入する。
+
+        Args:
+            target_tablename: マージ先のテーブル名
+            source_tablename: マージ元のテーブル名（一時テーブル）
+
+        Returns:
+            int: 挿入された行数
+        """
+        merge_sql = f"""
+        MERGE `{self.project_id}.{self.dataset_name}.{target_tablename}` AS T
+        USING `{self.project_id}.{self.dataset_name}.{source_tablename}` AS S
+        ON T.announcement_no = S.announcement_no
+        WHEN NOT MATCHED THEN
+          INSERT (announcement_no, workName, topAgencyName, orderer_id,
+                  workPlace, zipcode, address, department, assigneeName,
+                  telephone, fax, mail, publishDate, docDistStart, docDistEnd,
+                  submissionStart, submissionEnd, bidStartDate, bidEndDate,
+                  bidType, category, is_ocr_failed, doneOCR, createdDate, updatedDate)
+          VALUES (S.announcement_no, S.workName, S.topAgencyName, S.orderer_id,
+                  S.workPlace, S.zipcode, S.address, S.department, S.assigneeName,
+                  S.telephone, S.fax, S.mail, S.publishDate, S.docDistStart, S.docDistEnd,
+                  S.submissionStart, S.submissionEnd, S.bidStartDate, S.bidEndDate,
+                  S.bidType, S.category, S.is_ocr_failed, S.doneOCR, S.createdDate, S.updatedDate)
         """
 
         query_job = self.client.query(merge_sql)
@@ -2196,13 +2248,14 @@ class DBOperatorSQLITE3(DBOperator):
         bidEndDate string,
 
         doneOCR bool,
-        remarks string, 
+        remarks string,
         createdDate string,
         updatedDate string,
 
         orderer_id string,
         category string,
-        bidType string
+        bidType string,
+        is_ocr_failed bool
         )
         """
         self.cur.execute(sql)
@@ -2258,6 +2311,7 @@ class DBOperatorSQLITE3(DBOperator):
         done_judgement bool,
         createdDate text,
         updatedDate text,
+        is_ocr_failed bool,
         UNIQUE(requirement_no)
         )
         """
@@ -2714,9 +2768,47 @@ class DBOperatorSQLITE3(DBOperator):
         """
         sql = f"""
         INSERT INTO {target_tablename} (document_id, announcement_no, requirement_no,
-                                         requirement_type, requirement_text, done_judgement, createdDate, updatedDate)
+                                         requirement_type, requirement_text, is_ocr_failed, done_judgement, createdDate, updatedDate)
         SELECT document_id, announcement_no, requirement_no,
-               requirement_type, requirement_text, done_judgement, createdDate, updatedDate
+               requirement_type, requirement_text, is_ocr_failed, done_judgement, createdDate, updatedDate
+        FROM {source_tablename} AS S
+        WHERE NOT EXISTS (
+            SELECT 1
+            FROM {target_tablename} AS T
+            WHERE T.announcement_no = S.announcement_no
+        )
+        """
+
+        self.cur.execute(sql)
+        return self.cur.rowcount
+
+    def mergeBidAnnouncements(self, target_tablename, source_tablename):
+        """
+        SQLite3で bid_announcements に新しいレコードを挿入
+
+        announcement_no で重複チェックを行い、重複しないレコードのみをターゲットテーブルに挿入する。
+
+        Args:
+            target_tablename: マージ先のテーブル名
+            source_tablename: マージ元のテーブル名（一時テーブル）
+
+        Returns:
+            int: 挿入された行数
+        """
+        sql = f"""
+        INSERT INTO {target_tablename} (
+            announcement_no, workName, topAgencyName, orderer_id,
+            workPlace, zipcode, address, department, assigneeName,
+            telephone, fax, mail, publishDate, docDistStart, docDistEnd,
+            submissionStart, submissionEnd, bidStartDate, bidEndDate,
+            bidType, category, is_ocr_failed, doneOCR, createdDate, updatedDate
+        )
+        SELECT
+            announcement_no, workName, topAgencyName, orderer_id,
+            workPlace, zipcode, address, department, assigneeName,
+            telephone, fax, mail, publishDate, docDistStart, docDistEnd,
+            submissionStart, submissionEnd, bidStartDate, bidEndDate,
+            bidType, category, is_ocr_failed, doneOCR, createdDate, updatedDate
         FROM {source_tablename} AS S
         WHERE NOT EXISTS (
             SELECT 1
@@ -3330,7 +3422,7 @@ class BidJudgementSan:
             print(f"\n[{step_num}/{total_steps}] Running Gemini OCR...")
 
             # DataFrame を直接渡して OCR 処理
-            df_merged = self._step0_ocr_with_gemini(
+            df_merged, df_announcements, df_requirements = self._step0_ocr_with_gemini(
                 df_main=df_merged,
                 use_gcp_vm=use_gcp_vm,
                 google_api_key=google_api_key,
@@ -3338,19 +3430,32 @@ class BidJudgementSan:
                 max_api_calls_per_run=ocr_max_api_calls_per_run
             )
 
-            print(f"OCR completed. Announcements and requirements saved to DB.")
+            print(f"OCR completed.")
         else:
             print("\n[Skipped] Running Gemini OCR")
+            df_announcements = pd.DataFrame()
+            df_requirements = pd.DataFrame()
 
-        # 7. DB に保存（announcements_document）
+        # 7. DB に保存（3つのテーブル）
         print("\n" + "=" * 60)
-        print("Saving new records to announcements_document_table...")
+        print("Saving data to database tables...")
         print("=" * 60)
+
+        # 7-1. announcements_documents_master
+        print("\n[1/3] Saving announcements_documents_master...")
         self._save_to_announcements_document_table(df_merged)
 
-        print("=" * 60)
+        # 7-2. bid_announcements
+        print("\n[2/3] Saving bid_announcements...")
+        self._save_to_bid_announcements(df_announcements)
+
+        # 7-3. bid_requirements
+        print("\n[3/3] Saving bid_requirements...")
+        self._save_to_bid_requirements(df_requirements)
+
+        print("\n" + "=" * 60)
         print(f"Step0 completed successfully!")
-        print("Announcements and requirements data saved to DB.")
+        print(f"Saved data to: announcements_documents_master, bid_announcements, bid_requirements")
         print("=" * 60)
 
 
@@ -3815,7 +3920,8 @@ class BidJudgementSan:
             "submissionend": [None] * df_merged.shape[0],
             "bidstartdate": [None] * df_merged.shape[0],
             "bidenddate": [None] * df_merged.shape[0],
-            "done": [False] * df_merged.shape[0]
+            "done": [False] * df_merged.shape[0],
+            "is_ocr_failed": [False] * df_merged.shape[0]
         })
 
         # ソート
@@ -3993,6 +4099,84 @@ class BidJudgementSan:
             print(f"Merged: {affected_rows} rows inserted")
 
 
+    def _save_to_bid_announcements(self, df):
+        """
+        bid_announcements に DataFrame を保存（MERGE: INSERT if not exists）
+
+        Args:
+            df: 保存する DataFrame（集約された公告情報 + 基本情報）
+                - 基本情報: workName, topAgencyName, orderer_id, category, bidType
+                - OCR情報: workPlace, assigneeName, publishDate, etc.
+        """
+        tablename = self.tablenamesconfig.bid_announcements
+
+        if len(df) == 0:
+            print("No announcements to save.")
+            return
+
+        # 型を確実に修正
+        df = df.copy()
+        if 'announcement_no' in df.columns:
+            df['announcement_no'] = pd.to_numeric(df['announcement_no'], errors='coerce').fillna(0).astype('int64')
+
+        # テーブルが存在しない場合は作成
+        if not self.db_operator.ifTableExists(tablename):
+            print(f"Creating new table: {tablename}")
+            self.db_operator.createBidAnnouncementsV2(tablename)
+
+        # MERGE で追加（重複は無視、INSERT のみ）
+        print(f"Merging {len(df)} announcements into {tablename}...")
+        tmp_table = f"tmp_{tablename}_ocr"
+        self.db_operator.uploadDataToTable(df, tmp_table, chunksize=5000)
+        affected_rows = self.db_operator.mergeBidAnnouncements(
+            target_tablename=tablename,
+            source_tablename=tmp_table
+        )
+        self.db_operator.dropTable(tmp_table)
+        print(f"Merged: {affected_rows} rows inserted")
+
+
+    def _save_to_bid_requirements(self, df):
+        """
+        bid_requirements に DataFrame を保存（requirement_no を採番してMERGE）
+
+        Args:
+            df: 保存する DataFrame（要件情報）
+        """
+        tablename = self.tablenamesconfig.bid_requirements
+
+        if len(df) == 0:
+            print("No requirements to save.")
+            return
+
+        # requirement_no を一括採番
+        if not self.db_operator.ifTableExists(tablename):
+            self.db_operator.createBidRequirements(tablename)
+            print(f"Created new table: {tablename}")
+            start_requirement_no = 1
+        else:
+            # 既存の最大 requirement_no を取得
+            max_requirement_no = self.db_operator.getMaxOfColumn(tablename, 'requirement_no')
+            if max_requirement_no.iloc[0, 0] is None or pd.isna(max_requirement_no.iloc[0, 0]):
+                start_requirement_no = 1
+            else:
+                start_requirement_no = max_requirement_no.iloc[0, 0] + 1
+
+        # requirement_no を採番
+        df = df.copy()
+        df['requirement_no'] = range(start_requirement_no, start_requirement_no + len(df))
+        df['requirement_no'] = df['requirement_no'].astype('int64')
+        df['announcement_no'] = df['announcement_no'].astype('int64')
+
+        # MERGE で追加
+        print(f"Merging {len(df)} requirements into {tablename}...")
+        tmp_table = 'tmp_bid_requirements_ocr'
+        self.db_operator.uploadDataToTable(df, tmp_table, chunksize=5000)
+        affected_rows = self.db_operator.mergeRequirements(tablename, tmp_table)
+        self.db_operator.dropTable(tmp_table)
+        print(f"Merged: {affected_rows} rows inserted")
+
+
     def _step0_download_pdfs(self, df, use_gcp_vm=False):
         """
         PDF を URL からダウンロードして保存
@@ -4160,6 +4344,35 @@ class BidJudgementSan:
         return df
 
 
+    def _select_best_value(self, values):
+        """
+        複数の値から "もっともらしい" 値を選択
+
+        Args:
+            values: 値のリスト
+
+        Returns:
+            最適な値（欠損値を除外した後の最頻値、または最初の非欠損値）
+        """
+        # 欠損値を除外
+        valid_values = [
+            v for v in values
+            if v is not None
+            and v != ''
+            and str(v).lower() not in ['null', 'nan', 'none']
+        ]
+
+        if not valid_values:
+            return None
+
+        # 最頻値を計算（同頻度の場合は最初の値）
+        from collections import Counter
+        counter = Counter(valid_values)
+        most_common = counter.most_common(1)[0][0]
+
+        return most_common
+
+
     def _step0_ocr_with_gemini(
         self,
         df_main,
@@ -4323,15 +4536,53 @@ class BidJudgementSan:
             ann_results = [r for r in results if r.get("type") == "ann"]
             ann_done_updates = 0
 
+            # announcement_id 単位で集約するための準備
+            # 同じ document_id に複数の announcement_id がある場合に対応
+            doc_id_to_ann_ids = df_main.groupby('document_id')['announcement_id'].apply(list).to_dict()
+
             if len(ann_results) > 0:
-                records = []
+                # document 単位で OCR 結果を収集
+                doc_records = []  # document固有情報（pageCount, done）用
+                ann_records_by_doc = {}  # announcement固有情報を document 単位で収集
+
                 for res in tqdm(ann_results, desc="Processing announcement results"):
                     document_id = res["document_id"]
+                    announcement_ids = doc_id_to_ann_ids.get(document_id, [])
+
                     try:
                         # エラーチェック
                         if res.get("error") is not None:
                             tqdm.write(f"API error for {document_id}: {res.get('error')}")
-                            records.append({"document_id": document_id, "done": True})
+                            # エラー時は done=True, is_ocr_failed=True
+                            doc_records.append({"document_id": document_id, "done": True, "is_ocr_failed": True})
+
+                            # エラー時でも announcement にレコードを作成（NULL値 + ocr_failed フラグ）
+                            for announcement_id in announcement_ids:
+                                if announcement_id not in ann_records_by_doc:
+                                    ann_records_by_doc[announcement_id] = []
+                                ann_records_by_doc[announcement_id].append({
+                                    "document_id": document_id,
+                                    "workplace": None,
+                                    "zipcode": None,
+                                    "address": None,
+                                    "department": None,
+                                    "assigneename": None,
+                                    "telephone": None,
+                                    "fax": None,
+                                    "mail": None,
+                                    "publishdate": None,
+                                    "bidType": None,
+                                    "type": None,
+                                    "category": None,
+                                    "docdiststart": None,
+                                    "docdistend": None,
+                                    "submissionstart": None,
+                                    "submissionend": None,
+                                    "bidstartdate": None,
+                                    "bidenddate": None,
+                                    "ocr_failed": True,  # エラーフラグ
+                                })
+
                             ann_done_updates += 1
                             continue
 
@@ -4339,57 +4590,162 @@ class BidJudgementSan:
                         dict0 = json.loads(json_str)
                         dict0 = self._convertJson(dict0)
 
-                        record = {
+                        # document固有情報（pageCount, done, is_ocr_failed）
+                        doc_records.append({
                             "document_id": document_id,
-                            "workplace": dict0.get("workplace"),
-                            "zipcode": dict0.get("zipcode"),
-                            "address": dict0.get("address"),
-                            "department": dict0.get("department"),
-                            "assigneename": dict0.get("assigneename"),
-                            "telephone": dict0.get("telephone"),
-                            "fax": dict0.get("fax"),
-                            "mail": dict0.get("mail"),
-                            "publishdate": dict0.get("publishdate"),
-                            "bidType": dict0.get("bidType"),
-                            "type": dict0.get("type"),
-                            "category": dict0.get("category"),
                             "pageCount": dict0.get("pageCount"),
-                            "docdiststart": dict0.get("docdiststart"),
-                            "docdistend": dict0.get("docdistend"),
-                            "submissionstart": dict0.get("submissionstart"),
-                            "submissionend": dict0.get("submissionend"),
-                            "bidstartdate": dict0.get("bidstartdate"),
-                            "bidenddate": dict0.get("bidenddate"),
-                            "done": True
-                        }
-                        records.append(record)
+                            "done": True,
+                            "is_ocr_failed": False
+                        })
+
+                        # announcement固有情報を収集（後で集約）
+                        # 同じPDFに紐づく全てのannouncement_idに対して同じOCR結果を保存
+                        for announcement_id in announcement_ids:
+                            if announcement_id not in ann_records_by_doc:
+                                ann_records_by_doc[announcement_id] = []
+
+                            ann_records_by_doc[announcement_id].append({
+                                "document_id": document_id,
+                                "workplace": dict0.get("workplace"),
+                                "zipcode": dict0.get("zipcode"),
+                                "address": dict0.get("address"),
+                                "department": dict0.get("department"),
+                                "assigneename": dict0.get("assigneename"),
+                                "telephone": dict0.get("telephone"),
+                                "fax": dict0.get("fax"),
+                                "mail": dict0.get("mail"),
+                                "publishdate": dict0.get("publishdate"),
+                                "bidType": dict0.get("bidType"),
+                                "type": dict0.get("type"),
+                                "category": dict0.get("category"),
+                                "docdiststart": dict0.get("docdiststart"),
+                                "docdistend": dict0.get("docdistend"),
+                                "submissionstart": dict0.get("submissionstart"),
+                                "submissionend": dict0.get("submissionend"),
+                                "bidstartdate": dict0.get("bidstartdate"),
+                                "bidenddate": dict0.get("bidenddate"),
+                                "ocr_failed": False,  # 成功
+                            })
+
                         ann_done_updates += 1
                     except Exception as e:
                         tqdm.write(f"Error processing {document_id}: {e}")
-                        records.append({"document_id": document_id, "done": True})
+                        # Exception時も done=True, is_ocr_failed=True
+                        doc_records.append({"document_id": document_id, "done": True, "is_ocr_failed": True})
+
+                        # Exception時でも announcement にレコードを作成（NULL値 + ocr_failed フラグ）
+                        for announcement_id in announcement_ids:
+                            if announcement_id not in ann_records_by_doc:
+                                ann_records_by_doc[announcement_id] = []
+                            ann_records_by_doc[announcement_id].append({
+                                "document_id": document_id,
+                                "workplace": None,
+                                "zipcode": None,
+                                "address": None,
+                                "department": None,
+                                "assigneename": None,
+                                "telephone": None,
+                                "fax": None,
+                                "mail": None,
+                                "publishdate": None,
+                                "bidType": None,
+                                "type": None,
+                                "category": None,
+                                "docdiststart": None,
+                                "docdistend": None,
+                                "submissionstart": None,
+                                "submissionend": None,
+                                "bidstartdate": None,
+                                "bidenddate": None,
+                                "ocr_failed": True,  # エラーフラグ
+                            })
+
                         ann_done_updates += 1
 
-                # DataFrameにマージ
-                df_records = pd.DataFrame(records)
-                df_records = df_records.drop_duplicates(subset="document_id", keep="first")
+                # df_main に document固有情報（pageCount, done）をマージ
+                df_doc_records = pd.DataFrame(doc_records)
+                df_doc_records = df_doc_records.drop_duplicates(subset="document_id", keep="first")
 
-                df_main = df_main.merge(df_records, on="document_id", how="left", suffixes=("", "_new"))
+                df_main = df_main.merge(df_doc_records, on="document_id", how="left", suffixes=("", "_new"))
 
                 # done列の更新
-                df_main["done"] = (df_main["done"] | df_main["done_new"].fillna(False)).astype("boolean")
-                df_main.drop(columns=["done_new"], inplace=True, errors="ignore")
+                if "done_new" in df_main.columns:
+                    df_main["done"] = (df_main["done"] | df_main["done_new"].fillna(False)).astype("boolean")
+                    df_main.drop(columns=["done_new"], inplace=True, errors="ignore")
 
-                # その他の列を更新
-                new_cols = [col for col in df_main.columns if col.endswith("_new")]
-                for new_col in new_cols:
-                    original_col = new_col[:-4]
-                    df_main[original_col] = df_main[new_col].fillna(df_main[original_col])
-                    df_main.drop(columns=[new_col], inplace=True)
+                # pageCount列の更新
+                if "pageCount_new" in df_main.columns:
+                    df_main["pageCount"] = df_main["pageCount_new"].fillna(df_main.get("pageCount"))
+                    df_main.drop(columns=["pageCount_new"], inplace=True, errors="ignore")
 
-                print(f"Updated {len(records)} documents with announcement data")
-                print(f"Set df_main.done=True for {ann_done_updates} documents in this batch")
+                # is_ocr_failed列の更新
+                if "is_ocr_failed_new" in df_main.columns:
+                    df_main["is_ocr_failed"] = (df_main["is_ocr_failed"] | df_main["is_ocr_failed_new"].fillna(False)).astype("boolean")
+                    df_main.drop(columns=["is_ocr_failed_new"], inplace=True, errors="ignore")
 
-            # 要件文結果処理 → DB に直接保存
+                # announcement_id 単位で集約して df_announcements を作成
+                aggregated_announcements = []
+                for announcement_id, docs_data in ann_records_by_doc.items():
+                    # df_main から基本情報を取得（複数行から最適な値を選択）
+                    ann_docs = df_main[df_main['announcement_id'] == announcement_id]
+                    if len(ann_docs) > 0:
+                        workName = self._select_best_value(ann_docs['title'].tolist())
+                        topAgencyName = self._select_best_value(ann_docs['topAgencyName'].tolist())
+                        orderer_id = self._select_best_value(ann_docs['orderer_id'].tolist())
+                        category_base = self._select_best_value(ann_docs['category'].tolist())
+                        bidType_base = self._select_best_value(ann_docs['bidType'].tolist())
+                    else:
+                        workName = None
+                        topAgencyName = None
+                        orderer_id = None
+                        category_base = None
+                        bidType_base = None
+
+                    # 各フィールドについて、複数 document から最適な値を選択
+                    # category, bidType は OCR結果を優先、なければ基本情報を使用
+                    category_ocr = self._select_best_value([d["category"] for d in docs_data])
+                    bidType_ocr = self._select_best_value([d["bidType"] for d in docs_data])
+
+                    # is_ocr_failed: 1つでも失敗していたら True
+                    has_ocr_failure = any(d.get("ocr_failed", False) for d in docs_data)
+
+                    aggregated = {
+                        "announcement_no": announcement_id,
+                        "workName": workName,
+                        "topAgencyName": topAgencyName,
+                        "orderer_id": orderer_id,
+                        "workPlace": self._select_best_value([d["workplace"] for d in docs_data]),
+                        "zipcode": self._select_best_value([d["zipcode"] for d in docs_data]),
+                        "address": self._select_best_value([d["address"] for d in docs_data]),
+                        "department": self._select_best_value([d["department"] for d in docs_data]),
+                        "assigneeName": self._select_best_value([d["assigneename"] for d in docs_data]),
+                        "telephone": self._select_best_value([d["telephone"] for d in docs_data]),
+                        "fax": self._select_best_value([d["fax"] for d in docs_data]),
+                        "mail": self._select_best_value([d["mail"] for d in docs_data]),
+                        "publishDate": self._select_best_value([d["publishdate"] for d in docs_data]),
+                        "bidType": bidType_ocr if bidType_ocr is not None else bidType_base,
+                        "category": category_ocr if category_ocr is not None else category_base,
+                        "docDistStart": self._select_best_value([d["docdiststart"] for d in docs_data]),
+                        "docDistEnd": self._select_best_value([d["docdistend"] for d in docs_data]),
+                        "submissionStart": self._select_best_value([d["submissionstart"] for d in docs_data]),
+                        "submissionEnd": self._select_best_value([d["submissionend"] for d in docs_data]),
+                        "bidStartDate": self._select_best_value([d["bidstartdate"] for d in docs_data]),
+                        "bidEndDate": self._select_best_value([d["bidenddate"] for d in docs_data]),
+                        "is_ocr_failed": has_ocr_failure,
+                        "doneOCR": True,
+                        "createdDate": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                        "updatedDate": datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                    }
+                    aggregated_announcements.append(aggregated)
+
+                df_announcements = pd.DataFrame(aggregated_announcements) if aggregated_announcements else pd.DataFrame()
+
+                print(f"Updated {len(doc_records)} documents with pageCount and done status")
+                print(f"Aggregated {len(aggregated_announcements)} announcements from {len(ann_results)} OCR results")
+            else:
+                df_announcements = pd.DataFrame()
+
+            # 要件文結果処理 → DataFrame で返す
             req_results = [r for r in results if r.get("type") == "req"]
             db_req_records = []
 
@@ -4402,7 +4758,10 @@ class BidJudgementSan:
                     announcement_ids = doc_to_ann_ids.get(document_id, [])
 
                     try:
-                        if res.get("error") is not None:
+                        # エラーがあるかチェック
+                        has_error = res.get("error") is not None
+
+                        if has_error:
                             text2 = str(res["error"])
                         else:
                             text2 = res["result"].replace('\n', '').replace('```json', '').replace('```', '')
@@ -4423,7 +4782,7 @@ class BidJudgementSan:
 
                         # 各 announcement_id に対して要件を保存（同じPDFを参照する全ての公告に保存）
                         for announcement_id in announcement_ids:
-                            # リスト展開 + requirement_type 判定 + DB レコード作成
+                            # リスト展開 + requirement_type 判定 + レコード作成
                             for idx, req_text in enumerate(req_list):
                                 req_type = self._classify_requirement_type(req_text)
                                 db_req_records.append({
@@ -4432,6 +4791,7 @@ class BidJudgementSan:
                                     'requirement_no': None,  # 後で一括採番
                                     'requirement_text': req_text,
                                     'requirement_type': req_type,
+                                    'is_ocr_failed': has_error,
                                     'done_judgement': False,
                                     'createdDate': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
                                     'updatedDate': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
@@ -4447,66 +4807,23 @@ class BidJudgementSan:
                                 'requirement_no': None,
                                 'requirement_text': f"Error: {str(e)}",
                                 'requirement_type': "その他要件",
+                                'is_ocr_failed': True,
                                 'done_judgement': False,
                                 'createdDate': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
                                 'updatedDate': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
                             })
 
-                # requirement_no を一括採番
-                if db_req_records:
-                    tablename_requirements = self.tablenamesconfig.bid_requirements
+                df_requirements = pd.DataFrame(db_req_records) if db_req_records else pd.DataFrame()
+                print(f"Processed {len(req_results)} documents with requirement data")
+                print(f"Created {len(db_req_records)} requirement records")
+            else:
+                df_requirements = pd.DataFrame()
 
-                    # テーブルが存在しない場合は作成
-                    if not self.db_operator.ifTableExists(tablename_requirements):
-                        self.db_operator.createBidRequirements(tablename_requirements)
-                        print(f"Created new table: {tablename_requirements}")
-                        start_requirement_no = 1
-                    else:
-                        # 既存の最大 requirement_no を取得
-                        max_requirement_no = self.db_operator.getMaxOfColumn(tablename_requirements, 'requirement_no')
-                        if max_requirement_no.iloc[0, 0] is None or pd.isna(max_requirement_no.iloc[0, 0]):
-                            start_requirement_no = 1
-                        else:
-                            start_requirement_no = max_requirement_no.iloc[0, 0] + 1
+        else:
+            df_announcements = pd.DataFrame()
+            df_requirements = pd.DataFrame()
 
-                    # requirement_no を採番
-                    for idx, record in enumerate(db_req_records):
-                        record['requirement_no'] = start_requirement_no + idx
-
-                    # DB に保存
-                    df_req_db = pd.DataFrame(db_req_records)
-                    df_req_db['requirement_no'] = df_req_db['requirement_no'].astype('int64')
-                    df_req_db['announcement_no'] = df_req_db['announcement_no'].astype('int64')
-
-                    tmp_table = 'tmp_bid_requirements'
-
-                    # デバッグ: インサート対象の document_id を表示
-                    unique_docs = df_req_db['document_id'].unique()
-                    print(f"[DEBUG] Attempting to insert requirements for {len(unique_docs)} documents:")
-                    print(f"[DEBUG] Document IDs: {list(unique_docs)}")
-
-                    self.db_operator.uploadDataToTable(df_req_db, tmp_table, chunksize=5000)
-
-                    # デバッグ: 既存テーブルに存在する document_id を確認
-                    existing_check = self.db_operator.getDistinctDocumentIds(tablename_requirements)
-                    existing_docs = set(existing_check['document_id'].tolist()) if len(existing_check) > 0 else set()
-                    conflict_docs = [d for d in unique_docs if d in existing_docs]
-                    if conflict_docs:
-                        print(f"[DEBUG] WARNING: {len(conflict_docs)} documents already exist in {tablename_requirements}:")
-                        print(f"[DEBUG] Conflict document IDs: {conflict_docs}")
-                        # デバッグ: 衝突しているdocumentのreq_done_lookup値を確認
-                        for doc_id in conflict_docs[:5]:  # 最初の5件
-                            lookup_val = req_done_lookup.get(doc_id, 'NOT_FOUND')
-                            print(f"[DEBUG] req_done_lookup['{doc_id}'] = {lookup_val}")
-
-                    affected_rows = self.db_operator.mergeRequirements(tablename_requirements, tmp_table)
-                    self.db_operator.dropTable(tmp_table)
-
-                    print(f"Processed {len(req_results)} documents with requirement data")
-                    print(f"Created {len(db_req_records)} requirement records")
-                    print(f"Merged into {tablename_requirements}: {affected_rows} rows inserted")
-
-        return df_main
+        return df_main, df_announcements, df_requirements
 
 
     async def _call_parallel(self, client, params, max_concurrency=5):
@@ -4881,31 +5198,29 @@ Execute
             print("Please run step0_prepare_documents first to create announcements_document_table.")
             return
 
-        # テーブル 'bid_announcements' の存在確認。
-        tmpcheck = db_operator.ifTableExists(tablename=tablename_announcements)
-        # テーブルが存在するなら、削除オプションに応じて削除
-        if tmpcheck:
-            if remove_table:
-                db_operator.dropTable(tablename=tablename_announcements)
-                print(fr"DELETE existing table: {tablename_announcements}.")
-                # テーブル削除したのでフラグ更新
-                tmpcheck = False
+        # NOTE: bid_announcements は step0 の OCR 処理で作成・更新されるため、
+        #       step1 では何も処理しません。
+        print(f"\n[INFO] {tablename_announcements} is managed in step0 (no step1 processing needed)")
 
-        if not tmpcheck:
-            # テーブルが無いなら作成
-            db_operator.createBidAnnouncementsV2(bid_announcements_tablename=tablename_announcements)
-            print(fr"NEWLY CREATED: {tablename_announcements}.")
-        else:
-            print(fr"ALREADY EXISTS: {tablename_announcements}.")
-
+        # 旧実装（コメントアウト）:
+        # テーブル 'bid_announcements' の存在確認・作成
+        # tmpcheck = db_operator.ifTableExists(tablename=tablename_announcements)
+        # if tmpcheck:
+        #     if remove_table:
+        #         db_operator.dropTable(tablename=tablename_announcements)
+        #         print(fr"DELETE existing table: {tablename_announcements}.")
+        #         tmpcheck = False
+        # if not tmpcheck:
+        #     db_operator.createBidAnnouncementsV2(bid_announcements_tablename=tablename_announcements)
+        #     print(fr"NEWLY CREATED: {tablename_announcements}.")
+        # else:
+        #     print(fr"ALREADY EXISTS: {tablename_announcements}.")
+        #
         # announcements_document_table から announcements への転記処理
-        print(f"\nTransferring from {tablename_bid_announcements_document_table} to {tablename_announcements}...")
-        db_operator.transferAnnouncementsV2(
-            bid_announcements_tablename=tablename_announcements, 
-            bid_announcements_documents_tablename=tablename_bid_announcements_document_table
-        )
-        # check
-        # val = db_operator.selectToTable(tablename=tablename)
+        # db_operator.transferAnnouncementsV2(
+        #     bid_announcements_tablename=tablename_announcements,
+        #     bid_announcements_documents_tablename=tablename_bid_announcements_document_table
+        # )
 
 
     def _classify_requirement_type(self, text):
