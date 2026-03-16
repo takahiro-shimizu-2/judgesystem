@@ -819,24 +819,6 @@ class DBOperatorGCPVM(DBOperator):
         subAgencyName string,
         workPlace string,
 
-        pdfUrl string,
-        pdfUrl2 string,
-        pdfUrl3 string,
-        pdfUrl4 string,
-        pdfUrl5 string,
-
-        pdfUrl_type string,
-        pdfUrl2_type string,
-        pdfUrl3_type string,
-        pdfUrl4_type string,
-        pdfUrl5_type string,
-
-        document_id string,
-        document_id2 string,
-        document_id3 string,
-        document_id4 string,
-        document_id5 string,
-        
         zipcode string,
         address string,
         department string,
@@ -930,12 +912,6 @@ class DBOperatorGCPVM(DBOperator):
 
             topAgencyName,
 
-            pdfUrl, pdfUrl_type, document_id,
-            pdfUrl2, pdfUrl2_type, document_id2,
-            pdfUrl3, pdfUrl3_type, document_id3,
-            pdfUrl4, pdfUrl4_type, document_id4,
-            pdfUrl5, pdfUrl5_type, document_id5,
-
             workPlace,
             zipcode,
             address,
@@ -974,26 +950,6 @@ class DBOperatorGCPVM(DBOperator):
             MAX(CASE WHEN o.rn = 1 THEN o.title END) AS workName,
 
             MAX(CASE WHEN o.rn = 1 THEN o.topAgencyName END) AS topAgencyName,
-
-            MAX(CASE WHEN o.rn = 1 THEN o.url END) AS pdfUrl,
-            MAX(CASE WHEN o.rn = 1 THEN o.type END) AS pdfUrl_type,
-            MAX(CASE WHEN o.rn = 1 THEN o.document_id END) AS document_id,
-
-            MAX(CASE WHEN o.rn = 2 THEN o.url END) AS pdfUrl2,
-            MAX(CASE WHEN o.rn = 2 THEN o.type END) AS pdfUrl2_type,
-            MAX(CASE WHEN o.rn = 2 THEN o.document_id END) AS document_id2,
-
-            MAX(CASE WHEN o.rn = 3 THEN o.url END) AS pdfUrl3,
-            MAX(CASE WHEN o.rn = 3 THEN o.type END) AS pdfUrl3_type,
-            MAX(CASE WHEN o.rn = 3 THEN o.document_id END) AS document_id3,
-
-            MAX(CASE WHEN o.rn = 4 THEN o.url END) AS pdfUrl4,
-            MAX(CASE WHEN o.rn = 4 THEN o.type END) AS pdfUrl4_type,
-            MAX(CASE WHEN o.rn = 4 THEN o.document_id END) AS document_id4,
-
-            MAX(CASE WHEN o.rn = 5 THEN o.url END) AS pdfUrl5,
-            MAX(CASE WHEN o.rn = 5 THEN o.type END) AS pdfUrl5_type,
-            MAX(CASE WHEN o.rn = 5 THEN o.document_id END) AS document_id5,
 
             MAX(CASE WHEN o.rn = 1 THEN o.workplace END) AS workPlace,
             MAX(CASE WHEN o.rn = 1 THEN o.zipcode END) AS zipcode,
@@ -2213,24 +2169,6 @@ class DBOperatorSQLITE3(DBOperator):
         subAgencyName string,
         workPlace string,
 
-        pdfUrl string,
-        pdfUrl2 string,
-        pdfUrl3 string,
-        pdfUrl4 string,
-        pdfUrl5 string,
-
-        pdfUrl_type string,
-        pdfUrl2_type string,
-        pdfUrl3_type string,
-        pdfUrl4_type string,
-        pdfUrl5_type string,
-
-        document_id string,
-        document_id2 string,
-        document_id3 string,
-        document_id4 string,
-        document_id5 string,
-
         zipcode string,
         address string,
         department string,
@@ -2335,12 +2273,6 @@ class DBOperatorSQLITE3(DBOperator):
 
             topAgencyName,
 
-            pdfUrl, pdfUrl_type, document_id,
-            pdfUrl2, pdfUrl2_type, document_id2,
-            pdfUrl3, pdfUrl3_type, document_id3,
-            pdfUrl4, pdfUrl4_type, document_id4,
-            pdfUrl5, pdfUrl5_type, document_id5,
-
             doneOCR,
             createdDate,
             updatedDate,
@@ -2354,22 +2286,6 @@ class DBOperatorSQLITE3(DBOperator):
             MAX(CASE WHEN o.rn = 1 THEN o.title END) AS workName,
 
             MAX(CASE WHEN o.rn = 1 THEN o.topAgencyName END) AS topAgencyName,
-
-            MAX(CASE WHEN o.rn = 1 THEN o.url END) AS pdfUrl,
-            MAX(CASE WHEN o.rn = 1 THEN o.type END) AS pdfUrl_type,
-            MAX(CASE WHEN o.rn = 1 THEN o.document_id END) AS document_id,
-            MAX(CASE WHEN o.rn = 2 THEN o.url END) AS pdfUrl2,
-            MAX(CASE WHEN o.rn = 2 THEN o.type END) AS pdfUrl2_type,
-            MAX(CASE WHEN o.rn = 2 THEN o.document_id END) AS document_id2,
-            MAX(CASE WHEN o.rn = 3 THEN o.url END) AS pdfUrl3,
-            MAX(CASE WHEN o.rn = 3 THEN o.type END) AS pdfUrl3_type,
-            MAX(CASE WHEN o.rn = 3 THEN o.document_id END) AS document_id3,
-            MAX(CASE WHEN o.rn = 4 THEN o.url END) AS pdfUrl4,
-            MAX(CASE WHEN o.rn = 4 THEN o.type END) AS pdfUrl4_type,
-            MAX(CASE WHEN o.rn = 4 THEN o.document_id END) AS document_id4,
-            MAX(CASE WHEN o.rn = 5 THEN o.url END) AS pdfUrl5,
-            MAX(CASE WHEN o.rn = 5 THEN o.type END) AS pdfUrl5_type,
-            MAX(CASE WHEN o.rn = 5 THEN o.document_id END) AS document_id5,
 
             0 AS doneOCR,
             CURRENT_TIMESTAMP,
@@ -2399,7 +2315,6 @@ class DBOperatorSQLITE3(DBOperator):
             subAgencyNo,
             subAgencyName,
             workPlace,
-            pdfUrl,
             zipcode,
             address,
             department,
@@ -2428,7 +2343,6 @@ class DBOperatorSQLITE3(DBOperator):
         NULL,
         NULL,
         workplace,
-        NULL,
         zipcode,
         address,
         department,
@@ -2457,7 +2371,6 @@ class DBOperatorSQLITE3(DBOperator):
             subAgencyNo = {bid_announcements_tablename}.subagencyno,
             subAgencyName = {bid_announcements_tablename}.subagencyname,
             workplace = excluded.workplace,
-            pdfUrl = {bid_announcements_tablename}.pdfurl,
             zipcode = excluded.zipcode,
             address = excluded.address,
             department = excluded.department,
@@ -3903,23 +3816,6 @@ class BidJudgementSan:
             "pdf_is_saved_date": [None] * df_merged.shape[0],
             "orderer_id": [None] * df_merged.shape[0],
             "topAgencyName": [None] * df_merged.shape[0],
-            "category": [None] * df_merged.shape[0],
-            "bidType": [None] * df_merged.shape[0],
-            "workplace": [None] * df_merged.shape[0],
-            "zipcode": [None] * df_merged.shape[0],
-            "address": [None] * df_merged.shape[0],
-            "department": [None] * df_merged.shape[0],
-            "assigneename": [None] * df_merged.shape[0],
-            "telephone": [None] * df_merged.shape[0],
-            "fax": [None] * df_merged.shape[0],
-            "mail": [None] * df_merged.shape[0],
-            "publishdate": [None] * df_merged.shape[0],
-            "docdiststart": [None] * df_merged.shape[0],
-            "docdistend": [None] * df_merged.shape[0],
-            "submissionstart": [None] * df_merged.shape[0],
-            "submissionend": [None] * df_merged.shape[0],
-            "bidstartdate": [None] * df_merged.shape[0],
-            "bidenddate": [None] * df_merged.shape[0],
             "done": [False] * df_merged.shape[0],
             "is_ocr_failed": [False] * df_merged.shape[0]
         })
@@ -4692,17 +4588,13 @@ class BidJudgementSan:
                         workName = self._select_best_value(ann_docs['title'].tolist())
                         topAgencyName = self._select_best_value(ann_docs['topAgencyName'].tolist())
                         orderer_id = self._select_best_value(ann_docs['orderer_id'].tolist())
-                        category_base = self._select_best_value(ann_docs['category'].tolist())
-                        bidType_base = self._select_best_value(ann_docs['bidType'].tolist())
                     else:
                         workName = None
                         topAgencyName = None
                         orderer_id = None
-                        category_base = None
-                        bidType_base = None
 
                     # 各フィールドについて、複数 document から最適な値を選択
-                    # category, bidType は OCR結果を優先、なければ基本情報を使用
+                    # category, bidType は OCR結果のみから取得
                     category_ocr = self._select_best_value([d["category"] for d in docs_data])
                     bidType_ocr = self._select_best_value([d["bidType"] for d in docs_data])
 
@@ -4723,8 +4615,8 @@ class BidJudgementSan:
                         "fax": self._select_best_value([d["fax"] for d in docs_data]),
                         "mail": self._select_best_value([d["mail"] for d in docs_data]),
                         "publishDate": self._select_best_value([d["publishdate"] for d in docs_data]),
-                        "bidType": bidType_ocr if bidType_ocr is not None else bidType_base,
-                        "category": category_ocr if category_ocr is not None else category_base,
+                        "bidType": bidType_ocr,
+                        "category": category_ocr,
                         "docDistStart": self._select_best_value([d["docdiststart"] for d in docs_data]),
                         "docDistEnd": self._select_best_value([d["docdistend"] for d in docs_data]),
                         "submissionStart": self._select_best_value([d["submissionstart"] for d in docs_data]),
