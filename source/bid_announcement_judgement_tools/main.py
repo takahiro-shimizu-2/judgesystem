@@ -3223,9 +3223,6 @@ class BidJudgementSan:
             google_api_key: Google AI Studio API キーファイルのパス
             ocr_max_concurrency: OCR 実行時の最大並列数
             ocr_max_api_calls_per_run: 1回の実行での最大API呼び出し数（デフォルト: 1000）
-
-        Returns:
-            str or None: 生成された req_announcements_document.txt のパス（OCR実行時のみ）
         """
         print("=" * 60)
         print("Step0: Document Preparation")
@@ -3333,9 +3330,8 @@ class BidJudgementSan:
             print(f"\n[{step_num}/{total_steps}] Running Gemini OCR...")
 
             # DataFrame を直接渡して OCR 処理
-            df_merged, _ = self._step0_ocr_with_gemini(
+            df_merged = self._step0_ocr_with_gemini(
                 df_main=df_merged,
-                req_file_path=None,  # ファイル保存は廃止
                 use_gcp_vm=use_gcp_vm,
                 google_api_key=google_api_key,
                 max_concurrency=ocr_max_concurrency,
@@ -3356,8 +3352,6 @@ class BidJudgementSan:
         print(f"Step0 completed successfully!")
         print("Announcements and requirements data saved to DB.")
         print("=" * 60)
-
-        return None  # ファイルパスではなく None を返す
 
 
     def _step0_convert_input_list(self, input_list1, output_dir):
@@ -4169,7 +4163,6 @@ class BidJudgementSan:
     def _step0_ocr_with_gemini(
         self,
         df_main,
-        req_file_path=None,  # 後方互換性のため残すが使用しない
         use_gcp_vm=False,
         google_api_key=None,
         max_concurrency=5,
@@ -4180,14 +4173,13 @@ class BidJudgementSan:
 
         Args:
             df_main: announcements_document の DataFrame
-            req_file_path: (廃止、後方互換性のためのみ)
             use_gcp_vm: GCS (gs://) を使用する場合 True
             google_api_key: Google AI Studio API key filepath
             max_concurrency: 並列実行数
             max_api_calls_per_run: 1回の実行での最大API呼び出し数（デフォルト: 1000）
 
         Returns:
-            tuple: (df_main, None) 更新されたメインDataFrame
+            pd.DataFrame: 更新されたメインDataFrame
         """
         print("=" * 60)
         print("Step0-6: OCR with Gemini")
@@ -4514,7 +4506,7 @@ class BidJudgementSan:
                     print(f"Created {len(db_req_records)} requirement records")
                     print(f"Merged into {tablename_requirements}: {affected_rows} rows inserted")
 
-        return df_main, None  # req_file_path は不要になった
+        return df_main
 
 
     async def _call_parallel(self, client, params, max_concurrency=5):
@@ -4862,7 +4854,7 @@ Execute
 """
 
 
-    def step1_transfer_v2(self, announcements_documents_file=None, remove_table=False):
+    def step1_transfer_v2(self, remove_table=False):
         """
         step1 : 転写処理
 
@@ -4875,13 +4867,7 @@ Execute
         注意: bid_requirements は step0 で作成済みのため、このステップでは処理しません。
 
         Args:
-
-        - announcements_documents_file: (非推奨・後方互換性のため残存)
-          step0 で DB に保存済みのため、このパラメータは使用されません。
-
-        - remove_table=False:
-
-          処理前に、公告マスターを削除するかどうか。
+            remove_table (bool): 処理前に公告マスターを削除するかどうか（デフォルト: False）
         """
 
         tablename_announcements = self.tablenamesconfig.bid_announcements
@@ -5281,8 +5267,6 @@ if __name__ == "__main__":
                        help="OCR並列実行数")
     parser.add_argument("--step0_ocr_max_api_calls_per_run", type=int, default=1000,
                        help="1回の実行での最大API呼び出し数")
-    parser.add_argument("--announcements_documents_file", default=None,
-                       help="[非推奨] announcements_document ファイルのパス（DBから直接読み込むため不要）")
 
     parser.add_argument("--step1_transfer_remove_table", action="store_true")
     parser.add_argument("--step3_remove_table", action="store_true")
@@ -5366,7 +5350,7 @@ if __name__ == "__main__":
             print("Error: --input_list_file is required when --run_step0_only is specified")
             exit(1)
 
-        req_file_path = obj.step0_prepare_documents(
+        obj.step0_prepare_documents(
             input_list_file=input_list_file,
             output_base_dir=step0_output_base_dir,
             timestamp=step0_timestamp,
@@ -5383,13 +5367,8 @@ if __name__ == "__main__":
             ocr_max_concurrency=step0_ocr_max_concurrency,
             ocr_max_api_calls_per_run=step0_ocr_max_api_calls_per_run
         )
-        if req_file_path:
-            print(f"Generated requirements_file: {req_file_path}")
         print("\n--run_step0_only specified. Exiting after step0.")
         exit(0)
-
-    # Step0の出力ファイルパス（step0をスキップする場合はNone）
-    req_file_path = None
 
     # Step0: 公告ドキュメント準備処理（オプション）
     if run_step0_prepare_documents:
@@ -5397,7 +5376,7 @@ if __name__ == "__main__":
             print("Error: --input_list_file is required when --run_step0_prepare_documents is specified")
             exit(1)
 
-        req_file_path = obj.step0_prepare_documents(
+        obj.step0_prepare_documents(
             input_list_file=input_list_file,
             output_base_dir=step0_output_base_dir,
             timestamp=step0_timestamp,
@@ -5414,13 +5393,8 @@ if __name__ == "__main__":
             ocr_max_concurrency=step0_ocr_max_concurrency,
             ocr_max_api_calls_per_run=step0_ocr_max_api_calls_per_run
         )
-        if req_file_path:
-            print(f"Generated requirements_file: {req_file_path}")
 
-    obj.step1_transfer_v2(
-        announcements_documents_file=None,  # 非推奨パラメータ（DB から読み込むため不要）
-        remove_table=step1_transfer_remove_table
-    )
+    obj.step1_transfer_v2(remove_table=step1_transfer_remove_table)
 
     # step1で止まる場合
     if stop_after_step1:
