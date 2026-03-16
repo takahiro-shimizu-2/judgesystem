@@ -31,7 +31,6 @@ Usage example:
         --run_step0_prepare_documents \\
         --input_list_file data/urllistリスト_防衛省入札_1.txt \\
         --step0_output_base_dir output \\
-        --google_ai_studio_api_key_filepath data/sec/google_ai_studio_api_key.txt \\
         --sqlite3_db_file_path data/example.db \\
         --step1_transfer_remove_table \\
         --step3_remove_table
@@ -39,13 +38,10 @@ Usage example:
     # Step0をスキップして既存のDBデータを使用（announcements_document_table が既に存在する場合）
     # announcements_documents_file パラメータは非推奨（DBから直接読み込み）
     python source/bid_announcement_judgement_tools/main.py \\
-        --google_ai_studio_api_key_filepath data/sec/google_ai_studio_api_key.txt \\
         --sqlite3_db_file_path data/example.db
 
     # GCP VM での実行例
     python source/bid_announcement_judgement_tools/main.py \\
-        --bid_announcements_pre_file data/bid_announcements_pre/all.txt \\
-        --google_ai_studio_api_key_filepath data/sec/google_ai_studio_api_key.txt \\
         --bigquery_location "LOCATION" \\
         --bigquery_project_id PROJECT_ID \\
         --bigquery_dataset_name DATASET_NAME \\
@@ -58,14 +54,6 @@ Arguments:
 - --use_gcp_vm: (フラグ引数)
 
   GCP VM で動作させる場合に指定する。指定した場合、データベースを操作するオブジェクトとして、DBOperatorGCPVMを使う。指定しない場合、DBOperatorSQLITE3 を使う。
-
-- --bid_announcements_pre_file: (パラメータ引数)
-
-  判定前公告一覧表のファイルパス。
-
-- --google_ai_studio_api_key_filepath: (パラメータ引数)
-
-  OCRのための、google ai studio gemini api キーを記載したファイルパス。
 
 - --stop_processing: (フラグ引数)
 
@@ -572,10 +560,6 @@ class DBOperator:
         raise NotImplementedError
 
     @abstractmethod
-    def transferAnnouncements(self, bid_announcements_tablename, bid_announcements_pre_tablename):
-        raise NotImplementedError
-
-    @abstractmethod
     def transferAnnouncementsV2(self, bid_announcements_tablename, bid_announcements_documents_tablename):
         raise NotImplementedError
 
@@ -919,107 +903,6 @@ class DBOperatorGCPVM(DBOperator):
         )
         """
         self.client.query(sql).result()
-
-    def transferAnnouncements(self, bid_announcements_tablename, bid_announcements_pre_tablename):
-        sql = fr"""
-        INSERT INTO `{self.project_id}.{self.dataset_name}.{bid_announcements_tablename}` (
-            announcement_no,
-            workName,
-            userAnnNo,
-            topAgencyNo,
-            topAgencyName,
-            subAgencyNo,
-            subAgencyName,
-            workPlace,
-            pdfUrl,
-            zipcode,
-            address,
-            department,
-            assigneeName,
-            telephone,
-            fax,
-            mail,
-            publishDate,
-            docDistStart,
-            docDistEnd,
-            submissionStart,
-            submissionEnd,
-            bidStartDate,
-            bidEndDate,
-            doneOCR,
-            remarks, 
-            createdDate,
-            updatedDate
-            )
-        WITH maxval AS (
-            SELECT IFNULL(MAX(announcement_no), 0) AS maxid FROM `{self.project_id}.{self.dataset_name}.{bid_announcements_tablename}`
-        ), 
-        to_insert AS (
-        SELECT
-            ROW_NUMBER() OVER (ORDER BY tbl_pre.pdfurl) AS rn,
-            tbl_pre.workName,
-            tbl_pre.userAnnNo,
-            NULL AS topAgencyNo,
-            tbl_pre.topAgencyName,
-            NULL AS subAgencyNo,
-            tbl_pre.subAgencyName,
-            cast(NULL as string) as workPlace,
-            tbl_pre.pdfUrl,
-            cast(NULL as string) as zipcode,
-            cast(NULL as string) as addres,
-            cast(NULL as string) as department,
-            cast(NULL as string) as assigneeName,
-            cast(NULL as string) as telephone,
-            cast(NULL as string) as fax,
-            cast(NULL as string) as mail,
-            tbl_pre.publishDate,
-            cast(NULL as string) as docDistStart,
-            tbl_pre.docDistEnd,
-            cast(NULL as string) as submissionStart,
-            tbl_pre.submissionEnd,
-            cast(NULL as string) as bidStartDate,
-            tbl_pre.bidEndDate,
-            FALSE AS doneOCR,
-            tbl_pre.remarks,
-            FORMAT_TIMESTAMP('%Y-%m-%d %H:%M:%S', CURRENT_TIMESTAMP()) AS createdDate,
-            FORMAT_TIMESTAMP('%Y-%m-%d %H:%M:%S', CURRENT_TIMESTAMP()) AS updatedDate
-        FROM `{self.project_id}.{self.dataset_name}.{bid_announcements_pre_tablename}` AS tbl_pre
-        LEFT JOIN `{self.project_id}.{self.dataset_name}.{bid_announcements_tablename}` AS tbl
-            ON tbl_pre.pdfurl = tbl.pdfurl
-        WHERE tbl.pdfurl IS NULL
-        )
-        SELECT 
-        rn + maxid,
-        workName,
-        userAnnNo,
-        topAgencyNo,
-        topAgencyName,
-        subAgencyNo,
-        subAgencyName,
-        workPlace,
-        pdfUrl,
-        zipcode,
-        addres,
-        department,
-        assigneeName,
-        telephone,
-        fax,
-        mail,
-        publishDate,
-        docDistStart,
-        docDistEnd,
-        submissionStart,
-        submissionEnd,
-        bidStartDate,
-        bidEndDate,
-        doneOCR,
-        remarks,
-        createdDate,
-        updatedDate
-        FROM to_insert, maxval
-        """
-        self.client.query(sql).result()
-
 
     def transferAnnouncementsV2(self, bid_announcements_tablename, bid_announcements_documents_tablename):
         sql = fr"""
@@ -2381,109 +2264,6 @@ class DBOperatorSQLITE3(DBOperator):
         self.cur.execute(sql)
 
 
-    def transferAnnouncements(self, bid_announcements_tablename, bid_announcements_pre_tablename):
-        sql = fr"""
-        INSERT INTO {bid_announcements_tablename} (
-            announcement_no,
-            workName,
-            userAnnNo,
-            topAgencyNo,
-            topAgencyName,
-            subAgencyNo,
-            subAgencyName,
-            workPlace,
-            pdfUrl,
-            zipcode,
-            address,
-            department,
-            assigneeName,
-            telephone,
-            fax,
-            mail,
-            publishDate,
-            docDistStart,
-            docDistEnd,
-            submissionStart,
-            submissionEnd,
-            bidStartDate,
-            bidEndDate,
-            doneOCR,
-            remarks, 
-            createdDate,
-            updatedDate
-            )
-        WITH maxval AS (
-            SELECT IFNULL(MAX(announcement_no), 0) AS maxno FROM {bid_announcements_tablename}
-        ), 
-        to_insert AS (
-        SELECT
-            ROW_NUMBER() OVER (ORDER BY tbl_pre.pdfurl) AS rn,
-            tbl_pre.workName,
-            tbl_pre.userAnnNo,
-            NULL AS topAgencyNo,
-            tbl_pre.topAgencyName,
-            NULL AS subAgencyNo,
-            tbl_pre.subAgencyName,
-            NULL as workPlace,
-            tbl_pre.pdfUrl,
-            NULL as zipcode,
-            NULL as addres,
-            NULL as department,
-            NULL as assigneeName,
-            NULL as telephone,
-            NULL as fax,
-            NULL as mail,
-            tbl_pre.publishDate,
-            NULL as docDistStart,
-            tbl_pre.docDistEnd,
-            NULL as submissionStart,
-            tbl_pre.submissionEnd,
-            NULL as bidStartDate,
-            tbl_pre.bidEndDate,
-            FALSE AS doneOCR,
-            tbl_pre.remarks,
-            strftime('%Y-%m-%d %H:%M:%S', CURRENT_TIMESTAMP) AS createdDate,
-            strftime('%Y-%m-%d %H:%M:%S', CURRENT_TIMESTAMP) AS updatedDate
-        FROM {bid_announcements_pre_tablename} AS tbl_pre
-        LEFT JOIN {bid_announcements_tablename} AS tbl
-            ON tbl_pre.pdfurl = tbl.pdfurl
-        WHERE tbl.pdfurl IS NULL
-        )
-        SELECT 
-        rn + maxno,
-        workName,
-        userAnnNo,
-        topAgencyNo,
-        topAgencyName,
-        subAgencyNo,
-        subAgencyName,
-        workPlace,
-        pdfUrl,
-        zipcode,
-        addres,
-        department,
-        assigneeName,
-        telephone,
-        fax,
-        mail,
-        publishDate,
-        docDistStart,
-        docDistEnd,
-        submissionStart,
-        submissionEnd,
-        bidStartDate,
-        bidEndDate,
-        doneOCR,
-        remarks,
-        createdDate,
-        updatedDate
-        FROM to_insert, maxval
-        """
-        # FORMAT_TIMESTAMP('%Y-%m-%d %H:%M:%S', CURRENT_TIMESTAMP())
-        # -> strftime('%Y-%m-%d %H:%M:%S', CURRENT_TIMESTAMP)
-        self.cur.execute(sql)
-
-
     def transferAnnouncementsV2(self, bid_announcements_tablename, bid_announcements_documents_tablename):
         sql = fr"""
         WITH ordered AS (
@@ -3367,12 +3147,8 @@ class BidJudgementSan:
 
     Attributes:
 
-    - bid_announcements_pre_file: 
-    
-      判定前公告一覧表のローカルファイル。
-
     - tablenamesconfig:
-    
+
       TablenamesConfig オブジェクト。
 
     - db_operator:
@@ -3381,8 +3157,7 @@ class BidJudgementSan:
 
     """
 
-    def __init__(self, bid_announcements_pre_file, tablenamesconfig=None, db_operator=None):
-        self.bid_announcements_pre_file = bid_announcements_pre_file
+    def __init__(self, tablenamesconfig=None, db_operator=None):
         self.tablenamesconfig = tablenamesconfig
         self.db_operator=db_operator
 
@@ -3403,7 +3178,7 @@ class BidJudgementSan:
         do_download_pdfs=True,
         do_count_pages=True,
         do_ocr=True,
-        google_ai_studio_api_key_filepath="data/sec/google_ai_studio_api_key_mizu.txt",
+        google_api_key="data/sec/google_ai_studio_api_key_mizu.txt",
         ocr_max_concurrency=5,
         ocr_max_api_calls_per_run=1000
     ):
@@ -3445,7 +3220,7 @@ class BidJudgementSan:
             do_download_pdfs: PDF をダウンロードする場合 True
             do_count_pages: PDF のページ数をカウントする場合 True
             do_ocr: Gemini OCR を実行する場合 True
-            google_ai_studio_api_key_filepath: Google AI Studio API キーファイルのパス
+            google_api_key: Google AI Studio API キーファイルのパス
             ocr_max_concurrency: OCR 実行時の最大並列数
             ocr_max_api_calls_per_run: 1回の実行での最大API呼び出し数（デフォルト: 1000）
 
@@ -3562,7 +3337,7 @@ class BidJudgementSan:
                 df_main=df_merged,
                 req_file_path=None,  # ファイル保存は廃止
                 use_gcp_vm=use_gcp_vm,
-                google_ai_studio_api_key_filepath=google_ai_studio_api_key_filepath,
+                google_api_key=google_api_key,
                 max_concurrency=ocr_max_concurrency,
                 max_api_calls_per_run=ocr_max_api_calls_per_run
             )
@@ -4396,7 +4171,7 @@ class BidJudgementSan:
         df_main,
         req_file_path=None,  # 後方互換性のため残すが使用しない
         use_gcp_vm=False,
-        google_ai_studio_api_key_filepath=None,
+        google_api_key=None,
         max_concurrency=5,
         max_api_calls_per_run=1000
     ):
@@ -4407,7 +4182,7 @@ class BidJudgementSan:
             df_main: announcements_document の DataFrame
             req_file_path: (廃止、後方互換性のためのみ)
             use_gcp_vm: GCS (gs://) を使用する場合 True
-            google_ai_studio_api_key_filepath: Google AI Studio API key filepath
+            google_api_key: Google AI Studio API key filepath
             max_concurrency: 並列実行数
             max_api_calls_per_run: 1回の実行での最大API呼び出し数（デフォルト: 1000）
 
@@ -4419,10 +4194,10 @@ class BidJudgementSan:
         print("=" * 60)
 
         # API key読み込み
-        if google_ai_studio_api_key_filepath is None:
-            raise ValueError("google_ai_studio_api_key_filepath is required for OCR processing")
+        if google_api_key is None:
+            raise ValueError("google_api_key is required for OCR processing")
 
-        with open(google_ai_studio_api_key_filepath, "r") as f:
+        with open(google_api_key, "r") as f:
             api_key = f.read().strip()
 
         client = genai.Client(api_key=api_key)
@@ -5087,136 +4862,6 @@ Execute
 """
 
 
-    def step0_create_bid_announcements_pre(self, bid_announcements_pre_file=None):
-        """
-        step0 : 判定前公告表アップロード
-
-        判定前公告表をデータフレームとして読み込み、アップロードする。
-
-        表の列は型変換する。
-
-        Attributes:
-
-        - bid_announcements_pre_file=None: 
-        
-          判定前公告表のファイルパス。
-                
-          None なら、自身のbid_announcements_pre_fileを参照して表を読み込む。
-        """
-
-        if bid_announcements_pre_file is None:
-            bid_announcements_pre_file = self.bid_announcements_pre_file
-
-        tablename = self.tablenamesconfig.bid_announcements_pre
-        db_operator = self.db_operator
-        
-        if db_operator.ifTableExists(tablename=tablename):
-            db_operator.dropTable(tablename=tablename)
-        else:
-            print(fr"TABLE Not exists: {tablename}")
-
-        # データ用意
-        df = pd.read_csv(bid_announcements_pre_file, sep="\t")
-        df["userAnnNo"] = df["userAnnNo"].astype("Int64")
-        for cname in [
-            "workName",
-            "topAgencyName",
-            "subAgencyName",
-            "publishDate",
-            "docDistEnd",
-            "submissionEnd",
-            "bidEndDate",
-            "remarks",
-            "pdfUrl",
-            "reasonForNG"
-        ]:
-            df[cname] = df[cname].astype("string")
-        
-        print(fr"Upload {tablename}")
-        db_operator.uploadDataToTable(data=df, tablename=tablename)
-
-        # check
-        #val = db_operator.selectToTable(tablename=tablename)
-
-
-
-    def step1_transfer(self, remove_table=False):
-        """
-        step1 : 転写処理
-
-        公告マスターが無ければ公告マスターを作成する。要件マスターが無ければ要件マスターを作成する。
-
-        引数 remove_table に応じて、事前に公告マスター・要件マスターを削除する。
-        
-        判定前公告を公告マスターにコピーする。
-
-        Args:
-
-        - remove_table=False: 
-        
-          処理前に、公告マスター・要件マスターを削除するかどうか。
-        """
-
-        tablename_pre = self.tablenamesconfig.bid_announcements_pre
-        tablename_announcements = self.tablenamesconfig.bid_announcements
-        tablename_requirements = self.tablenamesconfig.bid_requirements
-        db_operator = self.db_operator
-
-
-        # テーブル 'bid_announcements' の存在確認。
-        tmpcheck = db_operator.ifTableExists(tablename=tablename_announcements)
-        # テーブルが存在するなら、削除オプションに応じて削除
-        if tmpcheck:
-            if remove_table:
-                db_operator.dropTable(tablename=tablename_announcements)
-                print(fr"DELETE existing table: {tablename_announcements}.")
-                # テーブル削除したのでフラグ更新
-                tmpcheck = False
-
-        if not tmpcheck:
-            # テーブルが無いなら作成
-            db_operator.createBidAnnouncements(bid_announcements_tablename=tablename_announcements)
-            print(fr"NEWLY CREATED: {tablename_announcements}.")
-        else:
-            print(fr"ALREADY EXISTS: {tablename_announcements}.")
-
-
-        # 同様に bid_requirements 
-        # テーブル 'bid_requirements' の存在確認。
-        tmpcheck = db_operator.ifTableExists(tablename=tablename_requirements)
-
-        # テーブルが存在するなら、削除オプションに応じて削除
-        if tmpcheck:
-            if remove_table:
-                db_operator.dropTable(tablename=tablename_requirements)
-                print(fr"DELETE existing table: {tablename_requirements}.")
-                # テーブル削除したのでフラグ更新
-                tmpcheck = False
-
-        if not tmpcheck:
-            # テーブルが無いなら作成
-            db_operator.createBidRequirements(bid_requirements_tablename=tablename_requirements)
-            print(fr"NEWLY CREATED: {tablename_requirements}.")
-        else:
-            print(fr"ALREADY EXISTS: {tablename_requirements}.")
-
-
-        # 転写処理
-        # BigQueryのような分析基盤は OLAP寄り。
-        # ID管理や逐次更新はOLTP型DB（RDBMS）が得意
-        #
-        # ID ... GENERATE_UUID() で UUID を作る方法はある。
-        # バッチ処理なら連番採番で問題なさそう。同時実行が想定される(例：近い時刻に異なる注文をinsert)場合は問題あるかもしれない。
-        # TODO: 要テスト
-        # 疑問:row_number付与の order by 列は pdf_urlがよいのか？
-        db_operator.transferAnnouncements(
-            bid_announcements_tablename=tablename_announcements, 
-            bid_announcements_pre_tablename=tablename_pre
-        )
-        # check
-        # val = db_operator.selectToTable(tablename=tablename)
-
-
     def step1_transfer_v2(self, announcements_documents_file=None, remove_table=False):
         """
         step1 : 転写処理
@@ -5593,8 +5238,6 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description="")
     parser.add_argument("--use_gcp_vm", action="store_true")
-    parser.add_argument("--bid_announcements_pre_file")
-    parser.add_argument("--google_ai_studio_api_key_filepath")
     parser.add_argument("--stop_processing", action="store_true")
 
     parser.add_argument("--sqlite3_db_file_path", default=None)
@@ -5612,8 +5255,6 @@ if __name__ == "__main__":
                        help="step0のみ実行して終了（データベース不要でテスト可能）")
     parser.add_argument("--stop_after_step1", action="store_true",
                        help="step1まで実行して終了")
-    parser.add_argument("--stop_after_step2", action="store_true",
-                       help="step2まで実行して終了")
     parser.add_argument("--step0_output_base_dir", default="output",
                        help="step0の出力ベースディレクトリ（デフォルト: output）")
     parser.add_argument("--step0_topAgencyName", default="防衛省",
@@ -5648,8 +5289,6 @@ if __name__ == "__main__":
 
     try:
         args = parser.parse_args()
-        bid_announcements_pre_file = args.bid_announcements_pre_file
-        google_ai_studio_api_key_filepath = args.google_ai_studio_api_key_filepath
         use_gcp_vm = args.use_gcp_vm
         stop_processing = args.stop_processing
         sqlite3_db_file_path = args.sqlite3_db_file_path
@@ -5663,7 +5302,6 @@ if __name__ == "__main__":
         run_step0_prepare_documents = args.run_step0_prepare_documents
         run_step0_only = args.run_step0_only
         stop_after_step1 = args.stop_after_step1
-        stop_after_step2 = args.stop_after_step2
         step0_output_base_dir = args.step0_output_base_dir
         step0_topAgencyName = args.step0_topAgencyName
         step0_no_merge = args.step0_no_merge
@@ -5681,7 +5319,6 @@ if __name__ == "__main__":
         step1_transfer_remove_table = args.step1_transfer_remove_table
         step3_remove_table = args.step3_remove_table
     except:
-        bid_announcements_pre_file = "data/bid_announcements_pre/bid_announcements_pre_1.txt"
         use_bigquery = False
         stop_processing = True
 
@@ -5689,7 +5326,6 @@ if __name__ == "__main__":
         run_step0_prepare_documents = False
         run_step0_only = False
         stop_after_step1 = False
-        stop_after_step2 = False
         step0_output_base_dir = "output"
         step0_topAgencyName = "防衛省"
         step0_no_merge = False
@@ -5702,9 +5338,6 @@ if __name__ == "__main__":
 
         step1_transfer_remove_table = False
         step3_remove_table = False
-    if bid_announcements_pre_file is None:
-        bid_announcements_pre_file = "data/bid_announcements_pre/bid_announcements_pre_1.txt"
-        print(fr"Set bid_announcements_pre_file = {bid_announcements_pre_file}")
 
     # データベースオペレーターの作成（共通）
     if use_gcp_vm:
@@ -5720,7 +5353,6 @@ if __name__ == "__main__":
 
     # BidJudgementSan オブジェクト作成（共通）
     obj = BidJudgementSan(
-        bid_announcements_pre_file=bid_announcements_pre_file,
         tablenamesconfig=TablenamesConfig,
         db_operator=db_operator
     )
@@ -5747,7 +5379,7 @@ if __name__ == "__main__":
             do_download_pdfs=step0_do_download_pdfs,
             do_count_pages=step0_do_count_pages,
             do_ocr=step0_do_ocr,
-            google_ai_studio_api_key_filepath=step0_google_api_key,
+            google_api_key=step0_google_api_key,
             ocr_max_concurrency=step0_ocr_max_concurrency,
             ocr_max_api_calls_per_run=step0_ocr_max_api_calls_per_run
         )
@@ -5778,15 +5410,13 @@ if __name__ == "__main__":
             do_download_pdfs=step0_do_download_pdfs,
             do_count_pages=step0_do_count_pages,
             do_ocr=step0_do_ocr,
-            google_ai_studio_api_key_filepath=step0_google_api_key,
+            google_api_key=step0_google_api_key,
             ocr_max_concurrency=step0_ocr_max_concurrency,
             ocr_max_api_calls_per_run=step0_ocr_max_api_calls_per_run
         )
         if req_file_path:
             print(f"Generated requirements_file: {req_file_path}")
 
-    # obj.step0_create_bid_announcements_pre(bid_announcements_pre_file=bid_announcements_pre_file)
-    # obj.step1_transfer(remove_table=step1_transfer_remove_table)
     obj.step1_transfer_v2(
         announcements_documents_file=None,  # 非推奨パラメータ（DB から読み込むため不要）
         remove_table=step1_transfer_remove_table
@@ -5795,12 +5425,6 @@ if __name__ == "__main__":
     # step1で止まる場合
     if stop_after_step1:
         print("\n--stop_after_step1 specified. Exiting after step1.")
-        exit(0)
-
-    # step2 は削除されました（要件処理は step0 で完結）
-    # step2で止まる場合
-    if stop_after_step2:
-        print("\n--stop_after_step2 specified. Exiting after step2 (step2 is now removed, but flag honored).")
         exit(0)
 
     obj.step3(remove_table=step3_remove_table)
@@ -5842,12 +5466,6 @@ if __name__ == "__main__":
     db_operator.uploadDataToTable(data=announcements_competing_companies_master, tablename="announcements_competing_companies_master", chunksize=5000)
     db_operator.uploadDataToTable(data=announcements_competing_company_bids_master, tablename="announcements_competing_company_bids_master", chunksize=5000)
 
-    # announcements_documents_master = master.getAnnouncementsDocumentsMaster()
-    # db_operator.uploadDataToTable(data=announcements_documents_master, tablename="announcements_documents_master")
-    if False:
-        announcements_documents_file="source/check_html/use_claude/3_source_formatting/output/announcements_document_202602162218_updated.txt.zip"
-        announcements_documents_master = pd.read_csv(announcements_documents_file, sep="\t")
-        db_operator.uploadDataToTable(data=announcements_documents_master, tablename="announcements_documents_master")
 
     # db_operator.selectToTable(tablename="bid_announcements_pre")
     # db_operator.selectToTable(tablename="bid_announcements")
@@ -5893,122 +5511,5 @@ if __name__ == "__main__":
         df_backend_companies.shape
         df_backend_orderers.shape
         df_backend_partners.shape
-
-
-    if False:
-        df_new = pd.read_csv("source/check_html/use_claude/announcements_document.txt",sep="\t")
-        col = "announcement_id"
-        df_new = df_new[df_new[col] <= 100004]
-
-        bid_announcements_table = "bid_announcements"
-        bid_announcements_document_table = "announcements_documents_master"
-
-        # anno_doc はひとまず1回アップロードすればよい
-        # db_operator.uploadDataToTable(data=df_new, tablename=bid_announcements_document_table, chunksize=5000)
-        # db_operator.dropTable(tablename=bid_announcements_documents_table)
-
-        db_operator.selectToTable(tablename=bid_announcements_document_table)
-
-        db_operator.dropTable(tablename=bid_announcements_table)
-
-        sql = fr"""
-        create table {bid_announcements_table} (
-        announcement_no integer PRIMARY KEY,
-        workName string,
-        userAnnNo integer,
-        topAgencyNo integer,
-        topAgencyName string,
-        subAgencyNo integer,
-        subAgencyName string,
-        workPlace string,
-
-        pdfUrl string,
-        pdfUrl2 string,
-        pdfUrl3 string,
-        pdfUrl4 string,
-        pdfUrl5 string,
-
-        pdfUrl_type string,
-        pdfUrl2_type string,
-        pdfUrl3_type string,
-        pdfUrl4_type string,
-        pdfUrl5_type string,
-
-        zipcode string,
-        address string,
-        department string,
-        assigneeName string,
-        telephone string,
-        fax string,
-        mail string,
-        publishDate string,
-        docDistStart string,
-        docDistEnd string,
-        submissionStart string,
-        submissionEnd string,    
-        bidStartDate string,
-        bidEndDate string,
-        doneOCR bool,
-        remarks string, 
-        createdDate string,
-        updatedDate string
-        )
-        """
-        db_operator.cur.execute(sql)
-        db_operator.selectToTable(tablename=bid_announcements_table)
-
-
-        sql = fr"""
-        INSERT INTO {bid_announcements_table} (
-            announcement_no,
-            workName,
-
-            pdfUrl, pdfUrl_type,
-            pdfUrl2, pdfUrl2_type,
-            pdfUrl3, pdfUrl3_type,
-            pdfUrl4, pdfUrl4_type,
-            pdfUrl5, pdfUrl5_type,
-
-            doneOCR,
-            createdDate,
-            updatedDate
-        )
-        SELECT
-            ad.announcement_id,
-            MAX(CASE WHEN ad.document_id = 1 THEN ad.title END) AS workName,
-
-            MAX(CASE WHEN ad.document_id = 1 THEN ad.url END) AS pdfUrl,
-            MAX(CASE WHEN ad.document_id = 1 THEN ad.type END) AS pdfUrl_type,
-            MAX(CASE WHEN ad.document_id = 2 THEN ad.url END) AS pdfUrl2,
-            MAX(CASE WHEN ad.document_id = 2 THEN ad.type END) AS pdfUrl2_type,
-            MAX(CASE WHEN ad.document_id = 3 THEN ad.url END) AS pdfUrl3,
-            MAX(CASE WHEN ad.document_id = 3 THEN ad.type END) AS pdfUrl3_type,
-            MAX(CASE WHEN ad.document_id = 4 THEN ad.url END) AS pdfUrl4,
-            MAX(CASE WHEN ad.document_id = 4 THEN ad.type END) AS pdfUrl4_type,
-            MAX(CASE WHEN ad.document_id = 5 THEN ad.url END) AS pdfUrl5,
-            MAX(CASE WHEN ad.document_id = 5 THEN ad.type END) AS pdfUrl5_type,
-
-            0 as doneOCR,
-
-            CURRENT_TIMESTAMP,
-            CURRENT_TIMESTAMP
-        FROM {bid_announcements_document_table} ad
-        WHERE NOT EXISTS (
-            SELECT 1
-            FROM {bid_announcements_table} b
-            WHERE b.announcement_no = ad.announcement_id
-        )
-        GROUP BY ad.announcement_id
-        """
-        db_operator.cur.execute(sql)
-
-        df_tmp = db_operator.selectToTable(tablename=bid_announcements_table)
-        df_tmp.head(5)
-        df_tmp.shape
-        df_tmp.columns
-
-
-
-
 
 
