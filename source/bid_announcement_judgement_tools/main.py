@@ -643,6 +643,16 @@ class DBOperator:
         raise NotImplementedError
 
     @abstractmethod
+    def showAllTables(self):
+        """
+        データベース内の全テーブル一覧を DataFrame で返す
+
+        Returns:
+            DataFrame: テーブル名の列を持つ DataFrame
+        """
+        raise NotImplementedError
+
+    @abstractmethod
     def createCompanyBidJudgements(self, company_bid_judgement_tablename):
         raise NotImplementedError
 
@@ -822,6 +832,21 @@ class DBOperatorGCPVM(DBOperator):
         if df.shape[0] == 1:
             return True
         return False
+
+    def showAllTables(self):
+        """
+        BigQuery データセット内の全テーブル一覧を DataFrame で返す
+
+        Returns:
+            DataFrame: table_name 列を持つ DataFrame
+        """
+        sql = fr"""
+        SELECT table_name
+        FROM `{self.project_id}.{self.dataset_name}.INFORMATION_SCHEMA.TABLES`
+        ORDER BY table_name
+        """
+        df = self.client.query(sql).result().to_dataframe()
+        return df
 
     def dropTable(self, tablename):
         self.client.delete_table(fr"{self.project_id}.{self.dataset_name}.{tablename}", not_found_ok=True)
@@ -2103,6 +2128,22 @@ class DBOperatorSQLITE3(DBOperator):
             return True
         return False
 
+    def showAllTables(self):
+        """
+        SQLite3 データベース内の全テーブル一覧を DataFrame で返す
+
+        Returns:
+            DataFrame: name 列を持つ DataFrame
+        """
+        sql = """
+        SELECT name
+        FROM sqlite_master
+        WHERE type='table'
+        ORDER BY name
+        """
+        df = pd.read_sql_query(sql, self.conn)
+        return df
+
     def dropTable(self, tablename):
         self.cur.execute(fr"DROP TABLE IF EXISTS {tablename}")
 
@@ -2840,6 +2881,22 @@ class DBOperatorPOSTGRES(DBOperator):
         if df.shape[0] == 1:
             return True
         return False
+
+    def showAllTables(self):
+        """
+        PostgreSQL データベース内の全テーブル一覧を DataFrame で返す
+
+        Returns:
+            DataFrame: tablename 列を持つ DataFrame
+        """
+        sql = """
+        SELECT tablename
+        FROM pg_tables
+        WHERE schemaname = 'public'
+        ORDER BY tablename
+        """
+        df = pd.read_sql_query(sql, self.engine)
+        return df
 
     def dropTable(self, tablename):
         self.cur.execute(fr"DROP TABLE IF EXISTS {tablename}")
