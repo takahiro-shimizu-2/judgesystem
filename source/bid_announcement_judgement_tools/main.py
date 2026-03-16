@@ -910,7 +910,6 @@ class DBOperatorGCPVM(DBOperator):
         create table `{self.project_id}.{self.dataset_name}.{bid_requirements_tablename}` (
         document_id string,
         announcement_no int64,
-        requirement_index int64,
         requirement_no int64,
         requirement_type string,
         requirement_text string,
@@ -1461,9 +1460,9 @@ class DBOperatorGCPVM(DBOperator):
         USING `{self.project_id}.{self.dataset_name}.{source_tablename}` AS S
         ON T.announcement_no = S.announcement_no
         WHEN NOT MATCHED THEN
-          INSERT (document_id, announcement_no, requirement_index, requirement_no,
+          INSERT (document_id, announcement_no, requirement_no,
                   requirement_type, requirement_text, done_judgement, createdDate, updatedDate)
-          VALUES (S.document_id, S.announcement_no, S.requirement_index, S.requirement_no,
+          VALUES (S.document_id, S.announcement_no, S.requirement_no,
                   S.requirement_type, S.requirement_text, S.done_judgement, S.createdDate, S.updatedDate)
         """
 
@@ -2370,14 +2369,13 @@ class DBOperatorSQLITE3(DBOperator):
         create table {bid_requirements_tablename} (
         document_id text,
         announcement_no integer,
-        requirement_index integer,
         requirement_no integer,
         requirement_type text,
         requirement_text text,
         done_judgement bool,
         createdDate text,
         updatedDate text,
-        UNIQUE(announcement_no, requirement_index)
+        UNIQUE(requirement_no)
         )
         """
         self.cur.execute(sql)
@@ -2935,9 +2933,9 @@ class DBOperatorSQLITE3(DBOperator):
             int: 挿入された行数
         """
         sql = f"""
-        INSERT INTO {target_tablename} (document_id, announcement_no, requirement_index, requirement_no,
+        INSERT INTO {target_tablename} (document_id, announcement_no, requirement_no,
                                          requirement_type, requirement_text, done_judgement, createdDate, updatedDate)
-        SELECT document_id, announcement_no, requirement_index, requirement_no,
+        SELECT document_id, announcement_no, requirement_no,
                requirement_type, requirement_text, done_judgement, createdDate, updatedDate
         FROM {source_tablename} AS S
         WHERE NOT EXISTS (
@@ -4664,7 +4662,6 @@ class BidJudgementSan:
                                 db_req_records.append({
                                     'document_id': document_id,
                                     'announcement_no': announcement_id,
-                                    'requirement_index': idx,
                                     'requirement_no': None,  # 後で一括採番
                                     'requirement_text': req_text,
                                     'requirement_type': req_type,
@@ -4680,7 +4677,6 @@ class BidJudgementSan:
                             db_req_records.append({
                                 'document_id': document_id,
                                 'announcement_no': announcement_id,
-                                'requirement_index': 0,
                                 'requirement_no': None,
                                 'requirement_text': f"Error: {str(e)}",
                                 'requirement_type': "その他要件",
