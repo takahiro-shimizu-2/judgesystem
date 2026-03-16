@@ -24,4 +24,12 @@ npm run build
 npm run dev
 ```
 
-リクエストは `limit` クエリパラメータで件数を指定できます。値が 1〜`API_MAX_LIMIT` の範囲外の場合は `400 Invalid limit` を返します。JSON 応答は `Cache-Control: public, max-age=1800` で 30 分キャッシュ可能になっています。
+一覧 API (`/api/evaluations`) は `page` / `pageSize` によるページネーションと、`statuses` / `workStatuses` / `priorities` / `categories` / `bidTypes` / `organizations` / `prefectures` / `searchQuery` / `sortField` / `sortOrder` といったクエリパラメータに対応しています。JSON 応答は `Cache-Control: public, max-age=1800` で 30 分キャッシュ可能です。
+
+## API エンドポイント
+
+| Method | Path | Description |
+| --- | --- | --- |
+| GET | `/api/evaluations` | 入札一覧ページ向けの判定結果サマリ。ページ番号・フィルター・ソート・検索で絞り込み、フロント表示に必要なフィールドのみを JSON で返します。 |
+| GET | `/api/evaluations/:id` | 詳細ページ用。`id` で 1 件の判定結果を取得し、`requirements` や `announcement` の全文情報を返します。 |
+| PATCH | `/api/evaluations/:evaluationNo` | 進捗ステータスの更新。`workStatus` を `not_started` / `in_progress` / `completed` のいずれかに変更します。 |

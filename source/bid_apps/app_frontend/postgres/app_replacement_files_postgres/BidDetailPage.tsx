@@ -12,7 +12,8 @@ import {
 } from "@mui/icons-material";
 import { useState, useCallback, useEffect } from "react";
 
-import { findById, updateWorkStatus, updateCurrentStep, bidTypeConfig } from "../data";
+import { bidTypeConfig, updateWorkStatus } from "../data";
+import type { BidEvaluation } from "../types";
 import { priorityLabels, priorityColors } from "../constants/priority";
 import { WORKFLOW_STEP_CONFIG, WORKFLOW_STEP_IDS } from "../constants/workflow";
 import type { Partner } from "../types";
@@ -167,7 +168,39 @@ export default function BidDetailPage() {
     } catch { /* ignore */ }
   }, [location.pathname]);
 
-  const evaluation = findById(id || "");
+  // API状態管理
+  const [evaluation, setEvaluation] = useState<BidEvaluation | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // 評価データ取得
+  useEffect(() => {
+    if (!id) {
+      setIsLoading(false);
+      return;
+    }
+
+    const fetchEvaluation = async () => {
+      setIsLoading(true);
+      setError(null);
+
+      try {
+        const response = await fetch(`/api/evaluations/${id}`);
+        if (!response.ok) {
+          throw new Error(`Failed to fetch evaluation: ${response.status}`);
+        }
+        const data = await response.json();
+        setEvaluation(data);
+      } catch (err) {
+        console.error('Failed to fetch evaluation:', err);
+        setError(err instanceof Error ? err.message : 'Unknown error');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchEvaluation();
+  }, [id]);
 
   const [currentStep, setCurrentStep] = useState<string>(
     evaluation?.currentStep || WORKFLOW_STEP_IDS.JUDGMENT
@@ -183,6 +216,16 @@ export default function BidDetailPage() {
   const [stepAssignees, setStepAssignees] = useState<StepAssignee[]>(
     evaluation?.stepAssignees || []
   );
+
+  // evaluationが読み込まれたら状態を初期化
+  useEffect(() => {
+    if (evaluation) {
+      setCurrentStep(evaluation.currentStep || WORKFLOW_STEP_IDS.JUDGMENT);
+      setActiveTab(evaluation.currentStep || WORKFLOW_STEP_IDS.JUDGMENT);
+      setCurrentWorkStatus(evaluation.workStatus || "not_started");
+      setStepAssignees(evaluation.stepAssignees || []);
+    }
+  }, [evaluation]);
 
   // 担当者変更ハンドラ
   const handleAssigneeChange = useCallback((stepId: string, staffId: string) => {
@@ -275,34 +318,29 @@ export default function BidDetailPage() {
 
   const handleBack = useCallback(() => navigate("/"), [navigate]);
 
-  const goToNextStep = useCallback(async () => {
+  const goToNextStep = useCallback(() => {
     const currentIndex = WORKFLOW_STEP_CONFIG.findIndex(
       (s) => s.id === currentStep
     );
     const nextStep = WORKFLOW_STEP_CONFIG[currentIndex + 1];
-    if (nextStep && id) {
-      // ステップを更新
-      updateCurrentStep(id, nextStep.id);
+    if (nextStep && evaluation) {
+      // ステップを更新（ローカル状態のみ）
       setCurrentStep(nextStep.id);
       setActiveTab(nextStep.id);
       // 未着手なら着手中に変更
       if (currentWorkStatus === "not_started") {
-        const success = await updateWorkStatus(id, "in_progress");
-        if (success) {
-          setCurrentWorkStatus("in_progress");
-        }
+        updateWorkStatus(evaluation.evaluationNo, "in_progress");
+        setCurrentWorkStatus("in_progress");
       }
     }
-  }, [currentStep, currentWorkStatus, id]);
+  }, [currentStep, currentWorkStatus, evaluation]);
 
-  const handleComplete = useCallback(async () => {
-    if (id) {
-      const success = await updateWorkStatus(id, "completed");
-      if (success) {
-        setCurrentWorkStatus("completed");
-      }
+  const handleComplete = useCallback(() => {
+    if (evaluation) {
+      updateWorkStatus(evaluation.evaluationNo, "completed");
+      setCurrentWorkStatus("completed");
     }
-  }, [id]);
+  }, [evaluation]);
 
   const getTabStatus = useCallback(
     (stepId: string): TabStatus => {
@@ -327,6 +365,32 @@ export default function BidDetailPage() {
     [getTabStatus]
   );
 
+  // ローディング中
+  if (isLoading) {
+    return (
+      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh' }}>
+        <Box sx={{ textAlign: 'center' }}>
+          <Typography sx={{ color: colors.text.muted, mb: 2 }}>読み込み中...</Typography>
+        </Box>
+      </Box>
+    );
+  }
+
+  // エラー時
+  if (error) {
+    return (
+      <Box sx={{ ...pageStyles.contentArea, maxWidth: "900px", py: 3 }}>
+        <Alert severity="error" sx={{ mb: 3, borderRadius: borderRadius.xs }}>
+          データの取得に失敗しました: {error}
+        </Alert>
+        <Button startIcon={<ArrowBackIcon />} onClick={handleBack}>
+          一覧に戻る
+        </Button>
+      </Box>
+    );
+  }
+
+  // データが見つからない時
   if (!evaluation) {
     return <NotFoundView onBack={handleBack} />;
   }

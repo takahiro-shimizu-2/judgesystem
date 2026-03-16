@@ -164,7 +164,234 @@ app.get("/", (req, res) => {
 
 
 app.get("/api/announcements", createTableHandler(TABLES.announcements));
-app.get("/api/evaluations", createTableHandler(TABLES.evaluations));
+
+// Paginated evaluations endpoint with filters, sorting, and search
+app.get("/api/evaluations", async (req: Request, res: Response): Promise<void> => {
+  console.log(`GET /api/evaluations hit`);
+
+  const page = parseInt(req.query.page as string) || 0;
+  const pageSize = parseInt(req.query.pageSize as string) || 25;
+  const offset = page * pageSize;
+
+  // Parse filter arrays
+  const statuses = req.query.statuses ? (Array.isArray(req.query.statuses) ? req.query.statuses : [req.query.statuses]) : [];
+  const workStatuses = req.query.workStatuses ? (Array.isArray(req.query.workStatuses) ? req.query.workStatuses : [req.query.workStatuses]) : [];
+  const priorities = req.query.priorities ? (Array.isArray(req.query.priorities) ? req.query.priorities : [req.query.priorities]) : [];
+  const categories = req.query.categories ? (Array.isArray(req.query.categories) ? req.query.categories : [req.query.categories]) : [];
+  const bidTypes = req.query.bidTypes ? (Array.isArray(req.query.bidTypes) ? req.query.bidTypes : [req.query.bidTypes]) : [];
+  const organizations = req.query.organizations ? (Array.isArray(req.query.organizations) ? req.query.organizations : [req.query.organizations]) : [];
+  const prefectures = req.query.prefectures ? (Array.isArray(req.query.prefectures) ? req.query.prefectures : [req.query.prefectures]) : [];
+
+  // Search query
+  const searchQuery = (req.query.searchQuery as string) || '';
+
+  // Sorting
+  const sortField = (req.query.sortField as string) || '';
+  const sortOrder = (req.query.sortOrder as string) || 'asc';
+
+  let client: PoolClient | undefined;
+  try {
+    client = await pool.connect();
+    const qualifiedTableName = `${schemaPrefix}${TABLES.evaluations}`;
+
+    // Build WHERE clause
+    const whereClauses: string[] = [];
+    const queryParams: any[] = [];
+    let paramIndex = 1;
+
+    if (statuses.length > 0) {
+      whereClauses.push(`status = ANY($${paramIndex})`);
+      queryParams.push(statuses);
+      paramIndex++;
+    }
+
+    if (workStatuses.length > 0) {
+      whereClauses.push(`"workStatus" = ANY($${paramIndex})`);
+      queryParams.push(workStatuses);
+      paramIndex++;
+    }
+
+    if (priorities.length > 0) {
+      // Convert string array to integer array for type matching
+      const priorityInts = priorities.map((p: string) => parseInt(p, 10)).filter((p: number) => !isNaN(p));
+      if (priorityInts.length > 0) {
+        whereClauses.push(`(company->>'priority')::integer = ANY($${paramIndex}::int[])`);
+        queryParams.push(priorityInts);
+        paramIndex++;
+      }
+    }
+
+    if (categories.length > 0) {
+      whereClauses.push(`announcement->>'category' = ANY($${paramIndex})`);
+      queryParams.push(categories);
+      paramIndex++;
+    }
+
+    if (bidTypes.length > 0) {
+      whereClauses.push(`announcement->>'bidType' = ANY($${paramIndex})`);
+      queryParams.push(bidTypes);
+      paramIndex++;
+    }
+
+    if (organizations.length > 0) {
+      whereClauses.push(`announcement->>'organization' = ANY($${paramIndex})`);
+      queryParams.push(organizations);
+      paramIndex++;
+    }
+
+    if (prefectures.length > 0) {
+      const prefLikes = prefectures.map((_, i) => `announcement->>'workLocation' ILIKE $${paramIndex + i}`).join(' OR ');
+      whereClauses.push(`(${prefLikes})`);
+      prefectures.forEach(p => queryParams.push(`%${p}%`));
+      paramIndex += prefectures.length;
+    }
+
+    if (searchQuery.trim()) {
+      whereClauses.push(`(announcement->>'title' ILIKE $${paramIndex} OR announcement->>'organization' ILIKE $${paramIndex} OR company->>'name' ILIKE $${paramIndex} OR announcement->>'category' ILIKE $${paramIndex})`);
+      queryParams.push(`%${searchQuery}%`);
+      paramIndex++;
+    }
+
+    const whereClause = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : '';
+
+    // Build ORDER BY clause
+    let orderByClause = '';
+    if (sortField) {
+      const direction = sortOrder === 'desc' ? 'DESC' : 'ASC';
+      // Map frontend field names to DB column names (using JSONB accessors)
+      const fieldMap: Record<string, string> = {
+        evaluationNo: '"evaluationNo"',
+        status: 'status',
+        workStatus: '"workStatus"',
+        priority: "(company->>'priority')::integer",
+        title: "announcement->>'title'",
+        company: "company->>'name'",
+        organization: "announcement->>'organization'",
+        category: "announcement->>'category'",
+        bidType: "announcement->>'bidType'",
+        deadline: "announcement->>'deadline'",
+        evaluatedAt: '"evaluatedAt"',
+        prefecture: "announcement->>'workLocation'",
+      };
+      // Validate sortField to prevent SQL injection
+      if (fieldMap[sortField]) {
+        const dbField = fieldMap[sortField];
+        orderByClause = `ORDER BY ${dbField} ${direction}`;
+      }
+      // If sortField is not in fieldMap, ignore it (no ORDER BY clause)
+    }
+
+    // Get total count
+    const countQuery = `SELECT COUNT(*) as count FROM ${qualifiedTableName} ${whereClause}`;
+    const countResult = await client.query(countQuery, queryParams);
+    const total = parseInt(countResult.rows[0].count);
+
+    // Get paginated data (return full JSONB structure)
+    const dataQuery = `
+      SELECT
+        id,
+        "evaluationNo",
+        jsonb_build_object(
+          'title', announcement->>'title',
+          'organization', announcement->>'organization',
+          'category', announcement->>'category',
+          'bidType', announcement->>'bidType',
+          'deadline', announcement->>'deadline',
+          'workLocation', announcement->>'workLocation'
+        ) AS announcement,
+        jsonb_build_object(
+          'name', company->>'name',
+          'priority', (company->>'priority')::integer
+        ) AS company,
+        jsonb_build_object(
+          'name', branch->>'name'
+        ) AS branch,
+        status,
+        "workStatus",
+        "currentStep",
+        "evaluatedAt"
+      FROM ${qualifiedTableName}
+      ${whereClause}
+      ${orderByClause}
+      LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
+    `;
+    const dataParams = [...queryParams, pageSize, offset];
+    const dataResult = await client.query(dataQuery, dataParams);
+
+    const responseData = {
+      data: dataResult.rows,
+      total,
+      page,
+      pageSize,
+    };
+
+    console.log(`Response: ${dataResult.rows.length} rows, total: ${total}, page: ${page}`);
+
+    res.setHeader("Content-Type", "application/json");
+    res.setHeader("Cache-Control", "public, max-age=1800");
+    res.status(200).json(responseData);
+  } catch (error) {
+    console.error(`ERROR in GET /api/evaluations:`, error);
+    if (!res.headersSent) {
+      res.status(500).json({
+        error: "Internal Server Error",
+        message: error instanceof Error ? error.message : String(error),
+      });
+    }
+  } finally {
+    client?.release();
+  }
+});
+
+// GET single evaluation by id
+app.get("/api/evaluations/:id", async (req: Request, res: Response): Promise<void> => {
+  console.log(`GET /api/evaluations/${req.params.id} hit`);
+
+  const { id } = req.params;
+
+  let client: PoolClient | undefined;
+  try {
+    client = await pool.connect();
+    const qualifiedTableName = `${schemaPrefix}${TABLES.evaluations}`;
+
+    const result = await client.query(
+      `SELECT
+        id,
+        "evaluationNo",
+        announcement,
+        company,
+        branch,
+        requirements,
+        status,
+        "workStatus",
+        "currentStep",
+        "evaluatedAt"
+      FROM ${qualifiedTableName}
+      WHERE id = $1`,
+      [id]
+    );
+
+    if (result.rowCount === 0) {
+      res.status(404).json({ error: "Evaluation not found" });
+      return;
+    }
+
+    res.setHeader("Content-Type", "application/json");
+    res.setHeader("Cache-Control", "public, max-age=1800");
+    res.status(200).json(result.rows[0]);
+  } catch (error) {
+    console.error(`ERROR in GET /api/evaluations/${id}:`, error);
+    if (!res.headersSent) {
+      res.status(500).json({
+        error: "Internal Server Error",
+        message: error instanceof Error ? error.message : String(error),
+      });
+    }
+  } finally {
+    client?.release();
+  }
+});
+
 app.get("/api/companies", createTableHandler(TABLES.companies));
 app.get("/api/orderers", createTableHandler(TABLES.orderers));
 app.get("/api/partners", createTableHandler(TABLES.partners));

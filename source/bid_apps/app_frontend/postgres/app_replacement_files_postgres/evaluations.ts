@@ -2,31 +2,21 @@
  * 判定結果データ
  * 案件ID、企業IDで他のマスターを参照
  * BidEvaluationの形式を維持（ページ互換性のため）
+ *
+ * Note: サーバーサイドページネーション移行により、全件取得は削除
+ * データ取得は useBidListState で行う
  */
 import type {
   BidEvaluation,
-  //RequirementResult,
-  //RequirementCategory,
   WorkStatus,
   EvaluationStatus,
   SimilarCase
-  //Company,
-  //Branch
 } from '../types';
 import { mockCompanies } from './companies';
-//import { mockAnnouncements } from './announcements';
 
-
-const generateEvaluations = async (): Promise<BidEvaluation[]> => {
-  const res = await fetch("/api/evaluations");
-  const data = await res.json();
-  //console.log("API response:", data);
-  return data;
-}
-
-// エクスポート
-// export const mockBidEvaluations: BidEvaluation[] = generateEvaluations();
-export const mockBidEvaluations: BidEvaluation[] = await generateEvaluations();
+// サーバーサイドページネーション移行により、全件取得は廃止
+// データ取得は useBidListState フックで行う
+export const mockBidEvaluations: BidEvaluation[] = [];
 
 // ヘルパー関数
 export const filterByStatus = (status: EvaluationStatus) =>
@@ -35,14 +25,9 @@ export const filterByStatus = (status: EvaluationStatus) =>
 export const findById = (id: string) =>
   mockBidEvaluations.find((evaluation) => evaluation.id === id);
 
-export const updateWorkStatus = async (id: string, workStatus: WorkStatus): Promise<boolean> => {
-  const evaluation = mockBidEvaluations.find((e) => e.id === id);
-  if (!evaluation) {
-    return false;
-  }
-
+export const updateWorkStatus = async (evaluationNo: string, workStatus: WorkStatus): Promise<boolean> => {
   try {
-    const response = await fetch(`/api/evaluations/${evaluation.evaluationNo}`, {
+    const response = await fetch(`/api/evaluations/${evaluationNo}`, {
       method: 'PATCH',
       headers: {
         'Content-Type': 'application/json',
@@ -55,8 +40,6 @@ export const updateWorkStatus = async (id: string, workStatus: WorkStatus): Prom
       return false;
     }
 
-    // Update local cache
-    evaluation.workStatus = workStatus;
     return true;
   } catch (error) {
     console.error('Error updating workStatus:', error);
