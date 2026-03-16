@@ -1,3 +1,0 @@
-workName	userAnnNo	topAgencyName	subAgencyName	publishDate	docDistEnd	submissionEnd	bidEndDate	remarks	pdfUrl	transferFlag	reasonForNG
-目黒（７）庁舎新設基本検討		防衛省	内部部局	7.4.22		7.5.15	7.6.23		https://www.mod.go.jp/j/budget/chotatsu/naikyoku/consul/2025/0422a.pdf	False	
-庁舎等整備基本検討競争参加者の資格に関する公示		防衛省	内部部局	7.5.23		7.6.13	7.7.25		https://www.mod.go.jp/j/budget/chotatsu/naikyoku/consul/2025/0523a.pdf	False	
