@@ -49,11 +49,26 @@ Usage example:
         --step1_transfer_remove_table \\
         --step3_remove_table
 
+    # PostgreSQL での実行例
+    python source/bid_announcement_judgement_tools/main.py \\
+        --postgres_host localhost \\
+        --postgres_port 5432 \\
+        --postgres_database biddb \\
+        --postgres_user postgres \\
+        --postgres_password your_password \\
+        --use_postgres \\
+        --step1_transfer_remove_table \\
+        --step3_remove_table
+
 Arguments:
 
 - --use_gcp_vm: (フラグ引数)
 
   GCP VM で動作させる場合に指定する。指定した場合、データベースを操作するオブジェクトとして、DBOperatorGCPVMを使う。指定しない場合、DBOperatorSQLITE3 を使う。
+
+- --use_postgres: (フラグ引数)
+
+  PostgreSQL を使用する場合に指定する。指定した場合、データベースを操作するオブジェクトとして、DBOperatorPOSTGRESを使う。
 
 - --stop_processing: (フラグ引数)
 
@@ -74,6 +89,26 @@ Arguments:
 - --bigquery_dataset_name: (パラメータ引数)
 
   google cloud platform の bigquery の dataset_name。
+
+- --postgres_host: (パラメータ引数)
+
+  PostgreSQL のホスト名。
+
+- --postgres_port: (パラメータ引数)
+
+  PostgreSQL のポート番号（デフォルト: 5432）。
+
+- --postgres_database: (パラメータ引数)
+
+  PostgreSQL のデータベース名。
+
+- --postgres_user: (パラメータ引数)
+
+  PostgreSQL のユーザー名。
+
+- --postgres_password: (パラメータ引数)
+
+  PostgreSQL のパスワード。
 
 - --input_list_file: (パラメータ引数)
 
@@ -158,6 +193,18 @@ warnings.simplefilter(action="ignore", category=FutureWarning)
 
 try:
     from google.cloud import bigquery
+except Exception as e:
+    print(e)
+
+try:
+    import psycopg2
+    from psycopg2 import sql
+    from psycopg2.extras import execute_values
+except Exception as e:
+    print(e)
+
+try:
+    from sqlalchemy import create_engine
 except Exception as e:
     print(e)
 
@@ -484,8 +531,9 @@ class DBOperator:
       google cloud platform の bigquery の dataset_name。
     """
 
-    def __init__(self, sqlite3_db_file_path=None, bigquery_location=None, bigquery_project_id=None, bigquery_dataset_name=None):
-        """ 
+    def __init__(self, sqlite3_db_file_path=None, bigquery_location=None, bigquery_project_id=None, bigquery_dataset_name=None,
+                 postgres_host=None, postgres_port=None, postgres_database=None, postgres_user=None, postgres_password=None):
+        """
         google ai studio の api キーが記載されたファイルパスを受け取り、genai の client を設定する。
 
         Args:
@@ -503,8 +551,28 @@ class DBOperator:
           google cloud platform の project_id。
 
         - bigquery_dataset_name
-    
+
           google cloud platform の bigquery の dataset_name。
+
+        - postgres_host
+
+          PostgreSQL のホスト名
+
+        - postgres_port
+
+          PostgreSQL のポート番号
+
+        - postgres_database
+
+          PostgreSQL のデータベース名
+
+        - postgres_user
+
+          PostgreSQL のユーザー名
+
+        - postgres_password
+
+          PostgreSQL のパスワード
         """
 
         self.sqlite3_db_file_path = sqlite3_db_file_path
@@ -522,6 +590,13 @@ class DBOperator:
             self.dataset_name = bigquery_dataset_name
         except Exception as e:
             print(fr"    SQLConnector: {str(e)}")
+
+        # PostgreSQL 接続情報を保存
+        self.postgres_host = postgres_host
+        self.postgres_port = postgres_port
+        self.postgres_database = postgres_database
+        self.postgres_user = postgres_user
+        self.postgres_password = postgres_password
 
     @abstractmethod
     def any_query(self, sql):
@@ -557,10 +632,6 @@ class DBOperator:
 
     @abstractmethod
     def createBidRequirements(self, bid_requirements_tablename):
-        raise NotImplementedError
-
-    @abstractmethod
-    def transferAnnouncementsV2(self, bid_announcements_tablename, bid_announcements_documents_tablename):
         raise NotImplementedError
 
     @abstractmethod
@@ -902,86 +973,6 @@ class DBOperatorGCPVM(DBOperator):
         is_ocr_failed bool
         )
         """
-        self.client.query(sql).result()
-
-    def transferAnnouncementsV2(self, bid_announcements_tablename, bid_announcements_documents_tablename):
-        sql = fr"""
-        INSERT INTO `{self.project_id}.{self.dataset_name}.{bid_announcements_tablename}` (
-            announcement_no,
-            workName,
-
-            topAgencyName,
-
-            workPlace,
-            zipcode,
-            address,
-            department,
-            assigneeName,
-            telephone,
-            fax,
-            mail,
-            publishDate,
-            docDistStart,
-            docDistEnd,
-            submissionStart,
-            submissionEnd,
-            bidStartDate,
-            bidEndDate,
-
-            doneOCR,
-            createdDate,
-            updatedDate,
-
-            orderer_id,
-            category,
-            bidType
-        )
-        WITH ordered AS (
-            SELECT
-                ad.*,
-                ROW_NUMBER() OVER (
-                    PARTITION BY ad.announcement_id
-                    ORDER BY ad.document_id
-                ) AS rn
-            FROM `{self.project_id}.{self.dataset_name}.{bid_announcements_documents_tablename}` ad
-        )
-        SELECT
-            o.announcement_id,
-            MAX(CASE WHEN o.rn = 1 THEN o.title END) AS workName,
-
-            MAX(CASE WHEN o.rn = 1 THEN o.topAgencyName END) AS topAgencyName,
-
-            MAX(CASE WHEN o.rn = 1 THEN o.workplace END) AS workPlace,
-            MAX(CASE WHEN o.rn = 1 THEN o.zipcode END) AS zipcode,
-            MAX(CASE WHEN o.rn = 1 THEN o.address END) AS address,
-            MAX(CASE WHEN o.rn = 1 THEN o.department END) AS department,
-            MAX(CASE WHEN o.rn = 1 THEN o.assigneename END) AS assigneeName,
-            MAX(CASE WHEN o.rn = 1 THEN o.telephone END) AS telephone,
-            MAX(CASE WHEN o.rn = 1 THEN o.fax END) AS fax,
-            MAX(CASE WHEN o.rn = 1 THEN o.mail END) AS mail,
-            MAX(CASE WHEN o.rn = 1 THEN o.publishdate END) AS publishDate,
-            MAX(CASE WHEN o.rn = 1 THEN o.docdiststart END) AS docDistStart,
-            MAX(CASE WHEN o.rn = 1 THEN o.docdistend END) AS docDistEnd,
-            MAX(CASE WHEN o.rn = 1 THEN o.submissionstart END) AS submissionStart,
-            MAX(CASE WHEN o.rn = 1 THEN o.submissionend END) AS submissionEnd,
-            MAX(CASE WHEN o.rn = 1 THEN o.bidstartdate END) AS bidStartDate,
-            MAX(CASE WHEN o.rn = 1 THEN o.bidenddate END) AS bidEndDate,
-
-            MAX(CASE WHEN o.rn = 1 THEN o.done END) AS doneOCR,
-            FORMAT_TIMESTAMP('%Y-%m-%d %H:%M:%S', CURRENT_TIMESTAMP()) AS createdDate,
-            FORMAT_TIMESTAMP('%Y-%m-%d %H:%M:%S', CURRENT_TIMESTAMP()) AS updatedDate,
-
-            MAX(CASE WHEN o.rn = 1 THEN o.orderer_id END) AS orderer_id,
-            MAX(CASE WHEN o.rn = 1 THEN o.category END) AS category,
-            MAX(CASE WHEN o.rn = 1 THEN o.bidType END) AS bidType
-        FROM ordered o
-        WHERE NOT EXISTS (
-            SELECT 1
-            FROM `{self.project_id}.{self.dataset_name}.{bid_announcements_tablename}` b
-            WHERE b.announcement_no = o.announcement_id
-        )
-        GROUP BY o.announcement_id
-        """        
         self.client.query(sql).result()
 
 
@@ -2255,56 +2246,6 @@ class DBOperatorSQLITE3(DBOperator):
         """
         self.cur.execute(sql)
 
-
-    def transferAnnouncementsV2(self, bid_announcements_tablename, bid_announcements_documents_tablename):
-        sql = fr"""
-        WITH ordered AS (
-            SELECT
-                ad.*,
-                ROW_NUMBER() OVER (
-                    PARTITION BY ad.announcement_id
-                    ORDER BY ad.document_id
-                ) AS rn
-            FROM {bid_announcements_documents_tablename} ad
-        )
-        INSERT INTO {bid_announcements_tablename} (
-            announcement_no,
-            workName,
-
-            topAgencyName,
-
-            doneOCR,
-            createdDate,
-            updatedDate,
-
-            orderer_id,
-            category,
-            bidType
-        )
-        SELECT
-            o.announcement_id,
-            MAX(CASE WHEN o.rn = 1 THEN o.title END) AS workName,
-
-            MAX(CASE WHEN o.rn = 1 THEN o.topAgencyName END) AS topAgencyName,
-
-            0 AS doneOCR,
-            CURRENT_TIMESTAMP,
-            CURRENT_TIMESTAMP,
-
-            MAX(CASE WHEN o.rn = 1 THEN o.orderer_id END) AS orderer_id,
-            MAX(CASE WHEN o.rn = 1 THEN o.category END) AS category,
-            MAX(CASE WHEN o.rn = 1 THEN o.bidType END) AS bidType
-        FROM ordered o
-        WHERE NOT EXISTS (
-            SELECT 1
-            FROM {bid_announcements_tablename} b
-            WHERE b.announcement_no = o.announcement_id
-        )
-        GROUP BY o.announcement_id
-        """
-        self.cur.execute(sql)
-
-
     def updateAnnouncements(self, bid_announcements_tablename, bid_announcements_tablename_for_update):
         sql = fr"""insert into {bid_announcements_tablename} (
             announcement_no,
@@ -2805,6 +2746,746 @@ class DBOperatorSQLITE3(DBOperator):
     def selectUnprocessedAnnouncementDocuments(self, announcements_document_tablename, requirements_tablename, requirements_exists):
         """
         SQLite3 で未処理の announcement-document ペアを取得する
+
+        Args:
+            announcements_document_tablename: announcements_document_table のテーブル名
+            requirements_tablename: requirements テーブル名
+            requirements_exists: requirements テーブルが存在するか（True/False）
+
+        Returns:
+            DataFrame: announcement_no, document_id の列を持つ DataFrame
+        """
+        if requirements_exists:
+            # 既存の announcement_no を除外
+            query = f"""
+            SELECT ad.announcement_id AS announcement_no, ad.document_id
+            FROM {announcements_document_tablename} AS ad
+            LEFT JOIN (
+                SELECT DISTINCT announcement_no
+                FROM {requirements_tablename}
+            ) AS r ON ad.announcement_id = r.announcement_no
+            WHERE r.announcement_no IS NULL
+            ORDER BY ad.announcement_id, ad.document_id
+            """
+        else:
+            # 全ての announcement-document ペアを取得
+            query = f"""
+            SELECT announcement_id AS announcement_no, document_id
+            FROM {announcements_document_tablename}
+            ORDER BY announcement_id, document_id
+            """
+
+        return self.any_query(query)
+
+    def createBackendAnnouncements(self, tablename):
+        raise NotImplementedError
+
+    def createBackendEvaluations(self, tablename):
+        raise NotImplementedError
+
+    def createBackendCompanies(self, tablename):
+        raise NotImplementedError
+
+    def createBackendOrderers(self, tablename):
+        raise NotImplementedError
+
+    def createBackendPartners(self, tablename):
+        raise NotImplementedError
+
+
+class DBOperatorPOSTGRES(DBOperator):
+    """
+    PostgreSQL を操作するクラス。
+    """
+
+    def __init__(self, *args, **kwargs):
+        """
+        PostgreSQL への接続を初期化する
+        """
+        super().__init__(*args, **kwargs)
+
+        # PostgreSQL への接続を確立
+        try:
+            self.conn = psycopg2.connect(
+                host=self.postgres_host,
+                port=self.postgres_port,
+                database=self.postgres_database,
+                user=self.postgres_user,
+                password=self.postgres_password
+            )
+            self.conn.autocommit = True  # autocommit モード
+            self.cur = self.conn.cursor()
+        except Exception as e:
+            print(fr"    PostgreSQLConnector: {str(e)}")
+
+        # SQLAlchemy エンジンを作成（pandas.to_sql用）
+        try:
+            connection_string = f"postgresql://{self.postgres_user}:{self.postgres_password}@{self.postgres_host}:{self.postgres_port}/{self.postgres_database}"
+            self.engine = create_engine(connection_string)
+        except Exception as e:
+            print(fr"    SQLAlchemy Engine: {str(e)}")
+
+    def any_query(self, sql):
+        df = pd.read_sql_query(sql, self.engine)
+        return df
+
+    def ifTableExists(self, tablename):
+        sql = """
+        SELECT tablename FROM pg_tables
+        WHERE schemaname = 'public'
+        """
+        df = pd.read_sql_query(sql, self.engine)
+        df = df[df["tablename"] == tablename]
+
+        if df.shape[0] == 1:
+            return True
+        return False
+
+    def dropTable(self, tablename):
+        self.cur.execute(fr"DROP TABLE IF EXISTS {tablename}")
+
+    def uploadDataToTable(self, data, tablename, chunksize=1):
+        # SQLAlchemy エンジンを使用して pandas DataFrame を PostgreSQL にアップロード
+        data.to_sql(tablename, self.engine, if_exists="replace", index=False, chunksize=chunksize)
+
+    def selectToTable(self, tablename, where_clause=""):
+        sql = fr"SELECT * FROM {tablename} {where_clause}"
+        ret = pd.read_sql_query(sql, self.engine)
+        return ret
+
+    def createBidAnnouncements(self, bid_announcements_tablename):
+        sql = fr"""
+        CREATE TABLE {bid_announcements_tablename} (
+        announcement_no INTEGER PRIMARY KEY,
+        "workName" TEXT,
+        "userAnnNo" INTEGER,
+        "topAgencyNo" INTEGER,
+        "topAgencyName" TEXT,
+        "subAgencyNo" INTEGER,
+        "subAgencyName" TEXT,
+        "workPlace" TEXT,
+        "pdfUrl" TEXT,
+        zipcode TEXT,
+        address TEXT,
+        department TEXT,
+        "assigneeName" TEXT,
+        telephone TEXT,
+        fax TEXT,
+        mail TEXT,
+        "publishDate" TEXT,
+        "docDistStart" TEXT,
+        "docDistEnd" TEXT,
+        "submissionStart" TEXT,
+        "submissionEnd" TEXT,
+        "bidStartDate" TEXT,
+        "bidEndDate" TEXT,
+        "doneOCR" BOOLEAN,
+        remarks TEXT,
+        "createdDate" TEXT,
+        "updatedDate" TEXT
+        )
+        """
+        self.cur.execute(sql)
+
+    def createBidAnnouncementsV2(self, bid_announcements_tablename):
+        sql = fr"""
+        CREATE TABLE {bid_announcements_tablename} (
+        announcement_no INTEGER PRIMARY KEY,
+        "workName" TEXT,
+        "userAnnNo" INTEGER,
+        "topAgencyNo" INTEGER,
+        "topAgencyName" TEXT,
+        "subAgencyNo" INTEGER,
+        "subAgencyName" TEXT,
+        "workPlace" TEXT,
+
+        zipcode TEXT,
+        address TEXT,
+        department TEXT,
+        "assigneeName" TEXT,
+        telephone TEXT,
+        fax TEXT,
+        mail TEXT,
+
+        "publishDate" TEXT,
+        "docDistStart" TEXT,
+        "docDistEnd" TEXT,
+        "submissionStart" TEXT,
+        "submissionEnd" TEXT,
+        "bidStartDate" TEXT,
+        "bidEndDate" TEXT,
+
+        "doneOCR" BOOLEAN,
+        remarks TEXT,
+        "createdDate" TEXT,
+        "updatedDate" TEXT,
+
+        orderer_id TEXT,
+        category TEXT,
+        "bidType" TEXT,
+        is_ocr_failed BOOLEAN
+        )
+        """
+        self.cur.execute(sql)
+
+
+    def createBidOrderersFromAnnouncements(self, bid_orderer_tablename, bid_announcements_tablename):
+        sql = fr"""
+        CREATE TABLE {bid_orderer_tablename} AS
+        SELECT
+        a.orderer_id,
+        ROW_NUMBER() OVER() AS "no",
+        a.name,
+        a.category,
+        a.address,
+        a.phone,
+        a.fax,
+        a.email,
+        a.departments,
+        a.announcementCount,
+        a.awardCount,
+        a.averageAmount,
+        a.lastAnnouncementDate
+        FROM (
+            SELECT
+            orderer_id,
+            orderer_id AS name,
+            'unknown' AS category,
+            'unknown' AS address,
+            'unknown' AS phone,
+            'unknown' AS fax,
+            'unknown' AS email,
+            'unknown' AS departments,
+            COUNT(*) AS announcementCount,
+            0 AS awardCount,
+            0 AS averageAmount,
+            MIN("updatedDate") AS lastAnnouncementDate
+            FROM {bid_announcements_tablename}
+            GROUP BY
+            orderer_id
+        ) a
+        """
+        self.cur.execute(sql)
+
+
+    def createBidRequirements(self, bid_requirements_tablename):
+        sql = fr"""
+        CREATE TABLE {bid_requirements_tablename} (
+        document_id TEXT,
+        announcement_no INTEGER,
+        requirement_no INTEGER,
+        requirement_type TEXT,
+        requirement_text TEXT,
+        done_judgement BOOLEAN,
+        "createdDate" TEXT,
+        "updatedDate" TEXT,
+        is_ocr_failed BOOLEAN,
+        UNIQUE(requirement_no)
+        )
+        """
+        self.cur.execute(sql)
+
+    def updateAnnouncements(self, bid_announcements_tablename, bid_announcements_tablename_for_update):
+        sql = fr"""INSERT INTO {bid_announcements_tablename} (
+            announcement_no,
+            "workName",
+            "userAnnNo",
+            "topAgencyNo",
+            "topAgencyName",
+            "subAgencyNo",
+            "subAgencyName",
+            "workPlace",
+            zipcode,
+            address,
+            department,
+            "assigneeName",
+            telephone,
+            fax,
+            mail,
+            "publishDate",
+            "docDistStart",
+            "docDistEnd",
+            "submissionStart",
+            "submissionEnd",
+            "bidStartDate",
+            "bidEndDate",
+            "doneOCR",
+            remarks,
+            "createdDate",
+            "updatedDate"
+        )
+        SELECT
+        announcement_no,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        "workPlace",
+        zipcode,
+        address,
+        department,
+        "assigneeName",
+        telephone,
+        fax,
+        mail,
+        "publishDate",
+        "docDistStart",
+        "docDistEnd",
+        "submissionStart",
+        "submissionEnd",
+        "bidStartDate",
+        "bidEndDate",
+        NULL,
+        NULL,
+        NULL,
+        NULL
+        FROM {bid_announcements_tablename_for_update} source WHERE true
+        ON CONFLICT(announcement_no) DO UPDATE SET
+            announcement_no = {bid_announcements_tablename}.announcement_no,
+            "workName" = {bid_announcements_tablename}."workName",
+            "userAnnNo" = {bid_announcements_tablename}."userAnnNo",
+            "topAgencyNo" = {bid_announcements_tablename}."topAgencyNo",
+            "topAgencyName" = {bid_announcements_tablename}."topAgencyName",
+            "subAgencyNo" = {bid_announcements_tablename}."subAgencyNo",
+            "subAgencyName" = {bid_announcements_tablename}."subAgencyName",
+            "workPlace" = EXCLUDED."workPlace",
+            zipcode = EXCLUDED.zipcode,
+            address = EXCLUDED.address,
+            department = EXCLUDED.department,
+            "assigneeName" = EXCLUDED."assigneeName",
+            telephone = EXCLUDED.telephone,
+            fax = EXCLUDED.fax,
+            mail = EXCLUDED.mail,
+            "publishDate" = EXCLUDED."publishDate",
+            "docDistStart" = EXCLUDED."docDistStart",
+            "docDistEnd" = EXCLUDED."docDistEnd",
+            "submissionStart" = EXCLUDED."submissionStart",
+            "submissionEnd" = EXCLUDED."submissionEnd",
+            "bidStartDate" = EXCLUDED."bidStartDate",
+            "bidEndDate" = EXCLUDED."bidEndDate",
+            "doneOCR" = TRUE,
+            remarks = {bid_announcements_tablename}.remarks,
+            "createdDate" = {bid_announcements_tablename}."createdDate",
+            "updatedDate" = {bid_announcements_tablename}."updatedDate"
+        """
+        self.cur.execute(sql)
+
+    def getMaxOfColumn(self, tablename, column_name):
+        sql = fr"SELECT MAX({column_name}) FROM {tablename}"
+        ret = pd.read_sql_query(sql, self.engine)
+        return ret
+
+    def createCompanyBidJudgements(self, company_bid_judgement_tablename):
+        sql = fr"""
+        CREATE TABLE {company_bid_judgement_tablename} (
+            evaluation_no TEXT,
+            announcement_no INTEGER,
+            company_no INTEGER,
+            office_no INTEGER,
+            requirement_ineligibility BOOLEAN,
+            requirement_grade_item BOOLEAN,
+            requirement_location BOOLEAN,
+            requirement_experience BOOLEAN,
+            requirement_technician BOOLEAN,
+            requirement_other BOOLEAN,
+            deficit_requirement_message TEXT,
+            final_status BOOLEAN,
+            message TEXT,
+            remarks TEXT,
+            "createdDate" TEXT,
+            "updatedDate" TEXT,
+            UNIQUE(evaluation_no, announcement_no, company_no, office_no)
+        )
+        """
+        self.cur.execute(sql)
+
+    def createSufficientRequirements(self, sufficient_requirements_tablename):
+        sql = fr"""
+        CREATE TABLE {sufficient_requirements_tablename} (
+            sufficiency_detail_no TEXT,
+            evaluation_no TEXT,
+            announcement_no INTEGER,
+            requirement_no INTEGER,
+            company_no INTEGER,
+            office_no INTEGER,
+            requirement_type TEXT,
+            requirement_description TEXT,
+            "createdDate" TEXT,
+            "updatedDate" TEXT,
+            UNIQUE(sufficiency_detail_no, evaluation_no, announcement_no, requirement_no, company_no, office_no, requirement_type)
+        )
+        """
+        self.cur.execute(sql)
+
+    def createInsufficientRequirements(self, insufficient_requirements_tablename):
+        sql = fr"""
+        CREATE TABLE {insufficient_requirements_tablename} (
+            shortage_detail_no TEXT,
+            evaluation_no TEXT,
+            announcement_no INTEGER,
+            requirement_no INTEGER,
+            company_no INTEGER,
+            office_no INTEGER,
+            requirement_type TEXT,
+            requirement_description TEXT,
+            suggestions_for_improvement TEXT,
+            final_comment TEXT,
+            "createdDate" TEXT,
+            "updatedDate" TEXT,
+            UNIQUE(shortage_detail_no, evaluation_no, announcement_no, requirement_no, company_no, office_no, requirement_type)
+        )
+        """
+        self.cur.execute(sql)
+
+    def preupdateCompanyBidJudgement(self, company_bid_judgement_tablename, office_master_tablename, bid_announcements_tablename):
+        sql = fr"""INSERT INTO {company_bid_judgement_tablename} (
+            evaluation_no,
+            announcement_no,
+            company_no,
+            office_no,
+            requirement_ineligibility,
+            requirement_grade_item,
+            requirement_location,
+            requirement_experience,
+            requirement_technician,
+            requirement_other,
+            deficit_requirement_message,
+            final_status,
+            message,
+            remarks,
+            "createdDate",
+            "updatedDate"
+        )
+        SELECT
+        NULL,
+        a.announcement_no,
+        b.company_no,
+        b.office_no,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL
+        FROM {bid_announcements_tablename} AS a
+        CROSS JOIN
+        {office_master_tablename} AS b
+        WHERE true
+        ON CONFLICT(evaluation_no, announcement_no, company_no, office_no) DO NOTHING
+        """
+        self.cur.execute(sql)
+
+    def preselectCompanyBidJudgement(self, company_bid_judgement_tablename, office_master_tablename, bid_announcements_tablename):
+        sql = fr"""
+        SELECT
+        x.announcement_no,
+        x.company_no,
+        x.office_no
+        FROM
+        (
+            SELECT
+            a.announcement_no,
+            b.company_no,
+            b.office_no
+            FROM {bid_announcements_tablename} AS a
+            CROSS JOIN
+            {office_master_tablename} AS b
+        ) x
+        LEFT OUTER JOIN {company_bid_judgement_tablename} y
+        ON
+        x.announcement_no = y.announcement_no
+        AND x.company_no = y.company_no
+        AND x.office_no = y.office_no
+        WHERE y.announcement_no IS NULL
+        """
+        ret = pd.read_sql_query(sql, self.engine)
+        return ret
+
+    def updateCompanyBidJudgement(self, company_bid_judgement_tablename, company_bid_judgement_tablename_for_update):
+        # preselectCompanyBidJudgementで未判定のみ取得済み、かつUUID使用のため単純INSERTでOK
+        sql = f"""
+        INSERT INTO {company_bid_judgement_tablename} (
+            evaluation_no,
+            announcement_no,
+            company_no,
+            office_no,
+            requirement_ineligibility,
+            requirement_grade_item,
+            requirement_location,
+            requirement_experience,
+            requirement_technician,
+            requirement_other,
+            deficit_requirement_message,
+            final_status,
+            message,
+            remarks,
+            "createdDate",
+            "updatedDate"
+        )
+        SELECT
+            evaluation_no,
+            announcement_no,
+            company_no,
+            office_no,
+            requirement_ineligibility,
+            requirement_grade_item,
+            requirement_location,
+            requirement_experience,
+            requirement_technician,
+            requirement_other,
+            deficit_requirement_message,
+            final_status,
+            message,
+            remarks,
+            "createdDate",
+            "updatedDate"
+        FROM {company_bid_judgement_tablename_for_update}
+        """
+        self.cur.execute(sql)
+
+    def updateSufficientRequirements(self, sufficient_requirements_tablename, sufficient_requirements_tablename_for_update):
+        # UUID使用のため単純INSERTでOK
+        sql = fr"""INSERT INTO {sufficient_requirements_tablename} (
+            sufficiency_detail_no,
+            evaluation_no,
+            announcement_no,
+            requirement_no,
+            company_no,
+            office_no,
+            requirement_type,
+            requirement_description,
+            "createdDate",
+            "updatedDate"
+        )
+        SELECT
+            sufficiency_detail_no,
+            evaluation_no,
+            announcement_no,
+            requirement_no,
+            company_no,
+            office_no,
+            requirement_type,
+            requirement_description,
+            "createdDate",
+            "updatedDate"
+        FROM {sufficient_requirements_tablename_for_update} WHERE true
+        """
+        self.cur.execute(sql)
+
+    def updateInsufficientRequirements(self, insufficient_requirements_tablename, insufficient_requirements_tablename_for_update):
+        # UUID使用のため単純INSERTでOK
+        sql = fr"""INSERT INTO {insufficient_requirements_tablename} (
+            shortage_detail_no,
+            evaluation_no,
+            announcement_no,
+            requirement_no,
+            company_no,
+            office_no,
+            requirement_type,
+            requirement_description,
+            suggestions_for_improvement,
+            final_comment,
+            "createdDate",
+            "updatedDate"
+        )
+        SELECT
+            shortage_detail_no,
+            evaluation_no,
+            announcement_no,
+            requirement_no,
+            company_no,
+            office_no,
+            requirement_type,
+            requirement_description,
+            suggestions_for_improvement,
+            final_comment,
+            "createdDate",
+            "updatedDate"
+        FROM {insufficient_requirements_tablename_for_update} WHERE true
+        """
+        self.cur.execute(sql)
+
+    def mergeAnnouncementsDocumentTable(self, target_tablename, source_tablename, columns):
+        """
+        PostgreSQL で announcements_document_table に新しいレコードを挿入
+
+        document_id で重複チェックを行い、重複しないレコードのみをターゲットテーブルに挿入する。
+
+        Args:
+            target_tablename: マージ先のテーブル名
+            source_tablename: マージ元のテーブル名（一時テーブル）
+            columns: 挿入する列のリスト
+
+        Returns:
+            int: 挿入された行数
+        """
+        # 列名を引用符で囲んでカンマ区切りで結合（PostgreSQL の CamelCase 対策）
+        quoted_columns = [f'"{col}"' if any(c.isupper() for c in col) else col for col in columns]
+        columns_str = ", ".join(quoted_columns)
+
+        # INSERT ... SELECT ... WHERE NOT EXISTS を使用して重複を避ける（document_id のみで重複チェック）
+        sql = f"""
+        INSERT INTO {target_tablename} ({columns_str})
+        SELECT {columns_str}
+        FROM {source_tablename} AS S
+        WHERE NOT EXISTS (
+            SELECT 1
+            FROM {target_tablename} AS T
+            WHERE T.document_id = S.document_id
+        )
+        """
+
+        self.cur.execute(sql)
+        # PostgreSQL では affected rows を取得
+        return self.cur.rowcount
+
+    def mergeRequirements(self, target_tablename, source_tablename):
+        """
+        PostgreSQL で bid_requirements に新しいレコードを挿入
+
+        announcement_no で重複チェックを行い、重複しないレコードのみをターゲットテーブルに挿入する。
+
+        Args:
+            target_tablename: マージ先のテーブル名
+            source_tablename: マージ元のテーブル名（一時テーブル）
+
+        Returns:
+            int: 挿入された行数
+        """
+        sql = f"""
+        INSERT INTO {target_tablename} (document_id, announcement_no, requirement_no,
+                                         requirement_type, requirement_text, is_ocr_failed, done_judgement, "createdDate", "updatedDate")
+        SELECT document_id, announcement_no, requirement_no,
+               requirement_type, requirement_text, is_ocr_failed, done_judgement, "createdDate", "updatedDate"
+        FROM {source_tablename} AS S
+        WHERE NOT EXISTS (
+            SELECT 1
+            FROM {target_tablename} AS T
+            WHERE T.announcement_no = S.announcement_no
+        )
+        """
+
+        self.cur.execute(sql)
+        return self.cur.rowcount
+
+    def mergeBidAnnouncements(self, target_tablename, source_tablename):
+        """
+        PostgreSQL で bid_announcements に新しいレコードを挿入
+
+        announcement_no で重複チェックを行い、重複しないレコードのみをターゲットテーブルに挿入する。
+
+        Args:
+            target_tablename: マージ先のテーブル名
+            source_tablename: マージ元のテーブル名（一時テーブル）
+
+        Returns:
+            int: 挿入された行数
+        """
+        sql = f"""
+        INSERT INTO {target_tablename} (
+            announcement_no, "workName", "topAgencyName", orderer_id,
+            "workPlace", zipcode, address, department, "assigneeName",
+            telephone, fax, mail, "publishDate", "docDistStart", "docDistEnd",
+            "submissionStart", "submissionEnd", "bidStartDate", "bidEndDate",
+            "bidType", category, is_ocr_failed, "doneOCR", "createdDate", "updatedDate"
+        )
+        SELECT
+            announcement_no, "workName", "topAgencyName", orderer_id,
+            "workPlace", zipcode, address, department, "assigneeName",
+            telephone, fax, mail, "publishDate", "docDistStart", "docDistEnd",
+            "submissionStart", "submissionEnd", "bidStartDate", "bidEndDate",
+            "bidType", category, is_ocr_failed, "doneOCR", "createdDate", "updatedDate"
+        FROM {source_tablename} AS S
+        WHERE NOT EXISTS (
+            SELECT 1
+            FROM {target_tablename} AS T
+            WHERE T.announcement_no = S.announcement_no
+        )
+        """
+
+        self.cur.execute(sql)
+        return self.cur.rowcount
+
+    def checkRequirementsExist(self, tmp_check_table, requirements_table):
+        """
+        PostgreSQL で一時テーブルの announcement_id について requirements の存在をチェック
+
+        Args:
+            tmp_check_table: チェック対象の announcement_id を含む一時テーブル
+            requirements_table: チェック先の requirements テーブル
+
+        Returns:
+            DataFrame: announcement_id と req_exists (bool) の列を持つ DataFrame
+        """
+        query = f"""
+        SELECT
+            t.announcement_id,
+            CASE WHEN r.announcement_no IS NOT NULL THEN 1 ELSE 0 END AS req_exists
+        FROM {tmp_check_table} t
+        LEFT JOIN (
+            SELECT DISTINCT announcement_no
+            FROM {requirements_table}
+        ) r ON t.announcement_id = r.announcement_no
+        """
+        return pd.read_sql_query(query, self.engine)
+
+    def getDistinctDocumentIds(self, tablename):
+        """
+        PostgreSQL でテーブルから DISTINCT な document_id を取得
+
+        Args:
+            tablename: テーブル名
+
+        Returns:
+            DataFrame: document_id 列を持つ DataFrame
+        """
+        query = f"""
+        SELECT DISTINCT document_id
+        FROM {tablename}
+        """
+        return pd.read_sql_query(query, self.engine)
+
+    def build_new_documents_query(self, tmp_table, existing_table):
+        """
+        DBOperatorPOSTGRES: 一時テーブルと既存テーブルを document_id で比較し、新規レコードを取得するクエリを生成
+        """
+        query = f"""
+        SELECT n.*
+        FROM {tmp_table} n
+        LEFT JOIN {existing_table} e ON n.document_id = e.document_id
+        WHERE e.document_id IS NULL
+        """
+        return query
+
+    def build_max_announcement_id_query(self, existing_table, divisor):
+        """
+        DBOperatorPOSTGRES: 既存テーブルからグループごとの最大 announcement_id を取得するクエリを生成
+        """
+        query = f"""
+        SELECT
+          announcement_group,
+          MAX(announcement_id) AS max_id
+        FROM (
+          SELECT
+            announcement_id,
+            CAST(FLOOR(announcement_id / {divisor}) AS INTEGER) AS announcement_group
+          FROM {existing_table}
+        ) subquery
+        GROUP BY announcement_group
+        """
+        return query
+
+    def selectUnprocessedAnnouncementDocuments(self, announcements_document_tablename, requirements_tablename, requirements_exists):
+        """
+        PostgreSQL で未処理の announcement-document ペアを取得する
 
         Args:
             announcements_document_tablename: announcements_document_table のテーブル名
@@ -4322,7 +5003,7 @@ class BidJudgementSan:
         tablename_requirements = self.tablenamesconfig.bid_requirements
         tmp_check_table = "tmp_req_check"
 
-        df_check = pd.DataFrame({'announcement_id': df_main['announcement_id'].unique()})
+        df_check = pd.DataFrame({'announcement_id': df_main['announcement_id'].unique().astype(int)})
         self.db_operator.uploadDataToTable(df_check, tmp_check_table, chunksize=5000)
 
         if self.db_operator.ifTableExists(tablename_requirements):
@@ -5107,13 +5788,6 @@ Execute
         #     print(fr"NEWLY CREATED: {tablename_announcements}.")
         # else:
         #     print(fr"ALREADY EXISTS: {tablename_announcements}.")
-        #
-        # announcements_document_table から announcements への転記処理
-        # db_operator.transferAnnouncementsV2(
-        #     bid_announcements_tablename=tablename_announcements,
-        #     bid_announcements_documents_tablename=tablename_bid_announcements_document_table
-        # )
-
 
     def _classify_requirement_type(self, text):
         """
@@ -5431,6 +6105,7 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description="")
     parser.add_argument("--use_gcp_vm", action="store_true")
+    parser.add_argument("--use_postgres", action="store_true")
     parser.add_argument("--stop_processing", action="store_true")
 
     parser.add_argument("--sqlite3_db_file_path", default=None)
@@ -5438,6 +6113,12 @@ if __name__ == "__main__":
     parser.add_argument("--bigquery_location", default=None)
     parser.add_argument("--bigquery_project_id", default=None)
     parser.add_argument("--bigquery_dataset_name", default=None)
+
+    parser.add_argument("--postgres_host", default=None)
+    parser.add_argument("--postgres_port", default=5432, type=int)
+    parser.add_argument("--postgres_database", default=None)
+    parser.add_argument("--postgres_user", default=None)
+    parser.add_argument("--postgres_password", default=None)
 
     # Step0 関連の引数
     parser.add_argument("--input_list_file", default=None,
@@ -5481,12 +6162,19 @@ if __name__ == "__main__":
     try:
         args = parser.parse_args()
         use_gcp_vm = args.use_gcp_vm
+        use_postgres = args.use_postgres
         stop_processing = args.stop_processing
         sqlite3_db_file_path = args.sqlite3_db_file_path
 
         bigquery_location = args.bigquery_location
         bigquery_project_id = args.bigquery_project_id
         bigquery_dataset_name = args.bigquery_dataset_name
+
+        postgres_host = args.postgres_host
+        postgres_port = args.postgres_port
+        postgres_database = args.postgres_database
+        postgres_user = args.postgres_user
+        postgres_password = args.postgres_password
 
         # Step0 関連の引数
         input_list_file = args.input_list_file
@@ -5511,7 +6199,14 @@ if __name__ == "__main__":
         step3_remove_table = args.step3_remove_table
     except:
         use_bigquery = False
+        use_postgres = False
         stop_processing = True
+
+        postgres_host = None
+        postgres_port = 5432
+        postgres_database = None
+        postgres_user = None
+        postgres_password = None
 
         input_list_file = None
         run_step0_prepare_documents = False
@@ -5536,6 +6231,14 @@ if __name__ == "__main__":
             bigquery_location=bigquery_location,
             bigquery_project_id=bigquery_project_id,
             bigquery_dataset_name=bigquery_dataset_name
+        )
+    elif use_postgres:
+        db_operator = DBOperatorPOSTGRES(
+            postgres_host=postgres_host,
+            postgres_port=postgres_port,
+            postgres_database=postgres_database,
+            postgres_user=postgres_user,
+            postgres_password=postgres_password
         )
     else:
         db_operator = DBOperatorSQLITE3(
