@@ -37,7 +37,7 @@ export class EvaluationController {
       console.log(`Response: ${result.data.length} rows, total: ${result.total}, page: ${result.page}`);
 
       res.setHeader("Content-Type", "application/json");
-      res.setHeader("Cache-Control", "public, max-age=1800");
+      res.setHeader("Cache-Control", "no-cache");
       res.status(200).json(result);
     } catch (error) {
       console.error(`ERROR in GET /api/evaluations:`, error);
@@ -67,7 +67,7 @@ export class EvaluationController {
       }
 
       res.setHeader("Content-Type", "application/json");
-      res.setHeader("Cache-Control", "public, max-age=1800");
+      res.setHeader("Cache-Control", "no-cache");
       res.status(200).json(evaluation);
     } catch (error) {
       console.error(`ERROR in GET /api/evaluations/${id}:`, error);

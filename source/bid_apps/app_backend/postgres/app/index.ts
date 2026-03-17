@@ -35,7 +35,7 @@ const createTableHandler = (tableName: TableName) => {
 
       // Set headers
       res.setHeader("Content-Type", "application/json");
-      res.setHeader("Cache-Control", "public, max-age=1800");
+      res.setHeader("Cache-Control", "no-cache");
 
       // Start JSON array
       res.write("[");
