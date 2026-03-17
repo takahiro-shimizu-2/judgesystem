@@ -44,4 +44,11 @@ export class EvaluationService {
 
     return await this.repository.updateWorkStatus(evaluationNo, workStatus);
   }
+
+  /**
+   * Get statistics for analytics dashboard
+   */
+  async getStats(): Promise<any> {
+    return await this.repository.getStats();
+  }
 }

@@ -121,6 +121,64 @@ export class EvaluationRepository {
   }
 
   /**
+   * Get statistics for analytics dashboard
+   */
+  async getStats(): Promise<any> {
+    const client = await pool.connect();
+    try {
+      const qualifiedTableName = `${schemaPrefix}${TABLES.evaluations}`;
+
+      const result = await client.query(`
+        SELECT
+          COUNT(*) AS total,
+          COUNT(*) FILTER (WHERE status = 'all_met') AS "allMet",
+          COUNT(*) FILTER (WHERE status = 'other_only_unmet') AS "otherUnmet",
+          COUNT(*) FILTER (WHERE status = 'unmet') AS "unmet",
+
+          -- 発注機関別集計（上位5件）
+          (
+            SELECT jsonb_agg(org_stats ORDER BY count DESC)
+            FROM (
+              SELECT
+                SPLIT_PART(announcement->>'organization', ' ', 1) AS organization,
+                COUNT(*) AS count
+              FROM ${qualifiedTableName}
+              GROUP BY SPLIT_PART(announcement->>'organization', ' ', 1)
+              ORDER BY COUNT(*) DESC
+              LIMIT 5
+            ) org_stats
+          ) AS "topOrganizations",
+
+          -- 発注機関数
+          (
+            SELECT COUNT(DISTINCT SPLIT_PART(announcement->>'organization', ' ', 1))
+            FROM ${qualifiedTableName}
+          ) AS "organizationCount",
+
+          -- カテゴリ別集計（上位5件）
+          (
+            SELECT jsonb_agg(cat_stats ORDER BY count DESC)
+            FROM (
+              SELECT
+                announcement->>'category' AS category,
+                COUNT(*) AS count
+              FROM ${qualifiedTableName}
+              GROUP BY announcement->>'category'
+              ORDER BY COUNT(*) DESC
+              LIMIT 5
+            ) cat_stats
+          ) AS "topCategories"
+
+        FROM ${qualifiedTableName}
+      `);
+
+      return result.rows[0];
+    } finally {
+      client.release();
+    }
+  }
+
+  /**
    * Build WHERE clause from filters
    */
   private buildWhereClause(filters: FilterParams): {

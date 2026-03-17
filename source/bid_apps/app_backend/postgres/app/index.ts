@@ -5,6 +5,7 @@ import { PoolClient } from "pg";
 import QueryStream from "pg-query-stream";
 import { pool, TABLES, TableName, schemaPrefix } from "./src/config/database";
 import { EvaluationController, AnnouncementController } from "./src/controllers";
+import { PartnerController } from "./src/controllers/partnerController";
 
 const app = express();
 
@@ -99,8 +100,10 @@ app.get("/", (req, res) => {
 // Initialize controllers
 const evaluationController = new EvaluationController();
 const announcementController = new AnnouncementController();
+const partnerController = new PartnerController();
 
 // Evaluation routes
+app.get("/api/evaluations/stats", evaluationController.getStats);
 app.get("/api/evaluations", evaluationController.getList);
 app.get("/api/evaluations/:id", evaluationController.getById);
 app.patch("/api/evaluations/:evaluationNo", evaluationController.updateWorkStatus);
@@ -109,10 +112,13 @@ app.patch("/api/evaluations/:evaluationNo", evaluationController.updateWorkStatu
 app.get("/api/announcements", announcementController.getList);
 app.get("/api/announcements/:announcementNo", announcementController.getByNo);
 
+// Partner routes
+app.get("/api/partners", partnerController.getList);
+app.get("/api/partners/:id", partnerController.getById);
+
 // Other table routes (using streaming handler)
 app.get("/api/companies", createTableHandler(TABLES.companies));
 app.get("/api/orderers", createTableHandler(TABLES.orderers));
-app.get("/api/partners", createTableHandler(TABLES.partners));
 
 // Cloud Run は PORT 環境変数を使う
 const port = process.env.PORT || 8080;

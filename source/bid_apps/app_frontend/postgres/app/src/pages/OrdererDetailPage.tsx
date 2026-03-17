@@ -28,7 +28,7 @@ import {
   FilterAlt as FilterIcon,
   Close as CloseIcon,
 } from '@mui/icons-material';
-import { mockOrderers, ordererCategoryConfig, mockAnnouncements, announcementStatusConfig, bidTypeConfig } from '../data';
+import { mockOrderers, ordererCategoryConfig, announcementStatusConfig, bidTypeConfig } from '../data';
 import { categories } from '../constants/categories';
 import { bidTypes } from '../constants/bidType';
 import { prefecturesByRegion } from '../constants/prefectures';
@@ -775,11 +775,31 @@ export default function OrdererDetailPage() {
 
   const orderer = mockOrderers.find((o) => o.id === id);
 
-  // この発注者の案件をフィルタリング
-  const ordererAnnouncements = useMemo(
-    () => mockAnnouncements.filter((a) => a.ordererId === id),
-    [id]
-  );
+  // この発注者の案件をAPIから取得
+  const [ordererAnnouncements, setOrdererAnnouncements] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchAnnouncements = async () => {
+      if (!id) return;
+      try {
+        setLoading(true);
+        const response = await fetch(`https://bidapp-backend-postgres-50843898931.asia-northeast1.run.app/api/announcements?ordererId=${id}&pageSize=1000`);
+        if (!response.ok) {
+          throw new Error(`Failed to fetch announcements: ${response.status}`);
+        }
+        const result = await response.json();
+        setOrdererAnnouncements(result.data || []);
+      } catch (err) {
+        console.error('Error fetching announcements:', err);
+        setOrdererAnnouncements([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchAnnouncements();
+  }, [id]);
 
   const {
     searchQuery,
@@ -1037,7 +1057,13 @@ export default function OrdererDetailPage() {
               <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
                 {/* カードグリッド */}
                 <Box sx={{ flex: 1, overflow: 'auto', p: 2, backgroundColor: colors.background.hover }}>
-                  {announcementRows.length === 0 ? (
+                  {loading ? (
+                    <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
+                      <Typography sx={{ fontSize: fontSizes.md, color: colors.text.light }}>
+                        読み込み中...
+                      </Typography>
+                    </Box>
+                  ) : announcementRows.length === 0 ? (
                     <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
                       <Typography sx={{ fontSize: fontSizes.md, color: colors.text.light }}>
                         案件が見つかりません

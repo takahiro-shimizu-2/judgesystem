@@ -47,6 +47,9 @@ sed -i 's|https://[^/]*/api/|/api/|g' app/src/hooks/useBidListState.ts
 sed -i 's|https://[^/]*/api/|/api/|g' app/src/hooks/useAnnouncementListState.ts
 sed -i 's|https://[^/]*/api/|/api/|g' app/src/pages/BidDetailPage.tsx
 sed -i 's|https://[^/]*/api/|/api/|g' app/src/pages/AnnouncementDetailPage.tsx
+sed -i 's|https://[^/]*/api/|/api/|g' app/src/pages/AnalyticsPage.tsx
+sed -i 's|https://[^/]*/api/|/api/|g' app/src/pages/PartnerDetailPage.tsx
+sed -i 's|https://[^/]*/api/|/api/|g' app/src/pages/OrdererDetailPage.tsx
 
 # Step 2: /api/ を $URL/api/ に置換
 sed -i "s|/api/announcements|$URL/api/announcements|g" app/src/data/announcements.ts
@@ -58,6 +61,9 @@ sed -i "s|/api/evaluations|$URL/api/evaluations|g"     app/src/hooks/useBidListS
 sed -i "s|/api/announcements|$URL/api/announcements|g" app/src/hooks/useAnnouncementListState.ts
 sed -i "s|/api/evaluations|$URL/api/evaluations|g"     app/src/pages/BidDetailPage.tsx
 sed -i "s|/api/announcements|$URL/api/announcements|g" app/src/pages/AnnouncementDetailPage.tsx
+sed -i "s|/api/evaluations|$URL/api/evaluations|g"     app/src/pages/AnalyticsPage.tsx
+sed -i "s|/api/partners|$URL/api/partners|g"           app/src/pages/PartnerDetailPage.tsx
+sed -i "s|/api/announcements|$URL/api/announcements|g" app/src/pages/OrdererDetailPage.tsx
 
 echo "Replaced API URLs with: $URL"
 

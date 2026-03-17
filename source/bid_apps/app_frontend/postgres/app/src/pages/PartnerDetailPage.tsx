@@ -34,7 +34,7 @@ import {
   FilterAlt as FilterIcon,
   Close as CloseIcon,
 } from '@mui/icons-material';
-import { mockPartners, bidTypeConfig } from '../data';
+import { bidTypeConfig } from '../data';
 import { colors, pageStyles, fontSizes, chipStyles, iconStyles, borderRadius, rightPanelColors } from '../constants/styles';
 import { workStatusConfig } from '../constants/workStatus';
 import { evaluationStatusConfig } from '../constants/status';
@@ -914,6 +914,11 @@ export default function PartnerDetailPage() {
   const { rightPanelOpen, toggleRightPanel, closeRightPanel, isMobile } = useSidebar();
   const [conditionTab, setConditionTab] = useState<'sort' | 'filter'>('sort');
 
+  // APIからデータ取得
+  const [partner, setPartner] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
   // 詳細ページのパスを保存（一覧に戻った時のページ復元用）
   useEffect(() => {
     try {
@@ -921,7 +926,27 @@ export default function PartnerDetailPage() {
     } catch { /* ignore */ }
   }, [location.pathname]);
 
-  const partner = mockPartners.find((p) => p.id === id);
+  // パートナー情報をAPIから取得
+  useEffect(() => {
+    const fetchPartner = async () => {
+      if (!id) return;
+      setLoading(true);
+      setError(null);
+      try {
+        const response = await fetch(`https://bidapp-backend-postgres-50843898931.asia-northeast1.run.app/api/partners/${id}`);
+        if (!response.ok) {
+          throw new Error(`Failed to fetch partner: ${response.status}`);
+        }
+        const data = await response.json();
+        setPartner(data);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : String(err));
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchPartner();
+  }, [id]);
 
   // 対応案件のページネーション・検索状態
   const [projectSearchQuery, setProjectSearchQuery] = useState('');
@@ -951,13 +976,15 @@ export default function PartnerDetailPage() {
   // 対応案件のフィルタリング
   const filteredProjects = useMemo((): PastProject[] => {
     if (!partner) return [];
+    const pastProjects = partner.pastProjects || [];
+    if (!Array.isArray(pastProjects)) return [];
 
     // 検索フィルター
-    let filtered = partner.pastProjects;
+    let filtered = pastProjects;
     if (projectSearchQuery) {
       const query = projectSearchQuery.toLowerCase();
       filtered = filtered.filter(
-        (p) =>
+        (p: PastProject) =>
           p.announcementTitle.toLowerCase().includes(query) ||
           p.category.toLowerCase().includes(query) ||
           p.prefecture.toLowerCase().includes(query) ||
@@ -966,7 +993,7 @@ export default function PartnerDetailPage() {
     }
 
     // フィルター適用
-    filtered = filtered.filter((p) => {
+    filtered = filtered.filter((p: PastProject) => {
       if (filters.workStatuses.length > 0 && !filters.workStatuses.includes(p.workStatus)) return false;
       if (filters.evaluationStatuses.length > 0 && !filters.evaluationStatuses.includes(p.evaluationStatus)) return false;
       if (filters.priorities.length > 0 && !filters.priorities.includes(p.priority)) return false;
@@ -987,13 +1014,13 @@ export default function PartnerDetailPage() {
         case 'deadline_desc':
           return new Date(b.deadline).getTime() - new Date(a.deadline).getTime();
         case 'evaluationStatus_asc':
-          return EVALUATION_STATUS_ORDER[a.evaluationStatus] - EVALUATION_STATUS_ORDER[b.evaluationStatus];
+          return EVALUATION_STATUS_ORDER[a.evaluationStatus as EvaluationStatus] - EVALUATION_STATUS_ORDER[b.evaluationStatus as EvaluationStatus];
         case 'evaluationStatus_desc':
-          return EVALUATION_STATUS_ORDER[b.evaluationStatus] - EVALUATION_STATUS_ORDER[a.evaluationStatus];
+          return EVALUATION_STATUS_ORDER[b.evaluationStatus as EvaluationStatus] - EVALUATION_STATUS_ORDER[a.evaluationStatus as EvaluationStatus];
         case 'workStatus_asc':
-          return WORK_STATUS_ORDER[a.workStatus] - WORK_STATUS_ORDER[b.workStatus];
+          return WORK_STATUS_ORDER[a.workStatus as WorkStatus] - WORK_STATUS_ORDER[b.workStatus as WorkStatus];
         case 'workStatus_desc':
-          return WORK_STATUS_ORDER[b.workStatus] - WORK_STATUS_ORDER[a.workStatus];
+          return WORK_STATUS_ORDER[b.workStatus as WorkStatus] - WORK_STATUS_ORDER[a.workStatus as WorkStatus];
         case 'priority_asc':
           return a.priority - b.priority;
         case 'priority_desc':
@@ -1024,6 +1051,22 @@ export default function PartnerDetailPage() {
     setProjectPage(0);
   }, []);
 
+  if (loading) {
+    return (
+      <Box sx={{ p: 4, textAlign: 'center' }}>
+        <Typography>読み込み中...</Typography>
+      </Box>
+    );
+  }
+
+  if (error) {
+    return (
+      <Box sx={{ p: 4, textAlign: 'center', color: colors.status.error.main }}>
+        <Typography>{error}</Typography>
+      </Box>
+    );
+  }
+
   if (!partner) {
     return (
       <NotFoundView
@@ -1033,6 +1076,15 @@ export default function PartnerDetailPage() {
       />
     );
   }
+
+  // データ構造の保証（デフォルト値設定）
+  const safePartner = {
+    ...partner,
+    branches: partner.branches || [],
+    categories: partner.categories || [],
+    pastProjects: partner.pastProjects || [],
+    qualifications: partner.qualifications || { unified: [], orderers: [] },
+  };
 
   return (
     <Box sx={{ height: '100vh', bgcolor: colors.page.background, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
@@ -1060,18 +1112,18 @@ export default function PartnerDetailPage() {
               </Button>
             </Box>
             <Typography sx={pageStyles.detailPageTitle}>
-              {partner.name}
+              {safePartner.name}
             </Typography>
           </Box>
           <Box sx={{ textAlign: 'right', flexShrink: 0, ml: 3, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
             <Typography sx={{ fontSize: fontSizes.md, color: colors.text.light }}>
-              No. {String(partner.no).padStart(8, '0')}
+              No. {String(safePartner.no).padStart(8, '0')}
             </Typography>
             <Typography sx={{ fontSize: fontSizes.xl, fontWeight: 700, color: colors.accent.blue }}>
               <Typography component="span" sx={{ fontSize: fontSizes.sm, fontWeight: 500, color: colors.text.muted }}>
                 対応案件実績{" "}
               </Typography>
-              {partner.pastProjects.length}件
+              {safePartner.pastProjects.length}件
             </Typography>
           </Box>
         </Box>
@@ -1091,7 +1143,7 @@ export default function PartnerDetailPage() {
                 }}
               >
                 <Tab label="基本情報" />
-                <Tab label={`対応案件 (${partner.pastProjects.length})`} />
+                <Tab label={`対応案件 (${safePartner.pastProjects.length})`} />
               </Tabs>
             </Box>
 
@@ -1109,26 +1161,26 @@ export default function PartnerDetailPage() {
                         <Typography sx={{ fontSize: fontSizes.base, fontWeight: 600, color: colors.primary.main }}>会社情報</Typography>
                       </AccordionSummary>
                       <AccordionDetails sx={{ pt: 2, pb: 2, px: 2.5 }}>
-                        <InfoRow label="住所" value={`〒${partner.postalCode} ${partner.address}`} icon={<LocationIcon sx={{ ...iconStyles.small, color: colors.text.light }} />} />
-                        <InfoRow label="電話番号" value={partner.phone} icon={<PhoneIcon sx={{ ...iconStyles.small, color: colors.text.light }} />} />
-                        <InfoRow label="FAX" value={partner.fax} icon={<FaxIcon sx={{ ...iconStyles.small, color: colors.text.light }} />} />
-                        <InfoRow label="メール" value={<Link href={`mailto:${partner.email}`} sx={{ color: colors.accent.blue }}>{partner.email}</Link>} icon={<EmailIcon sx={{ ...iconStyles.small, color: colors.text.light }} />} />
-                        {partner.url && <InfoRow label="HP" value={<Link href={partner.url} target="_blank" rel="noopener noreferrer" sx={{ color: colors.accent.blue }}>{partner.url}</Link>} icon={<LanguageIcon sx={{ ...iconStyles.small, color: colors.text.light }} />} />}
-                        <InfoRow label="代表者" value={partner.representative} icon={<PersonIcon sx={{ ...iconStyles.small, color: colors.text.light }} />} />
-                        <InfoRow label="設立" value={`${partner.established}年`} icon={<CalendarIcon sx={{ ...iconStyles.small, color: colors.text.light }} />} />
-                        <InfoRow label="資本金" value={`${(partner.capital / 100000000).toLocaleString()}億円`} icon={<AccountBalanceIcon sx={{ ...iconStyles.small, color: colors.text.light }} />} />
-                        <InfoRow label="従業員数" value={`${partner.employeeCount.toLocaleString()}名`} icon={<PeopleIcon sx={{ ...iconStyles.small, color: colors.text.light }} />} />
+                        <InfoRow label="住所" value={`〒${safePartner.postalCode} ${safePartner.address}`} icon={<LocationIcon sx={{ ...iconStyles.small, color: colors.text.light }} />} />
+                        <InfoRow label="電話番号" value={safePartner.phone} icon={<PhoneIcon sx={{ ...iconStyles.small, color: colors.text.light }} />} />
+                        <InfoRow label="FAX" value={safePartner.fax} icon={<FaxIcon sx={{ ...iconStyles.small, color: colors.text.light }} />} />
+                        <InfoRow label="メール" value={<Link href={`mailto:${safePartner.email}`} sx={{ color: colors.accent.blue }}>{safePartner.email}</Link>} icon={<EmailIcon sx={{ ...iconStyles.small, color: colors.text.light }} />} />
+                        {safePartner.url && <InfoRow label="HP" value={<Link href={safePartner.url} target="_blank" rel="noopener noreferrer" sx={{ color: colors.accent.blue }}>{safePartner.url}</Link>} icon={<LanguageIcon sx={{ ...iconStyles.small, color: colors.text.light }} />} />}
+                        <InfoRow label="代表者" value={safePartner.representative} icon={<PersonIcon sx={{ ...iconStyles.small, color: colors.text.light }} />} />
+                        <InfoRow label="設立" value={`${safePartner.established}年`} icon={<CalendarIcon sx={{ ...iconStyles.small, color: colors.text.light }} />} />
+                        <InfoRow label="資本金" value={`${(safePartner.capital / 100000000).toLocaleString()}億円`} icon={<AccountBalanceIcon sx={{ ...iconStyles.small, color: colors.text.light }} />} />
+                        <InfoRow label="従業員数" value={`${safePartner.employeeCount.toLocaleString()}名`} icon={<PeopleIcon sx={{ ...iconStyles.small, color: colors.text.light }} />} />
                       </AccordionDetails>
                     </Accordion>
 
                     {/* 拠点一覧 */}
                     <Accordion defaultExpanded sx={{ boxShadow: 'none', border: `1px solid ${colors.border.main}`, borderRadius: `${borderRadius.xs} !important`, '&:before': { display: 'none' }, '&.Mui-expanded': { margin: 0 } }}>
                       <AccordionSummary expandIcon={<ExpandMoreIcon />} sx={{ minHeight: 48, borderBottom: `1px solid ${colors.border.main}`, '&.Mui-expanded': { minHeight: 48 } }}>
-                        <Typography sx={{ fontSize: fontSizes.base, fontWeight: 600, color: colors.primary.main }}>拠点一覧 ({partner.branches.length})</Typography>
+                        <Typography sx={{ fontSize: fontSizes.base, fontWeight: 600, color: colors.primary.main }}>拠点一覧 ({safePartner.branches.length})</Typography>
                       </AccordionSummary>
                       <AccordionDetails sx={{ pt: 2, pb: 2, px: 2.5 }}>
-                        {partner.branches.map((branch, index) => (
-                          <Box key={index} sx={{ py: 1.25, borderBottom: index < partner.branches.length - 1 ? `1px solid ${colors.border.light}` : 'none' }}>
+                        {safePartner.branches.map((branch: any, index: number) => (
+                          <Box key={index} sx={{ py: 1.25, borderBottom: index < safePartner.branches.length - 1 ? `1px solid ${colors.border.light}` : 'none' }}>
                             <Typography sx={{ fontWeight: 600, fontSize: fontSizes.md, color: colors.text.secondary }}>{branch.name}</Typography>
                             <Typography sx={{ fontSize: fontSizes.md, color: colors.text.muted }}>{branch.address}</Typography>
                           </Box>
@@ -1139,11 +1191,11 @@ export default function PartnerDetailPage() {
                     {/* カテゴリ */}
                     <Accordion defaultExpanded sx={{ boxShadow: 'none', border: `1px solid ${colors.border.main}`, borderRadius: `${borderRadius.xs} !important`, '&:before': { display: 'none' }, '&.Mui-expanded': { margin: 0 } }}>
                       <AccordionSummary expandIcon={<ExpandMoreIcon />} sx={{ minHeight: 48, borderBottom: `1px solid ${colors.border.main}`, '&.Mui-expanded': { minHeight: 48 } }}>
-                        <Typography sx={{ fontSize: fontSizes.base, fontWeight: 600, color: colors.primary.main }}>カテゴリ ({partner.categories.length})</Typography>
+                        <Typography sx={{ fontSize: fontSizes.base, fontWeight: 600, color: colors.primary.main }}>カテゴリ ({safePartner.categories.length})</Typography>
                       </AccordionSummary>
                       <AccordionDetails sx={{ pt: 2, pb: 2, px: 2.5 }}>
                         <Box sx={{ display: 'flex', gap: 0.75, flexWrap: 'wrap' }}>
-                          {partner.categories.map((category) => (
+                          {safePartner.categories.map((category: string) => (
                             <Chip
                               key={category}
                               label={category}
@@ -1172,17 +1224,17 @@ export default function PartnerDetailPage() {
                         <Box sx={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr auto 1fr', alignItems: 'center' }}>
                           <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1 }}>
                             <Typography sx={{ fontSize: fontSizes.md, color: colors.text.muted }}>評価</Typography>
-                            <Rating value={partner.rating} max={3} precision={0.5} readOnly size="small" />
+                            <Rating value={safePartner.rating} max={3} precision={0.5} readOnly size="small" />
                           </Box>
                           <Typography sx={{ color: colors.border.dark, px: 1 }}>|</Typography>
                           <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1 }}>
                             <Typography sx={{ fontSize: fontSizes.md, color: colors.text.muted }}>現地調査</Typography>
-                            <Typography sx={{ fontSize: fontSizes.base, fontWeight: 700, color: colors.text.secondary }}>{partner.surveyCount}回</Typography>
+                            <Typography sx={{ fontSize: fontSizes.base, fontWeight: 700, color: colors.text.secondary }}>{safePartner.surveyCount}回</Typography>
                           </Box>
                           <Typography sx={{ color: colors.border.dark, px: 1 }}>|</Typography>
                           <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1 }}>
                             <Typography sx={{ fontSize: fontSizes.md, color: colors.text.muted }}>実績数</Typography>
-                            <Typography sx={{ fontSize: fontSizes.base, fontWeight: 700, color: colors.text.secondary }}>{partner.resultCount}件</Typography>
+                            <Typography sx={{ fontSize: fontSizes.base, fontWeight: 700, color: colors.text.secondary }}>{safePartner.resultCount}件</Typography>
                           </Box>
                         </Box>
                       </AccordionDetails>
@@ -1196,7 +1248,7 @@ export default function PartnerDetailPage() {
                       <AccordionDetails sx={{ pt: 2, pb: 2, px: 2.5 }}>
                         {/* 全省庁統一資格 */}
                         <Typography sx={{ fontSize: fontSizes.sm, fontWeight: 600, color: colors.text.muted, mb: 1.5, textTransform: 'uppercase', letterSpacing: '0.03em' }}>全省庁統一資格</Typography>
-                        {partner.qualifications.unified.length === 0 ? (
+                        {safePartner.qualifications.unified.length === 0 ? (
                           <Typography sx={{ color: colors.text.light, fontSize: fontSizes.sm, mb: 2.5 }}>登録なし</Typography>
                         ) : (
                           <Box sx={{ mb: 2.5, border: `1px solid ${colors.border.main}`, borderRadius: borderRadius.xs, overflow: 'hidden' }}>
@@ -1209,8 +1261,8 @@ export default function PartnerDetailPage() {
                               <Typography sx={{ px: 1.5, py: 1, fontSize: fontSizes.xs, fontWeight: 600, color: colors.text.muted, textAlign: 'center' }}>等級</Typography>
                             </Box>
                             {/* テーブルボディ */}
-                            {partner.qualifications.unified.map((q, idx) => (
-                              <Box key={idx} sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr 100px 80px 70px', borderBottom: idx < partner.qualifications.unified.length - 1 ? `1px solid ${colors.border.light}` : 'none', '&:hover': { backgroundColor: 'rgba(0,0,0,0.02)' } }}>
+                            {safePartner.qualifications.unified.map((q: any, idx: number) => (
+                              <Box key={idx} sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr 100px 80px 70px', borderBottom: idx < safePartner.qualifications.unified.length - 1 ? `1px solid ${colors.border.light}` : 'none', '&:hover': { backgroundColor: 'rgba(0,0,0,0.02)' } }}>
                                 <Typography sx={{ px: 1.5, py: 1, fontSize: fontSizes.sm, color: colors.text.secondary }}>{q.mainCategory}</Typography>
                                 <Typography sx={{ px: 1.5, py: 1, fontSize: fontSizes.sm, color: colors.text.secondary }}>{q.category}</Typography>
                                 <Typography sx={{ px: 1.5, py: 1, fontSize: fontSizes.sm, color: colors.text.muted }}>{q.region}</Typography>
@@ -1222,11 +1274,11 @@ export default function PartnerDetailPage() {
                         )}
                         {/* 発注者別資格 */}
                         <Typography sx={{ fontSize: fontSizes.sm, fontWeight: 600, color: colors.text.muted, mb: 1.5, textTransform: 'uppercase', letterSpacing: '0.03em' }}>発注者別資格</Typography>
-                        {partner.qualifications.orderers.length === 0 ? (
+                        {safePartner.qualifications.orderers.length === 0 ? (
                           <Typography sx={{ color: colors.text.light, fontSize: fontSizes.sm }}>登録なし</Typography>
                         ) : (
                           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                            {partner.qualifications.orderers.map((orderer, idx) => (
+                            {safePartner.qualifications.orderers.map((orderer: any, idx: number) => (
                               <Box key={idx}>
                                 <Typography sx={{ fontSize: fontSizes.sm, fontWeight: 600, color: colors.text.secondary, mb: 1, pl: 1.5, borderLeft: `3px solid ${colors.accent.blue}` }}>{orderer.ordererName}</Typography>
                                 <Box sx={{ border: `1px solid ${colors.border.main}`, borderRadius: borderRadius.xs, overflow: 'hidden' }}>
@@ -1238,7 +1290,7 @@ export default function PartnerDetailPage() {
                                     <Typography sx={{ px: 1.5, py: 1, fontSize: fontSizes.xs, fontWeight: 600, color: colors.text.muted, textAlign: 'center' }}>等級</Typography>
                                   </Box>
                                   {/* テーブルボディ */}
-                                  {orderer.items.map((item, itemIdx) => (
+                                  {orderer.items.map((item: any, itemIdx: number) => (
                                     <Box key={itemIdx} sx={{ display: 'grid', gridTemplateColumns: '1fr 120px 80px 70px', borderBottom: itemIdx < orderer.items.length - 1 ? `1px solid ${colors.border.light}` : 'none', '&:hover': { backgroundColor: 'rgba(0,0,0,0.02)' } }}>
                                       <Typography sx={{ px: 1.5, py: 1, fontSize: fontSizes.sm, color: colors.text.secondary }}>{item.category}</Typography>
                                       <Typography sx={{ px: 1.5, py: 1, fontSize: fontSizes.sm, color: colors.text.muted }}>{item.region}</Typography>
@@ -1401,7 +1453,7 @@ export default function PartnerDetailPage() {
                 }}
                 activeTab={conditionTab}
                 onTabChange={setConditionTab}
-                projects={partner.pastProjects}
+                projects={partner?.pastProjects || []}
               />
             </RightSidePanel>
           )}

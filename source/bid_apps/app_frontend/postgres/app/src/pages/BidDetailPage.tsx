@@ -185,7 +185,7 @@ export default function BidDetailPage() {
       setError(null);
 
       try {
-        const response = await fetch(`/api/evaluations/${id}`);
+        const response = await fetch(`https://bidapp-backend-postgres-50843898931.asia-northeast1.run.app/api/evaluations/${id}`);
         if (!response.ok) {
           throw new Error(`Failed to fetch evaluation: ${response.status}`);
         }
@@ -202,12 +202,8 @@ export default function BidDetailPage() {
     fetchEvaluation();
   }, [id]);
 
-  const [currentStep, setCurrentStep] = useState<string>(
-    evaluation?.currentStep || WORKFLOW_STEP_IDS.JUDGMENT
-  );
-  const [activeTab, setActiveTab] = useState<string>(
-    evaluation?.currentStep || WORKFLOW_STEP_IDS.JUDGMENT
-  );
+  const [currentStep, setCurrentStep] = useState<string>(WORKFLOW_STEP_IDS.JUDGMENT);
+  const [activeTab, setActiveTab] = useState<string>(WORKFLOW_STEP_IDS.JUDGMENT);
   const [currentWorkStatus, setCurrentWorkStatus] = useState<string>(
     evaluation?.workStatus || "not_started"
   );
@@ -403,7 +399,7 @@ export default function BidDetailPage() {
   const renderTabContent = () => {
     switch (activeTab) {
       case WORKFLOW_STEP_IDS.JUDGMENT:
-        return <JudgmentSection requirements={requirements} status={status} />;
+        return <JudgmentSection requirements={requirements || []} status={status} />;
       case WORKFLOW_STEP_IDS.ORDERER: {
         const ordererAssignee = stepAssignees.find((a) => a.stepId === WORKFLOW_STEP_IDS.ORDERER);
         return <OrdererWorkflowSection evaluation={evaluation} workflowAssigneeId={ordererAssignee?.staffId} />;

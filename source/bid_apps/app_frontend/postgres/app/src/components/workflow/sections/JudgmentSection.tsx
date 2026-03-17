@@ -29,6 +29,11 @@ export function JudgmentSection({ requirements, status }: JudgmentSectionProps) 
   const [activeTab, setActiveTab] = useState(0);
   const navigate = useNavigate();
 
+  // requirements が undefined の場合のガード
+  if (!requirements || !Array.isArray(requirements)) {
+    return <Typography>要件データを読み込んでいます...</Typography>;
+  }
+
   const metRequirements = requirements.filter((r) => r.isMet);
   const unmetRequirements = requirements.filter((r) => !r.isMet);
   const totalCount = requirements.length;

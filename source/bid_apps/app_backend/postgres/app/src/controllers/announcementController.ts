@@ -45,6 +45,7 @@ export class AnnouncementController {
         searchQuery: req.query.searchQuery as string | undefined,
         sortField: req.query.sortField as string | undefined,
         sortOrder: (req.query.sortOrder as "asc" | "desc") || undefined,
+        ordererId: req.query.ordererId as string | undefined,
       };
 
       const result = await this.service.getList(filters);

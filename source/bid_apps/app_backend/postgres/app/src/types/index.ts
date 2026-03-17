@@ -11,6 +11,7 @@ export interface FilterParams {
   searchQuery?: string;
   sortField?: string;
   sortOrder?: "asc" | "desc";
+  ordererId?: string;
 }
 
 export interface PaginatedResponse<T> {

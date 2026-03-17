@@ -16,10 +16,27 @@ export class EvaluationController {
     console.log(`GET /api/evaluations hit`);
 
     try {
+      // Parse and validate pagination parameters
+      const pageNum = req.query.page ? parseInt(req.query.page as string, 10) : 0;
+      const pageSizeNum = req.query.pageSize ? parseInt(req.query.pageSize as string, 10) : 25;
+
+      // Validation
+      if (isNaN(pageNum) || pageNum < 0) {
+        res.status(400).json({ error: "Bad Request", message: "page must be a non-negative integer" });
+        return;
+      }
+      if (isNaN(pageSizeNum) || pageSizeNum < 1 || pageSizeNum > 1000) {
+        res.status(400).json({ error: "Bad Request", message: "pageSize must be an integer between 1 and 1000" });
+        return;
+      }
+
+      const page = pageNum;
+      const pageSize = pageSizeNum;
+
       // Parse query parameters
       const filters: FilterParams = {
-        page: parseInt(req.query.page as string) || 0,
-        pageSize: parseInt(req.query.pageSize as string) || 25,
+        page,
+        pageSize,
         statuses: this.parseArrayParam(req.query.statuses),
         workStatuses: this.parseArrayParam(req.query.workStatuses),
         priorities: this.parseArrayParam(req.query.priorities),
@@ -110,6 +127,29 @@ export class EvaluationController {
         return;
       }
 
+      if (!res.headersSent) {
+        res.status(500).json({
+          error: "Internal Server Error",
+          message: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+  };
+
+  /**
+   * GET /api/evaluations/stats - Get statistics for analytics dashboard
+   */
+  getStats = async (req: Request, res: Response): Promise<void> => {
+    console.log(`GET /api/evaluations/stats hit`);
+
+    try {
+      const stats = await this.service.getStats();
+
+      res.setHeader("Content-Type", "application/json");
+      res.setHeader("Cache-Control", "no-cache");
+      res.status(200).json(stats);
+    } catch (error) {
+      console.error(`ERROR in GET /api/evaluations/stats:`, error);
       if (!res.headersSent) {
         res.status(500).json({
           error: "Internal Server Error",

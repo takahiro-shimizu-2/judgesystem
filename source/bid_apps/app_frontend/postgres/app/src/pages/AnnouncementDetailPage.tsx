@@ -1283,8 +1283,9 @@ export default function AnnouncementDetailPage() {
       setLoading(true);
       setError(null);
       try {
-        // id は公告番号（数値の文字列）
-        const response = await fetch(`https://bidapp-backend-postgres-50843898931.asia-northeast1.run.app/api/announcements/${id}`);
+        // id から ann- プレフィックスを除去して公告番号を取得
+        const announcementNo = id.startsWith('ann-') ? id.substring(4) : id;
+        const response = await fetch(`https://bidapp-backend-postgres-50843898931.asia-northeast1.run.app/api/announcements/${announcementNo}`);
         if (!response.ok) {
           throw new Error(`Failed to fetch announcement: ${response.status}`);
         }

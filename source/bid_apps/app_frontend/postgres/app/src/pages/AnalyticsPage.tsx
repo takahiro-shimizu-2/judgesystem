@@ -1,5 +1,5 @@
-import { useMemo } from 'react';
-import { Box, Paper, Typography, Grid } from '@mui/material';
+import { useState, useEffect, useMemo } from 'react';
+import { Box, Paper, Typography, Grid, CircularProgress } from '@mui/material';
 import { colors, pageStyles, borderRadius } from '../constants/styles';
 import {
   Assessment as AssessmentIcon,
@@ -7,7 +7,6 @@ import {
   AccountBalance as AccountBalanceIcon,
   CheckCircle as CheckCircleIcon,
 } from '@mui/icons-material';
-import { mockBidEvaluations } from '../data';
 
 interface StatCardProps {
   title: string;
@@ -104,43 +103,75 @@ function SimpleBarChart({ data, maxValue }: { data: BarData[]; maxValue: number 
   );
 }
 
+interface StatsResponse {
+  total: string;
+  allMet: string;
+  otherUnmet: string;
+  unmet: string;
+  organizationCount: string;
+  topOrganizations: Array<{ organization: string; count: string }> | null;
+  topCategories: Array<{ category: string; count: string }> | null;
+}
+
 export default function AnalyticsPage() {
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [rawStats, setRawStats] = useState<StatsResponse | null>(null);
+
+  useEffect(() => {
+    const fetchStats = async () => {
+      try {
+        setLoading(true);
+        const response = await fetch('https://bidapp-backend-postgres-50843898931.asia-northeast1.run.app/api/evaluations/stats');
+        if (!response.ok) {
+          throw new Error(`Failed to fetch stats: ${response.status}`);
+        }
+        const data = await response.json();
+        setRawStats(data);
+        setError(null);
+      } catch (err) {
+        console.error('Error fetching stats:', err);
+        setError(err instanceof Error ? err.message : 'Failed to load data');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchStats();
+  }, []);
+
   const stats = useMemo(() => {
-    const total = mockBidEvaluations.length;
-    const allMet = mockBidEvaluations.filter((e) => e.status === 'all_met').length;
-    const otherUnmet = mockBidEvaluations.filter((e) => e.status === 'other_only_unmet').length;
-    const unmet = mockBidEvaluations.filter((e) => e.status === 'unmet').length;
-    const participationRate = ((allMet / total) * 100).toFixed(1);
+    if (!rawStats) {
+      return {
+        total: 0,
+        allMet: 0,
+        otherUnmet: 0,
+        unmet: 0,
+        participationRate: '0.0',
+        organizationCount: 0,
+        topOrganizations: [],
+        topCategories: [],
+      };
+    }
 
-    // 発注機関別集計
-    const byOrganization: Record<string, number> = {};
-    mockBidEvaluations.forEach((e) => {
-      const org = e.announcement.organization.split(' ')[0];
-      byOrganization[org] = (byOrganization[org] || 0) + 1;
-    });
-    const organizationCount = Object.keys(byOrganization).length;
-    const topOrganizations = Object.entries(byOrganization)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 5)
-      .map(([label, value], i) => ({
-        label,
-        value,
-        color: [colors.accent.blue, colors.accent.green, colors.accent.orange, colors.accent.red, colors.accent.purple][i],
-      }));
+    const total = parseInt(rawStats.total);
+    const allMet = parseInt(rawStats.allMet);
+    const otherUnmet = parseInt(rawStats.otherUnmet);
+    const unmet = parseInt(rawStats.unmet);
+    const participationRate = total > 0 ? ((allMet / total) * 100).toFixed(1) : '0.0';
+    const organizationCount = parseInt(rawStats.organizationCount);
 
-    // カテゴリ別集計
-    const byCategory: Record<string, number> = {};
-    mockBidEvaluations.forEach((e) => {
-      byCategory[e.announcement.category] = (byCategory[e.announcement.category] || 0) + 1;
-    });
-    const topCategories = Object.entries(byCategory)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 5)
-      .map(([label, value], i) => ({
-        label,
-        value,
-        color: [colors.accent.indigo, colors.accent.pink, colors.accent.teal, colors.accent.orangeMedium, colors.text.muted][i],
-      }));
+    const topOrganizations = (rawStats.topOrganizations || []).map((item, i) => ({
+      label: item.organization,
+      value: parseInt(item.count),
+      color: [colors.accent.blue, colors.accent.green, colors.accent.orange, colors.accent.red, colors.accent.purple][i],
+    }));
+
+    const topCategories = (rawStats.topCategories || []).map((item, i) => ({
+      label: item.category,
+      value: parseInt(item.count),
+      color: [colors.accent.indigo, colors.accent.pink, colors.accent.teal, colors.accent.orangeMedium, colors.text.muted][i],
+    }));
 
     return {
       total,
@@ -152,13 +183,34 @@ export default function AnalyticsPage() {
       topOrganizations,
       topCategories,
     };
-  }, []);
+  }, [rawStats]);
 
   const statusData: BarData[] = [
     { label: '参加可能', value: stats.allMet, color: colors.accent.greenSuccess },
     { label: '特殊条件', value: stats.otherUnmet, color: colors.accent.orangeDark },
     { label: '参加不可', value: stats.unmet, color: colors.accent.redDark },
   ];
+
+  if (loading) {
+    return (
+      <Box sx={{ minHeight: '100vh', bgcolor: pageStyles.container.bgcolor, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <CircularProgress />
+      </Box>
+    );
+  }
+
+  if (error) {
+    return (
+      <Box sx={{ minHeight: '100vh', bgcolor: pageStyles.container.bgcolor }}>
+        <Box sx={pageStyles.contentArea}>
+          <Typography variant="h5" sx={{ ...pageStyles.pageTitle, mb: 3 }}>
+            分析ダッシュボード
+          </Typography>
+          <Typography color="error">エラー: {error}</Typography>
+        </Box>
+      </Box>
+    );
+  }
 
   return (
     <Box sx={{ minHeight: '100vh', bgcolor: pageStyles.container.bgcolor }}>
