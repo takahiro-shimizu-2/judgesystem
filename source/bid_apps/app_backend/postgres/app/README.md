@@ -2,6 +2,19 @@
 
 このバージョンは BigQuery ではなく Cloud SQL for PostgreSQL を参照します。Cloud SQL Proxy または Private IP 経由で到達できる状態の PostgreSQL を用意し、以下の環境変数を設定してください。
 
+## アーキテクチャ
+
+3層アーキテクチャで構成されています：
+
+```
+src/
+├── config/          # データベース設定
+├── controllers/     # Presentation層 (リクエスト/レスポンス処理)
+├── services/        # Business Logic層 (ビジネスロジック)
+├── repositories/    # Data Access層 (データベース操作)
+└── types/           # 型定義
+```
+
 ## 環境変数
 
 - `DATABASE_URL` もしくは `PGHOST` / `PGPORT` / `PGDATABASE` / `PGUSER` / `PGPASSWORD`
