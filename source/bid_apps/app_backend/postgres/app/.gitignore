@@ -4,6 +4,9 @@ node_modules/
 # Build output
 dist/
 
+# Lock files should be committed for production apps
+# package-lock.json is tracked
+
 # Logs
 *.log
 npm-debug.log*

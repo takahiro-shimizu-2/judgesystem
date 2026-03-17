@@ -9,7 +9,7 @@ import { EvaluationController } from "./src/controllers";
 const app = express();
 
 app.use(cors({
-  origin: "https://frontend-xxxxx.a.run.app",
+  origin: "https://bidapp-frontend-postgres-50843898931.asia-northeast1.run.app",
   methods: ["GET", "HEAD", "PUT", "PATCH", "POST", "DELETE", "OPTIONS"],
   allowedHeaders: ["*"],
   credentials: false
