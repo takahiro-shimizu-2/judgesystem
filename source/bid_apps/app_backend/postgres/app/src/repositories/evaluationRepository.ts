@@ -215,13 +215,19 @@ export class EvaluationRepository {
       organization: "announcement->>'organization'",
       category: "announcement->>'category'",
       bidType: "announcement->>'bidType'",
-      deadline: "announcement->>'deadline'",
+      deadline: `(
+        CASE
+          WHEN (announcement->>'deadline') ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}'
+            THEN (announcement->>'deadline')::timestamp
+          ELSE NULL
+        END
+      )`,
       evaluatedAt: '"evaluatedAt"',
       prefecture: "announcement->>'workLocation'",
     };
 
     if (fieldMap[sortField]) {
-      return `ORDER BY ${fieldMap[sortField]} ${direction}`;
+      return `ORDER BY ${fieldMap[sortField]} ${direction} NULLS LAST`;
     }
 
     return '';
