@@ -618,6 +618,17 @@ class DBOperator:
     def selectToTable(self, tablename, where_clause=""):
         raise NotImplementedError
 
+    def createIndex(self, index_name, table_name, columns):
+        """
+        インデックスを作成する（抽象メソッド）
+
+        Args:
+            index_name (str): インデックス名
+            table_name (str): テーブル名
+            columns (str or list): カラム指定
+        """
+        raise NotImplementedError
+
     @abstractmethod
     def createBidAnnouncements(self, bid_announcements_tablename):
         raise NotImplementedError
@@ -868,6 +879,10 @@ class DBOperatorGCPVM(DBOperator):
         sql = fr"select * from `{self.project_id}.{self.dataset_name}.{tablename}` {where_clause}"
         df = self.client.query(sql).result().to_dataframe()
         return df
+
+    def createIndex(self, index_name, table_name, columns):
+        """BigQuery はインデックスをサポートしていないため未実装"""
+        raise NotImplementedError("BigQuery does not support explicit indexes")
 
     def createBidAnnouncements(self, bid_announcements_tablename):
         sql = fr"""
@@ -2155,6 +2170,10 @@ class DBOperatorSQLITE3(DBOperator):
         ret = pd.read_sql_query(sql, self.conn)
         return ret
 
+    def createIndex(self, index_name, table_name, columns):
+        """SQLite3 のインデックス作成（未実装）"""
+        raise NotImplementedError("SQLite3 index creation is not implemented yet")
+
     def createBidAnnouncements(self, bid_announcements_tablename):
         sql = fr"""
         create table {bid_announcements_tablename} (
@@ -2909,6 +2928,30 @@ class DBOperatorPOSTGRES(DBOperator):
         sql = fr"SELECT * FROM {tablename} {where_clause}"
         ret = pd.read_sql_query(sql, self.engine)
         return ret
+
+    def createIndex(self, index_name, table_name, columns):
+        """
+        PostgreSQL にインデックスを作成する
+
+        Args:
+            index_name (str): インデックス名
+            table_name (str): テーブル名
+            columns (str or list): カラム指定
+                - 文字列: 単一カラムまたは式 (例: '"evaluatedAt"' or '((company->>\'priority\')::integer)')
+                - リスト: 複数カラム (例: ['status', '"evaluatedAt" DESC'])
+        """
+        if isinstance(columns, list):
+            columns_clause = ", ".join(columns)
+        else:
+            columns_clause = columns
+
+        sql = f"CREATE INDEX IF NOT EXISTS {index_name} ON {table_name} ({columns_clause})"
+
+        try:
+            self.cur.execute(sql)
+            print(f"✓ Index '{index_name}' created successfully")
+        except Exception as e:
+            print(f"✗ Index '{index_name}' failed: {str(e)}")
 
     def createBidAnnouncements(self, bid_announcements_tablename):
         sql = fr"""
