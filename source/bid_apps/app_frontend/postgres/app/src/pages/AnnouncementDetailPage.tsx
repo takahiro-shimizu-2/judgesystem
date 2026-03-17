@@ -21,7 +21,6 @@ import {
   Close as CloseIcon,
 } from '@mui/icons-material';
 import {
-  mockAnnouncements,
   announcementStatusConfig,
   bidTypeConfig,
   mockBidEvaluations,
@@ -1273,7 +1272,32 @@ export default function AnnouncementDetailPage() {
   const [companyPage, setCompanyPage] = useState(0);
   const companyPageSize = 25;
 
-  const announcement = mockAnnouncements.find((a) => a.id === id);
+  // API からデータ取得
+  const [announcement, setAnnouncement] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchAnnouncement = async () => {
+      if (!id) return;
+      setLoading(true);
+      setError(null);
+      try {
+        // id は公告番号（数値の文字列）
+        const response = await fetch(`https://bidapp-backend-postgres-50843898931.asia-northeast1.run.app/api/announcements/${id}`);
+        if (!response.ok) {
+          throw new Error(`Failed to fetch announcement: ${response.status}`);
+        }
+        const data = await response.json();
+        setAnnouncement(data);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : String(err));
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchAnnouncement();
+  }, [id]);
 
   // サイドパネル制御
   const handleOpenWithTab = useCallback((tab: 'sort' | 'filter') => {
@@ -1296,24 +1320,9 @@ export default function AnnouncementDetailPage() {
   }, []);
 
   // 関連案件のベースデータ（メモ化）
-  const baseRelatedAnnouncements = useMemo(() => {
-    if (!announcement) return [];
-    const currentPrefecture = announcement.workLocation.split(/[都道府県]/)[0];
-    const titleKeywords = announcement.title.split(/[（）\s・]/g).filter(k => k.length >= 2);
-
-    return mockAnnouncements
-      .filter((a) => a.id !== announcement.id)
-      .map((a) => {
-        let score = 0;
-        if (a.category === announcement.category) score += 3;
-        if (a.workLocation.includes(currentPrefecture)) score += 2;
-        const matchedKeywords = titleKeywords.filter(k => a.title.includes(k));
-        score += matchedKeywords.length;
-        return { ...a, score };
-      })
-      .filter((a) => a.score > 0)
-      .sort((a, b) => b.score - a.score)
-      .slice(0, 50); // より多くの関連案件を保持
+  // TODO: 関連案件APIを実装後に復活
+  const baseRelatedAnnouncements = useMemo((): any[] => {
+    return [];
   }, [announcement]);
 
   // フィルタリング・ソート済み関連案件
@@ -1361,9 +1370,9 @@ export default function AnnouncementDetailPage() {
         case 'publish_desc':
           return new Date(b.publishDate).getTime() - new Date(a.publishDate).getTime();
         case 'status_asc':
-          return STATUS_ORDER[a.status] - STATUS_ORDER[b.status];
+          return (STATUS_ORDER[a.status as AnnouncementStatus] || 0) - (STATUS_ORDER[b.status as AnnouncementStatus] || 0);
         case 'status_desc':
-          return STATUS_ORDER[b.status] - STATUS_ORDER[a.status];
+          return (STATUS_ORDER[b.status as AnnouncementStatus] || 0) - (STATUS_ORDER[a.status as AnnouncementStatus] || 0);
         case 'prefecture_asc': {
           const prefA = a.workLocation?.match(/^(.+?[都道府県])/)?.[1] || '';
           const prefB = b.workLocation?.match(/^(.+?[都道府県])/)?.[1] || '';
@@ -1386,33 +1395,27 @@ export default function AnnouncementDetailPage() {
     return filteredRelatedAnnouncements.slice(start, start + relatedPageSize);
   }, [filteredRelatedAnnouncements, relatedPage]);
 
-  if (!announcement) {
-    return (
-      <NotFoundView
-        message="指定された入札公告が見つかりません。"
-        backLabel="一覧に戻る"
-        onBack={() => navigate('/announcements')}
-      />
+  // 関連データ（早期returnの前に計算）
+  const relatedEvaluations = useMemo(() => {
+    if (!announcement) return [];
+    return mockBidEvaluations.filter(
+      (e) => e.announcement.id === announcement.id &&
+             (e.workStatus === 'in_progress' || e.workStatus === 'completed')
     );
-  }
+  }, [announcement]);
 
-  const statusConfig = announcementStatusConfig[announcement.status];
-
-  // 関連データ
-  const relatedEvaluations = mockBidEvaluations.filter(
-    (e) => e.announcement.id === announcement.id &&
-           (e.workStatus === 'in_progress' || e.workStatus === 'completed')
-  );
-  const baseProgressingCompanies = relatedEvaluations.map((e) => ({
-    companyId: e.company.id,
-    companyName: e.company.name,
-    branchId: e.branch.id,
-    branchName: e.branch.name,
-    priority: e.company.priority,
-    workStatus: e.workStatus,
-    evaluationId: e.id,
-    evaluationStatus: e.status,
-  }));
+  const baseProgressingCompanies = useMemo(() => {
+    return relatedEvaluations.map((e) => ({
+      companyId: e.company.id,
+      companyName: e.company.name,
+      branchId: e.branch.id,
+      branchName: e.branch.name,
+      priority: e.company.priority,
+      workStatus: e.workStatus,
+      evaluationId: e.id,
+      evaluationStatus: e.status,
+    }));
+  }, [relatedEvaluations]);
 
   // フィルタリング・ソート済み着手企業
   const filteredProgressingCompanies = useMemo(() => {
@@ -1468,6 +1471,34 @@ export default function AnnouncementDetailPage() {
     const start = companyPage * companyPageSize;
     return filteredProgressingCompanies.slice(start, start + companyPageSize);
   }, [filteredProgressingCompanies, companyPage, companyPageSize]);
+
+  if (loading) {
+    return (
+      <Box sx={{ p: 4, textAlign: 'center' }}>
+        <Typography>読み込み中...</Typography>
+      </Box>
+    );
+  }
+
+  if (error) {
+    return (
+      <Box sx={{ p: 4, textAlign: 'center', color: colors.status.error.main }}>
+        <Typography>{error}</Typography>
+      </Box>
+    );
+  }
+
+  if (!announcement) {
+    return (
+      <NotFoundView
+        message="指定された入札公告が見つかりません。"
+        backLabel="一覧に戻る"
+        onBack={() => navigate('/announcements')}
+      />
+    );
+  }
+
+  const statusConfig = announcementStatusConfig[announcement.status as AnnouncementStatus];
 
   // スケジュールデータ
   const scheduleItems = [
@@ -1545,7 +1576,7 @@ export default function AnnouncementDetailPage() {
 
               {/* 入札形式 */}
               <Typography sx={{ fontSize: fontSizes.base, fontWeight: 700, color: colors.primary.dark }}>
-                {announcement.bidType ? bidTypeConfig[announcement.bidType].label : '-'}
+                {announcement.bidType ? bidTypeConfig[announcement.bidType as BidType].label : '-'}
               </Typography>
             </Box>
 
@@ -1618,7 +1649,7 @@ export default function AnnouncementDetailPage() {
                       <AccordionDetails sx={{ pt: 2, pb: 2, px: 2.5 }}>
                         <InfoRow label="発注機関" value={announcement.organization} icon={<OrdererIcon sx={{ ...iconStyles.small, color: colors.text.light }} />} />
                         <InfoRow label="工種" value={announcement.category} icon={<CategoryIcon sx={{ ...iconStyles.small, color: colors.text.light }} />} />
-                        <InfoRow label="入札形式" value={announcement.bidType ? bidTypeConfig[announcement.bidType].label : '-'} icon={<BidTypeIcon sx={{ ...iconStyles.small, color: colors.text.light }} />} />
+                        <InfoRow label="入札形式" value={announcement.bidType ? bidTypeConfig[announcement.bidType as BidType].label : '-'} icon={<BidTypeIcon sx={{ ...iconStyles.small, color: colors.text.light }} />} />
                         <InfoRow label="履行場所" value={announcement.workLocation} icon={<LocationIcon sx={{ ...iconStyles.small, color: colors.text.light }} />} />
                         <InfoRow label="予想金額" value={formatAmountInManYen(announcement.estimatedAmountMin, announcement.estimatedAmountMax)} icon={<CurrencyYenIcon sx={{ ...iconStyles.small, color: colors.text.light }} />} />
                       </AccordionDetails>
@@ -1647,7 +1678,7 @@ export default function AnnouncementDetailPage() {
                       <AccordionDetails sx={{ pt: 2, pb: 2, px: 2.5 }}>
                         {announcement.documents && announcement.documents.length > 0 ? (
                           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                            {announcement.documents.map((doc) => {
+                            {announcement.documents.map((doc: any) => {
                               const typeConfig = getDocumentTypeConfig(doc.type);
                               const formatConfig = getFileFormatConfig(doc.fileFormat);
                               return (
@@ -1879,8 +1910,8 @@ export default function AnnouncementDetailPage() {
                     <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 1.5 }}>
                       {/* 関連案件カード */}
                       {paginatedRelatedAnnouncements.map((ann) => {
-                        const annStatusConfig = announcementStatusConfig[ann.status];
-                        const bidType = ann.bidType ? bidTypeConfig[ann.bidType] : null;
+                        const annStatusConfig = announcementStatusConfig[ann.status as AnnouncementStatus];
+                        const bidType = ann.bidType ? bidTypeConfig[ann.bidType as BidType] : null;
                         const prefecture = ann.workLocation?.match(/^(.+?[都道府県])/)?.[1] || '';
                         return (
                           <Box
@@ -1968,7 +1999,7 @@ export default function AnnouncementDetailPage() {
             {/* 資料タブ */}
             {activeTab === tabIndex.documents && hasDocuments && announcement.documents && (
               <Box sx={{ p: 2.5, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-                {announcement.documents.map((doc, index) => {
+                {announcement.documents.map((doc: any, index: number) => {
                   const typeConfig = getDocumentTypeConfig(doc.type);
                   const formatConfig = getFileFormatConfig(doc.fileFormat);
                   return (

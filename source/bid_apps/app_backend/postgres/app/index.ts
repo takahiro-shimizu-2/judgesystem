@@ -4,7 +4,7 @@ import compression from "compression";
 import { PoolClient } from "pg";
 import QueryStream from "pg-query-stream";
 import { pool, TABLES, TableName, schemaPrefix } from "./src/config/database";
-import { EvaluationController } from "./src/controllers";
+import { EvaluationController, AnnouncementController } from "./src/controllers";
 
 const app = express();
 
@@ -98,14 +98,18 @@ app.get("/", (req, res) => {
 
 // Initialize controllers
 const evaluationController = new EvaluationController();
+const announcementController = new AnnouncementController();
 
 // Evaluation routes
 app.get("/api/evaluations", evaluationController.getList);
 app.get("/api/evaluations/:id", evaluationController.getById);
 app.patch("/api/evaluations/:evaluationNo", evaluationController.updateWorkStatus);
 
+// Announcement routes
+app.get("/api/announcements", announcementController.getList);
+app.get("/api/announcements/:announcementNo", announcementController.getByNo);
+
 // Other table routes (using streaming handler)
-app.get("/api/announcements", createTableHandler(TABLES.announcements));
 app.get("/api/companies", createTableHandler(TABLES.companies));
 app.get("/api/orderers", createTableHandler(TABLES.orderers));
 app.get("/api/partners", createTableHandler(TABLES.partners));

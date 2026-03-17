@@ -1,26 +1,26 @@
 /**
  * 入札案件一覧ページ（カード形式 + 右パネル）
  */
-import { useCallback, useMemo, useState, useRef, useEffect } from 'react';
+import { useCallback, useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Box,
   Paper,
   Typography,
   Chip,
+  CircularProgress,
 } from '@mui/material';
 import { AccountBalance as OrdererIcon } from '@mui/icons-material';
-import type { GridSortModel } from '@mui/x-data-grid';
-import { mockAnnouncements, announcementStatusConfig, bidTypeConfig } from '../data';
+import { announcementStatusConfig, bidTypeConfig } from '../data';
 import type { AnnouncementStatus, BidType } from '../types';
 import { pageStyles, fontSizes, listFilterChipStyles, colors, borderRadius, iconStyles } from '../constants/styles';
-import { allPrefectures, extractPrefecture as extractPref } from '../constants/prefectures';
-import { getOrganizationGroup } from '../constants/organizations';
+import { extractPrefecture as extractPref } from '../constants/prefectures';
 import { categories } from '../constants/categories';
 import { CustomPagination } from '../components/bid';
 import { RightSidePanel } from '../components/layout';
-import { AnnouncementDisplayConditionsPanel, type AnnouncementFilterState } from '../components/announcement';
+import { AnnouncementDisplayConditionsPanel } from '../components/announcement';
 import { useSidebar } from '../contexts/SidebarContext';
+import { useAnnouncementListState } from '../hooks';
 
 // 都道府県を抽出するヘルパー関数
 function extractPrefecture(workLocation: string | undefined): string {
@@ -286,11 +286,6 @@ function AnnouncementCard({ row, onClick }: { row: RowData; onClick: () => void 
   );
 }
 
-// 日本語検索対応
-function japaneseIncludes(target: string, query: string): boolean {
-  return target.toLowerCase().includes(query.toLowerCase());
-}
-
 // ナビゲーション追跡用
 const NAV_TRACKING_KEY = 'lastVisitedPath';
 
@@ -300,148 +295,45 @@ export default function AnnouncementListPage() {
   const [conditionTab, setConditionTab] = useState<'sort' | 'filter'>('sort');
   const listContainerRef = useRef<HTMLDivElement>(null);
 
-  // 検索クエリ
-  const [searchQuery, setSearchQuery] = useState('');
+  // サーバーサイドページネーション用フック
+  const {
+    rows,
+    rowCount,
+    loading,
+    error,
+    filters,
+    searchQuery,
+    sortModel,
+    paginationModel,
+    applyFilters,
+    updateSearchQuery,
+    updateSortModel,
+    updatePaginationModel,
+  } = useAnnouncementListState();
 
-  // ソートモデル
-  const [sortModel, setSortModel] = useState<GridSortModel>([]);
-
-  // フィルター状態
-  const [filters, setFilters] = useState<AnnouncementFilterState>({
-    statuses: [],
-    bidTypes: [],
-    categories: [],
-    prefectures: [],
-    organizations: [],
-  });
-
-  // ページネーション（詳細から戻った場合のみ復元）
-  const [paginationModel, setPaginationModel] = useState<{ page: number; pageSize: number }>(() => {
-    try {
-      const lastPath = sessionStorage.getItem(NAV_TRACKING_KEY);
-      // /announcements/* からの戻りの場合はlocalStorageから復元
-      if (lastPath && /^\/announcements\//.test(lastPath)) {
-        const saved = localStorage.getItem('announcementlist-page');
-        if (saved) return JSON.parse(saved);
-      }
-    } catch { /* ignore */ }
-    return { page: 0, pageSize: 25 };
-  });
-
-  // ページ番号を保存 & 現在のパスを記録
+  // ナビゲーション追跡
   useEffect(() => {
     try {
-      localStorage.setItem('announcementlist-page', JSON.stringify(paginationModel));
-      // 一覧ページのパスを保存（他の一覧から来た場合のページリセット用）
       sessionStorage.setItem(NAV_TRACKING_KEY, '/announcements');
     } catch { /* ignore */ }
-  }, [paginationModel]);
+  }, []);
 
   // アクティブなフィルター数
   const totalFilterCount = filters.statuses.length + filters.bidTypes.length + filters.categories.length + filters.prefectures.length + filters.organizations.length;
 
-  // フィルター適用後のデータ
-  const filteredAnnouncements = useMemo(() => {
-    return mockAnnouncements.filter((announcement) => {
-      // 検索
-      if (searchQuery.trim()) {
-        const q = searchQuery.trim();
-        if (!japaneseIncludes(announcement.title, q) &&
-            !japaneseIncludes(announcement.organization, q) &&
-            !japaneseIncludes(announcement.category, q)) {
-          return false;
-        }
-      }
-      // ステータスフィルター
-      if (filters.statuses.length > 0 && !filters.statuses.includes(announcement.status)) {
-        return false;
-      }
-      // 入札形式フィルター
-      if (filters.bidTypes.length > 0 && announcement.bidType && !filters.bidTypes.includes(announcement.bidType)) {
-        return false;
-      }
-      // 工事種別フィルター
-      if (filters.categories.length > 0 && !filters.categories.includes(announcement.category)) {
-        return false;
-      }
-      // 都道府県フィルター
-      if (filters.prefectures.length > 0) {
-        const prefecture = extractPrefecture(announcement.workLocation);
-        if (!filters.prefectures.includes(prefecture)) return false;
-      }
-      // 発注機関フィルター
-      if (filters.organizations.length > 0) {
-        const orgGroup = getOrganizationGroup(announcement.organization);
-        if (!filters.organizations.includes(orgGroup)) return false;
-      }
-      return true;
-    });
-  }, [searchQuery, filters]);
-
-  // 行データに変換
-  const announcementRows: RowData[] = useMemo(() => {
-    return filteredAnnouncements.map((a) => ({
-      id: a.id,
-      no: String(a.no).padStart(8, '0'),
-      status: a.status,
-      bidType: a.bidType,
-      title: a.title,
-      organization: a.organization,
-      category: a.category,
-      publishDate: a.publishDate,
-      deadline: a.deadline,
-      prefecture: extractPrefecture(a.workLocation),
-    }));
-  }, [filteredAnnouncements]);
-
-  // ソート適用
-  const sortedRows = useMemo(() => {
-    if (sortModel.length === 0) return announcementRows;
-
-    // 今日の日付（YYYY-MM-DD形式）
-    const today = new Date();
-    const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-
-    return [...announcementRows].sort((a, b) => {
-      for (const sort of sortModel) {
-        let comparison = 0;
-        const field = sort.field as keyof RowData;
-        const direction = sort.sort === 'desc' ? -1 : 1;
-
-        // 締切日の場合、締切済みは常に最後
-        if (field === 'deadline') {
-          const aExpired = a.deadline < todayStr;
-          const bExpired = b.deadline < todayStr;
-          if (aExpired && !bExpired) return 1;  // aが締切済み → 後ろへ
-          if (!aExpired && bExpired) return -1; // bが締切済み → aを前へ
-          comparison = new Date(a.deadline).getTime() - new Date(b.deadline).getTime();
-        } else if (field === 'publishDate') {
-          comparison = new Date(a[field]).getTime() - new Date(b[field]).getTime();
-        } else if (field === 'prefecture') {
-          const idxA = allPrefectures.indexOf(a.prefecture);
-          const idxB = allPrefectures.indexOf(b.prefecture);
-          comparison = (idxA === -1 ? 99 : idxA) - (idxB === -1 ? 99 : idxB);
-        } else if (field === 'status') {
-          const order = ['upcoming', 'ongoing', 'awaiting_result', 'closed'];
-          comparison = order.indexOf(a.status) - order.indexOf(b.status);
-        } else {
-          comparison = String(a[field]).localeCompare(String(b[field]));
-        }
-
-        if (comparison !== 0) {
-          return comparison * direction;
-        }
-      }
-      return 0;
-    });
-  }, [announcementRows, sortModel]);
-
-  // ページネーション適用
-  const paginatedRows = useMemo(() => {
-    const start = paginationModel.page * paginationModel.pageSize;
-    const end = start + paginationModel.pageSize;
-    return sortedRows.slice(start, end);
-  }, [sortedRows, paginationModel]);
+  // 行データに変換（サーバーから取得したデータをそのまま使用）
+  const displayRows: RowData[] = rows.map((a) => ({
+    id: String(a.announcementNo), // 公告番号を使用（詳細APIと整合）
+    no: String(a.announcementNo).padStart(8, '0'),
+    status: a.status,
+    bidType: a.bidType,
+    title: a.title,
+    organization: a.organization,
+    category: a.category,
+    publishDate: a.publishDate,
+    deadline: a.deadline,
+    prefecture: extractPrefecture(a.workLocation),
+  }));
 
   // ページ変更時にスクロール位置をリセット
   useEffect(() => {
@@ -455,10 +347,10 @@ export default function AnnouncementListPage() {
   };
 
   const handleClearAll = useCallback(() => {
-    setSearchQuery('');
-    setSortModel([]);
-    setFilters({ statuses: [], bidTypes: [], categories: [], prefectures: [], organizations: [] });
-  }, []);
+    updateSearchQuery('');
+    updateSortModel([]);
+    applyFilters({ statuses: [], bidTypes: [], categories: [], prefectures: [], organizations: [] });
+  }, [updateSearchQuery, updateSortModel, applyFilters]);
 
   const handleOpenWithTab = useCallback((tab: 'sort' | 'filter') => {
     setConditionTab(tab);
@@ -521,7 +413,7 @@ export default function AnnouncementListPage() {
                 </Typography>
                 <Typography
                   component="button"
-                  onClick={() => setFilters({ statuses: [], bidTypes: [], categories: [], prefectures: [], organizations: [] })}
+                  onClick={() => applyFilters({ statuses: [], bidTypes: [], categories: [], prefectures: [], organizations: [] })}
                   sx={{ fontSize: fontSizes.xs, color: colors.accent.red, fontWeight: 600, cursor: 'pointer', background: 'none', border: 'none', p: 0, mr: 0.5, '&:hover': { color: colors.status.error.main } }}
                 >
                   クリア
@@ -532,7 +424,7 @@ export default function AnnouncementListPage() {
                     key={s}
                     label={announcementStatusConfig[s].label}
                     size="small"
-                    onDelete={() => setFilters((prev) => ({ ...prev, statuses: prev.statuses.filter((x) => x !== s) }))}
+                    onDelete={() => applyFilters({ ...filters, statuses: filters.statuses.filter((x) => x !== s) })}
                     sx={listFilterChipStyles}
                   />
                 ))}
@@ -542,7 +434,7 @@ export default function AnnouncementListPage() {
                     key={b}
                     label={bidTypeConfig[b].label}
                     size="small"
-                    onDelete={() => setFilters((prev) => ({ ...prev, bidTypes: prev.bidTypes.filter((x) => x !== b) }))}
+                    onDelete={() => applyFilters({ ...filters, bidTypes: filters.bidTypes.filter((x) => x !== b) })}
                     sx={listFilterChipStyles}
                   />
                 ))}
@@ -552,7 +444,7 @@ export default function AnnouncementListPage() {
                     key={c}
                     label={c}
                     size="small"
-                    onDelete={() => setFilters((prev) => ({ ...prev, categories: prev.categories.filter((x) => x !== c) }))}
+                    onDelete={() => applyFilters({ ...filters, categories: filters.categories.filter((x) => x !== c) })}
                     sx={listFilterChipStyles}
                   />
                 ))}
@@ -562,7 +454,7 @@ export default function AnnouncementListPage() {
                     key={p}
                     label={p}
                     size="small"
-                    onDelete={() => setFilters((prev) => ({ ...prev, prefectures: prev.prefectures.filter((x) => x !== p) }))}
+                    onDelete={() => applyFilters({ ...filters, prefectures: filters.prefectures.filter((x) => x !== p) })}
                     sx={listFilterChipStyles}
                   />
                 ))}
@@ -581,14 +473,24 @@ export default function AnnouncementListPage() {
               py: 2,
             }}
           >
-            {paginatedRows.map((row) => (
+            {loading && (
+              <Box sx={{ p: 4, textAlign: 'center' }}>
+                <CircularProgress />
+              </Box>
+            )}
+            {!loading && error && (
+              <Box sx={{ p: 4, textAlign: 'center', color: colors.status.error.main }}>
+                {error}
+              </Box>
+            )}
+            {!loading && !error && displayRows.map((row) => (
               <AnnouncementCard
                 key={row.id}
                 row={row}
                 onClick={() => handleCardClick(row.id)}
               />
             ))}
-            {paginatedRows.length === 0 && (
+            {!loading && !error && displayRows.length === 0 && (
               <Box sx={{ p: 4, textAlign: 'center', color: colors.text.muted }}>
                 該当する案件がありません
               </Box>
@@ -599,9 +501,9 @@ export default function AnnouncementListPage() {
           <CustomPagination
             page={paginationModel.page}
             pageSize={paginationModel.pageSize}
-            rowCount={sortedRows.length}
-            onPageChange={(page) => setPaginationModel({ ...paginationModel, page })}
-            onPageSizeChange={(pageSize) => setPaginationModel({ page: 0, pageSize })}
+            rowCount={rowCount}
+            onPageChange={(page) => updatePaginationModel({ ...paginationModel, page })}
+            onPageSizeChange={(pageSize) => updatePaginationModel({ page: 0, pageSize })}
           />
         </Paper>
       </Box>
@@ -616,11 +518,11 @@ export default function AnnouncementListPage() {
       >
         <AnnouncementDisplayConditionsPanel
           searchQuery={searchQuery}
-          onSearchChange={setSearchQuery}
+          onSearchChange={updateSearchQuery}
           sortModel={sortModel}
-          onSortModelChange={setSortModel}
+          onSortModelChange={updateSortModel}
           filters={filters}
-          onFilterChange={setFilters}
+          onFilterChange={applyFilters}
           onClearAll={handleClearAll}
           categories={[...categories]}
           activeTab={conditionTab}

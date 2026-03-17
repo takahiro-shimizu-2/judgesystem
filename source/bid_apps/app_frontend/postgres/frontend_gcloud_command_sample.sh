@@ -35,15 +35,29 @@ done
 echo $URL
 
 # Note: app/ ディレクトリには既に app_replacement_files_postgres の内容が適用済み
-# URL 置換のみ実行
+# URL 置換のみ実行（冪等性確保: 既存URLを一旦 /api/ に戻してから置換）
 
+# Step 1: 既存の https://...*/api/ を全て /api/ に戻す（冪等性確保）
+sed -i 's|https://[^/]*/api/|/api/|g' app/src/data/announcements.ts
+sed -i 's|https://[^/]*/api/|/api/|g' app/src/data/companies.ts
+sed -i 's|https://[^/]*/api/|/api/|g' app/src/data/evaluations.ts
+sed -i 's|https://[^/]*/api/|/api/|g' app/src/data/orderers.ts
+sed -i 's|https://[^/]*/api/|/api/|g' app/src/data/partners.ts
+sed -i 's|https://[^/]*/api/|/api/|g' app/src/hooks/useBidListState.ts
+sed -i 's|https://[^/]*/api/|/api/|g' app/src/hooks/useAnnouncementListState.ts
+sed -i 's|https://[^/]*/api/|/api/|g' app/src/pages/BidDetailPage.tsx
+sed -i 's|https://[^/]*/api/|/api/|g' app/src/pages/AnnouncementDetailPage.tsx
+
+# Step 2: /api/ を $URL/api/ に置換
 sed -i "s|/api/announcements|$URL/api/announcements|g" app/src/data/announcements.ts
 sed -i "s|/api/companies|$URL/api/companies|g"         app/src/data/companies.ts
 sed -i "s|/api/evaluations|$URL/api/evaluations|g"     app/src/data/evaluations.ts
 sed -i "s|/api/orderers|$URL/api/orderers|g"           app/src/data/orderers.ts
 sed -i "s|/api/partners|$URL/api/partners|g"           app/src/data/partners.ts
 sed -i "s|/api/evaluations|$URL/api/evaluations|g"     app/src/hooks/useBidListState.ts
+sed -i "s|/api/announcements|$URL/api/announcements|g" app/src/hooks/useAnnouncementListState.ts
 sed -i "s|/api/evaluations|$URL/api/evaluations|g"     app/src/pages/BidDetailPage.tsx
+sed -i "s|/api/announcements|$URL/api/announcements|g" app/src/pages/AnnouncementDetailPage.tsx
 
 echo "Replaced API URLs with: $URL"
 
