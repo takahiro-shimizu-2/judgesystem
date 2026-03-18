@@ -64,11 +64,11 @@ Arguments:
 
 - --use_gcp_vm: (フラグ引数)
 
-  GCP VM で動作させる場合に指定する。指定した場合、データベースを操作するオブジェクトとして、DBOperatorGCPVMを使う。指定しない場合、DBOperatorSQLITE3 を使う。
+  GCP VM で動作させる場合に指定する。指定した場合、データベースを操作するオブジェクトとして DBOperatorGCPVM を使い、PDF/Markdown を GCS (gs://) に保存する。PostgreSQL 接続を使う場合も、自動的に GCS 保存を有効にする。
 
 - --use_postgres: (フラグ引数)
 
-  PostgreSQL を使用する場合に指定する。指定した場合、データベースを操作するオブジェクトとして、DBOperatorPOSTGRESを使う。
+  PostgreSQL を使用する場合に指定する。指定した場合、DBOperatorPOSTGRES を使い、PDF/Markdown の保存先は GCS (gs://) に切り替わる（--use_gcp_vm を省略しても同様）。
 
 - --stop_processing: (フラグ引数)
 
@@ -1552,7 +1552,7 @@ class DBOperatorGCPVM(DBOperator):
                         pageCount,
                         extractedAt,
                         url,
-                        content
+                        markdown_path
                         )
                 ) AS documents
             FROM {self.project_id}.{self.dataset_name}.announcements_documents_master
@@ -1720,7 +1720,7 @@ class DBOperatorGCPVM(DBOperator):
                 SELECT
                     announcement_id,
                     ARRAY_AGG(
-                        STRUCT(document_id, type, title, fileFormat, pageCount, extractedAt, url, content)
+                        STRUCT(document_id, type, title, fileFormat, pageCount, extractedAt, url, markdown_path)
                     ) AS documents
                 FROM (
                     SELECT DISTINCT
@@ -1732,7 +1732,7 @@ class DBOperatorGCPVM(DBOperator):
                         pageCount,
                     extractedAt,
                     url,
-                    content
+                    markdown_path
                     FROM {self.project_id}.{self.dataset_name}.announcements_documents_master
                 )
                 GROUP BY announcement_id
@@ -3957,11 +3957,12 @@ class BidJudgementSan:
         extracted_at=None,
         base_digits=5,
         no_merge=False,
-        use_gcp_vm=False,
+        use_gcs=False,
         do_fetch_html=True,
         do_extract_links=True,
         do_format_documents=True,
         do_download_pdfs=True,
+        do_markdown=False,
         do_count_pages=True,
         do_ocr=True,
         google_api_key="data/sec/google_ai_studio_api_key_mizu.txt",
@@ -3999,11 +4000,12 @@ class BidJudgementSan:
             extracted_at: 抽出日 (YYYY-MM-DD形式)。Noneなら現在日付
             base_digits: announcement_id のグルーピング桁数
             no_merge: 過去の結果とマージしないフラグ
-            use_gcp_vm: GCS (gs://) を使用する場合 True
+            use_gcs: GCS (gs://) を使用する場合 True（--use_postgres 指定時も自動で True 相当になる）
             do_fetch_html: HTML ページを取得する場合 True
             do_extract_links: ドキュメントリンクを抽出する場合 True
             do_format_documents: ドキュメント情報をフォーマットする場合 True
             do_download_pdfs: PDF をダウンロードする場合 True
+            do_markdown: PDF 取得後に Gemini で Markdown を生成する場合 True
             do_count_pages: PDF のページ数をカウントする場合 True
             do_ocr: Gemini OCR を実行する場合 True
             google_api_key: Google AI Studio API キーファイルのパス
@@ -4043,6 +4045,7 @@ class BidJudgementSan:
                      (1 if do_extract_links else 0) + \
                      (1 if do_format_documents else 0) + \
                      (1 if do_download_pdfs else 0) + \
+                     (1 if do_markdown else 0) + \
                      (1 if do_count_pages else 0) + \
                      (1 if do_ocr else 0)
         step_num = 0
@@ -4100,8 +4103,22 @@ class BidJudgementSan:
         if do_download_pdfs:
             step_num += 1
             print(f"\n[{step_num}/{total_steps}] Downloading PDFs...")
-            df_merged = self._step0_download_pdfs(df_merged, use_gcp_vm=use_gcp_vm)
+            df_merged = self._step0_download_pdfs(df_merged, use_gcs=use_gcs)
             print(f"Updated DataFrame with pdf_is_saved info")
+
+        if do_markdown:
+            step_num += 1
+            print(f"\n[{step_num}/{total_steps}] Generating Markdown summaries...")
+            df_merged = self._step0_generate_markdown(
+                df_main=df_merged,
+                use_gcs=use_gcs,
+                google_api_key=google_api_key,
+                max_concurrency=ocr_max_concurrency,
+                max_api_calls_per_run=ocr_max_api_calls_per_run
+            )
+            print("Updated DataFrame with Markdown content")
+        else:
+            print("\n[Skipped] Generating Markdown summaries")
 
         # 5. PDFページ数カウント（オプション）
         if do_count_pages:
@@ -4118,7 +4135,7 @@ class BidJudgementSan:
             # DataFrame を直接渡して OCR 処理
             df_merged, df_announcements, df_requirements = self._step0_ocr_with_gemini(
                 df_main=df_merged,
-                use_gcp_vm=use_gcp_vm,
+                use_gcs=use_gcs,
                 google_api_key=google_api_key,
                 max_concurrency=ocr_max_concurrency,
                 max_api_calls_per_run=ocr_max_api_calls_per_run
@@ -4587,7 +4604,7 @@ class BidJudgementSan:
             "pageCount": np.where(ext == "pdf", -1, -2).astype('int64'),
             "extractedAt": [extracted_at] * df_merged.shape[0],
             "url": df_merged["pdf_full_url"],
-            "content": ["dummy"] * df_merged.shape[0],
+            "markdown_path": [None] * df_merged.shape[0],
             "adhoc_index": df_merged["adhoc_index"],
             "base_link_parent": df_merged["base_link_parent"],
             "base_link": df_merged["base_link"],
@@ -4854,13 +4871,13 @@ class BidJudgementSan:
         print(f"Merged: {affected_rows} rows inserted")
 
 
-    def _step0_download_pdfs(self, df, use_gcp_vm=False):
+    def _step0_download_pdfs(self, df, use_gcs=False):
         """
         PDF を URL からダウンロードして保存
 
         Args:
             df: announcements_document DataFrame (url, save_path, pdf_is_saved columns必要)
-            use_gcp_vm: True なら GCS (gs://) へ、False ならローカルへ保存
+            use_gcs: True なら GCS (gs://) へ、False ならローカルへ保存
 
         Returns:
             pd.DataFrame: pdf_is_saved, pdf_is_saved_date が更新された DataFrame
@@ -4873,7 +4890,7 @@ class BidJudgementSan:
         today_str = datetime.now().strftime("%Y-%m-%d")
 
         # GCS/local パスへの変換
-        if use_gcp_vm:
+        if use_gcs:
             df["save_path"] = df["save_path"].apply(
                 lambda x: x.replace("output/pdf/", "gs://ann-files/pdf/") if pd.notna(x) else x
             )
@@ -4892,7 +4909,7 @@ class BidJudgementSan:
                 df.loc[i, "pdf_is_saved"] = False
                 continue
 
-            if use_gcp_vm and p.startswith("gs://"):
+            if use_gcs and p.startswith("gs://"):
                 # GCS path
                 parts = p.split("/")
                 if len(parts) >= 5:
@@ -4935,7 +4952,7 @@ class BidJudgementSan:
 
             # Create directory if it doesn't exist (local only)
             save_path_dirname = os.path.dirname(save_path)
-            if not use_gcp_vm and not os.path.exists(save_path_dirname):
+            if not use_gcs and not os.path.exists(save_path_dirname):
                 os.makedirs(save_path_dirname, exist_ok=True)
 
             # Skip certain URLs
@@ -4970,7 +4987,7 @@ class BidJudgementSan:
                     continue
 
                 try:
-                    if use_gcp_vm and save_path.startswith("gs://"):
+                    if use_gcs and save_path.startswith("gs://"):
                         gcs_upload_from_bytes(save_path, response.content)
                         tqdm.write(fr"Saved {save_path}.")
                         df.loc[i, "pdf_is_saved"] = True
@@ -4985,6 +5002,166 @@ class BidJudgementSan:
                 time.sleep(SLEEP_AFTER_REQUEST)
 
         return df
+
+
+    def _build_markdown_path(self, document_id, file_format=None, use_gcs=False):
+        """
+        Markdownファイルの保存先を生成
+
+        Args:
+            document_id: ドキュメントID
+            file_format: ファイル形式（pdf, xlsx等）。指定時は {document_id}.{file_format}.md
+            use_gcs: GCS保存の場合 True
+        """
+        doc_id = str(document_id).strip()
+        if not doc_id:
+            doc_id = str(uuid.uuid4())
+        prefix = doc_id.split("_")[0] if "_" in doc_id else doc_id[:6]
+        prefix = prefix or "misc"
+
+        # ファイル名: file_format指定時は拡張子付き
+        if file_format:
+            filename = f"{doc_id}.{file_format}.md"
+        else:
+            filename = f"{doc_id}.md"
+
+        if use_gcs:
+            return f"gs://ann-files/markdown/md_{prefix}/{filename}"
+        else:
+            return os.path.join("output", "markdown", f"md_{prefix}", filename)
+
+
+    def _step0_generate_markdown(
+        self,
+        df_main,
+        use_gcs=False,
+        google_api_key=None,
+        max_concurrency=5,
+        max_api_calls_per_run=1000
+    ):
+        """
+        PDF から Gemini を使って Markdown 要約を生成し保存する
+        """
+        if google_api_key is None:
+            raise ValueError("google_api_key is required for Markdown generation")
+
+        key_path = Path(google_api_key)
+        if not key_path.exists():
+            raise FileNotFoundError(f"Google API key file not found: {google_api_key}")
+
+        api_key = key_path.read_text().strip()
+        if not api_key:
+            raise ValueError("Google API key file is empty")
+
+        client = genai.Client(api_key=api_key)
+        df_main = df_main.copy()
+        df_main["document_id"] = df_main["document_id"].astype(str).str.strip()
+
+        def clean_markdown(text):
+            if not text:
+                return None
+            cleaned = text.strip()
+            if cleaned.startswith("```"):
+                cleaned = re.sub(r"^```[a-zA-Z0-9_+-]*", "", cleaned).strip()
+            if cleaned.endswith("```"):
+                cleaned = cleaned[:-3].strip()
+            return cleaned
+
+        doc_to_md_path = {}
+        params = []
+        skipped_docs = []
+
+        # 行ごとに処理（PDFのみ）
+        for idx, row in df_main.iterrows():
+            document_id = str(row.get("document_id", "")).strip()
+            file_format = str(row.get("fileFormat", "")).strip().lower()
+            save_path = row.get("save_path")
+
+            if document_id in ("", "nan", "None"):
+                continue
+
+            # PDFのみ処理（Gemini APIはxlsx/docx/zipをサポートしていない）
+            if file_format != "pdf":
+                continue
+
+            # Markdown保存先: {document_id}.{fileFormat}.md
+            md_path = self._build_markdown_path(document_id, file_format=file_format, use_gcs=use_gcs)
+            key = (document_id, file_format)
+
+            # 既に処理済みまたはファイル存在チェック
+            if key in doc_to_md_path:
+                continue
+            doc_to_md_path[key] = md_path
+
+            if file_exists_gcs_or_local(md_path):
+                continue
+
+            # ファイルパス存在チェック
+            if pd.isna(save_path) or not file_exists_gcs_or_local(save_path):
+                skipped_docs.append(f"{document_id}.{file_format}")
+                continue
+
+            # Gemini API呼び出しパラメータ
+            params.append([
+                self._PROMPT_MD,
+                document_id,
+                file_format,  # 実際のファイル形式を渡す
+                "gemini-2.5-flash",
+                "md",
+                use_gcs,
+                save_path  # 実際のファイルパスを渡す
+            ])
+
+            if len(params) >= max_api_calls_per_run:
+                print(f"\nReached Markdown generation limit: {len(params)} documents in this run")
+                break
+
+        if skipped_docs:
+            print(f"Skipped {len(skipped_docs)} documents without accessible PDFs: {skipped_docs[:5]}")
+
+        if len(params) == 0:
+            print("No Markdown generation needed.")
+            return df_main
+
+        print(f"Calling Gemini for Markdown generation (documents: {len(params)}, max_concurrency={max_concurrency})")
+        start_time = time.time()
+        results = asyncio.run(self._call_parallel(client, params, max_concurrency))
+        elapsed_time = time.time() - start_time
+        print(f"Markdown generation completed in {elapsed_time:.2f} seconds")
+
+        saved_count = 0
+        for res in tqdm(results, desc="Processing Markdown responses"):
+            document_id = res.get("document_id")
+            file_format = res.get("file_format", "pdf")
+            key = (document_id, file_format)
+            md_path = doc_to_md_path.get(key)
+
+            if res.get("error") is not None:
+                tqdm.write(f"Markdown API error for {document_id}.{file_format}: {res.get('error')}")
+                continue
+
+            markdown_text = clean_markdown(res.get("result"))
+            if not markdown_text:
+                tqdm.write(f"No Markdown text returned for {document_id}.{file_format}")
+                continue
+
+            try:
+                if md_path.startswith("gs://"):
+                    gcs_upload_from_bytes(md_path, markdown_text.encode("utf-8"))
+                else:
+                    path_obj = Path(md_path)
+                    path_obj.parent.mkdir(parents=True, exist_ok=True)
+                    path_obj.write_text(markdown_text, encoding="utf-8")
+
+                # markdown_path カラムにパスを保存（document_id + fileFormat でマッチ）
+                mask = (df_main["document_id"] == document_id) & (df_main["fileFormat"] == file_format)
+                df_main.loc[mask, "markdown_path"] = md_path
+                saved_count += 1
+            except Exception as e:
+                tqdm.write(f"Failed to save Markdown for {document_id}.{file_format}: {e}")
+
+        print(f"Markdown saved for {saved_count} documents")
+        return df_main
 
 
     def _step0_count_pages(self, df):
@@ -5053,7 +5230,7 @@ class BidJudgementSan:
     def _step0_ocr_with_gemini(
         self,
         df_main,
-        use_gcp_vm=False,
+        use_gcs=False,
         google_api_key=None,
         max_concurrency=5,
         max_api_calls_per_run=1000
@@ -5063,7 +5240,7 @@ class BidJudgementSan:
 
         Args:
             df_main: announcements_document の DataFrame
-            use_gcp_vm: GCS (gs://) を使用する場合 True
+            use_gcs: GCS (gs://) を使用する場合 True
             google_api_key: Google AI Studio API key filepath
             max_concurrency: 並列実行数
             max_api_calls_per_run: 1回の実行での最大API呼び出し数（デフォルト: 1000）
@@ -5148,7 +5325,7 @@ class BidJudgementSan:
                 continue
 
             # PDFファイルパス確認
-            if use_gcp_vm:
+            if use_gcs:
                 pdf_path = f"gs://ann-files/pdf/pdf_{document_id.split('_')[0]}/{document_id}.pdf"
                 pdf_exists = True  # GCSの場合は存在チェックスキップ
             else:
@@ -5166,7 +5343,7 @@ class BidJudgementSan:
                     "pdf",
                     "gemini-2.5-flash",
                     "ann",
-                    use_gcp_vm
+                    use_gcs
                 ])
 
             # 要件文抽出用パラメータ（同じPDFを複数回APIに送らないため、document_idごとに1回のみ）
@@ -5178,7 +5355,7 @@ class BidJudgementSan:
                     "pdf",
                     "gemini-2.5-flash",
                     "req",
-                    use_gcp_vm
+                    use_gcs
                 ])
                 processed_docs.add(document_id)
 
@@ -5515,7 +5692,12 @@ class BidJudgementSan:
                 if item is None:
                     break
 
-                prompt, document_id, data_type, model, type2, gcp_vm = item
+                # paramsの形式: [prompt, document_id, data_type, model, type2, use_gcs, save_path(optional)]
+                if len(item) == 7:
+                    prompt, document_id, data_type, model, type2, use_gcs, save_path = item
+                else:
+                    prompt, document_id, data_type, model, type2, use_gcs = item
+                    save_path = None
 
                 for attempt in range(3):
                     try:
@@ -5526,11 +5708,13 @@ class BidJudgementSan:
                             document_id,
                             data_type,
                             model,
-                            gcp_vm
+                            use_gcs,
+                            save_path
                         )
 
                         results.append({
                             "document_id": document_id,
+                            "file_format": data_type,
                             "result": result,
                             "error": None,
                             "type": type2
@@ -5565,38 +5749,64 @@ class BidJudgementSan:
         return results
 
 
-    def _call_gemini(self, client, prompt, document_id, data_type, model="gemini-2.5-flash", gcp_vm=True):
+    def _call_gemini(self, client, prompt, document_id, data_type, model="gemini-2.5-flash", use_gcs=True, save_path=None):
         """
-        Gemini APIを呼び出してPDFを解析
+        Gemini APIを呼び出してファイルを解析
+
+        Args:
+            save_path: 実際のファイルパス。指定時はこれを優先使用
         """
-        # PDFデータ取得
-        if gcp_vm:
-            from google.cloud import storage
-            storage_client = storage.Client()
-            bucket_name = "ann-files"
-            blob_path = f"pdf/pdf_{document_id.split('_')[0]}/{document_id}.pdf"
-            bucket = storage_client.bucket(bucket_name)
-            blob = bucket.blob(blob_path)
-            data = blob.download_as_bytes()
+        # ファイルデータ取得
+        if save_path:
+            # save_pathが指定されている場合はそれを使用
+            if use_gcs and save_path.startswith("gs://"):
+                from google.cloud import storage
+                storage_client = storage.Client()
+                # gs://bucket/path/to/file.ext から bucket と path を抽出
+                parts = save_path.replace("gs://", "").split("/", 1)
+                bucket_name = parts[0]
+                blob_path = parts[1]
+                bucket = storage_client.bucket(bucket_name)
+                blob = bucket.blob(blob_path)
+                data = blob.download_as_bytes()
+            else:
+                with open(save_path, "rb") as f:
+                    data = f.read()
         else:
-            pdf_path = f"output/pdf/pdf_{document_id.split('_')[0]}/{document_id}.pdf"
-            with open(pdf_path, "rb") as f:
-                data = f.read()
+            # 従来の方法（後方互換性）
+            if use_gcs:
+                from google.cloud import storage
+                storage_client = storage.Client()
+                bucket_name = "ann-files"
+                blob_path = f"pdf/pdf_{document_id.split('_')[0]}/{document_id}.pdf"
+                bucket = storage_client.bucket(bucket_name)
+                blob = bucket.blob(blob_path)
+                data = blob.download_as_bytes()
+            else:
+                pdf_path = f"output/pdf/pdf_{document_id.split('_')[0]}/{document_id}.pdf"
+                with open(pdf_path, "rb") as f:
+                    data = f.read()
+
+        # MIME typeのマッピング（Gemini API対応形式のみ）
+        # Geminiが対応: PDF, 画像, 動画, 音声, テキスト
+        # 非対応: Office形式(xlsx, docx等), zip等のアーカイブ
+        mime_types = {
+            "pdf": "application/pdf"
+        }
+
+        mime_type = mime_types.get(data_type.lower(), "application/pdf")
 
         # Gemini API呼び出し
-        if data_type == "pdf":
-            response = client.models.generate_content(
-                model=model,
-                contents=[
-                    types.Part.from_bytes(
-                        data=data,
-                        mime_type='application/pdf',
-                    ),
-                    prompt
-                ]
-            )
-        else:
-            raise ValueError(f"Unsupported data_type: {data_type}")
+        response = client.models.generate_content(
+            model=model,
+            contents=[
+                types.Part.from_bytes(
+                    data=data,
+                    mime_type=mime_type,
+                ),
+                prompt
+            ]
+        )
 
         return response.text
 
@@ -5841,6 +6051,22 @@ Execute
 ]
 }
 ```
+"""
+
+    _PROMPT_MD = """
+あなたは日本語の建設・調達関連文書を要約する専門アシスタントです。添付 PDF の内容を読み、次のルールに従って Markdown でまとめてください。
+
+ルール:
+1. 出力は Markdown だけにし、余計な説明や JSON は付けない。
+2. 以下のセクション構成を必ず守る:
+   # 概要
+   ## 日程
+   ## 発注者・問い合わせ先
+   ## 主要条件
+   ## その他特記事項
+3. それぞれのセクションでは原文の日本語を尊重し、必要に応じて箇条書きで整理する。情報が無い場合は「情報なし」と明記する。
+4. 日付は判読できる場合 YYYY-MM-DD 形式に変換する。難しい場合は原文のまま残す。
+5. 数値や固有名詞は可能な限り具体的に保つ。
 """
 
 
@@ -6245,6 +6471,8 @@ if __name__ == "__main__":
                        help="フォーマット処理を実行")
     parser.add_argument("--step0_do_download_pdfs", action="store_true",
                        help="PDFダウンロード処理を実行")
+    parser.add_argument("--step0_do_markdown", action="store_true",
+                       help="PDFからMarkdown要約を生成")
     parser.add_argument("--step0_do_count_pages", action="store_true",
                        help="ページ数カウント処理を実行")
     parser.add_argument("--step0_do_ocr", action="store_true",
@@ -6289,6 +6517,7 @@ if __name__ == "__main__":
         step0_do_extract_links = args.step0_do_extract_links
         step0_do_format_documents = args.step0_do_format_documents
         step0_do_download_pdfs = args.step0_do_download_pdfs
+        step0_do_markdown = args.step0_do_markdown
         step0_do_count_pages = args.step0_do_count_pages
         step0_do_ocr = args.step0_do_ocr
         step0_google_api_key = args.step0_google_api_key
@@ -6320,7 +6549,9 @@ if __name__ == "__main__":
         step0_do_extract_links = False
         step0_do_format_documents = False
         step0_do_download_pdfs = False
+        step0_do_markdown = False
         step0_do_count_pages = False
+        step0_do_ocr = False
 
         step1_transfer_remove_table = False
         step3_remove_table = False
@@ -6366,11 +6597,12 @@ if __name__ == "__main__":
             timestamp=step0_timestamp,
             topAgencyName=step0_topAgencyName,
             no_merge=step0_no_merge,
-            use_gcp_vm=use_gcp_vm,
+            use_gcs=(use_gcp_vm or use_postgres),
             do_fetch_html=step0_do_fetch_html,
             do_extract_links=step0_do_extract_links,
             do_format_documents=step0_do_format_documents,
             do_download_pdfs=step0_do_download_pdfs,
+            do_markdown=step0_do_markdown,
             do_count_pages=step0_do_count_pages,
             do_ocr=step0_do_ocr,
             google_api_key=step0_google_api_key,
@@ -6392,11 +6624,12 @@ if __name__ == "__main__":
             timestamp=step0_timestamp,
             topAgencyName=step0_topAgencyName,
             no_merge=step0_no_merge,
-            use_gcp_vm=use_gcp_vm,
+            use_gcs=(use_gcp_vm or use_postgres),
             do_fetch_html=step0_do_fetch_html,
             do_extract_links=step0_do_extract_links,
             do_format_documents=step0_do_format_documents,
             do_download_pdfs=step0_do_download_pdfs,
+            do_markdown=step0_do_markdown,
             do_count_pages=step0_do_count_pages,
             do_ocr=step0_do_ocr,
             google_api_key=step0_google_api_key,
