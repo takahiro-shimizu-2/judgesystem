@@ -24,7 +24,7 @@ import type {
 
 
 const generatePartners = async (): Promise<PartnerListItem[]> => {
-  const res = await fetch("/api/partners");
+  const res = await fetch("https://bidapp-backend-postgres-50843898931.asia-northeast1.run.app/api/partners");
   const data = await res.json();
   //console.log("API response:", data);
   return data;

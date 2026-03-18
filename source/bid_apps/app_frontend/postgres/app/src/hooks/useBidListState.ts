@@ -122,7 +122,7 @@ async function fetchEvaluations(params: {
     queryParams.append('sortOrder', sort.sort || 'asc');
   }
 
-  const response = await fetch(`/api/evaluations?${queryParams.toString()}`);
+  const response = await fetch(`https://bidapp-backend-postgres-50843898931.asia-northeast1.run.app/api/evaluations?${queryParams.toString()}`);
   if (!response.ok) {
     const errorText = await response.text();
     console.error('API Error:', response.status, errorText);

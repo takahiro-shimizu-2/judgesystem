@@ -29,7 +29,6 @@ const buildPoolConfig = (): PoolConfig => {
 export const pool = new Pool(buildPoolConfig());
 
 export const TABLES = {
-  announcements: "backend_announcements",
   evaluations: "backend_evaluations",
   companies: "backend_companies",
   orderers: "backend_orderers",

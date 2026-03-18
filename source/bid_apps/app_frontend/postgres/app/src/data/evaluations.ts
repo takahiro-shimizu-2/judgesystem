@@ -27,7 +27,7 @@ export const findById = (id: string) =>
 
 export const updateWorkStatus = async (evaluationNo: string, workStatus: WorkStatus): Promise<boolean> => {
   try {
-    const response = await fetch(`/api/evaluations/${evaluationNo}`, {
+    const response = await fetch(`https://bidapp-backend-postgres-50843898931.asia-northeast1.run.app/api/evaluations/${evaluationNo}`, {
       method: 'PATCH',
       headers: {
         'Content-Type': 'application/json',

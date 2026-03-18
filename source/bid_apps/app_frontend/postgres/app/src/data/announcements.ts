@@ -9,16 +9,8 @@ import type { AnnouncementWithStatus } from '../types';
 //import { mockOrderers } from './orderers';
 //import { mockCompanies } from './companies';
 
-const generateAnnouncements = async (): Promise<AnnouncementWithStatus[]> => {
-  const res = await fetch("/api/announcements");
-  const data = await res.json();
-  //console.log("API response:", data);
-  return data;
-}
-
-// エクスポート
-//export const mockAnnouncements: AnnouncementWithStatus[] = generateAnnouncements();
-export const mockAnnouncements: AnnouncementWithStatus[] = await generateAnnouncements();
+// mockAnnouncements は使用しない（詳細ページでは個別にAPIから取得する）
+export const mockAnnouncements: AnnouncementWithStatus[] = [];
 
 // テスト用: 非常に長い案件名を1件追加
 //if (mockAnnouncements.length > 0) {

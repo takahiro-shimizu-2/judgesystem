@@ -24,7 +24,7 @@ interface CompanyWithDetails {
 }
 
 const generateCompanies = async (): Promise<CompanyWithDetails[]> => {
-  const res = await fetch("/api/companies");
+  const res = await fetch("https://bidapp-backend-postgres-50843898931.asia-northeast1.run.app/api/companies");
   const data = await res.json();
   //console.log("API response:", data);
   return data;
