@@ -41,6 +41,7 @@ import { useSidebar } from '../contexts/SidebarContext';
 import { formatAmountInManYen } from '../utils';
 import type { BidType, AnnouncementStatus } from '../types/announcement';
 import type { EvaluationStatus } from '../types';
+import { getApiUrl } from '../config/api';
 
 // 関連案件用ソートオプション
 type SortOption = 'deadline_asc' | 'deadline_desc' | 'publish_asc' | 'publish_desc' | 'status_asc' | 'status_desc' | 'prefecture_asc' | 'prefecture_desc';
@@ -1285,7 +1286,7 @@ export default function AnnouncementDetailPage() {
       try {
         // id から ann- プレフィックスを除去して公告番号を取得
         const announcementNo = id.startsWith('ann-') ? id.substring(4) : id;
-        const response = await fetch(`https://bidapp-backend-postgres-50843898931.asia-northeast1.run.app/api/announcements/${announcementNo}`);
+        const response = await fetch(getApiUrl(`/api/announcements/${announcementNo}`));
         if (!response.ok) {
           throw new Error(`Failed to fetch announcement: ${response.status}`);
         }

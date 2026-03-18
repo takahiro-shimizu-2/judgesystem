@@ -13,6 +13,7 @@ import type {
   SimilarCase
 } from '../types';
 import { mockCompanies } from './companies';
+import { getApiUrl } from '../config/api';
 
 // サーバーサイドページネーション移行により、全件取得は廃止
 // データ取得は useBidListState フックで行う
@@ -27,7 +28,7 @@ export const findById = (id: string) =>
 
 export const updateWorkStatus = async (evaluationNo: string, workStatus: WorkStatus): Promise<boolean> => {
   try {
-    const response = await fetch(`https://bidapp-backend-postgres-50843898931.asia-northeast1.run.app/api/evaluations/${evaluationNo}`, {
+    const response = await fetch(getApiUrl(`/api/evaluations/${evaluationNo}`), {
       method: 'PATCH',
       headers: {
         'Content-Type': 'application/json',

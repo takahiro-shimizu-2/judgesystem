@@ -4,6 +4,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import type { GridFilterModel, GridSortModel, GridPaginationModel } from '@mui/x-data-grid';
 import type { AnnouncementFilterState } from '../components/announcement';
+import { getApiUrl } from '../config/api';
 
 // ローカルストレージのキー
 const STORAGE_KEYS = {
@@ -96,7 +97,7 @@ async function fetchAnnouncements(params: {
     queryParams.append('sortOrder', sort.sort || 'asc');
   }
 
-  const response = await fetch(`https://bidapp-backend-postgres-50843898931.asia-northeast1.run.app/api/announcements?${queryParams.toString()}`);
+  const response = await fetch(getApiUrl(`/api/announcements?${queryParams.toString()}`));
   if (!response.ok) {
     const errorText = await response.text();
     console.error('API Error:', response.status, errorText);

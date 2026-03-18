@@ -16,6 +16,10 @@ RUN npm ci
 # Copy source code
 COPY . .
 
+# Build引数としてAPI URLを受け取る
+ARG VITE_API_URL
+ENV VITE_API_URL=${VITE_API_URL}
+
 # Build the application
 RUN npm run build
 
@@ -30,8 +34,8 @@ COPY nginx.conf /etc/nginx/conf.d/default.conf
 # Copy built assets from builder stage
 COPY --from=builder /app/dist /usr/share/nginx/html
 
-# Expose port 80
-EXPOSE 80
+# Expose port 8080 (Cloud Run default)
+EXPOSE 8080
 
 # Start nginx
 CMD ["nginx", "-g", "daemon off;"]

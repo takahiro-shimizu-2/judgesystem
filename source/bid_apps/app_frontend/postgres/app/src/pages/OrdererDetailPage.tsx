@@ -40,6 +40,7 @@ import { useSidebar } from '../contexts/SidebarContext';
 import { NotFoundView, FloatingBackButton, ScrollToTopButton } from '../components/common';
 import { CustomPagination } from '../components/bid';
 import { RightSidePanel } from '../components/layout';
+import { getApiUrl } from '../config/api';
 
 
 /**
@@ -784,7 +785,7 @@ export default function OrdererDetailPage() {
       if (!id) return;
       try {
         setLoading(true);
-        const response = await fetch(`https://bidapp-backend-postgres-50843898931.asia-northeast1.run.app/api/announcements?ordererId=${id}&pageSize=1000`);
+        const response = await fetch(getApiUrl(`/api/announcements?ordererId=${id}&pageSize=1000`));
         if (!response.ok) {
           throw new Error(`Failed to fetch announcements: ${response.status}`);
         }

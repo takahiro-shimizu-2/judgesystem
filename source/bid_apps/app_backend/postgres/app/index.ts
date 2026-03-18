@@ -10,7 +10,7 @@ import { PartnerController } from "./src/controllers/partnerController";
 const app = express();
 
 app.use(cors({
-  origin: "https://bidapp-frontend-postgres-50843898931.asia-northeast1.run.app",
+  origin: process.env.CORS_ORIGIN || "http://localhost:5173",
   methods: ["GET", "HEAD", "PUT", "PATCH", "POST", "DELETE", "OPTIONS"],
   allowedHeaders: ["*"],
   credentials: false

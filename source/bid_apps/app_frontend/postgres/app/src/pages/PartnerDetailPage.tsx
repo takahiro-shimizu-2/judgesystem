@@ -50,6 +50,7 @@ import { useSidebar } from '../contexts/SidebarContext';
 import type { PastProject } from '../types/partner';
 import type { BidType } from '../types/announcement';
 import type { EvaluationStatus, WorkStatus, CompanyPriority } from '../types';
+import { getApiUrl } from '../config/api';
 
 // ソートオプション
 type SortOption =
@@ -933,7 +934,7 @@ export default function PartnerDetailPage() {
       setLoading(true);
       setError(null);
       try {
-        const response = await fetch(`https://bidapp-backend-postgres-50843898931.asia-northeast1.run.app/api/partners/${id}`);
+        const response = await fetch(getApiUrl(`/api/partners/${id}`));
         if (!response.ok) {
           throw new Error(`Failed to fetch partner: ${response.status}`);
         }

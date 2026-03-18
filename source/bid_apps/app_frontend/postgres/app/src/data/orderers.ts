@@ -3,9 +3,10 @@
  * 全ての発注者データの単一真実源（Single Source of Truth）
  */
 import type { Orderer } from '../types/orderer';
+import { getApiUrl } from '../config/api';
 
 const generateOrderers = async (): Promise<Orderer[]> => {
-  const res = await fetch("https://bidapp-backend-postgres-50843898931.asia-northeast1.run.app/api/orderers");
+  const res = await fetch(getApiUrl('/api/orderers'));
   const data = await res.json();
   //console.log("API response:", data);
   return data;

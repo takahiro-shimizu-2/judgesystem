@@ -9,6 +9,7 @@ frontend_url=""
 project_id=""
 dataset_name=""
 cloud_sql_instance=""
+connection_type="proxy"  # "proxy" or "vpc"
 pg_host=""
 pg_user=""
 pg_password=""
@@ -49,6 +50,14 @@ while [[ $# -gt 0 ]]; do
         exit 1
       fi
       cloud_sql_instance="$2"
+      shift 2
+      ;;
+    --connection_type)
+      if [[ $# -lt 2 ]]; then
+        echo "Error: --connection_type requires a value"
+        exit 1
+      fi
+      connection_type="$2"
       shift 2
       ;;
     --pg_host)
@@ -114,13 +123,18 @@ Usage: backend_gcloud_command_sample_postgres.sh [options]
   --project_id <gcp-project>
   --dataset_name <dataset>
   --cloud_sql_instance <project:region:instance>
-  --pg_host </cloudsql/... or hostname>
+  --connection_type <proxy|vpc>  (default: proxy)
+  --pg_host </cloudsql/... or private IP>
   --pg_user <user>
   --pg_password <password>
   --pg_database <dbname>
   --pg_port <port>
   --pg_sslmode <disable|require|...>
   --pg_schema <schema>
+
+Connection types:
+  proxy: Cloud SQL Proxy (Unix socket, no VPC needed)
+  vpc:   VPC Private IP (requires VPC Connector)
 EOF
       exit 0
       ;;
@@ -135,34 +149,12 @@ echo "frontend_url: $frontend_url"
 echo "Project ID: $project_id"
 echo "Dataset Name: $dataset_name"
 echo "cloud_sql_instance: $cloud_sql_instance"
+echo "connection_type: $connection_type"
 
 
-if [[ -n "$frontend_url" ]]; then
-  if grep -q "https://frontend-xxxxx\.a\.run\.app" app/index.ts; then
-    sed -i "s|https://frontend-xxxxx\.a\.run\.app|$frontend_url|g" app/index.ts
-    echo "Replaced app/index.ts"
-  else
-    echo "No replacement target found."
-  fi
-fi
-
-if [[ -n "$project_id" ]]; then
-  if grep -q "PROJECT_ID" app/index.ts; then
-    sed -i "s|PROJECT_ID|$project_id|g" app/index.ts
-    echo "Replaced app/index.ts"
-  else
-    echo "No replacement target found."
-  fi
-fi
-
-if [[ -n "$dataset_name" ]]; then
-  if grep -q "DATASET_NAME" app/index.ts; then
-    sed -i "s|DATASET_NAME|$dataset_name|g" app/index.ts
-    echo "Replaced app/index.ts"
-  else
-    echo "No replacement target found."
-  fi
-fi
+# sed による置換は不要になりました（環境変数で設定するため）
+# frontend_url は CORS_ORIGIN 環境変数として Cloud Run に渡されます
+echo "CORS_ORIGIN will be set to: $frontend_url"
 
 # Settings
 # プロジェクトIDを環境変数にセット
@@ -191,11 +183,22 @@ fi
 # (gcr.io/PROJECT_ID/REPOSITORY/IMAGE_NAME:TAG)
 gcloud builds submit --tag $LOCATION-docker.pkg.dev/$PROJECT_ID/$REPO_NAME/$REPO_NAME:$TAG_NAME
 
-if [[ -z "$pg_host" && -n "$cloud_sql_instance" ]]; then
-  pg_host="/cloudsql/${cloud_sql_instance}"
+# 接続タイプに応じてPGHOSTを設定
+if [[ "$connection_type" == "proxy" ]]; then
+  # Cloud SQL Proxy (Unixソケット)
+  if [[ -z "$pg_host" && -n "$cloud_sql_instance" ]]; then
+    pg_host="/cloudsql/${cloud_sql_instance}"
+  fi
+elif [[ "$connection_type" == "vpc" ]]; then
+  # VPC Private IP
+  if [[ -z "$pg_host" ]]; then
+    echo "Error: --pg_host (private IP) is required when using --connection_type vpc"
+    exit 1
+  fi
 fi
 
 env_vars=()
+[[ -n "$frontend_url" ]] && env_vars+=("CORS_ORIGIN=${frontend_url}")
 [[ -n "$pg_host" ]] && env_vars+=("PGHOST=${pg_host}")
 [[ -n "$pg_user" ]] && env_vars+=("PGUSER=${pg_user}")
 [[ -n "$pg_password" ]] && env_vars+=("PGPASSWORD=${pg_password}")
@@ -204,17 +207,24 @@ env_vars=()
 [[ -n "$pg_sslmode" ]] && env_vars+=("PGSSLMODE=${pg_sslmode}")
 [[ -n "$pg_schema" ]] && env_vars+=("PG_SCHEMA=${pg_schema}")
 
+# デプロイコマンド構築
 deploy_cmd=(
   gcloud run deploy $IMAGE_NAME
   --image $LOCATION-docker.pkg.dev/$PROJECT_ID/$REPO_NAME/$IMAGE_NAME:$TAG_NAME
   --region $LOCATION
   --allow-unauthenticated
-  --vpc-connector=cloudrun-connector
-  --vpc-egress=private-ranges-only
 )
 
-if [[ -n "$cloud_sql_instance" ]]; then
-  deploy_cmd+=(--add-cloudsql-instances "$cloud_sql_instance")
+# 接続タイプに応じて設定を追加
+if [[ "$connection_type" == "proxy" ]]; then
+  # Cloud SQL Proxy使用
+  if [[ -n "$cloud_sql_instance" ]]; then
+    deploy_cmd+=(--add-cloudsql-instances "$cloud_sql_instance")
+  fi
+elif [[ "$connection_type" == "vpc" ]]; then
+  # VPC Private IP使用
+  deploy_cmd+=(--vpc-connector=cloudrun-connector)
+  deploy_cmd+=(--vpc-egress=private-ranges-only)
 fi
 
 if [[ ${#env_vars[@]} -gt 0 ]]; then

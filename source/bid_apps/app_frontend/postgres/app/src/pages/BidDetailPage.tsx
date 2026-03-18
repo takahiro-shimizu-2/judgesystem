@@ -11,6 +11,7 @@ import {
   CheckCircle as CheckCircleIcon,
 } from "@mui/icons-material";
 import { useState, useCallback, useEffect } from "react";
+import { getApiUrl } from "../config/api";
 
 import { bidTypeConfig, updateWorkStatus } from "../data";
 import type { BidEvaluation } from "../types";
@@ -185,7 +186,7 @@ export default function BidDetailPage() {
       setError(null);
 
       try {
-        const response = await fetch(`https://bidapp-backend-postgres-50843898931.asia-northeast1.run.app/api/evaluations/${id}`);
+        const response = await fetch(getApiUrl(`/api/evaluations/${id}`));
         if (!response.ok) {
           throw new Error(`Failed to fetch evaluation: ${response.status}`);
         }

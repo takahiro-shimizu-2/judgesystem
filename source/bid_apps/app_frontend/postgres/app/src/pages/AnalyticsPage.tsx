@@ -7,6 +7,7 @@ import {
   AccountBalance as AccountBalanceIcon,
   CheckCircle as CheckCircleIcon,
 } from '@mui/icons-material';
+import { getApiUrl } from '../config/api';
 
 interface StatCardProps {
   title: string;
@@ -122,7 +123,7 @@ export default function AnalyticsPage() {
     const fetchStats = async () => {
       try {
         setLoading(true);
-        const response = await fetch('https://bidapp-backend-postgres-50843898931.asia-northeast1.run.app/api/evaluations/stats');
+        const response = await fetch(getApiUrl('/api/evaluations/stats'));
         if (!response.ok) {
           throw new Error(`Failed to fetch stats: ${response.status}`);
         }

@@ -32,40 +32,11 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-echo $URL
+echo "Backend API URL: $URL"
 
-# Note: app/ ディレクトリには既に app_replacement_files_postgres の内容が適用済み
-# URL 置換のみ実行（冪等性確保: 既存URLを一旦 /api/ に戻してから置換）
-
-# Step 1: 既存の https://...*/api/ を全て /api/ に戻す（冪等性確保）
-sed -i 's|https://[^/]*/api/|/api/|g' app/src/data/announcements.ts
-sed -i 's|https://[^/]*/api/|/api/|g' app/src/data/companies.ts
-sed -i 's|https://[^/]*/api/|/api/|g' app/src/data/evaluations.ts
-sed -i 's|https://[^/]*/api/|/api/|g' app/src/data/orderers.ts
-sed -i 's|https://[^/]*/api/|/api/|g' app/src/data/partners.ts
-sed -i 's|https://[^/]*/api/|/api/|g' app/src/hooks/useBidListState.ts
-sed -i 's|https://[^/]*/api/|/api/|g' app/src/hooks/useAnnouncementListState.ts
-sed -i 's|https://[^/]*/api/|/api/|g' app/src/pages/BidDetailPage.tsx
-sed -i 's|https://[^/]*/api/|/api/|g' app/src/pages/AnnouncementDetailPage.tsx
-sed -i 's|https://[^/]*/api/|/api/|g' app/src/pages/AnalyticsPage.tsx
-sed -i 's|https://[^/]*/api/|/api/|g' app/src/pages/PartnerDetailPage.tsx
-sed -i 's|https://[^/]*/api/|/api/|g' app/src/pages/OrdererDetailPage.tsx
-
-# Step 2: /api/ を $URL/api/ に置換
-sed -i "s|/api/announcements|$URL/api/announcements|g" app/src/data/announcements.ts
-sed -i "s|/api/companies|$URL/api/companies|g"         app/src/data/companies.ts
-sed -i "s|/api/evaluations|$URL/api/evaluations|g"     app/src/data/evaluations.ts
-sed -i "s|/api/orderers|$URL/api/orderers|g"           app/src/data/orderers.ts
-sed -i "s|/api/partners|$URL/api/partners|g"           app/src/data/partners.ts
-sed -i "s|/api/evaluations|$URL/api/evaluations|g"     app/src/hooks/useBidListState.ts
-sed -i "s|/api/announcements|$URL/api/announcements|g" app/src/hooks/useAnnouncementListState.ts
-sed -i "s|/api/evaluations|$URL/api/evaluations|g"     app/src/pages/BidDetailPage.tsx
-sed -i "s|/api/announcements|$URL/api/announcements|g" app/src/pages/AnnouncementDetailPage.tsx
-sed -i "s|/api/evaluations|$URL/api/evaluations|g"     app/src/pages/AnalyticsPage.tsx
-sed -i "s|/api/partners|$URL/api/partners|g"           app/src/pages/PartnerDetailPage.tsx
-sed -i "s|/api/announcements|$URL/api/announcements|g" app/src/pages/OrdererDetailPage.tsx
-
-echo "Replaced API URLs with: $URL"
+# sed による置換は不要になりました（環境変数 VITE_API_URL で設定するため）
+# Docker ビルド時に --build-arg で VITE_API_URL を渡します
+echo "VITE_API_URL will be set to: $URL during Docker build"
 
 
 # Settings
@@ -91,12 +62,14 @@ if ! gcloud artifacts repositories describe $REPO_NAME --location=$LOCATION >/de
 fi
 
 # Cloud Build → Artifact Registry
-# LOCATION-docker.pkg.dev/PROJECT_ID/REPOSITORY/IMAGE_NAME:TAG
-# (gcr.io/PROJECT_ID/REPOSITORY/IMAGE_NAME:TAG)
-gcloud builds submit --tag $LOCATION-docker.pkg.dev/$PROJECT_ID/$REPO_NAME/$REPO_NAME:$TAG_NAME
+# cloudbuild.yaml を使用して VITE_API_URL をビルド引数として渡す
+gcloud builds submit \
+  --config=cloudbuild.yaml \
+  --substitutions=_VITE_API_URL="$URL",_LOCATION="$LOCATION",_REPO_NAME="$REPO_NAME",_IMAGE_NAME="$IMAGE_NAME",_TAG_NAME="$TAG_NAME"
 
 # Cloud Run デプロイ
 gcloud run deploy $IMAGE_NAME \
   --image $LOCATION-docker.pkg.dev/$PROJECT_ID/$REPO_NAME/$IMAGE_NAME:$TAG_NAME \
   --region $LOCATION \
-  --allow-unauthenticated
+  --allow-unauthenticated \
+  --memory 1Gi

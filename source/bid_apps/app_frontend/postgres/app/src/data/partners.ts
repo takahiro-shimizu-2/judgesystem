@@ -2,15 +2,16 @@
  * 協力会社マスターデータ（企業情報を統合）
  * 全ての会社データの単一真実源（Single Source of Truth）
  */
-import type { 
+import type {
   PartnerListItem
-  //PastProject, 
-  //CompanyBranch, 
-  //Qualifications, 
-  //UnifiedQualificationItem, 
-  //OrdererQualificationItem, 
-  //OrdererQualification 
+  //PastProject,
+  //CompanyBranch,
+  //Qualifications,
+  //UnifiedQualificationItem,
+  //OrdererQualificationItem,
+  //OrdererQualification
 } from '../types';
+import { getApiUrl } from '../config/api';
 //import { mockBidEvaluations } from './evaluations';
 //import {
 //  unifiedMainCategories,
@@ -24,7 +25,7 @@ import type {
 
 
 const generatePartners = async (): Promise<PartnerListItem[]> => {
-  const res = await fetch("https://bidapp-backend-postgres-50843898931.asia-northeast1.run.app/api/partners");
+  const res = await fetch(getApiUrl('/api/partners'));
   const data = await res.json();
   //console.log("API response:", data);
   return data;

@@ -4,6 +4,7 @@
  * ※このデータはevaluations.tsとannouncements.tsで参照されます
  */
 import type { CompanyPriority } from '../types';
+import { getApiUrl } from '../config/api';
 
 // 企業詳細情報（内部型）
 interface CompanyWithDetails {
@@ -24,7 +25,7 @@ interface CompanyWithDetails {
 }
 
 const generateCompanies = async (): Promise<CompanyWithDetails[]> => {
-  const res = await fetch("https://bidapp-backend-postgres-50843898931.asia-northeast1.run.app/api/companies");
+  const res = await fetch(getApiUrl('/api/companies'));
   const data = await res.json();
   //console.log("API response:", data);
   return data;
