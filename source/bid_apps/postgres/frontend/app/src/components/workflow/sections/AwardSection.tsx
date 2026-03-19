@@ -2,7 +2,7 @@
  * 落札結果セクション
  * 落札金額、落札会社、参加企業、連絡メール機能を表示
  */
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import {
   Box,
   Typography,
@@ -41,7 +41,13 @@ import {
 import { findCompanyById } from '../../../data/companies';
 import { mockStaff, findStaffById } from '../../../data';
 import { PersonIcon } from '../../../constants/icons';
-import type { BidEvaluation, Partner, EmailTemplate } from '../../../types';
+import type {
+  BidEvaluation,
+  Partner,
+  EmailTemplate,
+  CompetingCompany,
+  Announcement,
+} from '../../../types';
 
 // ============================================================================
 // 型定義
@@ -123,16 +129,41 @@ export function AwardSection({ evaluation, partners = [], workflowAssigneeId }: 
   const myCompanyName = '株式会社サンプル建設';
   const myName = '田中一郎';
 
-  // 落札結果（自動反映される想定のためダミーデータ）
-  const [awardedCompany] = useState('株式会社〇〇建設');
-  const [awardedAmount] = useState(12500000);
+  type AnnouncementWithExtras = Announcement & {
+    actualAmount?: number;
+    winningCompanyName?: string;
+    competingCompanies?: CompetingCompany[];
+  };
 
-  // 参加企業リスト（自動反映される想定）
-  const [participants] = useState<ParticipantCompany[]>([
-    { id: '1', name: '株式会社〇〇建設', contactPerson: '田中太郎', phone: '03-1234-5678', email: 'tanaka@example.com', bidAmount: 12500000, isWinner: true },
-    { id: '2', name: '△△工業株式会社', contactPerson: '山田花子', phone: '03-2345-6789', email: 'yamada@example.com', bidAmount: 13200000, isWinner: false },
-    { id: '3', name: '□□建設株式会社', contactPerson: '佐藤次郎', phone: '03-3456-7890', email: 'sato@example.com', bidAmount: 14000000, isWinner: false },
-  ]);
+  const announcementExtras = evaluation?.announcement as AnnouncementWithExtras | undefined;
+
+  const competingCompanies = announcementExtras?.competingCompanies ?? [];
+
+  const participants: ParticipantCompany[] = useMemo(() => {
+    return competingCompanies.map((company: CompetingCompany, index: number) => {
+      const bidAmounts = (company.bidAmounts || []).filter(
+        (amount): amount is number => typeof amount === 'number'
+      );
+      const latestBidAmount =
+        bidAmounts.length > 0 ? bidAmounts[bidAmounts.length - 1] : undefined;
+      return {
+        id: `participant-${index}`,
+        name: company.name,
+        contactPerson: '担当者情報なし',
+        phone: '',
+        email: '',
+        bidAmount: latestBidAmount,
+        isWinner: !!company.isWinner,
+      };
+    });
+  }, [competingCompanies]);
+
+  const winner = useMemo<CompetingCompany | undefined>(() => {
+    return competingCompanies.find((company: CompetingCompany) => company.isWinner);
+  }, [competingCompanies]);
+
+  const awardedCompany = winner?.name || announcementExtras?.winningCompanyName || '';
+  const awardedAmount = announcementExtras?.actualAmount;
 
   // 見積採用した協力会社
   const adoptedPartners = partners.filter(p => p.status === 'estimate_adopted');
@@ -232,8 +263,8 @@ export function AwardSection({ evaluation, partners = [], workflowAssigneeId }: 
       '自社担当者': myName,
       '企業名': selectedRecipient?.name || requesterCompany?.name || '',
       '担当者名': selectedRecipient?.contactPerson || requesterCompanyDetails?.representative || '',
-      '落札企業': awardedCompany,
-      '落札金額': `¥${awardedAmount.toLocaleString()}`,
+      '落札企業': awardedCompany || '',
+      '落札金額': awardedAmount != null ? `¥${awardedAmount.toLocaleString()}` : '未定',
     };
 
     return {
@@ -276,7 +307,7 @@ export function AwardSection({ evaluation, partners = [], workflowAssigneeId }: 
     setEditedBody(null);
   };
 
-  const isAwardDecided = !!awardedCompany && !!awardedAmount;
+  const isAwardDecided = Boolean(awardedCompany && awardedAmount != null);
 
   // 落札結果タブ
   const renderResultTab = () => (
@@ -302,7 +333,7 @@ export function AwardSection({ evaluation, partners = [], workflowAssigneeId }: 
                 {awardedCompany}
               </Typography>
               <Typography sx={{ fontSize: fontSizes.xl, fontWeight: 700, color: AWARD_COLORS.main, mt: 0.5 }}>
-                ¥{awardedAmount.toLocaleString()}
+                {awardedAmount != null ? `¥${awardedAmount.toLocaleString()}` : '金額未定'}
               </Typography>
             </Box>
           </Box>

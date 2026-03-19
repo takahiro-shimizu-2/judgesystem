@@ -110,6 +110,10 @@ export interface Announcement {
   estimatedAmountMax?: number;        // 見積予想金額上限（円）
   pdfUrl?: string;
   documents?: DocumentOcr[];          // 資料文字起こし
+  actualAmount?: number;              // 実際の落札金額
+  winningCompanyId?: string;          // 落札企業ID
+  winningCompanyName?: string;        // 落札企業名
+  competingCompanies?: import('./announcement').CompetingCompany[];  // 競争参加企業
 }
 
 // 類似案件

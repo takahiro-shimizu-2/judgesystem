@@ -145,12 +145,22 @@ export class EvaluationRepository {
               )
               ORDER BY cc.company_name
             ) AS companies,
-            MAX(CASE WHEN cc."isWinner" THEN cc.company_name END) AS winning_company_name
+            MAX(CASE WHEN cc."isWinner" THEN cc.company_name END) AS winning_company_name,
+            MAX(
+              CASE WHEN cc."isWinner" THEN (
+                SELECT bid_amount
+                FROM ${tables.competingCompanyBids} b
+                WHERE b.announcement_id = cc.announcement_id
+                  AND b.company_name = cc.company_name
+                ORDER BY bid_order DESC
+                LIMIT 1
+              ) END
+            ) AS winning_company_amount
           FROM ${tables.competingCompanies} cc
           LEFT JOIN company_bids cb
             ON cb.announcement_id = cc.announcement_id
            AND cb.company_name = cc.company_name
-          GROUP BY cc.announcement_id
+         GROUP BY cc.announcement_id
         ),
         requirement_details AS (
           SELECT
@@ -223,7 +233,8 @@ export class EvaluationRepository {
             'documents', COALESCE(doc.docs, '[]'::jsonb),
             'competingCompanies', COALESCE(companies.companies, '[]'::jsonb),
             'winningCompanyId', NULL,
-            'winningCompanyName', COALESCE(companies.winning_company_name, '')
+            'winningCompanyName', COALESCE(companies.winning_company_name, ''),
+            'actualAmount', companies.winning_company_amount
           ) AS announcement,
           jsonb_build_object(
             'id', CONCAT('com-', cbj.company_no),
