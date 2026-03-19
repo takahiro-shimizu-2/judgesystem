@@ -6588,13 +6588,13 @@ if __name__ == "__main__":
     parser.add_argument("--run_markdown_from_db", action="store_true",
                        help="既存DBデータを使ってMarkdown生成のみ実行")
     parser.add_argument("--markdown_document_ids", default=None,
-                       help="Markdown再生成対象document_id（カンマ区切り）")
+                       help="[--run_markdown_from_db専用] Markdown再生成対象document_id（カンマ区切り）")
     parser.add_argument("--markdown_document_ids_file", default=None,
-                       help="Markdown再生成対象document_idをJSON/テキストファイルで指定")
+                       help="[--run_markdown_from_db専用] Markdown再生成対象document_idをJSON/テキストファイルで指定")
     parser.add_argument("--markdown_include_existing", action="store_true",
-                       help="既にmarkdown_pathがあるドキュメントも対象に含める")
+                       help="[--run_markdown_from_db専用] 既にmarkdown_pathがあるドキュメントも対象に含める")
     parser.add_argument("--markdown_overwrite_files", action="store_true",
-                       help="既存のMarkdownファイルを上書き生成する")
+                       help="[--run_markdown_from_db専用] 既存のMarkdownファイルを上書き生成する")
     parser.add_argument("--stop_after_step1", action="store_true",
                        help="step1まで実行して終了")
     parser.add_argument("--step0_output_base_dir", default="output",
