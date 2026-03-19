@@ -265,7 +265,7 @@ def gcs_exists(gcs_path):
         return False
 
 
-def gcs_upload_from_bytes(gcs_path, data):
+def gcs_upload_from_bytes(gcs_path, data, content_type=None):
     """Upload bytes to GCS"""
     if not GCS_AVAILABLE:
         raise RuntimeError("google-cloud-storage not installed")
@@ -281,7 +281,10 @@ def gcs_upload_from_bytes(gcs_path, data):
         print(f"Created GCS bucket: {bucket_name}")
 
     blob = bucket.blob(blob_name)
-    blob.upload_from_string(data)
+    if content_type:
+        blob.upload_from_string(data, content_type=content_type)
+    else:
+        blob.upload_from_string(data)
 
 
 def gcs_download_as_bytes(gcs_path):
@@ -709,6 +712,17 @@ class DBOperator:
 
         Returns:
             int: 挿入された行数
+        """
+        raise NotImplementedError
+
+    @abstractmethod
+    def updateMarkdownPaths(self, tablename, df_markdown):
+        """
+        announcements_documents_master の markdown_path を更新する
+
+        Args:
+            tablename: 対象テーブル名
+            df_markdown: document_id / fileFormat / markdown_path を含む DataFrame
         """
         raise NotImplementedError
 
@@ -1329,6 +1343,28 @@ class DBOperatorGCPVM(DBOperator):
         query_job = self.client.query(merge_sql)
         query_job.result()  # 完了を待つ
         return query_job.num_dml_affected_rows
+
+    def updateMarkdownPaths(self, tablename, df_markdown):
+        if df_markdown.empty:
+            return 0
+
+        tmp_table = "tmp_markdown_updates"
+        df_tmp = df_markdown[["document_id", "fileFormat", "markdown_path"]].dropna()
+        if df_tmp.empty:
+            return 0
+
+        self.uploadDataToTable(df_tmp, tmp_table, chunksize=5000)
+        sql = f"""
+        MERGE `{self.project_id}.{self.dataset_name}.{tablename}` AS T
+        USING `{self.project_id}.{self.dataset_name}.{tmp_table}` AS S
+        ON T.document_id = S.document_id AND T.fileFormat = S.fileFormat
+        WHEN MATCHED THEN
+          UPDATE SET T.markdown_path = S.markdown_path
+        """
+        job = self.client.query(sql)
+        job.result()
+        self.dropTable(tmp_table)
+        return job.num_dml_affected_rows
 
     def mergeRequirements(self, target_tablename, source_tablename):
         """
@@ -2667,6 +2703,16 @@ class DBOperatorSQLITE3(DBOperator):
         # SQLite3では affected rows を取得
         return self.cur.rowcount
 
+    def updateMarkdownPaths(self, tablename, df_markdown):
+        df_tmp = df_markdown[["document_id", "fileFormat", "markdown_path"]].dropna()
+        if df_tmp.empty:
+            return 0
+        sql = fr"UPDATE {tablename} SET markdown_path = ? WHERE document_id = ? AND fileFormat = ?"
+        values = [(row["markdown_path"], row["document_id"], row["fileFormat"]) for _, row in df_tmp.iterrows()]
+        self.cur.executemany(sql, values)
+        self.conn.commit()
+        return len(values)
+
     def mergeRequirements(self, target_tablename, source_tablename):
         """
         SQLite3で bid_requirements に新しいレコードを挿入
@@ -3447,6 +3493,19 @@ class DBOperatorPOSTGRES(DBOperator):
         # PostgreSQL では affected rows を取得
         return self.cur.rowcount
 
+    def updateMarkdownPaths(self, tablename, df_markdown):
+        df_tmp = df_markdown[["document_id", "fileFormat", "markdown_path"]].dropna()
+        if df_tmp.empty:
+            return 0
+        records = [(row["document_id"], row["fileFormat"], row["markdown_path"]) for _, row in df_tmp.iterrows()]
+        sql = f"""
+        UPDATE {tablename} AS t SET markdown_path = v.markdown_path
+        FROM (VALUES %s) AS v(document_id, "fileFormat", markdown_path)
+        WHERE t.document_id = v.document_id AND t."fileFormat" = v."fileFormat"
+        """
+        execute_values(self.cur, sql, records)
+        return len(records)
+
     def mergeRequirements(self, target_tablename, source_tablename):
         """
         PostgreSQL で bid_requirements に新しいレコードを挿入
@@ -4114,7 +4173,8 @@ class BidJudgementSan:
                 use_gcs=use_gcs,
                 google_api_key=google_api_key,
                 max_concurrency=ocr_max_concurrency,
-                max_api_calls_per_run=ocr_max_api_calls_per_run
+                max_api_calls_per_run=ocr_max_api_calls_per_run,
+                force_regenerate=False
             )
             print("Updated DataFrame with Markdown content")
         else:
@@ -4988,7 +5048,8 @@ class BidJudgementSan:
 
                 try:
                     if use_gcs and save_path.startswith("gs://"):
-                        gcs_upload_from_bytes(save_path, response.content)
+                        content_type = "application/pdf" if str(save_path).lower().endswith(".pdf") else None
+                        gcs_upload_from_bytes(save_path, response.content, content_type=content_type)
                         tqdm.write(fr"Saved {save_path}.")
                         df.loc[i, "pdf_is_saved"] = True
                     else:
@@ -5037,10 +5098,14 @@ class BidJudgementSan:
         use_gcs=False,
         google_api_key=None,
         max_concurrency=5,
-        max_api_calls_per_run=1000
+        max_api_calls_per_run=1000,
+        force_regenerate=False
     ):
         """
         PDF から Gemini を使って Markdown 要約を生成し保存する
+
+        Args:
+            force_regenerate: True の場合、既存の Markdown ファイルがあっても再生成する
         """
         if google_api_key is None:
             raise ValueError("google_api_key is required for Markdown generation")
@@ -5093,7 +5158,9 @@ class BidJudgementSan:
                 continue
             doc_to_md_path[key] = md_path
 
-            if file_exists_gcs_or_local(md_path):
+            if file_exists_gcs_or_local(md_path) and not force_regenerate:
+                mask = (df_main["document_id"] == document_id) & (df_main["fileFormat"] == file_format)
+                df_main.loc[mask, "markdown_path"] = md_path
                 continue
 
             # ファイルパス存在チェック
@@ -5147,7 +5214,7 @@ class BidJudgementSan:
 
             try:
                 if md_path.startswith("gs://"):
-                    gcs_upload_from_bytes(md_path, markdown_text.encode("utf-8"))
+                    gcs_upload_from_bytes(md_path, markdown_text.encode("utf-8"), content_type="text/markdown; charset=utf-8")
                 else:
                     path_obj = Path(md_path)
                     path_obj.parent.mkdir(parents=True, exist_ok=True)
@@ -5162,6 +5229,71 @@ class BidJudgementSan:
 
         print(f"Markdown saved for {saved_count} documents")
         return df_main
+
+    def regenerate_markdown_from_database(
+        self,
+        use_gcs=False,
+        google_api_key=None,
+        max_concurrency=5,
+        max_api_calls_per_run=1000,
+        document_ids=None,
+        only_missing=True,
+        overwrite_files=False
+    ):
+        """
+        既存 announcements_documents_master から Markdown を再生成する
+        """
+        tablename = self.tablenamesconfig.bid_announcements_document_table
+        where_clauses = []
+
+        if only_missing:
+            where_clauses.append("(markdown_path IS NULL OR markdown_path = '')")
+
+        # DBごとのクォートルールに合わせて fileFormat 列を小文字化
+        if isinstance(self.db_operator, DBOperatorGCPVM):
+            where_clauses.append("LOWER(fileFormat) = 'pdf'")
+        elif isinstance(self.db_operator, DBOperatorPOSTGRES):
+            where_clauses.append("LOWER(\"fileFormat\") = 'pdf'")
+        else:
+            where_clauses.append("LOWER(fileFormat) = 'pdf'")
+
+        if document_ids:
+            sanitized = []
+            for doc_id in document_ids:
+                doc = doc_id.strip()
+                if doc:
+                    sanitized.append("'" + doc.replace("'", "''") + "'")
+            if sanitized:
+                where_clauses.append(f"document_id IN ({', '.join(sanitized)})")
+
+        where_clause = ""
+        if where_clauses:
+            where_clause = "WHERE " + " AND ".join(where_clauses)
+
+        df_main = self.db_operator.selectToTable(tablename, where_clause)
+        if df_main.empty:
+            print("No documents found for Markdown regeneration.")
+            return
+
+        print(f"Regenerating Markdown for {len(df_main)} documents...")
+        df_main = self._step0_generate_markdown(
+            df_main=df_main,
+            use_gcs=use_gcs,
+            google_api_key=google_api_key,
+            max_concurrency=max_concurrency,
+            max_api_calls_per_run=max_api_calls_per_run,
+            force_regenerate=overwrite_files
+        )
+
+        df_updates = df_main[["document_id", "fileFormat", "markdown_path"]].dropna()
+        df_updates = df_updates[df_updates["markdown_path"].astype(str).str.len() > 0]
+
+        if df_updates.empty:
+            print("No Markdown paths to update.")
+            return
+
+        updated = self.db_operator.updateMarkdownPaths(tablename, df_updates)
+        print(f"Updated markdown_path for {updated} documents.")
 
 
     def _step0_count_pages(self, df):
@@ -6453,6 +6585,16 @@ if __name__ == "__main__":
                        help="step0_prepare_documents（HTML取得・リンク抽出・フォーマット）を実行")
     parser.add_argument("--run_step0_only", action="store_true",
                        help="step0のみ実行して終了（データベース不要でテスト可能）")
+    parser.add_argument("--run_markdown_from_db", action="store_true",
+                       help="既存DBデータを使ってMarkdown生成のみ実行")
+    parser.add_argument("--markdown_document_ids", default=None,
+                       help="Markdown再生成対象document_id（カンマ区切り）")
+    parser.add_argument("--markdown_document_ids_file", default=None,
+                       help="Markdown再生成対象document_idをJSON/テキストファイルで指定")
+    parser.add_argument("--markdown_include_existing", action="store_true",
+                       help="既にmarkdown_pathがあるドキュメントも対象に含める")
+    parser.add_argument("--markdown_overwrite_files", action="store_true",
+                       help="既存のMarkdownファイルを上書き生成する")
     parser.add_argument("--stop_after_step1", action="store_true",
                        help="step1まで実行して終了")
     parser.add_argument("--step0_output_base_dir", default="output",
@@ -6508,6 +6650,11 @@ if __name__ == "__main__":
         input_list_file = args.input_list_file
         run_step0_prepare_documents = args.run_step0_prepare_documents
         run_step0_only = args.run_step0_only
+        run_markdown_from_db = args.run_markdown_from_db
+        markdown_document_ids_arg = args.markdown_document_ids
+        markdown_document_ids_file = args.markdown_document_ids_file
+        markdown_include_existing = args.markdown_include_existing
+        markdown_overwrite_files = args.markdown_overwrite_files
         stop_after_step1 = args.stop_after_step1
         step0_output_base_dir = args.step0_output_base_dir
         step0_topAgencyName = args.step0_topAgencyName
@@ -6552,6 +6699,11 @@ if __name__ == "__main__":
         step0_do_markdown = False
         step0_do_count_pages = False
         step0_do_ocr = False
+        run_markdown_from_db = False
+        markdown_document_ids_arg = None
+        markdown_document_ids_file = None
+        markdown_include_existing = False
+        markdown_overwrite_files = False
 
         step1_transfer_remove_table = False
         step3_remove_table = False
@@ -6586,6 +6738,62 @@ if __name__ == "__main__":
         exit(1)
 
     # Step0のみ実行モード
+    def _normalize_document_ids(raw_ids):
+        result = []
+        if not raw_ids:
+            return result
+        for doc in raw_ids:
+            if doc is None:
+                continue
+            if not isinstance(doc, str):
+                doc = str(doc)
+            doc = doc.strip()
+            if doc:
+                result.append(doc)
+        return result
+
+    markdown_document_ids = None
+    if run_markdown_from_db:
+        if markdown_document_ids_arg:
+            normalized = _normalize_document_ids(markdown_document_ids_arg.split(","))
+            if not normalized:
+                print("Error: --markdown_document_ids is specified but no valid IDs were provided.")
+                exit(1)
+            markdown_document_ids = normalized
+
+        if markdown_document_ids_file:
+            path = Path(markdown_document_ids_file)
+            if not path.exists():
+                print(f"Error: --markdown_document_ids_file not found: {markdown_document_ids_file}")
+                exit(1)
+            content = path.read_text().strip()
+            file_ids = []
+            if content:
+                parsed = None
+                try:
+                    parsed = json.loads(content)
+                except json.JSONDecodeError:
+                    parsed = None
+
+                if parsed is not None:
+                    if isinstance(parsed, list):
+                        file_ids = parsed
+                    else:
+                        print("Error: --markdown_document_ids_file must contain a JSON array when using JSON format.")
+                        exit(1)
+                else:
+                    file_ids = content.splitlines()
+
+            normalized_file_ids = _normalize_document_ids(file_ids)
+            if not normalized_file_ids:
+                print("Error: --markdown_document_ids_file does not contain valid IDs.")
+                exit(1)
+            if markdown_document_ids is None:
+                markdown_document_ids = normalized_file_ids
+            else:
+                combined = markdown_document_ids + normalized_file_ids
+                markdown_document_ids = list(dict.fromkeys(combined))
+
     if run_step0_only:
         if input_list_file is None:
             print("Error: --input_list_file is required when --run_step0_only is specified")
@@ -6610,6 +6818,19 @@ if __name__ == "__main__":
             ocr_max_api_calls_per_run=step0_ocr_max_api_calls_per_run
         )
         print("\n--run_step0_only specified. Exiting after step0.")
+        exit(0)
+
+    # Markdown再生成モード
+    if run_markdown_from_db:
+        obj.regenerate_markdown_from_database(
+            use_gcs=(use_gcp_vm or use_postgres),
+            google_api_key=step0_google_api_key,
+            max_concurrency=step0_ocr_max_concurrency,
+            max_api_calls_per_run=step0_ocr_max_api_calls_per_run,
+            document_ids=markdown_document_ids,
+            only_missing=(not markdown_include_existing),
+            overwrite_files=markdown_overwrite_files
+        )
         exit(0)
 
     # Step0: 公告ドキュメント準備処理（オプション）
