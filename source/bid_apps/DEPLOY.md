@@ -37,7 +37,7 @@ gcloud compute networks vpc-access connectors create cloudrun-connector \
 ### ディレクトリ移動
 
 ```bash
-cd bid_apps/app_backend/postgres
+cd bid_apps/postgres/backend
 ```
 
 ### デプロイコマンド
@@ -106,7 +106,7 @@ bash backend_gcloud_command_sample.sh \
 ### ディレクトリ移動
 
 ```bash
-cd bid_apps/app_frontend/postgres
+cd bid_apps/postgres/frontend
 ```
 
 ### デプロイコマンド
@@ -133,7 +133,7 @@ bash frontend_gcloud_command_sample.sh \
 ### バックエンド
 
 ```bash
-cd bid_apps/app_backend/postgres
+cd bid_apps/postgres/backend
 
 # .env ファイルを作成
 cp .env.example .env
@@ -153,7 +153,7 @@ npm start
 ### フロントエンド
 
 ```bash
-cd bid_apps/app_frontend/postgres/app
+cd bid_apps/postgres/frontend/app
 
 # .env.local ファイルを作成
 cp .env.local.example .env.local
@@ -178,7 +178,7 @@ npm run dev
 
 ```bash
 # 1. バックエンドをデプロイ
-cd bid_apps/app_backend/postgres
+cd bid_apps/postgres/backend
 bash backend_gcloud_command_sample.sh \
   --frontend_url https://bidapp-frontend-postgres-50843898931.asia-northeast1.run.app \
   --cloud_sql_instance ... \
@@ -189,7 +189,7 @@ bash backend_gcloud_command_sample.sh \
 # 例: https://bidapp-backend-postgres-50843898931.asia-northeast1.run.app
 
 # 2. フロントエンドをデプロイ（バックエンドURLを指定）
-cd ../app_frontend/postgres
+cd ../frontend
 bash frontend_gcloud_command_sample.sh \
   --url https://bidapp-backend-postgres-50843898931.asia-northeast1.run.app
 ```
