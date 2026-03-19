@@ -1,6 +1,7 @@
 import { PoolClient } from "pg";
 import { pool, TABLES, schemaPrefix } from "../config/database";
 import { FilterParams } from "../types";
+import { readMarkdownFromGCS } from "../utils/gcs";
 
 export class AnnouncementRepository {
   /**
@@ -98,7 +99,7 @@ export class AnnouncementRepository {
                 'pageCount', "pageCount",
                 'extractedAt', "extractedAt",
                 'url', url,
-                'content', content
+                'markdown_path', markdown_path
               ) ORDER BY document_id
             ) AS documents
           FROM ${schemaPrefix}announcements_documents_master
@@ -189,7 +190,43 @@ export class AnnouncementRepository {
         [announcementNo]
       );
 
-      return result.rowCount === 0 ? null : result.rows[0];
+      if (result.rowCount === 0) {
+        return null;
+      }
+
+      const announcement = result.rows[0];
+
+      // documents の各アイテムについて、markdown_path から content を取得
+      if (announcement.documents && Array.isArray(announcement.documents)) {
+        const documentsWithContent = await Promise.all(
+          announcement.documents.map(async (doc: any) => {
+            let content = '';
+
+            if (doc.markdown_path && doc.markdown_path.startsWith('gs://')) {
+              try {
+                content = await readMarkdownFromGCS(doc.markdown_path);
+              } catch (error) {
+                // Markdownファイルが存在しない場合でもページ全体は表示可能にする
+                // 開発中なので詳細なエラー情報はログに出力
+                console.error(`Failed to load markdown for document ${doc.id}:`, error);
+                content = '文字起こしデータがありません'; // エラー時はメッセージを表示
+              }
+            } else {
+              // markdown_path がない場合
+              content = '文字起こしデータがありません';
+            }
+
+            return {
+              ...doc,
+              content,
+              markdown_path: undefined, // フロントエンドには渡さない
+            };
+          })
+        );
+        announcement.documents = documentsWithContent;
+      }
+
+      return announcement;
     } finally {
       client.release();
     }
