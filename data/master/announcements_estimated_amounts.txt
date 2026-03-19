@@ -1,0 +1,1 @@
+announcement_no	estimated_amount_min	estimated_amount_max	updated_date

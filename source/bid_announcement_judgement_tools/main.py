@@ -397,6 +397,8 @@ class Master:
             "office_registration_authorization_master":"data/master/office_registration_authorization_master.txt",
             "office_work_achivements_master":"data/master/office_work_achivements_master.txt",
             "technician_qualification_master":"data/master/technician_qualification_master.txt",
+
+            "announcements_estimated_amounts":"data/master/announcements_estimated_amounts.txt",
             
             "partners_master":"data/master/partners_master.txt",
             "partners_branches":"data/master/partners_branches.txt",
@@ -420,6 +422,9 @@ class Master:
 
     def getAnnouncementsCompetingCompanyBidsMaster(self):
         return pd.read_csv(self.announcements_competing_company_bids_master, sep="\t")
+
+    def getAnnouncementsEstimatedAmounts(self):
+        return pd.read_csv(self.announcements_estimated_amounts, sep="\t")
 
     def getAnnouncementsDocumentsMaster(self):
         raise NotImplementedError
@@ -6726,9 +6731,11 @@ if __name__ == "__main__":
 
     announcements_competing_companies_master = master.getAnnouncementsCompetingCompaniesMaster()
     announcements_competing_company_bids_master = master.getAnnouncementsCompetingCompanyBidsMaster()
+    announcements_estimated_amounts = master.getAnnouncementsEstimatedAmounts()
 
     db_operator.uploadDataToTable(data=announcements_competing_companies_master, tablename="announcements_competing_companies_master", chunksize=5000)
     db_operator.uploadDataToTable(data=announcements_competing_company_bids_master, tablename="announcements_competing_company_bids_master", chunksize=5000)
+    db_operator.uploadDataToTable(data=announcements_estimated_amounts, tablename="announcements_estimated_amounts", chunksize=5000)
 
 
     # db_operator.selectToTable(tablename="bid_announcements_pre")

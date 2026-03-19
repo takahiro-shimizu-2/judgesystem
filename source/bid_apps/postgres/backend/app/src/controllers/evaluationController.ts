@@ -47,6 +47,7 @@ export class EvaluationController {
         searchQuery: (req.query.searchQuery as string) || "",
         sortField: (req.query.sortField as string) || "",
         sortOrder: (req.query.sortOrder as "asc" | "desc") || "asc",
+        ordererId: req.query.ordererId as string | undefined,
       };
 
       const result = await this.service.getList(filters);
