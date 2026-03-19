@@ -14,6 +14,7 @@ type QualifiedTables = {
   competingCompanies: string;
   competingCompanyBids: string;
   announcementsEstimatedAmounts: string;
+  evaluationStatuses: string;
 };
 
 export class EvaluationRepository {
@@ -27,10 +28,15 @@ export class EvaluationRepository {
       const baseFromClause = this.getBaseFromClause(tables);
       const statusExpression = this.getStatusExpression();
       const workStatusExpression = this.getWorkStatusExpression();
+      const currentStepExpression = this.getCurrentStepExpression();
       const priorityExpression = this.getPriorityExpression();
 
       // Build WHERE clause
-      const { whereClause, queryParams, paramIndex } = this.buildWhereClause(filters, statusExpression);
+      const { whereClause, queryParams, paramIndex } = this.buildWhereClause(
+        filters,
+        statusExpression,
+        workStatusExpression
+      );
 
       // Get total count
       const countQuery = `SELECT COUNT(*) as count ${baseFromClause} ${whereClause}`;
@@ -74,7 +80,7 @@ export class EvaluationRepository {
           ) AS branch,
           ${statusExpression} AS status,
           ${workStatusExpression} AS "workStatus",
-          'judgement' AS "currentStep",
+          ${currentStepExpression} AS "currentStep",
           cbj."updatedDate" AS "evaluatedAt"
         ${baseFromClause}
         ${whereClause}
@@ -102,6 +108,7 @@ export class EvaluationRepository {
       const tables = this.getQualifiedTables();
       const statusExpression = this.getStatusExpression();
       const workStatusExpression = this.getWorkStatusExpression();
+      const currentStepExpression = this.getCurrentStepExpression();
       const priorityExpression = this.getPriorityExpression();
       const baseFromClause = this.getBaseFromClause(tables);
 
@@ -251,7 +258,7 @@ export class EvaluationRepository {
           COALESCE(req.requirements, '[]'::jsonb) AS requirements,
           ${statusExpression} AS status,
           ${workStatusExpression} AS "workStatus",
-          'judgement' AS "currentStep",
+          ${currentStepExpression} AS "currentStep",
           cbj."updatedDate" AS "evaluatedAt"
         ${baseFromClause}
         LEFT JOIN documents doc ON doc.announcement_id::text = cbj.announcement_no::text
@@ -273,17 +280,24 @@ export class EvaluationRepository {
   /**
    * Update workStatus for an evaluation
    */
-  async updateWorkStatus(evaluationNo: string, workStatus: string): Promise<any | null> {
+  async updateWorkStatus(
+    evaluationNo: string,
+    workStatus: string,
+    currentStep?: string
+  ): Promise<any | null> {
     const client = await pool.connect();
     try {
-      const qualifiedTableName = `${schemaPrefix}${TABLES.evaluations}`;
+      const qualifiedTableName = `${schemaPrefix}${TABLES.evaluationStatuses}`;
 
       const result = await client.query(
-        `UPDATE ${qualifiedTableName}
-         SET "workStatus" = $1, "updatedAt" = NOW()
-         WHERE "evaluationNo" = $2
-         RETURNING *`,
-        [workStatus, evaluationNo]
+        `INSERT INTO ${qualifiedTableName} AS status ("evaluationNo", "workStatus", "currentStep")
+         VALUES ($1, $2, COALESCE($3, 'judgement'))
+         ON CONFLICT ("evaluationNo") DO UPDATE
+         SET "workStatus" = EXCLUDED."workStatus",
+             "currentStep" = CASE WHEN $3 IS NULL THEN status."currentStep" ELSE EXCLUDED."currentStep" END,
+             "updatedAt" = NOW()
+         RETURNING "evaluationNo", "workStatus", "currentStep", "updatedAt"`,
+        [evaluationNo, workStatus, currentStep ?? null]
       );
 
       return result.rowCount === 0 ? null : result.rows[0];
@@ -355,7 +369,11 @@ export class EvaluationRepository {
   /**
    * Build WHERE clause from filters
    */
-  private buildWhereClause(filters: FilterParams, statusExpression: string): {
+  private buildWhereClause(
+    filters: FilterParams,
+    statusExpression: string,
+    workStatusExpression: string
+  ): {
     whereClause: string;
     queryParams: any[];
     paramIndex: number;
@@ -371,7 +389,7 @@ export class EvaluationRepository {
     }
 
     if (filters.workStatuses && filters.workStatuses.length > 0) {
-      whereClauses.push(`'not_started' = ANY($${paramIndex})`);
+      whereClauses.push(`${workStatusExpression} = ANY($${paramIndex})`);
       queryParams.push(filters.workStatuses);
       paramIndex++;
     }
@@ -492,6 +510,7 @@ export class EvaluationRepository {
       competingCompanies: `${schemaPrefix}announcements_competing_companies_master`,
       competingCompanyBids: `${schemaPrefix}announcements_competing_company_bids_master`,
       announcementsEstimatedAmounts: `${schemaPrefix}announcements_estimated_amounts`,
+      evaluationStatuses: `${schemaPrefix}${TABLES.evaluationStatuses}`,
     };
   }
 
@@ -502,6 +521,7 @@ export class EvaluationRepository {
       JOIN ${tables.companyMaster} cm ON cm.company_no::text = cbj.company_no::text
       LEFT JOIN ${tables.officeMaster} om ON om.office_no::text = cbj.office_no::text
       LEFT JOIN ${tables.announcementsEstimatedAmounts} aea ON aea.announcement_no::text = cbj.announcement_no::text
+      LEFT JOIN ${tables.evaluationStatuses} evs ON evs."evaluationNo" = cbj.evaluation_no::text
     `;
   }
 
@@ -510,7 +530,11 @@ export class EvaluationRepository {
   }
 
   private getWorkStatusExpression(): string {
-    return `'not_started'`;
+    return `COALESCE(evs."workStatus", 'not_started')`;
+  }
+
+  private getCurrentStepExpression(): string {
+    return `COALESCE(evs."currentStep", 'judgement')`;
   }
 
   private getPriorityExpression(): string {

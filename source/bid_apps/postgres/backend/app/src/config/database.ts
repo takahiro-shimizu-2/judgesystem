@@ -33,6 +33,7 @@ export const TABLES = {
   companies: "backend_companies",
   orderers: "backend_orderers",
   partners: "backend_partners",
+  evaluationStatuses: "backend_evaluation_statuses",
 } as const;
 
 export type TableName = (typeof TABLES)[keyof typeof TABLES];

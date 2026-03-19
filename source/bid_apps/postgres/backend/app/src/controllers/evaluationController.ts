@@ -105,10 +105,10 @@ export class EvaluationController {
     console.log(`PATCH /api/evaluations/${req.params.evaluationNo} hit`);
 
     const { evaluationNo } = req.params;
-    const { workStatus } = req.body;
+    const { workStatus, currentStep } = req.body;
 
     try {
-      const result = await this.service.updateWorkStatus(evaluationNo, workStatus);
+      const result = await this.service.updateWorkStatus(evaluationNo, workStatus, currentStep);
 
       if (!result) {
         res.status(404).json({ error: "Evaluation not found" });

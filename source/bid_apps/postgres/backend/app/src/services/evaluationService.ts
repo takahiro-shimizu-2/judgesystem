@@ -35,14 +35,18 @@ export class EvaluationService {
   /**
    * Update work status of an evaluation
    */
-  async updateWorkStatus(evaluationNo: string, workStatus: string): Promise<any | null> {
+  async updateWorkStatus(
+    evaluationNo: string,
+    workStatus: string,
+    currentStep?: string
+  ): Promise<any | null> {
     // Validate workStatus
     const validStatuses = ["not_started", "in_progress", "completed"];
     if (!validStatuses.includes(workStatus)) {
       throw new Error(`Invalid workStatus. Valid values: ${validStatuses.join(", ")}`);
     }
 
-    return await this.repository.updateWorkStatus(evaluationNo, workStatus);
+    return await this.repository.updateWorkStatus(evaluationNo, workStatus, currentStep);
   }
 
   /**

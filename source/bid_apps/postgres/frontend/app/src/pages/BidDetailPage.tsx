@@ -14,10 +14,9 @@ import { useState, useCallback, useEffect } from "react";
 import { getApiUrl } from "../config/api";
 
 import { bidTypeConfig, updateWorkStatus } from "../data";
-import type { BidEvaluation } from "../types";
+import type { BidEvaluation, Partner, StepAssignee, WorkStatus } from "../types";
 import { priorityLabels, priorityColors } from "../constants/priority";
 import { WORKFLOW_STEP_CONFIG, WORKFLOW_STEP_IDS } from "../constants/workflow";
-import type { Partner } from "../types";
 import { pageStyles, colors, fontSizes, iconStyles, borderRadius } from "../constants/styles";
 import {
   FloatingBackButton,
@@ -35,7 +34,6 @@ import {
   AwardSection,
   StaffAssignmentPanel,
 } from "../components/workflow";
-import type { StepAssignee } from "../types";
 
 // ============================================================================
 // 定数
@@ -205,8 +203,8 @@ export default function BidDetailPage() {
 
   const [currentStep, setCurrentStep] = useState<string>(WORKFLOW_STEP_IDS.JUDGMENT);
   const [activeTab, setActiveTab] = useState<string>(WORKFLOW_STEP_IDS.JUDGMENT);
-  const [currentWorkStatus, setCurrentWorkStatus] = useState<string>(
-    evaluation?.workStatus || "not_started"
+  const [currentWorkStatus, setCurrentWorkStatus] = useState<WorkStatus>(
+    (evaluation?.workStatus as WorkStatus) || "not_started"
   );
 
   // 各ステップの担当者
@@ -219,7 +217,9 @@ export default function BidDetailPage() {
     if (evaluation) {
       setCurrentStep(evaluation.currentStep || WORKFLOW_STEP_IDS.JUDGMENT);
       setActiveTab(evaluation.currentStep || WORKFLOW_STEP_IDS.JUDGMENT);
-      setCurrentWorkStatus(evaluation.workStatus || "not_started");
+      setCurrentWorkStatus(
+        (evaluation.workStatus as WorkStatus) || "not_started"
+      );
       setStepAssignees(evaluation.stepAssignees || []);
     }
   }, [evaluation]);
@@ -315,29 +315,39 @@ export default function BidDetailPage() {
 
   const handleBack = useCallback(() => navigate("/"), [navigate]);
 
-  const goToNextStep = useCallback(() => {
+  const goToNextStep = useCallback(async () => {
     const currentIndex = WORKFLOW_STEP_CONFIG.findIndex(
       (s) => s.id === currentStep
     );
     const nextStep = WORKFLOW_STEP_CONFIG[currentIndex + 1];
     if (nextStep && evaluation) {
-      // ステップを更新（ローカル状態のみ）
-      setCurrentStep(nextStep.id);
-      setActiveTab(nextStep.id);
-      // 未着手なら着手中に変更
-      if (currentWorkStatus === "not_started") {
-        updateWorkStatus(evaluation.evaluationNo, "in_progress");
-        setCurrentWorkStatus("in_progress");
+      const nextStatus: WorkStatus =
+        currentWorkStatus === "not_started" ? "in_progress" : currentWorkStatus;
+      const success = await updateWorkStatus(
+        evaluation.evaluationNo,
+        nextStatus,
+        nextStep.id
+      );
+      if (success) {
+        setCurrentStep(nextStep.id);
+        setActiveTab(nextStep.id);
+        setCurrentWorkStatus(nextStatus);
       }
     }
   }, [currentStep, currentWorkStatus, evaluation]);
 
-  const handleComplete = useCallback(() => {
+  const handleComplete = useCallback(async () => {
     if (evaluation) {
-      updateWorkStatus(evaluation.evaluationNo, "completed");
-      setCurrentWorkStatus("completed");
+      const success = await updateWorkStatus(
+        evaluation.evaluationNo,
+        "completed",
+        currentStep
+      );
+      if (success) {
+        setCurrentWorkStatus("completed");
+      }
     }
-  }, [evaluation]);
+  }, [evaluation, currentStep]);
 
   const getTabStatus = useCallback(
     (stepId: string): TabStatus => {

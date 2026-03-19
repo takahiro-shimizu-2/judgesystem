@@ -26,14 +26,18 @@ export const filterByStatus = (status: EvaluationStatus) =>
 export const findById = (id: string) =>
   mockBidEvaluations.find((evaluation) => evaluation.id === id);
 
-export const updateWorkStatus = async (evaluationNo: string, workStatus: WorkStatus): Promise<boolean> => {
+export const updateWorkStatus = async (
+  evaluationNo: string,
+  workStatus: WorkStatus,
+  currentStep?: string
+): Promise<boolean> => {
   try {
     const response = await fetch(getApiUrl(`/api/evaluations/${evaluationNo}`), {
       method: 'PATCH',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ workStatus }),
+      body: JSON.stringify({ workStatus, currentStep }),
     });
 
     if (!response.ok) {

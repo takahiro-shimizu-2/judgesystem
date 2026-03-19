@@ -3119,6 +3119,21 @@ class DBOperatorPOSTGRES(DBOperator):
         """
         self.cur.execute(sql)
 
+    def ensureBackendEvaluationStatusesTable(self, tablename="backend_evaluation_statuses"):
+        """
+        Ensure the table for persisting workflow states exists.
+        """
+        sql = fr"""
+        CREATE TABLE IF NOT EXISTS {tablename} (
+            "evaluationNo" TEXT PRIMARY KEY,
+            "workStatus" TEXT NOT NULL DEFAULT 'not_started',
+            "currentStep" TEXT NOT NULL DEFAULT 'judgement',
+            "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            "updatedAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+        """
+        self.cur.execute(sql)
+
     def preupdateCompanyBidJudgement(self, company_bid_judgement_tablename, office_master_tablename, bid_announcements_tablename):
         sql = fr"""INSERT INTO {company_bid_judgement_tablename} (
             evaluation_no,
@@ -6554,6 +6569,7 @@ if __name__ == "__main__":
             postgres_user=postgres_user,
             postgres_password=postgres_password
         )
+        db_operator.ensureBackendEvaluationStatusesTable()
     else:
         db_operator = DBOperatorSQLITE3(
             sqlite3_db_file_path=sqlite3_db_file_path
