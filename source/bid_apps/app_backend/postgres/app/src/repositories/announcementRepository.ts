@@ -98,7 +98,7 @@ export class AnnouncementRepository {
                 'fileFormat', "fileFormat",
                 'pageCount', "pageCount",
                 'extractedAt', "extractedAt",
-                'url', url,
+                'url', COALESCE(REPLACE(save_path, 'gs://', 'https://storage.googleapis.com/'), url),
                 'markdown_path', markdown_path
               ) ORDER BY document_id
             ) AS documents
