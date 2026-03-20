@@ -38,4 +38,11 @@ export class AnnouncementService {
   async getProgressingCompanies(announcementNo: number) {
     return await this.repository.findProgressingCompanies(announcementNo);
   }
+
+  /**
+   * Get binary of a document attached to an announcement
+   */
+  async getDocumentFile(announcementNo: number, documentId: string) {
+    return await this.repository.getDocumentFile(announcementNo, documentId);
+  }
 }

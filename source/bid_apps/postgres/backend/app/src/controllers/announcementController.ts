@@ -131,4 +131,64 @@ export class AnnouncementController {
       }
     }
   };
+
+  /**
+   * GET /api/announcements/:announcementNo/documents/:documentId/preview
+   */
+  getDocumentPreview = async (req: Request, res: Response): Promise<void> => {
+    const { announcementNo, documentId } = req.params;
+    const announcementNoInt = parseInt(announcementNo, 10);
+
+    if (isNaN(announcementNoInt)) {
+      res.status(400).json({ error: "Invalid announcement number" });
+      return;
+    }
+    const safeDocumentId = documentId.replace(/[\r\n\t\0\x00-\x1f\x7f-\x9f\u200B-\u200D\u202A-\u202E\u2060-\u206F]/g, "");
+    if (!/^[a-zA-Z0-9_-]+$/.test(safeDocumentId) || safeDocumentId.length === 0 || safeDocumentId.length > 512) {
+      res.status(400).json({ error: "Invalid document id" });
+      return;
+    }
+
+    try {
+      const file = await this.service.getDocumentFile(announcementNoInt, safeDocumentId);
+      if (!file) {
+        res.status(404).json({ error: "Document not found" });
+        return;
+      }
+
+      const format = (file.fileFormat || "").toLowerCase();
+      const contentTypeMap: Record<string, string> = {
+        pdf: "application/pdf",
+        excel: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        xls: "application/vnd.ms-excel",
+        word: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        doc: "application/msword",
+        png: "image/png",
+        jpg: "image/jpeg",
+        jpeg: "image/jpeg",
+      };
+
+      const contentType = contentTypeMap[format] || "application/octet-stream";
+      const sanitizedFilename = (file.title || `document-${safeDocumentId}`)
+        .normalize("NFKC")
+        .replace(/[\r\n\t\0\x00-\x1f\x7f-\x9f\u200B-\u200D\u202A-\u202E\u2060-\u206F]/g, "")
+        .replace(/[<>:"|?*\\/]/g, "_")
+        .substring(0, 255);
+      res.setHeader("Content-Type", contentType);
+      res.setHeader("Cache-Control", "public, max-age=3600");
+      res.setHeader("Content-Disposition", `inline; filename*=UTF-8''${encodeURIComponent(sanitizedFilename)}`);
+      res.send(file.data);
+    } catch (error) {
+      console.error(
+        `ERROR in GET /api/announcements/${announcementNo}/documents/${documentId}/preview:`,
+        error
+      );
+      if (!res.headersSent) {
+        res.status(500).json({
+          error: "Internal Server Error",
+          message: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+  };
 }

@@ -1,7 +1,7 @@
 import { PoolClient } from "pg";
 import { pool, TABLES, schemaPrefix } from "../config/database";
 import { FilterParams } from "../types";
-import { readMarkdownFromGCS } from "../utils/gcs";
+import { downloadFileFromGCS, readMarkdownFromGCS } from "../utils/gcs";
 
 export class AnnouncementRepository {
   private getStatusExpression(): string {
@@ -447,5 +447,57 @@ export class AnnouncementRepository {
     }
 
     return '';
+  }
+
+  /**
+   * 指定した資料ファイルを GCS から取得
+   */
+  async getDocumentFile(announcementNo: number, documentId: string): Promise<{ data: Buffer; fileFormat: string; title: string } | null> {
+    const client = await pool.connect();
+    try {
+      const result = await client.query(
+        `
+        SELECT
+          document_id,
+          title,
+          "fileFormat",
+          save_path,
+          url
+        FROM ${schemaPrefix}announcements_documents_master
+        WHERE announcement_id = $1
+          AND document_id = $2
+        `,
+        [announcementNo, documentId]
+      );
+
+      if (result.rowCount === 0) {
+        return null;
+      }
+
+      const row = result.rows[0] as {
+        document_id: number;
+        title: string;
+        fileFormat: string | null;
+        save_path: string | null;
+        url: string | null;
+      };
+
+      const gcsPath = row.save_path?.startsWith('gs://') ? row.save_path : undefined;
+      if (!gcsPath) {
+        const message = `Document ${documentId} for announcement ${announcementNo} has no GCS save_path`;
+        console.warn(message);
+        throw new Error("Document file not found in storage");
+      }
+
+      const fileBuffer = await downloadFileFromGCS(gcsPath);
+
+      return {
+        data: fileBuffer,
+        fileFormat: row.fileFormat || 'pdf',
+        title: row.title || `document-${row.document_id}`,
+      };
+    } finally {
+      client.release();
+    }
   }
 }

@@ -1,6 +1,6 @@
-import { useState, useMemo, useCallback, useEffect } from 'react';
+import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
-import { Box, Typography, Button, Paper, Tabs, Tab, Accordion, AccordionSummary, AccordionDetails, TextField, InputAdornment, IconButton } from '@mui/material';
+import { Box, Typography, Button, Paper, Tabs, Tab, Accordion, AccordionSummary, AccordionDetails, TextField, InputAdornment, IconButton, CircularProgress } from '@mui/material';
 import {
   AccountBalance as OrdererIcon,
   LocationOn as LocationIcon,
@@ -39,7 +39,13 @@ import { RightSidePanel } from '../components/layout';
 import { useSidebar } from '../contexts/SidebarContext';
 import { formatAmountInManYen } from '../utils';
 import type { BidType, AnnouncementStatus } from '../types/announcement';
-import type { EvaluationStatus, WorkStatus, CompanyPriority } from '../types';
+import type { EvaluationStatus, WorkStatus, CompanyPriority, Announcement as AnnouncementType, DocumentOcr } from '../types';
+
+type AnnouncementDetail = AnnouncementType & {
+  announcementNo: number;
+  no: number;
+  status: AnnouncementStatus;
+};
 import { getApiUrl } from '../config/api';
 
 // 関連案件用ソートオプション
@@ -1295,9 +1301,29 @@ export default function AnnouncementDetailPage() {
   const [isProgressingLoading, setIsProgressingLoading] = useState(false);
 
   // API からデータ取得
-  const [announcement, setAnnouncement] = useState<any>(null);
+  const [announcement, setAnnouncement] = useState<AnnouncementDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [documentPreviewUrls, setDocumentPreviewUrls] = useState<Record<string, string>>({});
+  const [documentPreviewLoading, setDocumentPreviewLoading] = useState<Record<string, boolean>>({});
+  const [documentPreviewError, setDocumentPreviewError] = useState<Record<string, string>>({});
+  const previewUrlRef = useRef<Record<string, string>>({});
+  const documentPreviewLoadingRef = useRef<Record<string, boolean>>({});
+
+  const updateLoadingState = useCallback((docKey: string, value: boolean) => {
+    documentPreviewLoadingRef.current = { ...documentPreviewLoadingRef.current, [docKey]: value };
+    setDocumentPreviewLoading((prev) => ({ ...prev, [docKey]: value }));
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      Object.values(previewUrlRef.current).forEach((url) => {
+        if (url) {
+          URL.revokeObjectURL(url);
+        }
+      });
+    };
+  }, []);
 
   useEffect(() => {
     const fetchAnnouncement = async () => {
@@ -1321,6 +1347,53 @@ export default function AnnouncementDetailPage() {
     };
     fetchAnnouncement();
   }, [id]);
+
+  const loadPdfPreview = useCallback(
+    async (documentId: number) => {
+      if (!announcement?.announcementNo) return;
+      const docKey = String(documentId);
+      if (previewUrlRef.current[docKey] || documentPreviewLoadingRef.current[docKey]) {
+        return;
+      }
+
+      updateLoadingState(docKey, true);
+      setDocumentPreviewError((prev) => ({ ...prev, [docKey]: '' }));
+
+      try {
+        const response = await fetch(
+          getApiUrl(`/api/announcements/${announcement.announcementNo}/documents/${docKey}/preview`)
+        );
+        if (!response.ok) {
+          throw new Error(`Failed to fetch preview (${response.status})`);
+        }
+        const blob = await response.blob();
+        const objectUrl = URL.createObjectURL(blob);
+
+        if (previewUrlRef.current[docKey]) {
+          URL.revokeObjectURL(previewUrlRef.current[docKey]);
+        }
+        previewUrlRef.current[docKey] = objectUrl;
+
+        setDocumentPreviewUrls((prev) => ({ ...prev, [docKey]: objectUrl }));
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'PDFプレビューの取得に失敗しました';
+        setDocumentPreviewError((prev) => ({ ...prev, [docKey]: message }));
+      } finally {
+        updateLoadingState(docKey, false);
+      }
+    },
+    [announcement?.announcementNo, updateLoadingState]
+  );
+
+  useEffect(() => {
+    if (!announcement?.documents) return;
+    const firstPdfDoc = announcement.documents.find(
+      (doc: DocumentOcr) => doc.fileFormat && doc.fileFormat.toLowerCase() === 'pdf'
+    );
+    if (firstPdfDoc) {
+      loadPdfPreview(firstPdfDoc.id);
+    }
+  }, [announcement?.documents, loadPdfPreview]);
 
   useEffect(() => {
     if (!announcement || !announcement.announcementNo) {
@@ -1731,7 +1804,7 @@ export default function AnnouncementDetailPage() {
                       <AccordionDetails sx={{ pt: 2, pb: 2, px: 2.5 }}>
                         {announcement.documents && announcement.documents.length > 0 ? (
                           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                            {announcement.documents.map((doc: any) => {
+                            {announcement.documents.map((doc: DocumentOcr) => {
                               const typeConfig = getDocumentTypeConfig(doc.type);
                               const formatConfig = getFileFormatConfig(doc.fileFormat);
                               return (
@@ -2056,13 +2129,21 @@ export default function AnnouncementDetailPage() {
             {/* 資料タブ */}
             {activeTab === tabIndex.documents && hasDocuments && announcement.documents && (
               <Box sx={{ p: 2.5, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-                {announcement.documents.map((doc: any, index: number) => {
+                {announcement.documents.map((doc: DocumentOcr, index: number) => {
                   const typeConfig = getDocumentTypeConfig(doc.type);
                   const formatConfig = getFileFormatConfig(doc.fileFormat);
+                  const isPdfDocument = doc.fileFormat && doc.fileFormat.toLowerCase() === 'pdf';
+                  const docId = doc.id;
+                  const docKey = String(docId);
                   return (
                     <Accordion
                       key={doc.id}
                       defaultExpanded={index === 0}
+                      onChange={(_, expanded) => {
+                        if (expanded && isPdfDocument) {
+                          loadPdfPreview(docId);
+                        }
+                      }}
                       sx={{
                         backgroundColor: colors.text.white,
                         border: `1px solid ${colors.border.main}`,
@@ -2103,10 +2184,86 @@ export default function AnnouncementDetailPage() {
                         )}
                         {doc.pageCount && <Typography sx={{ fontSize: fontSizes.md, color: colors.text.light, ml: 'auto', mr: 1 }}>{doc.pageCount}ページ</Typography>}
                       </AccordionSummary>
-                      <AccordionDetails sx={{ p: 2.5, maxHeight: 400, overflow: 'auto', backgroundColor: colors.background.paper }}>
-                        <Typography component="pre" sx={{ fontSize: fontSizes.md, color: colors.text.muted, whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontFamily: 'inherit', margin: 0, lineHeight: 1.8 }}>
-                          {doc.content}
-                        </Typography>
+                      <AccordionDetails sx={{ p: 2.5, backgroundColor: colors.background.paper, display: 'flex', flexDirection: 'column', gap: 2 }}>
+                        {isPdfDocument && (
+                          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                            <Typography sx={{ fontSize: fontSizes.sm, fontWeight: 600, color: colors.text.secondary }}>PDFプレビュー</Typography>
+                            {documentPreviewLoading[docKey] ? (
+                              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', border: `1px dashed ${colors.border.main}`, borderRadius: borderRadius.xs, height: 400, backgroundColor: colors.text.white }}>
+                                <CircularProgress size={28} sx={{ color: colors.primary.main, mr: 1.5 }} />
+                                <Typography sx={{ fontSize: fontSizes.md, color: colors.text.muted }}>プレビューを読み込み中です...</Typography>
+                              </Box>
+                            ) : documentPreviewError[docKey] ? (
+                              <Box sx={{ border: `1px solid ${colors.status.error.light}`, borderRadius: borderRadius.xs, p: 2, backgroundColor: '#fff5f5', display: 'flex', flexDirection: 'column', gap: 1 }}>
+                                <Typography sx={{ fontSize: fontSizes.md, fontWeight: 600, color: colors.status.error.main }}>
+                                  プレビューの読み込みに失敗しました
+                                </Typography>
+                                <Typography sx={{ fontSize: fontSizes.sm, color: colors.text.light }}>
+                                  {documentPreviewError[docKey]}
+                                </Typography>
+                                <Typography sx={{ fontSize: fontSizes.xs, color: colors.text.muted }}>
+                                  ファイルが存在しないか、アクセス権限が不足している可能性があります。
+                                </Typography>
+                                <Box sx={{ display: 'flex', gap: 1 }}>
+                                  <Button
+                                    variant="outlined"
+                                    size="small"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      loadPdfPreview(docId);
+                                    }}
+                                    sx={{ borderRadius: borderRadius.xs }}
+                                  >
+                                    再読み込み
+                                  </Button>
+                                  {doc.url && (
+                                    <Button
+                                      variant="outlined"
+                                      size="small"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        window.open(doc.url, '_blank');
+                                      }}
+                                      sx={{ borderRadius: borderRadius.xs }}
+                                    >
+                                      元のURLを開く
+                                    </Button>
+                                  )}
+                                </Box>
+                              </Box>
+                            ) : documentPreviewUrls[docKey] ? (
+                              <Box
+                                component="iframe"
+                                title={`${doc.title} プレビュー`}
+                                src={documentPreviewUrls[docKey]}
+                                sx={{
+                                  width: '100%',
+                                  height: 420,
+                                  border: `1px solid ${colors.border.main}`,
+                                  borderRadius: borderRadius.xs,
+                                  backgroundColor: colors.text.white,
+                                }}
+                              />
+                            ) : (
+                              <Button
+                                variant="outlined"
+                                size="small"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  loadPdfPreview(docId);
+                                }}
+                                sx={{ alignSelf: 'flex-start', borderRadius: borderRadius.xs }}
+                              >
+                                PDFプレビューを読み込む
+                              </Button>
+                            )}
+                          </Box>
+                        )}
+                        <Box sx={{ border: `1px solid ${colors.border.main}`, borderRadius: borderRadius.xs, maxHeight: 420, overflow: 'auto', backgroundColor: colors.text.white, p: 2 }}>
+                          <Typography component="pre" sx={{ fontSize: fontSizes.md, color: colors.text.muted, whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontFamily: 'inherit', margin: 0, lineHeight: 1.8 }}>
+                            {doc.content || '文字起こしデータがありません'}
+                          </Typography>
+                        </Box>
                       </AccordionDetails>
                     </Accordion>
                   );

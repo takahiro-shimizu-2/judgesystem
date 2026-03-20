@@ -1,7 +1,28 @@
-import { Storage } from '@google-cloud/storage';
+import { Storage, File } from '@google-cloud/storage';
 
 // GCS クライアントを初期化
 const storage = new Storage();
+
+/**
+ * gs:// パスから GCS ファイルオブジェクトを取得
+ */
+function getGcsFile(gcsPath: string): File {
+  if (!gcsPath || !gcsPath.startsWith('gs://')) {
+    throw new Error(`Invalid GCS path: ${gcsPath}`);
+  }
+
+  const pathWithoutPrefix = gcsPath.replace('gs://', '');
+  const firstSlashIndex = pathWithoutPrefix.indexOf('/');
+
+  if (firstSlashIndex === -1) {
+    throw new Error(`Invalid GCS path format: ${gcsPath}`);
+  }
+
+  const bucketName = pathWithoutPrefix.substring(0, firstSlashIndex);
+  const filePath = pathWithoutPrefix.substring(firstSlashIndex + 1);
+
+  return storage.bucket(bucketName).file(filePath);
+}
 
 /**
  * GCS から Markdown ファイルの内容を取得する
@@ -9,31 +30,27 @@ const storage = new Storage();
  * @returns Markdown ファイルの内容
  */
 export async function readMarkdownFromGCS(gcsPath: string): Promise<string> {
-  if (!gcsPath || !gcsPath.startsWith('gs://')) {
-    throw new Error(`Invalid GCS path: ${gcsPath}`);
-  }
-
   try {
-    // gs:// プレフィックスを除去してバケット名とファイルパスを抽出
-    const pathWithoutPrefix = gcsPath.replace('gs://', '');
-    const firstSlashIndex = pathWithoutPrefix.indexOf('/');
-
-    if (firstSlashIndex === -1) {
-      throw new Error(`Invalid GCS path format: ${gcsPath}`);
-    }
-
-    const bucketName = pathWithoutPrefix.substring(0, firstSlashIndex);
-    const filePath = pathWithoutPrefix.substring(firstSlashIndex + 1);
-
-    // GCS からファイルをダウンロード
-    const bucket = storage.bucket(bucketName);
-    const file = bucket.file(filePath);
-
+    const file = getGcsFile(gcsPath);
     const [content] = await file.download();
     return content.toString('utf-8');
   } catch (error) {
     console.error(`Failed to read from GCS: ${gcsPath}`, error);
     throw new Error(`Failed to read markdown from GCS: ${gcsPath}`);
+  }
+}
+
+/**
+ * 任意ファイルを Buffer として取得
+ */
+export async function downloadFileFromGCS(gcsPath: string): Promise<Buffer> {
+  try {
+    const file = getGcsFile(gcsPath);
+    const [content] = await file.download();
+    return content;
+  } catch (error) {
+    console.error(`Failed to download file from GCS: ${gcsPath}`, error);
+    throw new Error(`Failed to download file from GCS: ${gcsPath}`);
   }
 }
 

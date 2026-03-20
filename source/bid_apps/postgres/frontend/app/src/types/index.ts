@@ -75,10 +75,10 @@ export interface Department {
 export type DocumentType = string;
 
 // ファイル形式
-export type FileFormat = 'pdf' | 'excel' | 'word' | 'other';
+export type FileFormat = 'pdf' | 'excel' | 'word' | 'xls' | 'doc' | 'png' | 'jpg' | 'jpeg' | 'other';
 
 export interface DocumentOcr {
-  id: string;
+  id: number;
   type: DocumentType;                 // 資料種別（自由入力）
   title: string;                      // 資料名
   content: string;                    // 文字起こし内容

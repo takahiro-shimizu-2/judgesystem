@@ -113,6 +113,7 @@ app.patch("/api/evaluations/:evaluationNo", evaluationController.updateWorkStatu
 app.get("/api/announcements", announcementController.getList);
 app.get("/api/announcements/:announcementNo", announcementController.getByNo);
 app.get("/api/announcements/:announcementNo/progressing-companies", announcementController.getProgressingCompanies);
+app.get("/api/announcements/:announcementNo/documents/:documentId/preview", announcementController.getDocumentPreview);
 
 // Partner routes
 app.get("/api/partners", partnerController.getList);
