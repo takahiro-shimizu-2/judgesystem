@@ -3127,7 +3127,7 @@ class DBOperatorPOSTGRES(DBOperator):
         CREATE TABLE IF NOT EXISTS {tablename} (
             "evaluationNo" TEXT PRIMARY KEY,
             "workStatus" TEXT NOT NULL DEFAULT 'not_started',
-            "currentStep" TEXT NOT NULL DEFAULT 'judgement',
+            "currentStep" TEXT NOT NULL DEFAULT 'judgment',
             "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
             "updatedAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
         )

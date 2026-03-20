@@ -291,7 +291,7 @@ export class EvaluationRepository {
 
       const result = await client.query(
         `INSERT INTO ${qualifiedTableName} AS status ("evaluationNo", "workStatus", "currentStep")
-         VALUES ($1, $2, COALESCE($3, 'judgement'))
+         VALUES ($1, $2, COALESCE($3, 'judgment'))
          ON CONFLICT ("evaluationNo") DO UPDATE
          SET "workStatus" = EXCLUDED."workStatus",
              "currentStep" = CASE WHEN $3 IS NULL THEN status."currentStep" ELSE EXCLUDED."currentStep" END,
@@ -534,7 +534,7 @@ export class EvaluationRepository {
   }
 
   private getCurrentStepExpression(): string {
-    return `COALESCE(evs."currentStep", 'judgement')`;
+    return `COALESCE(evs."currentStep", 'judgment')`;
   }
 
   private getPriorityExpression(): string {
