@@ -33,22 +33,7 @@ export class EvaluationController {
       const page = pageNum;
       const pageSize = pageSizeNum;
 
-      // Parse query parameters
-      const filters: FilterParams = {
-        page,
-        pageSize,
-        statuses: this.parseArrayParam(req.query.statuses),
-        workStatuses: this.parseArrayParam(req.query.workStatuses),
-        priorities: this.parseArrayParam(req.query.priorities),
-        categories: this.parseArrayParam(req.query.categories),
-        bidTypes: this.parseArrayParam(req.query.bidTypes),
-        organizations: this.parseArrayParam(req.query.organizations),
-        prefectures: this.parseArrayParam(req.query.prefectures),
-        searchQuery: (req.query.searchQuery as string) || "",
-        sortField: (req.query.sortField as string) || "",
-        sortOrder: (req.query.sortOrder as "asc" | "desc") || "asc",
-        ordererId: req.query.ordererId as string | undefined,
-      };
+      const filters = this.buildFilterParams(req, page, pageSize);
 
       const result = await this.service.getList(filters);
 
@@ -161,10 +146,52 @@ export class EvaluationController {
   };
 
   /**
+   * GET /api/evaluations/status-counts - Aggregated status counts for current filters
+   */
+  getStatusCounts = async (req: Request, res: Response): Promise<void> => {
+    console.log(`GET /api/evaluations/status-counts hit`);
+
+    try {
+      const filters = this.buildFilterParams(req, 0, 0);
+      const counts = await this.service.getStatusCounts(filters);
+
+      res.setHeader("Content-Type", "application/json");
+      res.setHeader("Cache-Control", "no-cache");
+      res.status(200).json(counts);
+    } catch (error) {
+      console.error(`ERROR in GET /api/evaluations/status-counts:`, error);
+      if (!res.headersSent) {
+        res.status(500).json({
+          error: "Internal Server Error",
+          message: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+  };
+
+  /**
    * Helper: Parse array parameter from query string
    */
   private parseArrayParam(param: any): string[] {
     if (!param) return [];
     return Array.isArray(param) ? param : [param];
+  }
+
+  private buildFilterParams(req: Request, page: number, pageSize: number): FilterParams {
+    return {
+      page,
+      pageSize,
+      statuses: this.parseArrayParam(req.query.statuses),
+      workStatuses: this.parseArrayParam(req.query.workStatuses),
+      priorities: this.parseArrayParam(req.query.priorities),
+      categories: this.parseArrayParam(req.query.categories),
+      bidTypes: this.parseArrayParam(req.query.bidTypes),
+      organizations: this.parseArrayParam(req.query.organizations),
+      prefectures: this.parseArrayParam(req.query.prefectures),
+      searchQuery: (req.query.searchQuery as string) || "",
+      sortField: (req.query.sortField as string) || "",
+      sortOrder: (req.query.sortOrder as "asc" | "desc") || "asc",
+      ordererId: req.query.ordererId as string | undefined,
+    };
   }
 }

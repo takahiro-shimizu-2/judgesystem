@@ -5,7 +5,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import type { GridFilterModel, GridSortModel, GridPaginationModel } from '@mui/x-data-grid';
 import { extractPrefecture } from '../constants/prefectures';
-import type { FilterState } from '../types';
+import type { EvaluationStatus, FilterState } from '../types';
 import { getApiUrl } from '../config/api';
 
 // ナビゲーション追跡用のsessionStorageキー
@@ -33,6 +33,11 @@ const DEFAULT_FILTERS: FilterState = {
 
 const DEFAULT_SORT: GridSortModel = [];
 const DEFAULT_PAGINATION: GridPaginationModel = { pageSize: 25, page: 0 };
+const DEFAULT_STATUS_COUNTS: Record<EvaluationStatus, number> = {
+  all_met: 0,
+  other_only_unmet: 0,
+  unmet: 0,
+};
 
 /**
  * localStorage から安全に値を読み込む
@@ -74,22 +79,14 @@ function isReturningFromDetail(): boolean {
 /**
  * API からデータを取得
  */
-async function fetchEvaluations(params: {
-  page: number;
-  pageSize: number;
-  filters: FilterState;
-  searchQuery: string;
-  sortModel: GridSortModel;
-}): Promise<{ data: any[]; total: number }> {
-  const { page, pageSize, filters, searchQuery, sortModel } = params;
+function appendFilterParams(
+  queryParams: URLSearchParams,
+  filters: FilterState,
+  options?: { includeStatuses?: boolean }
+) {
+  const includeStatuses = options?.includeStatuses ?? true;
 
-  // クエリパラメータを構築
-  const queryParams = new URLSearchParams();
-  queryParams.append('page', page.toString());
-  queryParams.append('pageSize', pageSize.toString());
-
-  // フィルター
-  if (filters.statuses.length > 0) {
+  if (includeStatuses && filters.statuses.length > 0) {
     filters.statuses.forEach(s => queryParams.append('statuses', s));
   }
   if (filters.workStatuses.length > 0) {
@@ -110,6 +107,24 @@ async function fetchEvaluations(params: {
   if (filters.prefectures.length > 0) {
     filters.prefectures.forEach(s => queryParams.append('prefectures', s));
   }
+}
+
+async function fetchEvaluations(params: {
+  page: number;
+  pageSize: number;
+  filters: FilterState;
+  searchQuery: string;
+  sortModel: GridSortModel;
+}): Promise<{ data: any[]; total: number }> {
+  const { page, pageSize, filters, searchQuery, sortModel } = params;
+
+  // クエリパラメータを構築
+  const queryParams = new URLSearchParams();
+  queryParams.append('page', page.toString());
+  queryParams.append('pageSize', pageSize.toString());
+
+  // フィルター
+  appendFilterParams(queryParams, filters);
 
   // 検索
   if (searchQuery.trim()) {
@@ -133,6 +148,31 @@ async function fetchEvaluations(params: {
   const result = await response.json();
   console.log('API Response:', result);
   return result;
+}
+
+async function fetchStatusCounts(params: {
+  filters: FilterState;
+  searchQuery: string;
+}): Promise<Record<EvaluationStatus, number>> {
+  const { filters, searchQuery } = params;
+  const queryParams = new URLSearchParams();
+  appendFilterParams(queryParams, filters, { includeStatuses: false });
+
+  if (searchQuery.trim()) {
+    queryParams.append('searchQuery', searchQuery.trim());
+  }
+
+  const response = await fetch(getApiUrl(`/api/evaluations/status-counts?${queryParams.toString()}`));
+  if (!response.ok) {
+    throw new Error(`Failed to fetch status counts: ${response.status}`);
+  }
+
+  const result = await response.json();
+  return {
+    all_met: Number(result?.all_met ?? 0),
+    other_only_unmet: Number(result?.other_only_unmet ?? 0),
+    unmet: Number(result?.unmet ?? 0),
+  };
 }
 
 /**
@@ -179,6 +219,7 @@ export function useBidListState() {
   const [totalCount, setTotalCount] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [statusCounts, setStatusCounts] = useState<Record<EvaluationStatus, number>>(DEFAULT_STATUS_COUNTS);
 
   // 前回の値を追跡（実際に値が変わった時のみページリセット）
   const prevSearchQuery = useRef(searchQuery);
@@ -296,6 +337,31 @@ export function useBidListState() {
     };
   }, [paginationModel, filters, searchQuery, sortModel]);
 
+  // ステータス件数の取得（ステータスフィルターは除外して集計）
+  useEffect(() => {
+    let isCancelled = false;
+
+    const loadStatusCounts = async () => {
+      try {
+        const counts = await fetchStatusCounts({ filters, searchQuery });
+        if (!isCancelled) {
+          setStatusCounts(counts);
+        }
+      } catch (err) {
+        console.error('Failed to fetch status counts:', err);
+        if (!isCancelled) {
+          setStatusCounts(DEFAULT_STATUS_COUNTS);
+        }
+      }
+    };
+
+    loadStatusCounts();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [filters, searchQuery]);
+
   // フィルター件数
   const activeFilterCount =
     filters.statuses.length +
@@ -342,6 +408,7 @@ export function useBidListState() {
     isLoading,
     error,
     totalCount,
+    statusCounts,
 
     // フィルター件数
     activeFilterCount,

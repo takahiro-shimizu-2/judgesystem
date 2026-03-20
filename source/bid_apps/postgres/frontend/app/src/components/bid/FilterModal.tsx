@@ -25,18 +25,11 @@ import {
 import type { EvaluationStatus, CompanyPriority, WorkStatus, FilterState } from '../../types';
 import { FilterOptionButton } from '../common/FilterOptionButton';
 import { SelectAllButton } from '../common/SelectAllButton';
-import { mockBidEvaluations } from '../../data';
 import { fontSizes, iconStyles, borderRadius, colors } from '../../constants/styles';
 
 // 優先順位の選択肢
 const priorities: CompanyPriority[] = [1, 2, 3, 4, 5];
 
-// ステータス件数
-const statusCounts = {
-  all_met: mockBidEvaluations.filter(e => e.status === 'all_met').length,
-  other_only_unmet: mockBidEvaluations.filter(e => e.status === 'other_only_unmet').length,
-  unmet: mockBidEvaluations.filter(e => e.status === 'unmet').length,
-};
 
 interface FilterModalProps {
   filters: FilterState;
@@ -44,6 +37,7 @@ interface FilterModalProps {
   onApply: (filters: FilterState) => void;
   onGridFilterApply: (model: GridFilterModel) => void;
   onClose: () => void;
+  statusCounts?: Record<EvaluationStatus, number>;
 }
 
 export function FilterModal({
@@ -52,6 +46,7 @@ export function FilterModal({
   onApply,
   onGridFilterApply,
   onClose,
+  statusCounts,
 }: FilterModalProps) {
   const [activeTab, setActiveTab] = useState<'preset' | 'column'>('preset');
   const [localFilters, setLocalFilters] = useState<FilterState>(filters);
@@ -278,10 +273,11 @@ export function FilterModal({
                   {(Object.keys(evaluationStatusConfig) as EvaluationStatus[]).map((status) => {
                     const config = evaluationStatusConfig[status];
                     const StatusIcon = config.icon;
+                    const count = statusCounts?.[status] ?? 0;
                     return (
                       <FilterOptionButton
                         key={status}
-                        label={`${config.label} (${statusCounts[status]})`}
+                        label={`${config.label} (${count})`}
                         selected={localFilters.statuses.includes(status)}
                         onClick={() => toggleStatus(status)}
                         icon={<StatusIcon style={iconStyles.small} />}

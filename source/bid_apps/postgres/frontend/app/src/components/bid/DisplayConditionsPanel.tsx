@@ -27,7 +27,6 @@ import { categories } from '../../constants/categories';
 import { organizationGroupsByRegion } from '../../constants/organizations';
 import { prefecturesByRegion } from '../../constants/prefectures';
 import type { FilterState, EvaluationStatus, CompanyPriority, WorkStatus } from '../../types';
-import { mockBidEvaluations } from '../../data';
 
 // ソートオプションの定義
 const SORT_FIELDS = [
@@ -45,11 +44,6 @@ const allStatuses: EvaluationStatus[] = ['all_met', 'other_only_unmet', 'unmet']
 const allWorkStatuses: WorkStatus[] = ['not_started', 'in_progress', 'completed'];
 
 // ステータス件数
-const statusCounts = {
-  all_met: mockBidEvaluations.filter(e => e.status === 'all_met').length,
-  other_only_unmet: mockBidEvaluations.filter(e => e.status === 'other_only_unmet').length,
-  unmet: mockBidEvaluations.filter(e => e.status === 'unmet').length,
-};
 
 // フィルタータブの定義
 const FILTER_TABS = [
@@ -70,6 +64,7 @@ interface DisplayConditionsPanelProps {
   filters: FilterState;
   onFilterChange: (filters: FilterState) => void;
   onClearAll: () => void;
+  statusCounts: Record<EvaluationStatus, number>;
   activeTab?: 'sort' | 'filter';
   onTabChange?: (tab: 'sort' | 'filter') => void;
 }
@@ -140,6 +135,7 @@ export function DisplayConditionsPanel({
   filters,
   onFilterChange,
   onClearAll,
+  statusCounts,
   activeTab,
   onTabChange,
 }: DisplayConditionsPanelProps) {
@@ -285,7 +281,7 @@ export function DisplayConditionsPanel({
               return (
                 <FilterButton
                   key={status}
-                  label={`${config.label} (${statusCounts[status]})`}
+                  label={`${config.label} (${statusCounts[status] ?? 0})`}
                   selected={filters.statuses.includes(status)}
                   onClick={() => toggleStatus(status)}
                   color={config.color}

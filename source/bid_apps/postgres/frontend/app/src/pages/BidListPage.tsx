@@ -367,6 +367,7 @@ export default function BidListPage() {
     paginationModel,
     rows,
     totalCount,
+    statusCounts,
     isLoading,
     error,
     totalFilterCount,
@@ -494,6 +495,7 @@ export default function BidListPage() {
           filters={filters}
           onFilterChange={setFilters}
           onClearAll={clearAllFilters}
+          statusCounts={statusCounts}
           activeTab={conditionTab}
           onTabChange={setConditionTab}
         />

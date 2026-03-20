@@ -367,6 +367,46 @@ export class EvaluationRepository {
   }
 
   /**
+   * Get counts for each evaluation status based on current filters
+   */
+  async getStatusCounts(filters: FilterParams): Promise<{ all_met: number; other_only_unmet: number; unmet: number }> {
+    const client = await pool.connect();
+    try {
+      const tables = this.getQualifiedTables();
+      const baseFromClause = this.getBaseFromClause(tables);
+      const statusExpression = this.getStatusExpression();
+      const workStatusExpression = this.getWorkStatusExpression();
+
+      const { whereClause, queryParams } = this.buildWhereClause(filters, statusExpression, workStatusExpression);
+
+      const result = await client.query(
+        `
+        WITH base AS (
+          SELECT
+            ${statusExpression} AS status
+          ${baseFromClause}
+          ${whereClause}
+        )
+        SELECT
+          COUNT(*) FILTER (WHERE status = 'all_met') AS "all_met",
+          COUNT(*) FILTER (WHERE status = 'other_only_unmet') AS "other_only_unmet",
+          COUNT(*) FILTER (WHERE status = 'unmet') AS "unmet"
+        FROM base
+        `,
+        queryParams
+      );
+
+      if (result.rowCount === 0) {
+        return { all_met: 0, other_only_unmet: 0, unmet: 0 };
+      }
+
+      return result.rows[0];
+    } finally {
+      client.release();
+    }
+  }
+
+  /**
    * Build WHERE clause from filters
    */
   private buildWhereClause(

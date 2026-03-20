@@ -55,4 +55,11 @@ export class EvaluationService {
   async getStats(): Promise<any> {
     return await this.repository.getStats();
   }
+
+  /**
+   * Get aggregated counts by evaluation status
+   */
+  async getStatusCounts(filters: FilterParams): Promise<{ all_met: number; other_only_unmet: number; unmet: number }> {
+    return await this.repository.getStatusCounts(filters);
+  }
 }
