@@ -125,7 +125,7 @@ export default function BidListPage() {
 
 // pages/PartnerListPage.tsx
 export default function PartnerListPage() {
-  const { searchQuery, rows, ... } = useListPageState(mockPartners, filterFn);
+  const { searchQuery, rows, ... } = useListPageState(partners, filterFn);
   // UIのみに集中
 }
 ```

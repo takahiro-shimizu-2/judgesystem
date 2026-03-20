@@ -12,7 +12,7 @@ export interface PastProject {
   branchName: string;          // 支店名
   workStatus: WorkStatus;      // 着手ステータス
   evaluationStatus: EvaluationStatus; // 参加可否
-  priority: CompanyPriority;   // 優先度
+  priority: CompanyPriority | null;   // 優先度
   bidType?: BidType;           // 入札形式
   category: string;            // 種別
   prefecture: string;          // 都道府県
@@ -91,16 +91,16 @@ export interface PartnerListItem {
   email: string;           // メールアドレス
   fax: string;             // FAX
   url?: string;            // ホームページURL
-  surveyCount: number;     // 現地調査回数
-  rating: number;          // 評価（0〜3、0.5刻み）
-  resultCount: number;     // 実績数
+  surveyCount: number | null;     // 現地調査回数
+  rating: number | null;          // 評価（0〜3、0.5刻み）
+  resultCount: number | null;     // 実績数
   categories: string[];    // 種別（最大30個程度）
   pastProjects: PastProject[]; // 過去案件
   // 企業情報（統合）
   representative: string;  // 代表者
   established: string;     // 設立年
-  capital: number;         // 資本金
-  employeeCount: number;   // 従業員数
+  capital: number | null;         // 資本金
+  employeeCount: number | null;   // 従業員数
   branches: CompanyBranch[]; // 拠点一覧
   qualifications: Qualifications; // 競争参加資格
 }

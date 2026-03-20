@@ -32,7 +32,13 @@ export const TABLES = {
   evaluations: "backend_evaluations",
   companies: "backend_companies",
   orderers: "backend_orderers",
-  partners: "backend_partners",
+  partners: "partners_master",
+  partnerCategories: "partners_categories",
+  partnerPastProjects: "partners_past_projects",
+  partnerBranches: "partners_branches",
+  partnerQualificationsUnified: "partners_qualifications_unified",
+  partnerQualificationsOrderers: "partners_qualifications_orderers",
+  partnerQualificationsOrdererItems: "partners_qualifications_orderer_items",
   evaluationStatuses: "backend_evaluation_statuses",
 } as const;
 

@@ -15,7 +15,7 @@ import {
   Phone as PhoneIcon,
 } from '@mui/icons-material';
 import type { GridSortModel } from '@mui/x-data-grid';
-import { mockPartners, allCategories } from '../data';
+import { partners, allCategories } from '../data';
 import { colors, pageStyles, fontSizes, chipStyles, listFilterChipStyles, iconStyles, borderRadius } from '../constants/styles';
 import { allPrefectures, extractPrefecture } from '../constants/prefectures';
 import { CustomPagination } from '../components/bid';
@@ -31,9 +31,9 @@ interface RowData {
   name: string;
   address: string;
   phone: string;
-  surveyCount: number;
-  rating: number;
-  resultCount: number;
+  surveyCount: number | null;
+  rating: number | null;
+  resultCount: number | null;
   hasPrimeQualification: boolean;
   categories: string[];
   prefecture: string;
@@ -44,7 +44,8 @@ interface RowData {
  */
 function PartnerCard({ row, onClick }: { row: RowData; onClick: () => void }) {
   // 評価に応じた色
-  const getRatingColor = (rating: number) => {
+  const getRatingColor = (rating: number | null) => {
+    if (rating == null) return colors.text.muted;
     if (rating >= 2.5) return colors.status.success.main;
     if (rating >= 1.5) return colors.status.warning.main;
     return colors.text.muted;
@@ -113,7 +114,7 @@ function PartnerCard({ row, onClick }: { row: RowData; onClick: () => void }) {
                 <Box sx={{ width: '1px', height: '14px', backgroundColor: colors.border.main }} />
               </>
             )}
-            {row.surveyCount > 0 && (
+            {row.surveyCount != null && row.surveyCount > 0 && (
               <Typography
                 sx={{
                   fontSize: fontSizes.xs,
@@ -229,7 +230,7 @@ function PartnerCard({ row, onClick }: { row: RowData; onClick: () => void }) {
           >
             評価
           </Typography>
-          <Rating value={row.rating} max={3} precision={0.5} readOnly size="small" />
+          <Rating value={row.rating ?? 0} max={3} precision={0.5} readOnly size="small" />
         </Box>
 
         {/* 実績数 */}
@@ -251,7 +252,7 @@ function PartnerCard({ row, onClick }: { row: RowData; onClick: () => void }) {
               fontWeight: 600,
             }}
           >
-            {row.resultCount}件
+            {row.resultCount != null ? `${row.resultCount}件` : '未設定'}
           </Typography>
         </Box>
       </Box>
@@ -319,7 +320,7 @@ export default function PartnerListPage() {
 
   // フィルター適用後のデータ
   const filteredPartners = useMemo(() => {
-    return mockPartners.filter((partner) => {
+    return partners.filter((partner) => {
       // 検索
       if (searchQuery.trim()) {
         const q = searchQuery.trim();
@@ -331,8 +332,10 @@ export default function PartnerListPage() {
         }
       }
       // 評価フィルター
-      if (filters.ratings.length > 0 && !filters.ratings.includes(partner.rating)) {
-        return false;
+      if (filters.ratings.length > 0) {
+        if (partner.rating == null || !filters.ratings.includes(partner.rating)) {
+          return false;
+        }
       }
       // 元請資格フィルター
       if (filters.hasPrimeQualification !== 'all') {
@@ -346,8 +349,9 @@ export default function PartnerListPage() {
       }
       // 現地調査実績フィルター
       if (filters.hasSurvey !== 'all') {
-        if (filters.hasSurvey === 'yes' && partner.surveyCount === 0) return false;
-        if (filters.hasSurvey === 'no' && partner.surveyCount > 0) return false;
+        const surveyCount = partner.surveyCount ?? 0;
+        if (filters.hasSurvey === 'yes' && surveyCount === 0) return false;
+        if (filters.hasSurvey === 'no' && surveyCount > 0) return false;
       }
       // 都道府県フィルター
       if (filters.prefectures.length > 0) {
@@ -366,9 +370,9 @@ export default function PartnerListPage() {
       name: p.name,
       address: p.address,
       phone: p.phone,
-      surveyCount: p.surveyCount,
-      rating: p.rating,
-      resultCount: p.resultCount,
+      surveyCount: p.surveyCount ?? null,
+      rating: p.rating ?? null,
+      resultCount: p.resultCount ?? null,
       hasPrimeQualification: p.qualifications.unified.length > 0 || p.qualifications.orderers.length > 0,
       categories: p.categories,
       prefecture: extractPrefecture(p.address) || '',
@@ -385,7 +389,17 @@ export default function PartnerListPage() {
         const field = sort.field as keyof RowData;
 
         if (field === 'rating' || field === 'resultCount' || field === 'surveyCount') {
-          comparison = (a[field] as number) - (b[field] as number);
+          const aValue = a[field] as number | null;
+          const bValue = b[field] as number | null;
+          if (aValue == null && bValue == null) {
+            comparison = 0;
+          } else if (aValue == null) {
+            comparison = -1;
+          } else if (bValue == null) {
+            comparison = 1;
+          } else {
+            comparison = aValue - bValue;
+          }
         } else if (field === 'prefecture') {
           const idxA = allPrefectures.indexOf(a.prefecture);
           const idxB = allPrefectures.indexOf(b.prefecture);

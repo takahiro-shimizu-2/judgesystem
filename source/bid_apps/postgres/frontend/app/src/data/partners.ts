@@ -30,9 +30,8 @@ const generatePartners = async (): Promise<PartnerListItem[]> => {
   return data;
 }
 
-// エクスポート
-// export const mockPartners: PartnerListItem[] = generatePartners();
-export const mockPartners: PartnerListItem[] = await generatePartners();
+// API から取得した実データをキャッシュとして保持
+export const partners: PartnerListItem[] = await generatePartners();
 
 // 種別（100種類以上）- エクスポート
 export const allCategories = [
@@ -60,7 +59,7 @@ export const allCategories = [
 
 // ヘルパー関数
 export const findPartnerById = (id: string): PartnerListItem | undefined =>
-  mockPartners.find(p => p.id === id);
+  partners.find(p => p.id === id);
 
 export const findPartnerByName = (name: string): PartnerListItem | undefined =>
-  mockPartners.find(p => p.name === name);
+  partners.find(p => p.name === name);

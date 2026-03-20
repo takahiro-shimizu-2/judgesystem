@@ -997,7 +997,9 @@ export default function PartnerDetailPage() {
     filtered = filtered.filter((p: PastProject) => {
       if (filters.workStatuses.length > 0 && !filters.workStatuses.includes(p.workStatus)) return false;
       if (filters.evaluationStatuses.length > 0 && !filters.evaluationStatuses.includes(p.evaluationStatus)) return false;
-      if (filters.priorities.length > 0 && !filters.priorities.includes(p.priority)) return false;
+      if (filters.priorities.length > 0) {
+        if (p.priority == null || !filters.priorities.includes(p.priority as CompanyPriority)) return false;
+      }
       if (filters.bidTypes.length > 0 && (!p.bidType || !filters.bidTypes.includes(p.bidType))) return false;
       if (filters.categories.length > 0 && !filters.categories.includes(p.category)) return false;
       if (filters.prefectures.length > 0 && !filters.prefectures.includes(p.prefecture)) return false;
@@ -1022,10 +1024,22 @@ export default function PartnerDetailPage() {
           return WORK_STATUS_ORDER[a.workStatus as WorkStatus] - WORK_STATUS_ORDER[b.workStatus as WorkStatus];
         case 'workStatus_desc':
           return WORK_STATUS_ORDER[b.workStatus as WorkStatus] - WORK_STATUS_ORDER[a.workStatus as WorkStatus];
-        case 'priority_asc':
-          return a.priority - b.priority;
-        case 'priority_desc':
-          return b.priority - a.priority;
+        case 'priority_asc': {
+          const aPriority = a.priority;
+          const bPriority = b.priority;
+          if (aPriority == null && bPriority == null) return 0;
+          if (aPriority == null) return 1;
+          if (bPriority == null) return -1;
+          return aPriority - bPriority;
+        }
+        case 'priority_desc': {
+          const aPriority = a.priority;
+          const bPriority = b.priority;
+          if (aPriority == null && bPriority == null) return 0;
+          if (aPriority == null) return 1;
+          if (bPriority == null) return -1;
+          return bPriority - aPriority;
+        }
         case 'prefecture_asc':
           return a.prefecture.localeCompare(b.prefecture, 'ja');
         case 'prefecture_desc':
@@ -1086,6 +1100,16 @@ export default function PartnerDetailPage() {
     pastProjects: partner.pastProjects || [],
     qualifications: partner.qualifications || { unified: [], orderers: [] },
   };
+
+  const ratingValue = safePartner.rating ?? 0;
+  const surveyDisplay = safePartner.surveyCount != null ? `${safePartner.surveyCount}回` : '未設定';
+  const resultDisplay = safePartner.resultCount != null ? `${safePartner.resultCount}件` : '未設定';
+  const capitalDisplay = safePartner.capital != null
+    ? `${(safePartner.capital / 100000000).toLocaleString()}億円`
+    : '未設定';
+  const employeeDisplay = safePartner.employeeCount != null
+    ? `${safePartner.employeeCount.toLocaleString()}名`
+    : '未設定';
 
   return (
     <Box sx={{ height: '100vh', bgcolor: colors.page.background, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
@@ -1169,8 +1193,8 @@ export default function PartnerDetailPage() {
                         {safePartner.url && <InfoRow label="HP" value={<Link href={safePartner.url} target="_blank" rel="noopener noreferrer" sx={{ color: colors.accent.blue }}>{safePartner.url}</Link>} icon={<LanguageIcon sx={{ ...iconStyles.small, color: colors.text.light }} />} />}
                         <InfoRow label="代表者" value={safePartner.representative} icon={<PersonIcon sx={{ ...iconStyles.small, color: colors.text.light }} />} />
                         <InfoRow label="設立" value={`${safePartner.established}年`} icon={<CalendarIcon sx={{ ...iconStyles.small, color: colors.text.light }} />} />
-                        <InfoRow label="資本金" value={`${(safePartner.capital / 100000000).toLocaleString()}億円`} icon={<AccountBalanceIcon sx={{ ...iconStyles.small, color: colors.text.light }} />} />
-                        <InfoRow label="従業員数" value={`${safePartner.employeeCount.toLocaleString()}名`} icon={<PeopleIcon sx={{ ...iconStyles.small, color: colors.text.light }} />} />
+                        <InfoRow label="資本金" value={capitalDisplay} icon={<AccountBalanceIcon sx={{ ...iconStyles.small, color: colors.text.light }} />} />
+                        <InfoRow label="従業員数" value={employeeDisplay} icon={<PeopleIcon sx={{ ...iconStyles.small, color: colors.text.light }} />} />
                       </AccordionDetails>
                     </Accordion>
 
@@ -1225,17 +1249,17 @@ export default function PartnerDetailPage() {
                         <Box sx={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr auto 1fr', alignItems: 'center' }}>
                           <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1 }}>
                             <Typography sx={{ fontSize: fontSizes.md, color: colors.text.muted }}>評価</Typography>
-                            <Rating value={safePartner.rating} max={3} precision={0.5} readOnly size="small" />
+                            <Rating value={ratingValue} max={3} precision={0.5} readOnly size="small" />
                           </Box>
                           <Typography sx={{ color: colors.border.dark, px: 1 }}>|</Typography>
                           <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1 }}>
                             <Typography sx={{ fontSize: fontSizes.md, color: colors.text.muted }}>現地調査</Typography>
-                            <Typography sx={{ fontSize: fontSizes.base, fontWeight: 700, color: colors.text.secondary }}>{safePartner.surveyCount}回</Typography>
+                            <Typography sx={{ fontSize: fontSizes.base, fontWeight: 700, color: colors.text.secondary }}>{surveyDisplay}</Typography>
                           </Box>
                           <Typography sx={{ color: colors.border.dark, px: 1 }}>|</Typography>
                           <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1 }}>
                             <Typography sx={{ fontSize: fontSizes.md, color: colors.text.muted }}>実績数</Typography>
-                            <Typography sx={{ fontSize: fontSizes.base, fontWeight: 700, color: colors.text.secondary }}>{safePartner.resultCount}件</Typography>
+                            <Typography sx={{ fontSize: fontSizes.base, fontWeight: 700, color: colors.text.secondary }}>{resultDisplay}</Typography>
                           </Box>
                         </Box>
                       </AccordionDetails>
@@ -1321,8 +1345,13 @@ export default function PartnerDetailPage() {
                       {paginatedProjects.map((project) => {
                         const wsConfig = workStatusConfig[project.workStatus];
                         const evalConfig = evaluationStatusConfig[project.evaluationStatus];
-                        const priorityLabel = priorityLabels[project.priority];
-                        const priorityColor = priorityColors[project.priority];
+                        const priorityValue = project.priority as CompanyPriority | null;
+                        const priorityColor = priorityValue
+                          ? priorityColors[priorityValue]
+                          : { color: colors.text.light, bgColor: colors.background.alt, borderColor: colors.border.main, gradient: colors.text.light };
+                        const priorityLabel = priorityValue
+                          ? priorityLabels[priorityValue]
+                          : '優先度: 未設定';
                         const bidType = project.bidType ? bidTypeConfig[project.bidType] : null;
                         const deadlineColor = getDeadlineColor(project.deadline);
                         return (

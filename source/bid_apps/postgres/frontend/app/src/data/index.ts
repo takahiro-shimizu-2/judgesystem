@@ -2,7 +2,7 @@
  * データ層 - 一元管理されたモックデータ（本番想定のデータ量）
  *
  * 使用方法:
- * import { mockPartners, mockOrderers } from '../data';
+ * import { partners, mockOrderers } from '../data';
  *
  * 構造:
  * - orderers.ts     : 発注者マスター（65件）国/独立行政法人/都道府県/政令市
@@ -37,7 +37,7 @@ export {
 
 // 協力会社
 export {
-  mockPartners,
+  partners,
   findPartnerById,
   findPartnerByName,
   allCategories,
