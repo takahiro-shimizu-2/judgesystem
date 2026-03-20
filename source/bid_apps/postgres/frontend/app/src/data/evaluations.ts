@@ -7,24 +7,11 @@
  * データ取得は useBidListState で行う
  */
 import type {
-  BidEvaluation,
   WorkStatus,
-  EvaluationStatus,
   SimilarCase
 } from '../types';
 import { mockCompanies } from './companies';
 import { getApiUrl } from '../config/api';
-
-// サーバーサイドページネーション移行により、全件取得は廃止
-// データ取得は useBidListState フックで行う
-export const mockBidEvaluations: BidEvaluation[] = [];
-
-// ヘルパー関数
-export const filterByStatus = (status: EvaluationStatus) =>
-  mockBidEvaluations.filter((evaluation) => evaluation.status === status);
-
-export const findById = (id: string) =>
-  mockBidEvaluations.find((evaluation) => evaluation.id === id);
 
 export const updateWorkStatus = async (
   evaluationNo: string,
@@ -50,15 +37,6 @@ export const updateWorkStatus = async (
     console.error('Error updating workStatus:', error);
     return false;
   }
-};
-
-export const updateCurrentStep = (id: string, currentStep: string): boolean => {
-  const evaluation = mockBidEvaluations.find((e) => e.id === id);
-  if (evaluation) {
-    evaluation.currentStep = currentStep;
-    return true;
-  }
-  return false;
 };
 
 // 類似案件のモックデータ（より多様な案件名）

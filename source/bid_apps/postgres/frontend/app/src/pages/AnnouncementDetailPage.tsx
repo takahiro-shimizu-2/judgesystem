@@ -23,7 +23,6 @@ import {
 import {
   announcementStatusConfig,
   bidTypeConfig,
-  mockBidEvaluations,
 } from '../data';
 import { getDocumentTypeConfig, getFileFormatConfig } from '../constants/documentType';
 import { colors, pageStyles, fontSizes, iconStyles, borderRadius, rightPanelColors } from '../constants/styles';
@@ -40,7 +39,7 @@ import { RightSidePanel } from '../components/layout';
 import { useSidebar } from '../contexts/SidebarContext';
 import { formatAmountInManYen } from '../utils';
 import type { BidType, AnnouncementStatus } from '../types/announcement';
-import type { EvaluationStatus } from '../types';
+import type { BidEvaluation, EvaluationStatus, WorkStatus, CompanyPriority } from '../types';
 import { getApiUrl } from '../config/api';
 
 // 関連案件用ソートオプション
@@ -107,6 +106,17 @@ interface CompanyFilterState {
   workStatuses: ('in_progress' | 'completed')[];
   priorities: (1 | 2 | 3 | 4 | 5)[];
 }
+
+type ProgressingCompany = {
+  companyId: string;
+  companyName: string;
+  branchId: string;
+  branchName: string;
+  priority: CompanyPriority;
+  workStatus: Extract<WorkStatus, 'in_progress' | 'completed'>;
+  evaluationId: string;
+  evaluationStatus: EvaluationStatus;
+};
 
 // 参加可否オプション
 const EVALUATION_STATUS_OPTIONS: EvaluationStatus[] = ['all_met', 'other_only_unmet', 'unmet'];
@@ -1398,29 +1408,28 @@ export default function AnnouncementDetailPage() {
   }, [filteredRelatedAnnouncements, relatedPage]);
 
   // 関連データ（早期returnの前に計算）
-  const relatedEvaluations = useMemo(() => {
-    if (!announcement) return [];
-    return mockBidEvaluations.filter(
-      (e) => e.announcement.id === announcement.id &&
-             (e.workStatus === 'in_progress' || e.workStatus === 'completed')
-    );
+  const relatedEvaluations = useMemo<BidEvaluation[]>(() => {
+    // TODO: 関連評価API実装後に復活
+    return [];
   }, [announcement]);
 
-  const baseProgressingCompanies = useMemo(() => {
-    return relatedEvaluations.map((e) => ({
-      companyId: e.company.id,
-      companyName: e.company.name,
-      branchId: e.branch.id,
-      branchName: e.branch.name,
-      priority: e.company.priority,
-      workStatus: e.workStatus,
-      evaluationId: e.id,
-      evaluationStatus: e.status,
-    }));
+  const baseProgressingCompanies = useMemo<ProgressingCompany[]>(() => {
+    return relatedEvaluations
+      .filter((e) => e.workStatus === 'in_progress' || e.workStatus === 'completed')
+      .map((e) => ({
+        companyId: e.company.id,
+        companyName: e.company.name,
+        branchId: e.branch.id,
+        branchName: e.branch.name,
+        priority: e.company.priority as CompanyPriority,
+        workStatus: e.workStatus as Extract<WorkStatus, 'in_progress' | 'completed'>,
+        evaluationId: e.id,
+        evaluationStatus: e.status as EvaluationStatus,
+      }));
   }, [relatedEvaluations]);
 
   // フィルタリング・ソート済み着手企業
-  const filteredProgressingCompanies = useMemo(() => {
+  const filteredProgressingCompanies = useMemo<ProgressingCompany[]>(() => {
     let filtered = baseProgressingCompanies;
 
     // 検索フィルター
@@ -1436,8 +1445,8 @@ export default function AnnouncementDetailPage() {
     // フィルター適用
     filtered = filtered.filter((c) => {
       if (companyFilters.evaluationStatuses.length > 0 && !companyFilters.evaluationStatuses.includes(c.evaluationStatus)) return false;
-      if (companyFilters.workStatuses.length > 0 && !companyFilters.workStatuses.includes(c.workStatus as 'in_progress' | 'completed')) return false;
-      if (companyFilters.priorities.length > 0 && !companyFilters.priorities.includes(c.priority as 1 | 2 | 3 | 4 | 5)) return false;
+      if (companyFilters.workStatuses.length > 0 && !companyFilters.workStatuses.includes(c.workStatus)) return false;
+      if (companyFilters.priorities.length > 0 && !companyFilters.priorities.includes(c.priority)) return false;
       return true;
     });
 
@@ -1469,7 +1478,7 @@ export default function AnnouncementDetailPage() {
   }, [baseProgressingCompanies, companySearchQuery, companyFilters, companySortOption]);
 
   // ページネーション済み着手企業
-  const paginatedProgressingCompanies = useMemo(() => {
+  const paginatedProgressingCompanies = useMemo<ProgressingCompany[]>(() => {
     const start = companyPage * companyPageSize;
     return filteredProgressingCompanies.slice(start, start + companyPageSize);
   }, [filteredProgressingCompanies, companyPage, companyPageSize]);

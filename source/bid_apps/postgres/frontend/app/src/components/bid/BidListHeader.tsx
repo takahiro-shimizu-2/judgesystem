@@ -6,13 +6,14 @@ import {
   Box,
   Typography,
   Chip,
+  Button,
 } from '@mui/material';
-import { Close as CloseIcon } from '@mui/icons-material';
+import { Close as CloseIcon, FilterAlt as FilterIcon } from '@mui/icons-material';
 import { evaluationStatusConfig } from '../../constants/status';
 import { workStatusConfig } from '../../constants/workStatus';
 import { priorityLabels } from '../../constants/priority';
 import { bidTypeConfig } from '../../constants/bidType';
-import { colors, pageStyles, fontSizes, listFilterChipStyles } from '../../constants/styles';
+import { colors, pageStyles, fontSizes, listFilterChipStyles, iconStyles, borderRadius } from '../../constants/styles';
 import type { FilterState } from '../../types';
 import type { BidType } from '../../types/announcement';
 
@@ -21,6 +22,7 @@ interface BidListHeaderProps {
   onFilterChange: (filters: FilterState) => void;
   onClearFilters: () => void;
   totalFilterCount: number;
+  onOpenFilterModal?: () => void;
 }
 
 // フィルターChipスタイル - use listFilterChipStyles
@@ -31,6 +33,7 @@ export function BidListHeader({
   onFilterChange,
   onClearFilters,
   totalFilterCount,
+  onOpenFilterModal,
 }: BidListHeaderProps) {
   return (
     <Box
@@ -45,13 +48,46 @@ export function BidListHeader({
         gap: totalFilterCount > 0 ? 1.5 : 0,
       }}
     >
-      {/* タイトル */}
-      <Typography
-        variant="h5"
-        sx={pageStyles.pageTitle}
+      {/* タイトル + モバイルアクション */}
+      <Box
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          width: '100%',
+          gap: 2,
+        }}
       >
-        入札可否判定結果
-      </Typography>
+        <Typography
+          variant="h5"
+          sx={pageStyles.pageTitle}
+        >
+          入札可否判定結果
+        </Typography>
+        {onOpenFilterModal && (
+          <Button
+            startIcon={<FilterIcon sx={iconStyles.small} />}
+            onClick={onOpenFilterModal}
+            sx={{
+              display: { xs: 'inline-flex', md: 'none' },
+              backgroundColor: colors.primary.main,
+              color: colors.text.white,
+              fontWeight: 600,
+              textTransform: 'none',
+              px: 2,
+              py: 0.75,
+              borderRadius: borderRadius.xs,
+              boxShadow: 'none',
+              '&:hover': {
+                backgroundColor: colors.primary.dark,
+                boxShadow: 'none',
+              },
+            }}
+          >
+            フィルター
+          </Button>
+        )}
+      </Box>
 
       {/* アクティブフィルターチップ */}
       {totalFilterCount > 0 && (

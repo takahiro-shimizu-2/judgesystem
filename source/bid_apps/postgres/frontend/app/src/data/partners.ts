@@ -12,7 +12,6 @@ import type {
   //OrdererQualification
 } from '../types';
 import { getApiUrl } from '../config/api';
-//import { mockBidEvaluations } from './evaluations';
 //import {
 //  unifiedMainCategories,
 //  unifiedSubCategories,

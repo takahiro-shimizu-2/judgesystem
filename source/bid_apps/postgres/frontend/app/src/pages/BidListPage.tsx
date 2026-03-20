@@ -26,6 +26,7 @@ import {
   CustomPagination,
   BidListHeader,
   DisplayConditionsPanel,
+  FilterModal,
 } from '../components/bid';
 import { RightSidePanel } from '../components/layout';
 
@@ -363,6 +364,7 @@ export default function BidListPage() {
   const {
     searchQuery,
     filters,
+    gridFilterModel,
     sortModel,
     paginationModel,
     rows,
@@ -373,7 +375,10 @@ export default function BidListPage() {
     totalFilterCount,
     setSearchQuery,
     setFilters,
+    showFilterModal,
+    setShowFilterModal,
     handleSortModelChange,
+    handleGridFilterChange,
     handlePaginationModelChange,
     clearAllFilters,
   } = useBidListState();
@@ -428,6 +433,7 @@ export default function BidListPage() {
             onFilterChange={setFilters}
             onClearFilters={clearAllFilters}
             totalFilterCount={totalFilterCount}
+            onOpenFilterModal={() => setShowFilterModal(true)}
           />
 
           {/* カード一覧 */}
@@ -500,6 +506,16 @@ export default function BidListPage() {
           onTabChange={setConditionTab}
         />
       </RightSidePanel>
+      {showFilterModal && (
+        <FilterModal
+          filters={filters}
+          gridFilterModel={gridFilterModel}
+          onApply={setFilters}
+          onGridFilterApply={handleGridFilterChange}
+          onClose={() => setShowFilterModal(false)}
+          statusCounts={statusCounts}
+        />
+      )}
     </Box>
   );
 }
