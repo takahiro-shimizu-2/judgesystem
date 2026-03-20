@@ -526,7 +526,20 @@ export class EvaluationRepository {
   }
 
   private getStatusExpression(): string {
-    return `CASE WHEN COALESCE(cbj.final_status, FALSE) THEN 'all_met' ELSE 'unmet' END`;
+    return `
+      CASE
+        WHEN COALESCE(cbj.final_status, FALSE) THEN 'all_met'
+        WHEN
+          COALESCE(cbj.requirement_ineligibility, FALSE) = TRUE
+          AND COALESCE(cbj.requirement_grade_item, FALSE) = TRUE
+          AND COALESCE(cbj.requirement_location, FALSE) = TRUE
+          AND COALESCE(cbj.requirement_experience, FALSE) = TRUE
+          AND COALESCE(cbj.requirement_technician, FALSE) = TRUE
+          AND COALESCE(cbj.requirement_other, FALSE) = FALSE
+        THEN 'other_only_unmet'
+        ELSE 'unmet'
+      END
+    `;
   }
 
   private getWorkStatusExpression(): string {
