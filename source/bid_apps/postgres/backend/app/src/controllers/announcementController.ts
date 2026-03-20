@@ -101,4 +101,34 @@ export class AnnouncementController {
       }
     }
   };
+
+  /**
+   * GET /api/announcements/:announcementNo/progressing-companies
+   */
+  getProgressingCompanies = async (req: Request, res: Response): Promise<void> => {
+    console.log(`GET /api/announcements/${req.params.announcementNo}/progressing-companies hit`);
+
+    const { announcementNo } = req.params;
+    const announcementNoInt = parseInt(announcementNo, 10);
+
+    if (isNaN(announcementNoInt)) {
+      res.status(400).json({ error: "Invalid announcement number" });
+      return;
+    }
+
+    try {
+      const rows = await this.service.getProgressingCompanies(announcementNoInt);
+      res.setHeader("Content-Type", "application/json");
+      res.setHeader("Cache-Control", "no-cache");
+      res.status(200).json(rows);
+    } catch (error) {
+      console.error(`ERROR in GET /api/announcements/${announcementNo}/progressing-companies:`, error);
+      if (!res.headersSent) {
+        res.status(500).json({
+          error: "Internal Server Error",
+          message: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+  };
 }

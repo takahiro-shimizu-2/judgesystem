@@ -31,4 +31,11 @@ export class AnnouncementService {
   async getByNo(announcementNo: number) {
     return await this.repository.findByNo(announcementNo);
   }
+
+  /**
+   * Get progressing companies for an announcement
+   */
+  async getProgressingCompanies(announcementNo: number) {
+    return await this.repository.findProgressingCompanies(announcementNo);
+  }
 }

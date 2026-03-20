@@ -4,6 +4,23 @@ import { FilterParams } from "../types";
 import { readMarkdownFromGCS } from "../utils/gcs";
 
 export class AnnouncementRepository {
+  private getStatusExpression(): string {
+    return `
+      CASE
+        WHEN COALESCE(cbj.final_status, FALSE) THEN 'all_met'
+        WHEN
+          COALESCE(cbj.requirement_ineligibility, FALSE) = TRUE
+          AND COALESCE(cbj.requirement_grade_item, FALSE) = TRUE
+          AND COALESCE(cbj.requirement_location, FALSE) = TRUE
+          AND COALESCE(cbj.requirement_experience, FALSE) = TRUE
+          AND COALESCE(cbj.requirement_technician, FALSE) = TRUE
+          AND COALESCE(cbj.requirement_other, FALSE) = FALSE
+        THEN 'other_only_unmet'
+        ELSE 'unmet'
+      END
+    `;
+  }
+
   /**
    * Get paginated announcements list with filters
    * bid_announcements テーブルから一覧表示に必要な最小限のデータを取得
@@ -227,6 +244,47 @@ export class AnnouncementRepository {
       }
 
       return announcement;
+    } finally {
+      client.release();
+    }
+  }
+
+  /**
+   * Get progressing companies (in_progress / completed) for a given announcement
+   */
+  async findProgressingCompanies(announcementNo: number): Promise<any[]> {
+    const client = await pool.connect();
+    try {
+      const statusExpression = this.getStatusExpression();
+      const result = await client.query(
+        `
+        SELECT
+          cbj.evaluation_no::text AS "evaluationId",
+          cbj.announcement_no::text AS "announcementNo",
+          cbj.company_no::text AS "companyId",
+          COALESCE(cm.company_name, '') AS "companyName",
+          cbj.office_no::text AS "branchId",
+          COALESCE(om.office_name, '') AS "branchName",
+          COALESCE(om.office_address, '') AS "branchAddress",
+          COALESCE(cm.company_address, '') AS "companyAddress",
+          1 AS priority,
+          COALESCE(evs."workStatus", 'not_started') AS "workStatus",
+          ${statusExpression} AS "evaluationStatus",
+          COALESCE(evs."updatedAt", cbj."updatedDate"::timestamptz) AS "updatedAt"
+        FROM ${schemaPrefix}company_bid_judgement cbj
+        JOIN ${schemaPrefix}company_master cm
+          ON cm.company_no::text = cbj.company_no::text
+        LEFT JOIN ${schemaPrefix}office_master om
+          ON om.office_no::text = cbj.office_no::text
+        LEFT JOIN ${schemaPrefix}${TABLES.evaluationStatuses} evs
+          ON evs."evaluationNo" = cbj.evaluation_no::text
+        WHERE cbj.announcement_no = $1
+          AND COALESCE(evs."workStatus", 'not_started') = ANY($2::text[])
+        ORDER BY COALESCE(evs."updatedAt", cbj."updatedDate"::timestamptz) DESC NULLS LAST
+        `,
+        [announcementNo, ['in_progress', 'completed']]
+      );
+      return result.rows;
     } finally {
       client.release();
     }

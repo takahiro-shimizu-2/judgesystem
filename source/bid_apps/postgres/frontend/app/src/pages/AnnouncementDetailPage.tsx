@@ -39,7 +39,7 @@ import { RightSidePanel } from '../components/layout';
 import { useSidebar } from '../contexts/SidebarContext';
 import { formatAmountInManYen } from '../utils';
 import type { BidType, AnnouncementStatus } from '../types/announcement';
-import type { BidEvaluation, EvaluationStatus, WorkStatus, CompanyPriority } from '../types';
+import type { EvaluationStatus, WorkStatus, CompanyPriority } from '../types';
 import { getApiUrl } from '../config/api';
 
 // 関連案件用ソートオプション
@@ -129,13 +129,13 @@ const EVALUATION_STATUS_ORDER: Record<EvaluationStatus, number> = {
 };
 
 // 着手状況オプション
-const WORK_STATUS_OPTIONS: ('in_progress' | 'completed')[] = ['in_progress', 'completed'];
+const WORK_STATUS_OPTIONS: Extract<WorkStatus, 'in_progress' | 'completed'>[] = ['in_progress', 'completed'];
 
 // 優先度オプション
-const PRIORITY_OPTIONS: (1 | 2 | 3 | 4 | 5)[] = [1, 2, 3, 4, 5];
+const PRIORITY_OPTIONS: CompanyPriority[] = [1, 2, 3, 4, 5];
 
 // 優先度順序（ソート用）
-const PRIORITY_ORDER: Record<number, number> = {
+const PRIORITY_ORDER: Record<CompanyPriority, number> = {
   1: 1,
   2: 2,
   3: 3,
@@ -144,9 +144,18 @@ const PRIORITY_ORDER: Record<number, number> = {
 };
 
 // 作業ステータス順序（ソート用）
-const WORK_STATUS_ORDER: Record<string, number> = {
+const WORK_STATUS_ORDER: Record<Extract<WorkStatus, 'in_progress' | 'completed'>, number> = {
   in_progress: 0,
   completed: 1,
+};
+
+const normalizePriority = (value: number): CompanyPriority => {
+  const rounded = Math.round(value);
+  return (PRIORITY_OPTIONS.includes(rounded as CompanyPriority) ? rounded : 1) as CompanyPriority;
+};
+
+const normalizeWorkStatus = (value: string): Extract<WorkStatus, 'in_progress' | 'completed'> => {
+  return value === 'completed' ? 'completed' : 'in_progress';
 };
 
 // フィルターボタン
@@ -1282,6 +1291,8 @@ export default function AnnouncementDetailPage() {
   });
   const [companyPage, setCompanyPage] = useState(0);
   const companyPageSize = 25;
+  const [progressingCompanies, setProgressingCompanies] = useState<ProgressingCompany[]>([]);
+  const [isProgressingLoading, setIsProgressingLoading] = useState(false);
 
   // API からデータ取得
   const [announcement, setAnnouncement] = useState<any>(null);
@@ -1310,6 +1321,57 @@ export default function AnnouncementDetailPage() {
     };
     fetchAnnouncement();
   }, [id]);
+
+  useEffect(() => {
+    if (!announcement || !announcement.announcementNo) {
+      setProgressingCompanies([]);
+      return;
+    }
+
+    let isCancelled = false;
+
+    const fetchProgressingCompanies = async () => {
+      setIsProgressingLoading(true);
+      try {
+        const response = await fetch(
+          getApiUrl(`/api/announcements/${announcement.announcementNo}/progressing-companies`)
+        );
+        if (!response.ok) {
+          throw new Error(`Failed to fetch progressing companies: ${response.status}`);
+        }
+        const data = await response.json();
+        if (isCancelled) return;
+        const mapped = Array.isArray(data)
+          ? data.map((row: any) => ({
+              companyId: String(row.companyId ?? ''),
+              companyName: row.companyName ?? '',
+              branchId: String(row.branchId ?? ''),
+              branchName: row.branchName ?? '',
+              priority: normalizePriority(Number(row.priority ?? 1)),
+              workStatus: normalizeWorkStatus(row.workStatus ?? ''),
+              evaluationId: String(row.evaluationId ?? ''),
+              evaluationStatus: (row.evaluationStatus ?? 'unmet') as EvaluationStatus,
+            }))
+          : [];
+        setProgressingCompanies(mapped);
+      } catch (err) {
+        console.error('Failed to fetch progressing companies:', err);
+        if (!isCancelled) {
+          setProgressingCompanies([]);
+        }
+      } finally {
+        if (!isCancelled) {
+          setIsProgressingLoading(false);
+        }
+      }
+    };
+
+    fetchProgressingCompanies();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [announcement?.announcementNo]);
 
   // サイドパネル制御
   const handleOpenWithTab = useCallback((tab: 'sort' | 'filter') => {
@@ -1408,29 +1470,9 @@ export default function AnnouncementDetailPage() {
   }, [filteredRelatedAnnouncements, relatedPage]);
 
   // 関連データ（早期returnの前に計算）
-  const relatedEvaluations = useMemo<BidEvaluation[]>(() => {
-    // TODO: 関連評価API実装後に復活
-    return [];
-  }, [announcement]);
-
-  const baseProgressingCompanies = useMemo<ProgressingCompany[]>(() => {
-    return relatedEvaluations
-      .filter((e) => e.workStatus === 'in_progress' || e.workStatus === 'completed')
-      .map((e) => ({
-        companyId: e.company.id,
-        companyName: e.company.name,
-        branchId: e.branch.id,
-        branchName: e.branch.name,
-        priority: e.company.priority as CompanyPriority,
-        workStatus: e.workStatus as Extract<WorkStatus, 'in_progress' | 'completed'>,
-        evaluationId: e.id,
-        evaluationStatus: e.status as EvaluationStatus,
-      }));
-  }, [relatedEvaluations]);
-
   // フィルタリング・ソート済み着手企業
   const filteredProgressingCompanies = useMemo<ProgressingCompany[]>(() => {
-    let filtered = baseProgressingCompanies;
+    let filtered = progressingCompanies;
 
     // 検索フィルター
     if (companySearchQuery) {
@@ -1475,7 +1517,7 @@ export default function AnnouncementDetailPage() {
           return 0;
       }
     });
-  }, [baseProgressingCompanies, companySearchQuery, companyFilters, companySortOption]);
+  }, [progressingCompanies, companySearchQuery, companyFilters, companySortOption]);
 
   // ページネーション済み着手企業
   const paginatedProgressingCompanies = useMemo<ProgressingCompany[]>(() => {
@@ -1638,7 +1680,7 @@ export default function AnnouncementDetailPage() {
                 <Tab label="基本情報" />
                 {announcement.documents && announcement.documents.length > 0 && <Tab label="資料" />}
                 <Tab label={`関連案件 (${baseRelatedAnnouncements.length})`} />
-                <Tab label={`着手企業 (${baseProgressingCompanies.length})`} />
+                <Tab label={`着手企業 (${progressingCompanies.length})`} />
               </Tabs>
             </Box>
 
@@ -1726,7 +1768,7 @@ export default function AnnouncementDetailPage() {
                         <Typography sx={{ fontSize: fontSizes.base, fontWeight: 600, color: announcement.status === 'closed' && announcement.actualAmount ? colors.status.success.main : colors.primary.main }}>落札情報</Typography>
                       </AccordionSummary>
                       <AccordionDetails sx={{ pt: 2, pb: 2, px: 2.5 }}>
-                        <Box sx={{ display: 'flex', gap: 4, flexWrap: 'wrap', mb: (announcement.competingCompanies?.length || baseProgressingCompanies.length > 0) ? 2 : 0 }}>
+                        <Box sx={{ display: 'flex', gap: 4, flexWrap: 'wrap', mb: (announcement.competingCompanies?.length || progressingCompanies.length > 0) ? 2 : 0 }}>
                           <Box>
                             <Typography sx={{ fontSize: fontSizes.md, color: colors.text.muted, mb: 0.25 }}>見積予想金額</Typography>
                             <Typography sx={{ fontSize: fontSizes.lg, fontWeight: 700, color: colors.text.secondary }}>
@@ -1753,7 +1795,7 @@ export default function AnnouncementDetailPage() {
                           )}
                         </Box>
                         {/* 競争参加企業 */}
-                        {(announcement.competingCompanies?.length || baseProgressingCompanies.length > 0) && (() => {
+                        {(announcement.competingCompanies?.length || progressingCompanies.length > 0) && (() => {
                           const sortedCompetitors = [...(announcement.competingCompanies || [])].sort((a, b) => {
                             if (a.isWinner && !b.isWinner) return -1;
                             if (!a.isWinner && b.isWinner) return 1;
@@ -1766,7 +1808,7 @@ export default function AnnouncementDetailPage() {
                           return (
                             <Box sx={{ pt: 2, borderTop: `1px solid ${colors.border.light}` }}>
                               <Typography sx={{ fontSize: fontSizes.md, color: colors.text.muted, mb: 1.5 }}>
-                                競争参加企業 ({sortedCompetitors.length + baseProgressingCompanies.length}社)
+                                競争参加企業 ({sortedCompetitors.length + progressingCompanies.length}社)
                               </Typography>
                               {/* ヘッダー */}
                               <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 110px 110px 110px', gap: 1, mb: 1, pb: 1, borderBottom: `1px solid ${colors.border.main}` }}>
@@ -1793,7 +1835,7 @@ export default function AnnouncementDetailPage() {
                                     </Typography>
                                   </Box>
                                 ))}
-                                {baseProgressingCompanies.map((company) => (
+                                {progressingCompanies.map((company) => (
                                   <Box
                                     key={`${company.companyId}-${company.branchId}`}
                                     onClick={() => navigate(`/detail/${company.evaluationId}`)}
@@ -1851,7 +1893,11 @@ export default function AnnouncementDetailPage() {
               <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
                 {/* スクロール可能なカードグリッド */}
                 <Box sx={{ flex: 1, overflow: 'auto', p: 2.5 }}>
-                  {paginatedProgressingCompanies.length > 0 ? (
+                  {isProgressingLoading ? (
+                    <Box sx={{ p: 4, textAlign: 'center', color: colors.text.light }}>
+                      データを読み込み中です...
+                    </Box>
+                  ) : paginatedProgressingCompanies.length > 0 ? (
                     <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 1.5 }}>
                       {paginatedProgressingCompanies.map((company) => {
                         const wsConfig = workStatusConfig[company.workStatus];
@@ -1895,7 +1941,7 @@ export default function AnnouncementDetailPage() {
                     </Box>
                   ) : (
                     <Box sx={{ p: 4, textAlign: 'center', color: colors.text.light }}>
-                      {baseProgressingCompanies.length > 0 ? '条件に一致する企業がありません' : '着手企業がありません'}
+                      {progressingCompanies.length > 0 ? '条件に一致する企業がありません' : '着手企業がありません'}
                     </Box>
                   )}
                 </Box>
