@@ -1,27 +1,64 @@
-import { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Box, Chip, Typography } from '@mui/material';
+import { Box, Chip, Typography, Button } from '@mui/material';
 import { colors, fontSizes, chipStyles, borderRadius } from '../../../constants/styles';
-import { getSimilarCases } from '../../../data';
 import type { SimilarCase } from '../../../types';
 
 interface SimilarCasesPanelProps {
-  count?: number;
+  cases: SimilarCase[];
+  isLoading?: boolean;
+  error?: string | null;
+  onRetry?: () => void;
 }
 
-const formatAmount = (amount: number): string => {
+const formatAmount = (amount?: number | null): string => {
+  if (amount === null || amount === undefined) {
+    return '金額情報なし';
+  }
   if (amount >= 100000000) {
     return `${(amount / 100000000).toFixed(1)}億円`;
   }
   return `${(amount / 10000).toLocaleString()}万円`;
 };
 
-export function SimilarCasesPanel({ count = 8 }: SimilarCasesPanelProps) {
+export function SimilarCasesPanel({
+  cases,
+  isLoading = false,
+  error,
+  onRetry,
+}: SimilarCasesPanelProps) {
   const navigate = useNavigate();
 
-  const similarCases: SimilarCase[] = useMemo(() => getSimilarCases(count), [count]);
+  if (isLoading) {
+    return (
+      <Box sx={{ p: 3 }}>
+        <Typography sx={{ fontSize: fontSizes.md, color: colors.text.light }}>
+          類似案件を読み込み中です...
+        </Typography>
+      </Box>
+    );
+  }
 
-  if (similarCases.length === 0) {
+  if (error) {
+    return (
+      <Box sx={{ p: 3, display: 'flex', flexDirection: 'column', gap: 1 }}>
+        <Typography sx={{ fontSize: fontSizes.md, color: colors.status.error.main }}>
+          類似案件の取得に失敗しました: {error}
+        </Typography>
+        {onRetry && (
+          <Button
+            variant="outlined"
+            size="small"
+            onClick={onRetry}
+            sx={{ alignSelf: 'flex-start', textTransform: 'none' }}
+          >
+            再試行
+          </Button>
+        )}
+      </Box>
+    );
+  }
+
+  if (!cases || cases.length === 0) {
     return (
       <Box sx={{ p: 3 }}>
         <Typography sx={{ fontSize: fontSizes.md, color: colors.text.light }}>
@@ -33,10 +70,12 @@ export function SimilarCasesPanel({ count = 8 }: SimilarCasesPanelProps) {
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-      {similarCases.map((similarCase) => (
+      {cases.map((similarCase) => {
+        const targetId = similarCase.similarAnnouncementId || similarCase.announcementId;
+        return (
         <Box
           key={similarCase.id}
-          onClick={() => navigate(`/announcements/${similarCase.announcementId}`)}
+          onClick={() => navigate(`/announcements/${targetId}`)}
           sx={{
             p: 2.5,
             borderRadius: borderRadius.xs,
@@ -66,7 +105,15 @@ export function SimilarCasesPanel({ count = 8 }: SimilarCasesPanelProps) {
             </Box>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
               <Typography sx={{ fontSize: fontSizes.sm, color: colors.text.muted }}>落札金額:</Typography>
-              <Typography sx={{ fontSize: fontSizes.md, fontWeight: 600, color: colors.status.success.main }}>
+              <Typography
+                sx={{
+                  fontSize: fontSizes.md,
+                  fontWeight: 600,
+                  color: similarCase.winningAmount == null
+                    ? colors.text.muted
+                    : colors.status.success.main,
+                }}
+              >
                 {formatAmount(similarCase.winningAmount)}
               </Typography>
             </Box>
@@ -94,7 +141,7 @@ export function SimilarCasesPanel({ count = 8 }: SimilarCasesPanelProps) {
             </Box>
           </Box>
         </Box>
-      ))}
+      )})}
     </Box>
   );
 }

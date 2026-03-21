@@ -120,9 +120,10 @@ export interface Announcement {
 export interface SimilarCase {
   id: string;
   announcementId: string;      // 入札案件ID（遷移用）
+  similarAnnouncementId: string; // 類似案件として表示する別公告ID
   caseName: string;            // 類似案件名
   winningCompany: string;      // 落札企業名
-  winningAmount: number;       // 落札金額
+  winningAmount: number | null;       // 落札金額（未登録時は null）
   competitors: string[];       // 競争参加企業名
 }
 

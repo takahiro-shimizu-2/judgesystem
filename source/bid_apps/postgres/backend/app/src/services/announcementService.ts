@@ -45,4 +45,11 @@ export class AnnouncementService {
   async getDocumentFile(announcementNo: number, documentId: string) {
     return await this.repository.getDocumentFile(announcementNo, documentId);
   }
+
+  /**
+   * Get similar cases linked to an announcement
+   */
+  async getSimilarCases(announcementNo: number) {
+    return await this.repository.findSimilarCases(announcementNo);
+  }
 }

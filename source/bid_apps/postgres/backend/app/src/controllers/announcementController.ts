@@ -133,6 +133,36 @@ export class AnnouncementController {
   };
 
   /**
+   * GET /api/announcements/:announcementNo/similar-cases
+   */
+  getSimilarCases = async (req: Request, res: Response): Promise<void> => {
+    console.log(`GET /api/announcements/${req.params.announcementNo}/similar-cases hit`);
+
+    const { announcementNo } = req.params;
+    const announcementNoInt = parseInt(announcementNo, 10);
+
+    if (isNaN(announcementNoInt)) {
+      res.status(400).json({ error: "Invalid announcement number" });
+      return;
+    }
+
+    try {
+      const rows = await this.service.getSimilarCases(announcementNoInt);
+      res.setHeader("Content-Type", "application/json");
+      res.setHeader("Cache-Control", "no-cache");
+      res.status(200).json(rows);
+    } catch (error) {
+      console.error(`ERROR in GET /api/announcements/${announcementNo}/similar-cases:`, error);
+      if (!res.headersSent) {
+        res.status(500).json({
+          error: "Internal Server Error",
+          message: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+  };
+
+  /**
    * GET /api/announcements/:announcementNo/documents/:documentId/preview
    */
   getDocumentPreview = async (req: Request, res: Response): Promise<void> => {

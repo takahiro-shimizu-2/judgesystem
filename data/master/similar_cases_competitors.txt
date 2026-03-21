@@ -1,1 +1,1 @@
-id	competitorName
+similar_case_announcement_id	competitor_name

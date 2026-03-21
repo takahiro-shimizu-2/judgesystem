@@ -1,1 +1,1 @@
-id	announcementId	caseName	winningCompany	winningAmount
+announcement_id	similar_case_announcement_id	case_name	winning_company	winning_amount

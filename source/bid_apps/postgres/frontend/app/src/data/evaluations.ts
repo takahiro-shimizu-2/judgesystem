@@ -101,6 +101,7 @@ const generateSimilarCases = (): SimilarCase[] => {
     cases.push({
       id: `similar-${i + 1}`,
       announcementId: `ann-${i + 1}`,  // 入札案件IDと紐づけ
+      similarAnnouncementId: `ann-${((i + 5) % 50) + 1}`,
       caseName,
       winningCompany,
       winningAmount,

@@ -14,7 +14,7 @@ import { useState, useCallback, useEffect } from "react";
 import { getApiUrl } from "../config/api";
 
 import { bidTypeConfig, updateWorkStatus } from "../data";
-import type { BidEvaluation, Partner, StepAssignee, WorkStatus } from "../types";
+import type { BidEvaluation, Partner, SimilarCase, StepAssignee, WorkStatus } from "../types";
 import { priorityLabels, priorityColors } from "../constants/priority";
 import { WORKFLOW_STEP_CONFIG, WORKFLOW_STEP_IDS } from "../constants/workflow";
 import { pageStyles, colors, fontSizes, iconStyles, borderRadius } from "../constants/styles";
@@ -181,6 +181,10 @@ export default function BidDetailPage() {
   const [evaluation, setEvaluation] = useState<BidEvaluation | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [similarCases, setSimilarCases] = useState<SimilarCase[]>([]);
+  const [isSimilarCasesLoading, setIsSimilarCasesLoading] = useState(false);
+  const [similarCasesError, setSimilarCasesError] = useState<string | null>(null);
+  const [targetAnnouncementNo, setTargetAnnouncementNo] = useState<string | null>(null);
 
   // 評価データ取得
   useEffect(() => {
@@ -233,6 +237,45 @@ export default function BidDetailPage() {
       setStepAssignees(evaluation.stepAssignees || []);
     }
   }, [evaluation]);
+
+  const fetchSimilarCases = useCallback(async (announcementNo: string) => {
+    if (!announcementNo) return;
+    setIsSimilarCasesLoading(true);
+    setSimilarCasesError(null);
+    try {
+      const response = await fetch(getApiUrl(`/api/announcements/${announcementNo}/similar-cases`));
+      if (!response.ok) {
+        throw new Error(`Failed to fetch similar cases: ${response.status}`);
+      }
+      const data = await response.json();
+      setSimilarCases(data);
+    } catch (err) {
+      console.error("Failed to fetch similar cases:", err);
+      setSimilarCases([]);
+      setSimilarCasesError(err instanceof Error ? err.message : "Unknown error");
+    } finally {
+      setIsSimilarCasesLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    const announcementId = evaluation?.announcement?.id;
+    if (!announcementId) {
+      setSimilarCases([]);
+      setTargetAnnouncementNo(null);
+      return;
+    }
+    const match = announcementId.match(/^ann-(\d+)$/);
+    const announcementNo = match ? match[1] : announcementId;
+    setTargetAnnouncementNo(announcementNo);
+    fetchSimilarCases(announcementNo);
+  }, [evaluation?.announcement?.id, fetchSimilarCases]);
+
+  const handleRetrySimilarCases = useCallback(() => {
+    if (targetAnnouncementNo) {
+      fetchSimilarCases(targetAnnouncementNo);
+    }
+  }, [targetAnnouncementNo, fetchSimilarCases]);
 
   // 担当者変更ハンドラ
   const handleAssigneeChange = useCallback((stepId: string, staffId: string) => {
@@ -537,7 +580,12 @@ export default function BidDetailPage() {
       return (
         <Box sx={{ flex: 1, overflow: "auto", backgroundColor: colors.background.hover }}>
           <Box sx={{ p: 3 }}>
-            <SimilarCasesPanel />
+            <SimilarCasesPanel
+              cases={similarCases}
+              isLoading={isSimilarCasesLoading}
+              error={similarCasesError}
+              onRetry={handleRetrySimilarCases}
+            />
           </Box>
         </Box>
       );

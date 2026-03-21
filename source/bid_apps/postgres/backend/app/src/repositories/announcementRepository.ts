@@ -291,6 +291,70 @@ export class AnnouncementRepository {
   }
 
   /**
+   * Get similar cases for a specific announcement (by announcement_no)
+   */
+  async findSimilarCases(announcementNo: number): Promise<any[]> {
+    const client = await pool.connect();
+    try {
+      const announcementIdCandidates = [`ann-${announcementNo}`, String(announcementNo)];
+      const tableSimilarCases = `${schemaPrefix}similar_cases_master`;
+      const tableCompetitors = `${schemaPrefix}similar_cases_competitors`;
+
+      const result = await client.query(
+        `
+        WITH filtered_cases AS (
+          SELECT
+            announcement_id::text AS announcement_id,
+            similar_case_announcement_id::text AS similar_case_announcement_id,
+            COALESCE(case_name, '') AS case_name,
+            COALESCE(winning_company, '') AS winning_company,
+            winning_amount
+          FROM ${tableSimilarCases}
+          WHERE announcement_id::text = ANY($1::text[])
+        ),
+        competitors AS (
+          SELECT
+            similar_case_announcement_id::text AS similar_case_announcement_id,
+            jsonb_agg(competitor_name ORDER BY competitor_name) AS names
+          FROM ${tableCompetitors}
+          WHERE similar_case_announcement_id::text IN (
+            SELECT similar_case_announcement_id FROM filtered_cases
+          )
+          GROUP BY similar_case_announcement_id
+        )
+        SELECT
+          sc.announcement_id,
+          sc.similar_case_announcement_id,
+          sc.case_name,
+          sc.winning_company,
+          sc.winning_amount,
+          COALESCE(comp.names, '[]'::jsonb) AS competitors
+        FROM filtered_cases sc
+        LEFT JOIN competitors comp
+          ON comp.similar_case_announcement_id = sc.similar_case_announcement_id
+        ORDER BY sc.case_name
+        `,
+        [announcementIdCandidates]
+      );
+
+      return result.rows.map(row => ({
+        id: row.similar_case_announcement_id ?? row.announcement_id,
+        announcementId: row.announcement_id,
+        similarAnnouncementId: row.similar_case_announcement_id,
+        caseName: row.case_name,
+        winningCompany: row.winning_company,
+        winningAmount: row.winning_amount,
+        competitors: row.competitors ?? [],
+      }));
+    } catch (error) {
+      console.error(`ERROR fetching similar cases for announcement ${announcementNo}:`, error);
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  /**
    * Build WHERE clause from filters
    * bid_announcements テーブルのカラム名に対応
    */
