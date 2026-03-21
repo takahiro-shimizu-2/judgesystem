@@ -1325,6 +1325,13 @@ export default function AnnouncementDetailPage() {
   const [documentPreviewState, setDocumentPreviewState] = useState<Record<string, PreviewState>>({});
   const previewUrlRef = useRef<Record<string, string>>({});
   const documentPreviewStateRef = useRef<Record<string, PreviewState>>({});
+  const previewFetchControllersRef = useRef<Record<string, AbortController>>({});
+  const abortAllPreviewFetches = useCallback(() => {
+    Object.values(previewFetchControllersRef.current).forEach((controller) => {
+      controller.abort();
+    });
+    previewFetchControllersRef.current = {};
+  }, []);
   const revokeAllPreviewUrls = useCallback(() => {
     Object.values(previewUrlRef.current).forEach((url) => {
       if (url) {
@@ -1335,18 +1342,20 @@ export default function AnnouncementDetailPage() {
   }, []);
 
   const resetPreviewState = useCallback(() => {
+    abortAllPreviewFetches();
     revokeAllPreviewUrls();
     setDocumentPreviewState(() => {
       documentPreviewStateRef.current = {};
       return {};
     });
-  }, [revokeAllPreviewUrls]);
+  }, [abortAllPreviewFetches, revokeAllPreviewUrls]);
 
   useEffect(() => {
     return () => {
+      abortAllPreviewFetches();
       revokeAllPreviewUrls();
     };
-  }, [revokeAllPreviewUrls]);
+  }, [abortAllPreviewFetches, revokeAllPreviewUrls]);
 
   useEffect(() => {
     resetPreviewState();
@@ -1390,6 +1399,14 @@ export default function AnnouncementDetailPage() {
         delete previewUrlRef.current[docKey];
       }
 
+      const existingController = previewFetchControllersRef.current[docKey];
+      if (existingController) {
+        existingController.abort();
+      }
+
+      const controller = new AbortController();
+      previewFetchControllersRef.current[docKey] = controller;
+
       setDocumentPreviewState((prev) => {
         const nextState = {
           ...prev,
@@ -1401,12 +1418,16 @@ export default function AnnouncementDetailPage() {
 
       try {
         const response = await fetch(
-          getApiUrl(`/api/announcements/${announcement.announcementNo}/documents/${docKey}/preview`)
+          getApiUrl(`/api/announcements/${announcement.announcementNo}/documents/${docKey}/preview`),
+          { signal: controller.signal }
         );
         if (!response.ok) {
           throw new Error(`Failed to fetch preview (${response.status})`);
         }
         const blob = await response.blob();
+        if (controller.signal.aborted) {
+          return;
+        }
         const objectUrl = URL.createObjectURL(blob);
 
         if (previewUrlRef.current[docKey]) {
@@ -1423,6 +1444,9 @@ export default function AnnouncementDetailPage() {
           return nextState;
         });
       } catch (err) {
+        if ((err instanceof DOMException && err.name === 'AbortError') || controller.signal.aborted) {
+          return;
+        }
         const message = err instanceof Error ? err.message : 'PDFプレビューの取得に失敗しました';
         setDocumentPreviewState((prev) => {
           const nextState = {
@@ -1432,6 +1456,10 @@ export default function AnnouncementDetailPage() {
           documentPreviewStateRef.current = nextState;
           return nextState;
         });
+      } finally {
+        if (previewFetchControllersRef.current[docKey] === controller) {
+          delete previewFetchControllersRef.current[docKey];
+        }
       }
     },
     [announcement?.announcementNo]
