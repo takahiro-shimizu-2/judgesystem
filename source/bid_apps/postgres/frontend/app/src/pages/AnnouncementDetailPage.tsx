@@ -44,7 +44,21 @@ import type { EvaluationStatus, WorkStatus, CompanyPriority, Announcement as Ann
 type AnnouncementDetail = AnnouncementType & {
   announcementNo: number;
   no: number;
-  status: AnnouncementStatus;
+  status?: AnnouncementStatus | string;
+};
+
+const resolveAnnouncementStatus = (status?: string | null): AnnouncementStatus => {
+  if (status && typeof status === 'string' && (announcementStatusConfig as Record<string, unknown>)[status]) {
+    return status as AnnouncementStatus;
+  }
+  return 'upcoming';
+};
+
+const resolveBidType = (bidType?: string | null): BidType => {
+  if (bidType && typeof bidType === 'string' && (bidTypeConfig as Record<string, unknown>)[bidType]) {
+    return bidType as BidType;
+  }
+  return 'unknown';
 };
 import { getApiUrl } from '../config/api';
 
@@ -105,6 +119,8 @@ const STATUS_ORDER: Record<AnnouncementStatus, number> = {
   awaiting_result: 2,
   closed: 3,
 };
+
+const getStatusOrderValue = (status?: string) => STATUS_ORDER[resolveAnnouncementStatus(status)] ?? 0;
 
 // 着手企業用フィルター状態の型
 interface CompanyFilterState {
@@ -1489,7 +1505,7 @@ export default function AnnouncementDetailPage() {
 
     // フィルター適用
     filtered = filtered.filter((a) => {
-      if (relatedFilters.statuses.length > 0 && !relatedFilters.statuses.includes(a.status)) return false;
+      if (relatedFilters.statuses.length > 0 && !relatedFilters.statuses.includes(resolveAnnouncementStatus(a.status as string | undefined))) return false;
       if (relatedFilters.bidTypes.length > 0 && (!a.bidType || !relatedFilters.bidTypes.includes(a.bidType))) return false;
       if (relatedFilters.categories.length > 0 && !relatedFilters.categories.includes(a.category)) return false;
       if (relatedFilters.prefectures.length > 0) {
@@ -1517,9 +1533,9 @@ export default function AnnouncementDetailPage() {
         case 'publish_desc':
           return new Date(b.publishDate).getTime() - new Date(a.publishDate).getTime();
         case 'status_asc':
-          return (STATUS_ORDER[a.status as AnnouncementStatus] || 0) - (STATUS_ORDER[b.status as AnnouncementStatus] || 0);
+          return getStatusOrderValue(a.status as string | undefined) - getStatusOrderValue(b.status as string | undefined);
         case 'status_desc':
-          return (STATUS_ORDER[b.status as AnnouncementStatus] || 0) - (STATUS_ORDER[a.status as AnnouncementStatus] || 0);
+          return getStatusOrderValue(b.status as string | undefined) - getStatusOrderValue(a.status as string | undefined);
         case 'prefecture_asc': {
           const prefA = a.workLocation?.match(/^(.+?[都道府県])/)?.[1] || '';
           const prefB = b.workLocation?.match(/^(.+?[都道府県])/)?.[1] || '';
@@ -1624,7 +1640,8 @@ export default function AnnouncementDetailPage() {
     );
   }
 
-  const statusConfig = announcementStatusConfig[announcement.status as AnnouncementStatus];
+  const announcementStatus = resolveAnnouncementStatus(announcement.status as string | undefined);
+  const statusConfig = announcementStatusConfig[announcementStatus];
 
   // スケジュールデータ
   const scheduleItems = [
@@ -1702,7 +1719,7 @@ export default function AnnouncementDetailPage() {
 
               {/* 入札形式 */}
               <Typography sx={{ fontSize: fontSizes.base, fontWeight: 700, color: colors.primary.dark }}>
-                {announcement.bidType ? bidTypeConfig[announcement.bidType as BidType].label : '-'}
+                {bidTypeConfig[resolveBidType(announcement.bidType)].label}
               </Typography>
             </Box>
 
@@ -1775,7 +1792,7 @@ export default function AnnouncementDetailPage() {
                       <AccordionDetails sx={{ pt: 2, pb: 2, px: 2.5 }}>
                         <InfoRow label="発注機関" value={announcement.organization} icon={<OrdererIcon sx={{ ...iconStyles.small, color: colors.text.light }} />} />
                         <InfoRow label="工種" value={announcement.category} icon={<CategoryIcon sx={{ ...iconStyles.small, color: colors.text.light }} />} />
-                        <InfoRow label="入札形式" value={announcement.bidType ? bidTypeConfig[announcement.bidType as BidType].label : '-'} icon={<BidTypeIcon sx={{ ...iconStyles.small, color: colors.text.light }} />} />
+                        <InfoRow label="入札形式" value={bidTypeConfig[resolveBidType(announcement.bidType)].label} icon={<BidTypeIcon sx={{ ...iconStyles.small, color: colors.text.light }} />} />
                         <InfoRow label="履行場所" value={announcement.workLocation} icon={<LocationIcon sx={{ ...iconStyles.small, color: colors.text.light }} />} />
                         <InfoRow label="予想金額" value={formatAmountInManYen(announcement.estimatedAmountMin, announcement.estimatedAmountMax)} icon={<CurrencyYenIcon sx={{ ...iconStyles.small, color: colors.text.light }} />} />
                       </AccordionDetails>
@@ -1805,7 +1822,7 @@ export default function AnnouncementDetailPage() {
                         {announcement.documents && announcement.documents.length > 0 ? (
                           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
                             {announcement.documents.map((doc: DocumentOcr) => {
-                              const typeConfig = getDocumentTypeConfig(doc.type);
+                              const typeConfig = getDocumentTypeConfig(doc.type || 'other');
                               const formatConfig = getFileFormatConfig(doc.fileFormat);
                               return (
                                 <Button
@@ -1836,9 +1853,9 @@ export default function AnnouncementDetailPage() {
                   {/* 右カラム */}
                   <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
                     {/* 落札情報 */}
-                    <Accordion defaultExpanded sx={{ boxShadow: 'none', border: announcement.status === 'closed' && announcement.actualAmount ? '1px solid #a7f3d0' : `1px solid ${colors.border.main}`, borderRadius: `${borderRadius.xs} !important`, '&:before': { display: 'none' }, '&.Mui-expanded': { margin: 0 } }}>
+                    <Accordion defaultExpanded sx={{ boxShadow: 'none', border: announcementStatus === 'closed' && announcement.actualAmount ? '1px solid #a7f3d0' : `1px solid ${colors.border.main}`, borderRadius: `${borderRadius.xs} !important`, '&:before': { display: 'none' }, '&.Mui-expanded': { margin: 0 } }}>
                       <AccordionSummary expandIcon={<ExpandMoreIcon />} sx={{ minHeight: 48, borderBottom: `1px solid ${colors.border.main}`, '&.Mui-expanded': { minHeight: 48 } }}>
-                        <Typography sx={{ fontSize: fontSizes.base, fontWeight: 600, color: announcement.status === 'closed' && announcement.actualAmount ? colors.status.success.main : colors.primary.main }}>落札情報</Typography>
+                        <Typography sx={{ fontSize: fontSizes.base, fontWeight: 600, color: announcementStatus === 'closed' && announcement.actualAmount ? colors.status.success.main : colors.primary.main }}>落札情報</Typography>
                       </AccordionSummary>
                       <AccordionDetails sx={{ pt: 2, pb: 2, px: 2.5 }}>
                         <Box sx={{ display: 'flex', gap: 4, flexWrap: 'wrap', mb: (announcement.competingCompanies?.length || progressingCompanies.length > 0) ? 2 : 0 }}>
@@ -1848,7 +1865,7 @@ export default function AnnouncementDetailPage() {
                               {formatAmountInManYen(announcement.estimatedAmountMin, announcement.estimatedAmountMax)}
                             </Typography>
                           </Box>
-                          {announcement.status === 'closed' && announcement.actualAmount && (
+                          {announcementStatus === 'closed' && announcement.actualAmount && (
                             <>
                               <Box>
                                 <Typography sx={{ fontSize: fontSizes.md, color: colors.text.muted, mb: 0.25 }}>落札金額</Typography>
@@ -2040,8 +2057,9 @@ export default function AnnouncementDetailPage() {
                     <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 1.5 }}>
                       {/* 関連案件カード */}
                       {paginatedRelatedAnnouncements.map((ann) => {
-                        const annStatusConfig = announcementStatusConfig[ann.status as AnnouncementStatus];
-                        const bidType = ann.bidType ? bidTypeConfig[ann.bidType as BidType] : null;
+                        const annStatusKey = resolveAnnouncementStatus(ann.status as string | undefined);
+                        const annStatusConfig = announcementStatusConfig[annStatusKey];
+                        const bidType = bidTypeConfig[resolveBidType(ann.bidType)];
                         const prefecture = ann.workLocation?.match(/^(.+?[都道府県])/)?.[1] || '';
                         return (
                           <Box
@@ -2130,7 +2148,7 @@ export default function AnnouncementDetailPage() {
             {activeTab === tabIndex.documents && hasDocuments && announcement.documents && (
               <Box sx={{ p: 2.5, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
                 {announcement.documents.map((doc: DocumentOcr, index: number) => {
-                  const typeConfig = getDocumentTypeConfig(doc.type);
+                  const typeConfig = getDocumentTypeConfig(doc.type || 'other');
                   const formatConfig = getFileFormatConfig(doc.fileFormat);
                   const isPdfDocument = doc.fileFormat && doc.fileFormat.toLowerCase() === 'pdf';
                   const docId = doc.id;
