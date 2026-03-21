@@ -399,6 +399,8 @@ class Master:
             "technician_qualification_master":"data/master/technician_qualification_master.txt",
 
             "announcements_estimated_amounts":"data/master/announcements_estimated_amounts.txt",
+            "similar_cases_master":"data/master/similar_cases_master.txt",
+            "similar_cases_competitors":"data/master/similar_cases_competitors.txt",
             
             "partners_master":"data/master/partners_master.txt",
             "partners_branches":"data/master/partners_branches.txt",
@@ -430,6 +432,11 @@ class Master:
         raise NotImplementedError
         return pd.read_csv(self.announcements_documents_master, sep="\t")
 
+    def getSimilarCasesMaster(self):
+        return pd.read_csv(self.similar_cases_master, sep="\t")
+
+    def getSimilarCasesCompetitors(self):
+        return pd.read_csv(self.similar_cases_competitors, sep="\t")
 
 
     def getCompanyMaster(self):
@@ -6532,10 +6539,16 @@ if __name__ == "__main__":
     announcements_competing_companies_master = master.getAnnouncementsCompetingCompaniesMaster()
     announcements_competing_company_bids_master = master.getAnnouncementsCompetingCompanyBidsMaster()
     announcements_estimated_amounts = master.getAnnouncementsEstimatedAmounts()
+    similar_cases_master = master.getSimilarCasesMaster()
+    similar_cases_competitors = master.getSimilarCasesCompetitors()
 
     db_operator.uploadDataToTable(data=announcements_competing_companies_master, tablename="announcements_competing_companies_master", chunksize=5000)
     db_operator.uploadDataToTable(data=announcements_competing_company_bids_master, tablename="announcements_competing_company_bids_master", chunksize=5000)
     db_operator.uploadDataToTable(data=announcements_estimated_amounts, tablename="announcements_estimated_amounts", chunksize=5000)
+    if not db_operator.ifTableExists(tablename="similar_cases_master"):
+        db_operator.uploadDataToTable(data=similar_cases_master, tablename="similar_cases_master", chunksize=5000)
+    if not db_operator.ifTableExists(tablename="similar_cases_competitors"):
+        db_operator.uploadDataToTable(data=similar_cases_competitors, tablename="similar_cases_competitors", chunksize=5000)
 
 
     # db_operator.selectToTable(tablename="bid_announcements_pre")
