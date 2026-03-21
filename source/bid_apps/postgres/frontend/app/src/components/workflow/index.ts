@@ -9,6 +9,8 @@ export type { WorkflowSectionProps } from './WorkflowSection';
 // Section Components
 export {
   BidInfoSection,
+  BidDocumentsSection,
+  SimilarCasesPanel,
   CompanyInfoSection,
   JudgmentSection,
   OrdererSection,

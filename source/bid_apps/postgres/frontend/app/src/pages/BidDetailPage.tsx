@@ -1,5 +1,5 @@
 import { useParams, useNavigate, useLocation } from "react-router-dom";
-import { Box, Button, Alert, Typography, Paper } from "@mui/material";
+import { Box, Button, Alert, Typography, Paper, Tabs, Tab } from "@mui/material";
 import {
   ArrowBack as ArrowBackIcon,
   Gavel as GavelIcon,
@@ -25,6 +25,7 @@ import {
 import { formatAmountInManYen } from "../utils";
 import {
   BidInfoSection,
+  BidDocumentsSection,
   CompanyInfoSection,
   OrdererInfoSection,
   JudgmentSection,
@@ -33,6 +34,7 @@ import {
   RequestSection,
   AwardSection,
   StaffAssignmentPanel,
+  SimilarCasesPanel,
 } from "../components/workflow";
 
 // ============================================================================
@@ -54,6 +56,14 @@ const TAB_LABELS: Record<string, string> = {
   [WORKFLOW_STEP_IDS.REQUEST]: "確認依頼",
   [WORKFLOW_STEP_IDS.AWARD]: "落札",
 };
+
+type MainViewTab = "workflow" | "similar" | "documents";
+
+const MAIN_VIEW_TABS: { id: MainViewTab; label: string }[] = [
+  { id: "workflow", label: "ワークフロー" },
+  { id: "similar", label: "類似案件" },
+  { id: "documents", label: "資料" },
+];
 
 // ============================================================================
 // サブコンポーネント
@@ -94,13 +104,13 @@ function WorkflowTab({
         transition: "all 0.15s ease",
         backgroundColor: isActive ? "rgba(59, 130, 246, 0.04)" : "transparent",
         color:
-          status === "pending" ? colors.border.dark : isActive ? "colors.accent.blue" : colors.text.muted,
-        borderBottom: isActive ? "2px solid colors.accent.blue" : "2px solid transparent",
+          status === "pending" ? colors.border.dark : isActive ? colors.accent.blue : colors.text.muted,
+        borderBottom: isActive ? `2px solid ${colors.accent.blue}` : "2px solid transparent",
         marginBottom: "-1px",
         "&:hover": isClickable
           ? {
               backgroundColor: "rgba(59, 130, 246, 0.04)",
-              color: isActive ? "colors.accent.blue" : colors.text.secondary,
+              color: isActive ? colors.accent.blue : colors.text.secondary,
             }
           : {},
       }}
@@ -312,6 +322,7 @@ export default function BidDetailPage() {
       receivedDocuments: [],
     },
   ]);
+  const [mainViewTab, setMainViewTab] = useState<MainViewTab>("workflow");
 
   const handleBack = useCallback(() => navigate("/"), [navigate]);
 
@@ -372,6 +383,10 @@ export default function BidDetailPage() {
     [getTabStatus]
   );
 
+  const handleMainViewChange = useCallback((_: unknown, value: MainViewTab) => {
+    setMainViewTab(value);
+  }, []);
+
   // ローディング中
   if (isLoading) {
     return (
@@ -430,6 +445,111 @@ export default function BidDetailPage() {
       default:
         return null;
     }
+  };
+
+  const renderMainViewContent = () => {
+    if (mainViewTab === "workflow") {
+      return (
+        <Box sx={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
+          <Box
+            sx={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              borderBottom: `1px solid ${colors.border.main}`,
+              backgroundColor: colors.text.white,
+            }}
+          >
+            <Box sx={{ display: "flex" }}>
+              {WORKFLOW_STEP_CONFIG.map((step) => (
+                <WorkflowTab
+                  key={step.id}
+                  label={TAB_LABELS[step.id]}
+                  icon={STEP_ICONS[step.id]}
+                  status={getTabStatus(step.id)}
+                  isActive={activeTab === step.id}
+                  onClick={() => handleTabClick(step.id)}
+                />
+              ))}
+            </Box>
+            {isCurrentTab && !isLastStep && (
+              <Box sx={{ pr: 2 }}>
+                <Button
+                  variant="contained"
+                  size="small"
+                  endIcon={<ArrowForwardIcon sx={iconStyles.small} />}
+                  onClick={goToNextStep}
+                  sx={{
+                    backgroundColor: colors.accent.blue,
+                    fontWeight: 600,
+                    px: 1.5,
+                    py: 0.5,
+                    fontSize: fontSizes.xs,
+                    borderRadius: borderRadius.xs,
+                    textTransform: "none",
+                    boxShadow: "none",
+                    "&:hover": {
+                      backgroundColor: "#2563eb",
+                      boxShadow: "none",
+                    },
+                  }}
+                >
+                  {activeTab === WORKFLOW_STEP_IDS.JUDGMENT ? "着手" : "次へ"}
+                </Button>
+              </Box>
+            )}
+            {isOnLastTab && currentWorkStatus !== "completed" && (
+              <Box sx={{ pr: 2 }}>
+                <Button
+                  variant="contained"
+                  size="small"
+                  endIcon={<CheckCircleIcon sx={iconStyles.small} />}
+                  onClick={handleComplete}
+                  sx={{
+                    backgroundColor: colors.accent.blue,
+                    fontWeight: 600,
+                    px: 1.5,
+                    py: 0.5,
+                    fontSize: fontSizes.xs,
+                    borderRadius: borderRadius.xs,
+                    textTransform: "none",
+                    boxShadow: "none",
+                    "&:hover": {
+                      backgroundColor: "#2563eb",
+                      boxShadow: "none",
+                    },
+                  }}
+                >
+                  完了
+                </Button>
+              </Box>
+            )}
+          </Box>
+
+          <Box sx={{ px: 3, pt: 1.5, pb: 3, backgroundColor: colors.background.hover, flex: 1 }}>
+            {renderTabContent()}
+          </Box>
+        </Box>
+      );
+    }
+
+    if (mainViewTab === "similar") {
+      return (
+        <Box sx={{ flex: 1, overflow: "auto", backgroundColor: colors.background.hover }}>
+          <Box sx={{ p: 3 }}>
+            <SimilarCasesPanel />
+          </Box>
+        </Box>
+      );
+    }
+
+    return (
+      <Box sx={{ flex: 1, overflow: "auto", backgroundColor: colors.background.hover }}>
+        <Box sx={{ p: 3 }}>
+          <BidDocumentsSection announcement={announcement} />
+        </Box>
+      </Box>
+    );
   };
 
   return (
@@ -595,86 +715,33 @@ export default function BidDetailPage() {
 
             {/* 中央: メインエリア */}
             <Box sx={{ flex: "1 1 auto", minWidth: 0, display: "flex", flexDirection: "column" }}>
-              {/* タブバー */}
-              <Box
+              <Tabs
+                value={mainViewTab}
+                onChange={handleMainViewChange}
                 sx={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
+                  minHeight: 44,
                   borderBottom: `1px solid ${colors.border.main}`,
                   backgroundColor: colors.text.white,
+                  '& .MuiTab-root': {
+                    fontSize: fontSizes.sm,
+                    textTransform: 'none',
+                    fontWeight: 600,
+                    color: colors.text.muted,
+                    minHeight: 44,
+                    '&.Mui-selected': {
+                      color: colors.accent.blue,
+                    },
+                  },
+                  '& .MuiTabs-indicator': {
+                    backgroundColor: colors.accent.blue,
+                  },
                 }}
               >
-                <Box sx={{ display: "flex" }}>
-                  {WORKFLOW_STEP_CONFIG.map((step) => (
-                    <WorkflowTab
-                      key={step.id}
-                      label={TAB_LABELS[step.id]}
-                      icon={STEP_ICONS[step.id]}
-                      status={getTabStatus(step.id)}
-                      isActive={activeTab === step.id}
-                      onClick={() => handleTabClick(step.id)}
-                    />
-                  ))}
-                </Box>
-                {isCurrentTab && !isLastStep && (
-                  <Box sx={{ pr: 2 }}>
-                    <Button
-                      variant="contained"
-                      size="small"
-                      endIcon={<ArrowForwardIcon sx={iconStyles.small} />}
-                      onClick={goToNextStep}
-                      sx={{
-                        backgroundColor: colors.accent.blue,
-                        fontWeight: 600,
-                        px: 1.5,
-                        py: 0.5,
-                        fontSize: fontSizes.xs,
-                        borderRadius: borderRadius.xs,
-                        textTransform: "none",
-                        boxShadow: "none",
-                        "&:hover": {
-                          backgroundColor: "#2563eb",
-                          boxShadow: "none",
-                        },
-                      }}
-                    >
-                      {activeTab === WORKFLOW_STEP_IDS.JUDGMENT ? "着手" : "次へ"}
-                    </Button>
-                  </Box>
-                )}
-                {isOnLastTab && currentWorkStatus !== "completed" && (
-                  <Box sx={{ pr: 2 }}>
-                    <Button
-                      variant="contained"
-                      size="small"
-                      endIcon={<CheckCircleIcon sx={iconStyles.small} />}
-                      onClick={handleComplete}
-                      sx={{
-                        backgroundColor: colors.accent.blue,
-                        fontWeight: 600,
-                        px: 1.5,
-                        py: 0.5,
-                        fontSize: fontSizes.xs,
-                        borderRadius: borderRadius.xs,
-                        textTransform: "none",
-                        boxShadow: "none",
-                        "&:hover": {
-                          backgroundColor: "#2563eb",
-                          boxShadow: "none",
-                        },
-                      }}
-                    >
-                      完了
-                    </Button>
-                  </Box>
-                )}
-              </Box>
-
-              {/* コンテンツ */}
-              <Box sx={{ px: 3, pt: 1.5, pb: 3, backgroundColor: colors.background.hover, flex: 1 }}>
-                {renderTabContent()}
-              </Box>
+                {MAIN_VIEW_TABS.map((tab) => (
+                  <Tab key={tab.id} label={tab.label} value={tab.id} />
+                ))}
+              </Tabs>
+              {renderMainViewContent()}
             </Box>
 
             {/* 右: 担当者・入札情報 */}

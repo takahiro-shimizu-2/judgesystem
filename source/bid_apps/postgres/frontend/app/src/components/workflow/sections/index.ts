@@ -1,5 +1,7 @@
 // Components
 export { BidInfoSection } from './BidInfoSection';
+export { BidDocumentsSection } from './BidDocumentsSection';
+export { SimilarCasesPanel } from './SimilarCasesPanel';
 export { CompanyInfoSection } from './CompanyInfoSection';
 export { JudgmentSection } from './JudgmentSection';
 export { OrdererSection } from './OrdererSection';
