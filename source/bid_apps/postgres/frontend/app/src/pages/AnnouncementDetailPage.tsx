@@ -68,6 +68,8 @@ type SortOption = 'deadline_asc' | 'deadline_desc' | 'publish_asc' | 'publish_de
 // 着手企業用ソートオプション
 type CompanySortOption = 'priority_asc' | 'priority_desc' | 'workStatus_asc' | 'workStatus_desc' | 'company_asc' | 'company_desc' | 'evaluationStatus_asc' | 'evaluationStatus_desc';
 
+type PreviewState = { url?: string; loading: boolean; error?: string };
+
 // ソートフィールド定義
 const SORT_FIELDS = [
   { field: 'deadline', label: '締切', ascLabel: '近い', descLabel: '遠い' },
@@ -1320,26 +1322,35 @@ export default function AnnouncementDetailPage() {
   const [announcement, setAnnouncement] = useState<AnnouncementDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [documentPreviewUrls, setDocumentPreviewUrls] = useState<Record<string, string>>({});
-  const [documentPreviewLoading, setDocumentPreviewLoading] = useState<Record<string, boolean>>({});
-  const [documentPreviewError, setDocumentPreviewError] = useState<Record<string, string>>({});
+  const [documentPreviewState, setDocumentPreviewState] = useState<Record<string, PreviewState>>({});
   const previewUrlRef = useRef<Record<string, string>>({});
-  const documentPreviewLoadingRef = useRef<Record<string, boolean>>({});
-
-  const updateLoadingState = useCallback((docKey: string, value: boolean) => {
-    documentPreviewLoadingRef.current = { ...documentPreviewLoadingRef.current, [docKey]: value };
-    setDocumentPreviewLoading((prev) => ({ ...prev, [docKey]: value }));
+  const documentPreviewStateRef = useRef<Record<string, PreviewState>>({});
+  const revokeAllPreviewUrls = useCallback(() => {
+    Object.values(previewUrlRef.current).forEach((url) => {
+      if (url) {
+        URL.revokeObjectURL(url);
+      }
+    });
+    previewUrlRef.current = {};
   }, []);
+
+  const resetPreviewState = useCallback(() => {
+    revokeAllPreviewUrls();
+    setDocumentPreviewState(() => {
+      documentPreviewStateRef.current = {};
+      return {};
+    });
+  }, [revokeAllPreviewUrls]);
 
   useEffect(() => {
     return () => {
-      Object.values(previewUrlRef.current).forEach((url) => {
-        if (url) {
-          URL.revokeObjectURL(url);
-        }
-      });
+      revokeAllPreviewUrls();
     };
-  }, []);
+  }, [revokeAllPreviewUrls]);
+
+  useEffect(() => {
+    resetPreviewState();
+  }, [announcement?.announcementNo, resetPreviewState]);
 
   useEffect(() => {
     const fetchAnnouncement = async () => {
@@ -1365,15 +1376,28 @@ export default function AnnouncementDetailPage() {
   }, [id]);
 
   const loadPdfPreview = useCallback(
-    async (documentId: number) => {
+    async (documentId: number, options?: { force?: boolean }) => {
       if (!announcement?.announcementNo) return;
       const docKey = String(documentId);
-      if (previewUrlRef.current[docKey] || documentPreviewLoadingRef.current[docKey]) {
+      const forceReload = options?.force ?? false;
+      const currentState = documentPreviewStateRef.current[docKey];
+      if (!forceReload && (currentState?.loading || currentState?.url)) {
         return;
       }
 
-      updateLoadingState(docKey, true);
-      setDocumentPreviewError((prev) => ({ ...prev, [docKey]: '' }));
+      if (forceReload && previewUrlRef.current[docKey]) {
+        URL.revokeObjectURL(previewUrlRef.current[docKey]);
+        delete previewUrlRef.current[docKey];
+      }
+
+      setDocumentPreviewState((prev) => {
+        const nextState = {
+          ...prev,
+          [docKey]: { loading: true },
+        };
+        documentPreviewStateRef.current = nextState;
+        return nextState;
+      });
 
       try {
         const response = await fetch(
@@ -1390,15 +1414,27 @@ export default function AnnouncementDetailPage() {
         }
         previewUrlRef.current[docKey] = objectUrl;
 
-        setDocumentPreviewUrls((prev) => ({ ...prev, [docKey]: objectUrl }));
+        setDocumentPreviewState((prev) => {
+          const nextState = {
+            ...prev,
+            [docKey]: { loading: false, url: objectUrl },
+          };
+          documentPreviewStateRef.current = nextState;
+          return nextState;
+        });
       } catch (err) {
         const message = err instanceof Error ? err.message : 'PDFプレビューの取得に失敗しました';
-        setDocumentPreviewError((prev) => ({ ...prev, [docKey]: message }));
-      } finally {
-        updateLoadingState(docKey, false);
+        setDocumentPreviewState((prev) => {
+          const nextState = {
+            ...prev,
+            [docKey]: { loading: false, error: message },
+          };
+          documentPreviewStateRef.current = nextState;
+          return nextState;
+        });
       }
     },
-    [announcement?.announcementNo, updateLoadingState]
+    [announcement?.announcementNo]
   );
 
   useEffect(() => {
@@ -2153,6 +2189,10 @@ export default function AnnouncementDetailPage() {
                   const isPdfDocument = doc.fileFormat && doc.fileFormat.toLowerCase() === 'pdf';
                   const docId = doc.id;
                   const docKey = String(docId);
+                  const previewState = documentPreviewState[docKey];
+                  const isPreviewLoading = previewState?.loading;
+                  const previewUrl = previewState?.url;
+                  const previewError = previewState?.error;
                   return (
                     <Accordion
                       key={doc.id}
@@ -2206,18 +2246,18 @@ export default function AnnouncementDetailPage() {
                         {isPdfDocument && (
                           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
                             <Typography sx={{ fontSize: fontSizes.sm, fontWeight: 600, color: colors.text.secondary }}>PDFプレビュー</Typography>
-                            {documentPreviewLoading[docKey] ? (
+                            {isPreviewLoading ? (
                               <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', border: `1px dashed ${colors.border.main}`, borderRadius: borderRadius.xs, height: 400, backgroundColor: colors.text.white }}>
                                 <CircularProgress size={28} sx={{ color: colors.primary.main, mr: 1.5 }} />
                                 <Typography sx={{ fontSize: fontSizes.md, color: colors.text.muted }}>プレビューを読み込み中です...</Typography>
                               </Box>
-                            ) : documentPreviewError[docKey] ? (
+                            ) : previewError ? (
                               <Box sx={{ border: `1px solid ${colors.status.error.light}`, borderRadius: borderRadius.xs, p: 2, backgroundColor: '#fff5f5', display: 'flex', flexDirection: 'column', gap: 1 }}>
                                 <Typography sx={{ fontSize: fontSizes.md, fontWeight: 600, color: colors.status.error.main }}>
                                   プレビューの読み込みに失敗しました
                                 </Typography>
                                 <Typography sx={{ fontSize: fontSizes.sm, color: colors.text.light }}>
-                                  {documentPreviewError[docKey]}
+                                  {previewError}
                                 </Typography>
                                 <Typography sx={{ fontSize: fontSizes.xs, color: colors.text.muted }}>
                                   ファイルが存在しないか、アクセス権限が不足している可能性があります。
@@ -2228,7 +2268,7 @@ export default function AnnouncementDetailPage() {
                                     size="small"
                                     onClick={(e) => {
                                       e.stopPropagation();
-                                      loadPdfPreview(docId);
+                                      loadPdfPreview(docId, { force: true });
                                     }}
                                     sx={{ borderRadius: borderRadius.xs }}
                                   >
@@ -2249,11 +2289,11 @@ export default function AnnouncementDetailPage() {
                                   )}
                                 </Box>
                               </Box>
-                            ) : documentPreviewUrls[docKey] ? (
+                            ) : previewUrl ? (
                               <Box
                                 component="iframe"
                                 title={`${doc.title} プレビュー`}
-                                src={documentPreviewUrls[docKey]}
+                                src={previewUrl}
                                 sx={{
                                   width: '100%',
                                   height: 420,
