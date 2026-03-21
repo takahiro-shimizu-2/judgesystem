@@ -537,16 +537,16 @@ export default function BidDetailPage() {
         </Box>
 
         {/* メインカード */}
-        <Paper
-          sx={{
-            borderRadius: borderRadius.xs,
-            overflow: "hidden",
-            boxShadow: "0 2px 8px rgba(0, 0, 0, 0.1)",
-            flex: 1,
-            display: "flex",
-            flexDirection: "column",
-          }}
-        >
+      <Paper
+        sx={{
+          borderRadius: borderRadius.xs,
+          overflow: "hidden",
+          boxShadow: "0 2px 8px rgba(0, 0, 0, 0.1)",
+          flex: 1,
+          display: "flex",
+          flexDirection: "column",
+        }}
+      >
           <Box sx={{ display: "flex", flex: 1 }}>
             {/* 左: 発注者・企業 */}
             <Box

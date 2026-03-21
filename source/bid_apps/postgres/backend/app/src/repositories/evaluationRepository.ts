@@ -1,4 +1,5 @@
 import { pool, TABLES, schemaPrefix } from "../config/database";
+import { readMarkdownFromGCS } from "../utils/gcs";
 import { FilterParams } from "../types";
 
 type QualifiedTables = {
@@ -271,7 +272,22 @@ export class EvaluationRepository {
         [id]
       );
 
-      return result.rowCount === 0 ? null : result.rows[0];
+      if (result.rowCount === 0) {
+        return null;
+      }
+
+      const evaluation = result.rows[0];
+
+      if (
+        evaluation?.announcement?.documents &&
+        Array.isArray(evaluation.announcement.documents)
+      ) {
+        evaluation.announcement.documents = await this.attachDocumentContents(
+          evaluation.announcement.documents
+        );
+      }
+
+      return evaluation;
     } finally {
       client.release();
     }
@@ -592,5 +608,25 @@ export class EvaluationRepository {
 
   private getPriorityExpression(): string {
     return `1`;
+  }
+
+  private async attachDocumentContents(documents: any[]): Promise<any[]> {
+    return Promise.all(
+      documents.map(async (doc: any) => {
+        let content = "文字起こしデータがありません";
+        if (doc.markdown_path && typeof doc.markdown_path === "string" && doc.markdown_path.startsWith("gs://")) {
+          try {
+            content = await readMarkdownFromGCS(doc.markdown_path);
+          } catch (error) {
+            console.error(`Failed to load markdown for document ${doc.id}:`, error);
+          }
+        }
+        return {
+          ...doc,
+          content,
+          markdown_path: undefined,
+        };
+      })
+    );
   }
 }

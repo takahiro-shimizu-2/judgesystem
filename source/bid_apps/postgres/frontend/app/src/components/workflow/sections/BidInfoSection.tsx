@@ -196,7 +196,7 @@ export function BidInfoSection({ announcement }: BidInfoSectionProps) {
                     lineHeight: 1.7,
                   }}
                 >
-                  {doc.content}
+                  {doc.content || '文字起こしデータがありません'}
                 </Typography>
               </Box>
             </CollapsibleSection>
