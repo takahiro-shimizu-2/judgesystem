@@ -825,10 +825,6 @@ class DBOperator:
         raise NotImplementedError
 
     @abstractmethod
-    def createBackendEvaluations(self, tablename):
-        raise NotImplementedError
-
-    @abstractmethod
     def createBackendCompanies(self, tablename):
         raise NotImplementedError
 
@@ -1533,212 +1529,6 @@ class DBOperatorGCPVM(DBOperator):
             """
 
         return self.any_query(query)
-
-    def createBackendEvaluations(self, tablename):
-        sql = fr"""
-        CREATE OR REPLACE TABLE {self.project_id}.{self.dataset_name}.{tablename} AS
-        WITH base AS (
-            SELECT
-            eval.evaluation_no,
-            eval.announcement_no,
-            
-            coalesce(anno.workName, 'unknown_title') AS workName,
-            coalesce(anno.category, 'unknown_category') AS category,
-            coalesce(anno.topAgencyName, 'unknown_organization') AS topAgencyName,
-            coalesce(anno.workPlace, 'unknown_location') AS workPlace,
-            coalesce(anno.department, 'unknown_department') AS department,
-
-
-            coalesce(anno.zipcode, 'unknown_zipcode') as postalCode,
-            coalesce(anno.address, 'unknown_address') as address,
-            coalesce(anno.department, 'unknown_department') as name,
-            coalesce(anno.assigneeName, 'unknown_assigneeName') as contactPerson,
-            coalesce(anno.telephone, 'unknown_telephone') as phone,
-            coalesce(anno.fax, 'unknown_fax') as fax,
-            coalesce(anno.mail, 'unknown_mail') as email,
-
-
-            
-            coalesce(anno.publishDate, 'unknown_publishDate') AS publishDate,
-            coalesce(anno.docDistStart, 'unknown_expStartDate') AS docDistStart,
-            coalesce(anno.docDistEnd, 'unknown_expEndDate') AS docDistEnd,
-            coalesce(anno.submissionStart, 'unknown_appStartDate') AS submissionStart,
-            coalesce(anno.submissionEnd, 'unknown_appEndDate') AS submissionEnd,
-            coalesce(anno.bidStartDate, 'unknown_bidStartDate') AS bidStartDate,
-            coalesce(anno.bidEndDate, 'unknown_bidEndDate') AS bidEndDate,
-            coalesce(anno.pdfUrl, 'https://example.com/') AS pdfUrl,
-            coalesce(anno.orderer_id, 'unknown_orderer_id') AS orderer_id,
-            
-            doc.documents,
-
-            eval.company_no,
-            coalesce(comp.company_name, 'dummy') AS company_name,
-            coalesce(comp.company_address, 'dummy') AS company_address,
-            eval.office_no,
-            branch.office_name,
-            branch.office_address,
-            req1.requirement_no,
-            req1.requirement_text,
-            req2.requirement_type,
-            req2.requirement_description,
-            req2.isMet,
-            eval.final_status,
-            eval.updatedDate
-            from {self.project_id}.{self.dataset_name}.company_bid_judgement eval
-
-            inner join {self.project_id}.{self.dataset_name}.bid_announcements anno
-            on eval.announcement_no = anno.announcement_no
-
-            LEFT OUTER JOIN (
-                SELECT
-                    announcement_id,
-                    ARRAY_AGG(
-                        STRUCT(document_id, type, title, fileFormat, pageCount, extractedAt, url, markdown_path)
-                    ) AS documents
-                FROM (
-                    SELECT DISTINCT
-                    announcement_id,
-                    document_id,
-                    type,
-                    title,
-                    fileFormat,
-                        pageCount,
-                    extractedAt,
-                    url,
-                    markdown_path
-                    FROM {self.project_id}.{self.dataset_name}.announcements_documents_master
-                )
-                GROUP BY announcement_id
-            ) doc
-            ON anno.announcement_no = doc.announcement_id
-            
-            inner join {self.project_id}.{self.dataset_name}.company_master comp
-            on eval.company_no = comp.company_no
-
-            inner join {self.project_id}.{self.dataset_name}.office_master branch
-            on eval.office_no = branch.office_no
-
-            inner join {self.project_id}.{self.dataset_name}.bid_requirements req1
-            on eval.announcement_no = req1.announcement_no
-
-            inner join
-            (
-                select 
-                announcement_no, office_no, requirement_no, requirement_type, requirement_description, true as isMet 
-                from {self.project_id}.{self.dataset_name}.sufficient_requirements
-                union all
-                select 
-                announcement_no, office_no, requirement_no, requirement_type, requirement_description, false as isMet 
-                from {self.project_id}.{self.dataset_name}.insufficient_requirements
-            ) req2
-            on 
-            req1.requirement_no = req2.requirement_no and eval.office_no = req2.office_no
-        )
-        SELECT
-        cast(evaluation_no as string) AS id,
-        cast(evaluation_no as string) AS evaluationNo,
-        struct(
-            concat('ann-', announcement_no) AS id,
-            orderer_id AS ordererId,
-            workName AS title,
-            category,
-            topAgencyName AS organization,
-            workPlace AS workLocation,
-            
-            struct(
-                postalCode,
-                address,
-                name,
-                contactPerson,
-                phone,
-                fax,
-                email
-            ) as department,
-
-            
-            publishDate AS publishDate,
-            docDistStart AS explanationStartDate,
-            docDistEnd AS explanationEndDate,
-            submissionStart AS applicationStartDate,
-            submissionEnd AS applicationEndDate,
-            bidStartDate AS bidStartDate,
-            bidEndDate AS bidEndDate,
-            bidEndDate AS deadline,
-            10000 AS estimatedAmountMin,
-            20000 AS estimatedAmountMax,
-            pdfUrl AS pdfUrl,
-            documents
-        ) AS announcement,
-        struct(
-            concat('com-', company_no) AS id,
-            company_name as name,
-            company_address as address,
-            'A' AS grade,
-            1 AS priority
-        ) AS company,
-        struct(
-            concat('brn-', office_no) AS id,
-            office_name AS name,
-            office_address AS address
-        ) AS branch,
-        array_agg(
-            struct(
-                concat('req-', requirement_no) AS id,
-                requirement_type AS category,
-                requirement_text AS name,
-                isMet AS isMet,
-                requirement_description AS reason,
-                'dummy_evidence' AS evidence
-            )
-        ) AS requirements,
-        CASE WHEN coalesce(final_status, FALSE) THEN 'all_met' ELSE 'unmet' END AS status,
-        'not_started' AS workStatus,
-        'judgement' AS currentStep,
-        coalesce(updatedDate, 'dummy') AS evaluatedAt
-        FROM base
-
-        GROUP BY
-        evaluation_no,
-        announcement_no,
-        orderer_id,
-        workName,
-        category,
-        topAgencyName,
-        workPlace,
-
-        postalCode,
-        address,
-        name,
-        contactPerson,
-        phone,
-        fax,
-        email,
-
-        
-        department,
-
-
-        publishDate,
-        docDistStart,
-        docDistEnd,
-        submissionStart,
-        submissionEnd,
-        bidStartDate,
-        bidEndDate,
-        pdfUrl,
-       
-        documents,
-
-        company_no,
-        company_name,
-        company_address,
-        office_no, 
-        office_name, 
-        office_address, 
-        final_status,
-        updatedDate
-        """
-        self.client.query(sql).result()
 
     def createBackendCompanies(self, tablename):
         sql = fr"""
@@ -2720,9 +2510,6 @@ class DBOperatorSQLITE3(DBOperator):
 
         return self.any_query(query)
 
-    def createBackendEvaluations(self, tablename):
-        raise NotImplementedError
-
     def createBackendCompanies(self, tablename):
         raise NotImplementedError
 
@@ -3524,9 +3311,6 @@ class DBOperatorPOSTGRES(DBOperator):
             """
 
         return self.any_query(query)
-
-    def createBackendEvaluations(self, tablename):
-        raise NotImplementedError
 
     def createBackendCompanies(self, tablename):
         raise NotImplementedError
@@ -6775,22 +6559,18 @@ if __name__ == "__main__":
             db_operator.dropTable("bid_orderer")
             db_operator.createBidOrderersFromAnnouncements(bid_orderer_tablename="bid_orderer", bid_announcements_tablename="bid_announcements")
 
-        db_operator.createBackendEvaluations(tablename="backend_evaluations_pre")
         db_operator.createBackendCompanies(tablename="backend_companies_pre")
         db_operator.createBackendOrderers(tablename="backend_orderers_pre")
         db_operator.createBackendPartners(tablename="backend_partners_pre")
 
-        db_operator.createBackendEvaluations(tablename="backend_evaluations")
         db_operator.createBackendCompanies(tablename="backend_companies")
         db_operator.createBackendOrderers(tablename="backend_orderers")
         db_operator.createBackendPartners(tablename="backend_partners")
 
-        df_backend_evaluations = db_operator.selectToTable(tablename="backend_evaluations")
         df_backend_companies = db_operator.selectToTable(tablename="backend_companies")
         df_backend_orderers = db_operator.selectToTable(tablename="backend_orderers")
         df_backend_partners = db_operator.selectToTable(tablename="backend_partners")
 
-        df_backend_evaluations.shape
         df_backend_companies.shape
         df_backend_orderers.shape
         df_backend_partners.shape

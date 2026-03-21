@@ -3,7 +3,6 @@ import { readMarkdownFromGCS } from "../utils/gcs";
 import { FilterParams } from "../types";
 
 type QualifiedTables = {
-  evaluations: string;
   companyBidJudgement: string;
   bidAnnouncements: string;
   companyMaster: string;
@@ -554,7 +553,6 @@ export class EvaluationRepository {
 
   private getQualifiedTables(): QualifiedTables {
     return {
-      evaluations: `${schemaPrefix}${TABLES.evaluations}`,
       companyBidJudgement: `${schemaPrefix}company_bid_judgement`,
       bidAnnouncements: `${schemaPrefix}bid_announcements`,
       companyMaster: `${schemaPrefix}company_master`,
