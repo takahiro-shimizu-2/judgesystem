@@ -857,14 +857,6 @@ class DBOperator:
         """
         raise NotImplementedError
 
-    @abstractmethod
-    def createBackendCompanies(self, tablename):
-        raise NotImplementedError
-
-    @abstractmethod
-    def createBackendPartners(self, tablename):
-        raise NotImplementedError
-
 class DBOperatorGCPVM(DBOperator):
     """
     google bigquery を操作するクラス。
@@ -1619,206 +1611,6 @@ class DBOperatorGCPVM(DBOperator):
             """
 
         return self.any_query(query)
-
-    def createBackendCompanies(self, tablename):
-        sql = fr"""
-        CREATE OR REPLACE TABLE {self.project_id}.{self.dataset_name}.{tablename} AS
-        WITH base AS (
-            select 
-            comp.company_no as id,
-            comp.company_no as `no`,
-            coalesce(comp.company_name, 'dummy') as name,
-            coalesce(comp.company_address, 'dummy') as address,
-            'A' as grade,
-            1 as priority,
-            coalesce(comp.telephone, 'dummy') as phone,
-            'dummy' as email,
-            coalesce(comp.name_of_representative, 'dummy') as representative,
-            coalesce(comp.establishment_date, 'dummy') as established,
-            1 as capital,
-            100 as employeeCount,
-            coalesce(branch.office_name, 'dummy') as branches_name,
-            coalesce(branch.office_address, 'dummy') as branches_address,
-            'dummy' as certifications
-
-            from {self.project_id}.{self.dataset_name}.company_master comp
-            left outer join {self.project_id}.{self.dataset_name}.office_master branch
-            on comp.company_no = branch.company_no
-        )
-        select
-        concat('com-', id) as id,
-        `no`,
-        name,
-        address,
-        grade,
-        priority,
-        phone,
-        email,
-        representative,
-        established,
-        capital,
-        employeeCount,
-        array_agg(
-            struct(
-                branches_name as name,
-                branches_address as address
-            )
-        ) AS branches,
-        array_agg(
-            struct(
-                certifications
-            )
-        ) as certifications
-        from base
-        group by
-        id,
-        `no`,
-        name,
-        address,
-        grade,
-        priority,
-        phone,
-        email,
-        representative,
-        established,
-        capital,
-        employeeCount
-        """
-        self.client.query(sql).result()
-
-    def createBackendPartners(self, tablename):
-        sql = fr"""
-        CREATE OR REPLACE TABLE {self.project_id}.{self.dataset_name}.{tablename} AS
-        WITH
-        -- 1) categories を partner_id ごとに集約
-        categories AS (
-            SELECT
-            partner_id,
-            ARRAY_AGG(categories) AS categories
-            FROM {self.project_id}.{self.dataset_name}.partners_categories
-            GROUP BY partner_id
-        ),
-
-        -- 2) past projects を partner_id ごとに集約
-        past_projects AS (
-            SELECT
-            partner_id,
-            ARRAY_AGG(
-                STRUCT(
-                    cast(evaluationId as string) as evaluationId,
-                    announcementId,
-                    cast(announcementNo as int64) as announcementNo,
-                    announcementTitle,
-                    branchName,
-                    workStatus,
-                    evaluationStatus,
-                    cast(priority as int64) as priority,
-                    bidType,
-                    category,
-                    prefecture,
-                    publishDate,
-                    deadline,
-                    evaluatedAt,
-                    organization
-                )
-            ) AS pastProjects
-            FROM {self.project_id}.{self.dataset_name}.partners_past_projects
-            GROUP BY partner_id
-        ),
-
-        -- 3) branches を partner_id ごとに集約
-        branches AS (
-            SELECT
-            partner_id,
-            ARRAY_AGG(
-                STRUCT(
-                    name,
-                    address
-                )
-            ) AS branches
-            FROM {self.project_id}.{self.dataset_name}.partners_branches
-            GROUP BY partner_id
-        ),
-
-        -- 4) unified qualifications を partner_id ごとに集約
-        qual_unified AS (
-        SELECT
-            partner_id,
-            ARRAY_AGG(
-                STRUCT(
-                    mainCategory,
-                    category,
-                    region,
-                    cast(value as string) as value,
-                    grade
-                )
-            ) AS unified
-            FROM {self.project_id}.{self.dataset_name}.partners_qualifications_unified
-            GROUP BY partner_id
-        ),
-
-        -- 5) orderer items を ordererName ごとに集約
-        orderer_items AS (
-            SELECT
-            partner_id,
-            ordererName,
-            ARRAY_AGG(
-                STRUCT(
-                    category,
-                    region,
-                    cast(value as string) as value,
-                    grade
-                )
-            ) AS items
-            FROM {self.project_id}.{self.dataset_name}.partners_qualifications_orderer_items
-            GROUP BY partner_id, ordererName
-        ),
-        -- 6) orderers を partner_id ごとに集約
-        orderers AS (
-            SELECT
-            partner_id,
-            ARRAY_AGG(
-                STRUCT(
-                    ordererName,
-                    items
-                )
-            ) AS orderers
-            FROM orderer_items
-            GROUP BY partner_id
-        )
-        -- 7) 最終結合（爆発しない）
-        SELECT
-        pm.partner_id AS id,
-        pm.no,
-        pm.name,
-        pm.postalCode,
-        pm.address,
-        pm.phone,
-        pm.fax,
-        pm.email,
-        pm.url,
-        pm.surveyCount,
-        cast(pm.rating as int64) as rating,
-        pm.resultCount,
-        c.categories,
-        pp.pastProjects,
-        pm.representative,
-        pm.establishment_date AS established,
-        pm.capital,
-        pm.employeeCount,
-        b.branches,
-        STRUCT(
-            qu.unified,
-            o.orderers
-        ) AS qualifications
-        FROM {self.project_id}.{self.dataset_name}.partners_master pm
-        LEFT JOIN categories c USING (partner_id)
-        LEFT JOIN past_projects pp USING (partner_id)
-        LEFT JOIN branches b USING (partner_id)
-        LEFT JOIN qual_unified qu USING (partner_id)
-        LEFT JOIN orderers o USING (partner_id)
-        """
-        self.client.query(sql).result()
 
 
 class DBOperatorSQLITE3(DBOperator):
@@ -2603,13 +2395,6 @@ class DBOperatorSQLITE3(DBOperator):
             """
 
         return self.any_query(query)
-
-    def createBackendCompanies(self, tablename):
-        raise NotImplementedError
-
-    def createBackendPartners(self, tablename):
-        raise NotImplementedError
-
 
 class DBOperatorPOSTGRES(DBOperator):
     """
@@ -3455,12 +3240,6 @@ class DBOperatorPOSTGRES(DBOperator):
             """
 
         return self.any_query(query)
-
-    def createBackendCompanies(self, tablename):
-        raise NotImplementedError
-
-    def createBackendPartners(self, tablename):
-        raise NotImplementedError
 
 
 def _convert_requirement_text_dict(requirement_texts):
@@ -7061,17 +6840,4 @@ if __name__ == "__main__":
         db_operator.dropTable("evaluation_assignees")
         db_operator.createWorkflowContacts("workflow_contacts")
         db_operator.createEvaluationAssignees("evaluation_assignees", workflow_contacts_tablename="workflow_contacts")
-        
-        db_operator.createBackendCompanies(tablename="backend_companies_pre")
-        db_operator.createBackendPartners(tablename="backend_partners_pre")
-
-        db_operator.createBackendCompanies(tablename="backend_companies")
-        db_operator.createBackendPartners(tablename="backend_partners")
-
-        df_backend_companies = db_operator.selectToTable(tablename="backend_companies")
-        df_backend_partners = db_operator.selectToTable(tablename="backend_partners")
-
-        df_backend_companies.shape
-        df_backend_partners.shape
-
 
