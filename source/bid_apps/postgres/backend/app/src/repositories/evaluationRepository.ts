@@ -77,7 +77,13 @@ export class EvaluationRepository {
             'priority', ${priorityExpression}
           ) AS company,
           jsonb_build_object(
-            'name', COALESCE(om.office_name, '')
+            'id', CONCAT('brn-', cbj.office_no),
+            'name', COALESCE(om.office_name, ''),
+            'address', COALESCE(om.office_address, ''),
+            'phone', COALESCE(om.office_telephone, ''),
+            'email', COALESCE(om.office_email, ''),
+            'fax', COALESCE(om.office_fax, ''),
+            'postalCode', COALESCE(om.office_postal_code, '')
           ) AS branch,
           ${statusExpression} AS status,
           ${workStatusExpression} AS "workStatus",
@@ -268,7 +274,11 @@ export class EvaluationRepository {
           jsonb_build_object(
             'id', CONCAT('brn-', cbj.office_no),
             'name', COALESCE(om.office_name, ''),
-            'address', COALESCE(om.office_address, '')
+            'address', COALESCE(om.office_address, ''),
+            'phone', COALESCE(om.office_telephone, ''),
+            'email', COALESCE(om.office_email, ''),
+            'fax', COALESCE(om.office_fax, ''),
+            'postalCode', COALESCE(om.office_postal_code, '')
           ) AS branch,
           COALESCE(sa.assignees, '[]'::jsonb) AS "stepAssignees",
           COALESCE(req.requirements, '[]'::jsonb) AS requirements,

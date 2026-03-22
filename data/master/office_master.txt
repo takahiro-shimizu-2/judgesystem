@@ -1,3 +1,3 @@
-"office_no"	"company_no"	"office_name"	"office_type"	"office_address"	"office_telephone"	"Located_Prefecture"	"created_date"	"updated_date"
-1	1	"株式会社円通"	"本社"	"愛知県瀬戸市高根町3丁目92"	"0561-85-7088"	"愛知県"	"2025/04/22"	""
-2	2	"株式会社国広建設"	"本社"	"福岡県遠賀郡岡垣町大字糠塚525番"	"093-283-2538"	"福岡県"	"2025/06/10"	""
+"office_no"	"company_no"	"office_name"	"office_type"	"office_address"	"office_telephone"	"office_postal_code"	"office_email"	"office_fax"	"Located_Prefecture"	"created_date"	"updated_date"
+1	1	"株式会社円通"	"本社"	"愛知県瀬戸市高根町3丁目92"	"0561-85-7088"	"489-0931"	"info@entwo.co.jp"	"0561-85-7089"	"愛知県"	"2025/04/22"	""
+2	2	"株式会社国広建設"	"本社"	"福岡県遠賀郡岡垣町大字糠塚525番"	"093-283-2538"	"811-4213"	"info@kuni-kenn.com"	"093-701-8237"	"福岡県"	"2025/06/10"	""

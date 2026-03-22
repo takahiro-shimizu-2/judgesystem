@@ -55,12 +55,23 @@ const renderEmailValue = (email?: string | null) => {
  */
 export function CompanyInfoSection({ company, branch }: CompanyInfoSectionProps) {
   const companyDetails = findCompanyById(company.id);
-  const phone = companyDetails?.phone?.trim() || '未登録';
-  const email = companyDetails?.email?.trim() || null;
-  const fax = companyDetails?.fax?.trim() || '未登録';
-  const postalCode = companyDetails?.postalCode?.trim();
+  const branchPhone = branch?.phone?.trim();
+  const branchEmail = branch?.email?.trim();
+  const branchFax = branch?.fax?.trim();
+  const branchPostalCode = branch?.postalCode?.trim();
+  const branchAddress = branch?.address?.trim();
+
+  const companyPhone = companyDetails?.phone?.trim();
+  const companyEmail = companyDetails?.email?.trim();
+  const companyFax = companyDetails?.fax?.trim();
+  const companyPostalCode = companyDetails?.postalCode?.trim();
   const fallbackAddress = companyDetails?.address?.trim() || company.address?.trim();
-  const branchAddress = branch?.address?.trim() || fallbackAddress;
+
+  const phone = branchPhone || companyPhone || '未登録';
+  const email = branchEmail || companyEmail || null;
+  const fax = branchFax || companyFax || '未登録';
+  const postalCode = branchPostalCode || companyPostalCode;
+  const addressToDisplay = branchAddress || fallbackAddress;
   const iconStyle = { ...iconStyles.small, color: colors.text.light };
 
   return (
@@ -83,7 +94,7 @@ export function CompanyInfoSection({ company, branch }: CompanyInfoSectionProps)
         <InfoRow label="FAX" value={fax} icon={<FaxIcon sx={iconStyle} />} variant="list" />
         <InfoRow
           label="住所"
-          value={formatAddress(postalCode || undefined, branchAddress)}
+          value={formatAddress(postalCode || undefined, addressToDisplay)}
           icon={<LocationIcon sx={iconStyle} />}
           variant="list"
         />
