@@ -30,7 +30,7 @@ export const pool = new Pool(buildPoolConfig());
 
 export const TABLES = {
   companies: "backend_companies",
-  orderers: "backend_orderers",
+  orderers: "bid_orderers",
   partners: "partners_master",
   partnerCategories: "partners_categories",
   partnerPastProjects: "partners_past_projects",

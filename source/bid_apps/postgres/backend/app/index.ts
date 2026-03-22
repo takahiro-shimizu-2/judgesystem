@@ -4,8 +4,12 @@ import compression from "compression";
 import { PoolClient } from "pg";
 import QueryStream from "pg-query-stream";
 import { pool, TABLES, TableName, schemaPrefix } from "./src/config/database";
-import { EvaluationController, AnnouncementController } from "./src/controllers";
-import { PartnerController } from "./src/controllers/partnerController";
+import {
+  EvaluationController,
+  AnnouncementController,
+  PartnerController,
+  OrdererController,
+} from "./src/controllers";
 
 const app = express();
 
@@ -101,6 +105,7 @@ app.get("/", (req, res) => {
 const evaluationController = new EvaluationController();
 const announcementController = new AnnouncementController();
 const partnerController = new PartnerController();
+const ordererController = new OrdererController();
 
 // Evaluation routes
 app.get("/api/evaluations/stats", evaluationController.getStats);
@@ -120,9 +125,12 @@ app.get("/api/announcements/:announcementNo/documents/:documentId/preview", anno
 app.get("/api/partners", partnerController.getList);
 app.get("/api/partners/:id", partnerController.getById);
 
+// Orderer routes
+app.get("/api/orderers", ordererController.getList);
+app.get("/api/orderers/:id", ordererController.getById);
+
 // Other table routes (using streaming handler)
 app.get("/api/companies", createTableHandler(TABLES.companies));
-app.get("/api/orderers", createTableHandler(TABLES.orderers));
 
 // Cloud Run は PORT 環境変数を使う
 const port = process.env.PORT || 8080;

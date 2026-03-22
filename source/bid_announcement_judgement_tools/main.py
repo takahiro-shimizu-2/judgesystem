@@ -854,10 +854,6 @@ class DBOperator:
         raise NotImplementedError
 
     @abstractmethod
-    def createBackendOrderers(self, tablename):
-        raise NotImplementedError
-
-    @abstractmethod
     def createBackendPartners(self, tablename):
         raise NotImplementedError
 
@@ -1026,7 +1022,7 @@ class DBOperatorGCPVM(DBOperator):
             select
             orderer_id,
             orderer_id as name,
-            'unknown' as category,
+            'national' as category,
             'unknown' as address,
             'unknown' as phone,
             'unknown' as fax,
@@ -1652,61 +1648,6 @@ class DBOperatorGCPVM(DBOperator):
         """
         self.client.query(sql).result()
 
-    def createBackendOrderers(self, tablename):
-        # カテゴリの値は要確認：category
-        sql = fr"""
-        CREATE OR REPLACE TABLE {self.project_id}.{self.dataset_name}.{tablename} AS
-        with base as (
-            select 
-            orderer_id as id,
-            `no`,
-            name,
-            'national' as category, 
-            address,
-            phone,
-            fax,
-            email,
-            departments,
-            announcementCount,
-            awardCount,
-            averageAmount,
-            lastAnnouncementDate
-            from {self.project_id}.{self.dataset_name}.bid_orderer
-        )
-        select
-        id,
-        `no`,
-        name,
-        category,
-        address,
-        phone,
-        fax,
-        email,
-        array_agg(
-            departments
-        ) as departments,
-        announcementCount,
-        awardCount,
-        averageAmount,
-        lastAnnouncementDate
-        from base
-
-        group by
-        id,
-        `no`,
-        name,
-        category,
-        address,
-        phone,
-        fax,
-        email,
-        announcementCount,
-        awardCount,
-        averageAmount,
-        lastAnnouncementDate
-        """
-        self.client.query(sql).result()
-
     def createBackendPartners(self, tablename):
         sql = fr"""
         CREATE OR REPLACE TABLE {self.project_id}.{self.dataset_name}.{tablename} AS
@@ -2001,7 +1942,7 @@ class DBOperatorSQLITE3(DBOperator):
             select
             orderer_id,
             orderer_id as name,
-            'unknown' as category,
+            'national' as category,
             'unknown' as address,
             'unknown' as phone,
             'unknown' as fax,
@@ -2590,9 +2531,6 @@ class DBOperatorSQLITE3(DBOperator):
     def createBackendCompanies(self, tablename):
         raise NotImplementedError
 
-    def createBackendOrderers(self, tablename):
-        raise NotImplementedError
-
     def createBackendPartners(self, tablename):
         raise NotImplementedError
 
@@ -2800,7 +2738,7 @@ class DBOperatorPOSTGRES(DBOperator):
             SELECT
             orderer_id,
             orderer_id AS name,
-            'unknown' AS category,
+            'national' AS category,
             'unknown' AS address,
             'unknown' AS phone,
             'unknown' AS fax,
@@ -3409,9 +3347,6 @@ class DBOperatorPOSTGRES(DBOperator):
         return self.any_query(query)
 
     def createBackendCompanies(self, tablename):
-        raise NotImplementedError
-
-    def createBackendOrderers(self, tablename):
         raise NotImplementedError
 
     def createBackendPartners(self, tablename):
@@ -6997,7 +6932,7 @@ if __name__ == "__main__":
     # db_operator.selectToTable(tablename="sufficient_requirements")
     # db_operator.selectToTable(tablename="insufficient_requirements")
     # db_operator.selectToTable(tablename="company_bid_judgement")
-    # db_operator.selectToTable(tablename="bid_orderer")
+    # db_operator.selectToTable(tablename="bid_orderers")
     # db_operator.any_query(sql = "SELECT name FROM sqlite_master WHERE type='table'")
 
     # db_operator.any_query(sql = fr"SELECT table_name FROM `{bigquery_project_id}.{bigquery_dataset_name}.INFORMATION_SCHEMA.TABLES`")
@@ -7005,26 +6940,22 @@ if __name__ == "__main__":
 
     # backend 用意する用
     if False:
-        if not db_operator.ifTableExists(tablename="bid_orderer"):
-            db_operator.createBidOrderersFromAnnouncements(bid_orderer_tablename="bid_orderer", bid_announcements_tablename="bid_announcements")
+        if not db_operator.ifTableExists(tablename="bid_orderers"):
+            db_operator.createBidOrderersFromAnnouncements(bid_orderer_tablename="bid_orderers", bid_announcements_tablename="bid_announcements")
         else:
-            db_operator.dropTable("bid_orderer")
-            db_operator.createBidOrderersFromAnnouncements(bid_orderer_tablename="bid_orderer", bid_announcements_tablename="bid_announcements")
+            db_operator.dropTable("bid_orderers")
+            db_operator.createBidOrderersFromAnnouncements(bid_orderer_tablename="bid_orderers", bid_announcements_tablename="bid_announcements")
 
         db_operator.createBackendCompanies(tablename="backend_companies_pre")
-        db_operator.createBackendOrderers(tablename="backend_orderers_pre")
         db_operator.createBackendPartners(tablename="backend_partners_pre")
 
         db_operator.createBackendCompanies(tablename="backend_companies")
-        db_operator.createBackendOrderers(tablename="backend_orderers")
         db_operator.createBackendPartners(tablename="backend_partners")
 
         df_backend_companies = db_operator.selectToTable(tablename="backend_companies")
-        df_backend_orderers = db_operator.selectToTable(tablename="backend_orderers")
         df_backend_partners = db_operator.selectToTable(tablename="backend_partners")
 
         df_backend_companies.shape
-        df_backend_orderers.shape
         df_backend_partners.shape
 
 
