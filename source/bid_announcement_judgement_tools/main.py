@@ -1803,7 +1803,7 @@ class DBOperatorGCPVM(DBOperator):
         c.categories,
         pp.pastProjects,
         pm.representative,
-        pm.established,
+        pm.establishment_date AS established,
         pm.capital,
         pm.employeeCount,
         b.branches,

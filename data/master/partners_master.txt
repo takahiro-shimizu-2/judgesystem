@@ -1,3 +1,3 @@
-partner_id	no	name	postalCode	address	phone	email	fax	url	surveyCount	rating	resultCount	representative	established	capital	employeeCount
-ptn-1	1	株式会社円通	489-0931	愛知県瀬戸市高根町3丁目92	0561-85-7088	info@entwo.co.jp	0561-85-7089	https://www.entwo.co.jp/	59	2.64	0	田中信昭	2007	10000000	12
-ptn-2	2	株式会社国広建設	811-4213	福岡県遠賀郡岡垣町大字糠塚525番	093-283-2538	info@kuni-kenn.com	093-701-8237	https://kuni-kenn.com/	53	5.48	0	國廣崇行	2008	0	8
+partner_id	no	name	postalCode	address	phone	email	fax	url	surveyCount	rating	resultCount	representative	establishment_date	capital	employeeCount
+ptn-1	1	株式会社円通	489-0931	愛知県瀬戸市高根町3丁目92	0561-85-7088	info@entwo.co.jp	0561-85-7089	https://www.entwo.co.jp/	59	2.64	0	田中信昭	2007-09-20	10000000	12
+ptn-2	2	株式会社国広建設	811-4213	福岡県遠賀郡岡垣町大字糠塚525番	093-283-2538	info@kuni-kenn.com	093-701-8237	https://kuni-kenn.com/	53	5.48	0	國廣崇行	2008-08-26	0	8

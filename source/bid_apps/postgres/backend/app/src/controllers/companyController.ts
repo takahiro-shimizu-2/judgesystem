@@ -29,9 +29,9 @@ export class CompanyController {
         'A' AS grade,
         5 AS priority,
         COALESCE(comp.telephone, '') AS phone,
-        '' AS email,
-        '' AS fax,
-        NULL::text AS "postalCode",
+        COALESCE(comp.email, '') AS email,
+        COALESCE(comp.fax, '') AS fax,
+        COALESCE(comp.postal_code, '') AS "postalCode",
         COALESCE(comp.name_of_representative, '') AS representative,
         COALESCE(comp.establishment_date::text, '') AS established,
         (

@@ -145,7 +145,7 @@ export class PartnerRepository {
             "rating",
             "resultCount",
             "representative",
-            "established",
+            "establishment_date" AS "established",
             "capital",
             "employeeCount"
           FROM ${schemaPrefix}${TABLES.partners}
