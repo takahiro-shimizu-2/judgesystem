@@ -9,6 +9,7 @@ import {
   AnnouncementController,
   PartnerController,
   OrdererController,
+  ContactController,
 } from "./src/controllers";
 
 const app = express();
@@ -106,6 +107,7 @@ const evaluationController = new EvaluationController();
 const announcementController = new AnnouncementController();
 const partnerController = new PartnerController();
 const ordererController = new OrdererController();
+const contactController = new ContactController();
 
 // Evaluation routes
 app.get("/api/evaluations/stats", evaluationController.getStats);
@@ -113,6 +115,8 @@ app.get("/api/evaluations/status-counts", evaluationController.getStatusCounts);
 app.get("/api/evaluations", evaluationController.getList);
 app.get("/api/evaluations/:id", evaluationController.getById);
 app.patch("/api/evaluations/:evaluationNo", evaluationController.updateWorkStatus);
+app.get("/api/evaluations/:evaluationNo/assignees", evaluationController.getAssignees);
+app.put("/api/evaluations/:evaluationNo/assignees", evaluationController.updateAssignee);
 
 // Announcement routes
 app.get("/api/announcements", announcementController.getList);
@@ -128,6 +132,13 @@ app.get("/api/partners/:id", partnerController.getById);
 // Orderer routes
 app.get("/api/orderers", ordererController.getList);
 app.get("/api/orderers/:id", ordererController.getById);
+
+// Contact routes
+app.get("/api/contacts", contactController.getList);
+app.get("/api/contacts/:id", contactController.getById);
+app.post("/api/contacts", contactController.create);
+app.patch("/api/contacts/:id", contactController.update);
+app.delete("/api/contacts/:id", contactController.delete);
 
 // Other table routes (using streaming handler)
 app.get("/api/companies", createTableHandler(TABLES.companies));

@@ -17,6 +17,7 @@ pg_database=""
 pg_port=""
 pg_sslmode=""
 pg_schema=""
+enable_contact_delete="false"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -116,6 +117,14 @@ while [[ $# -gt 0 ]]; do
       pg_schema="$2"
       shift 2
       ;;
+    --enable_contact_delete)
+      if [[ $# -lt 2 ]]; then
+        echo "Error: --enable_contact_delete requires a value (true|false)"
+        exit 1
+      fi
+      enable_contact_delete="$2"
+      shift 2
+      ;;
     --help)
       cat <<'EOF'
 Usage: backend_gcloud_command_sample_postgres.sh [options]
@@ -131,6 +140,7 @@ Usage: backend_gcloud_command_sample_postgres.sh [options]
   --pg_port <port>
   --pg_sslmode <disable|require|...>
   --pg_schema <schema>
+  --enable_contact_delete <true|false> (default: false)
 
 Connection types:
   proxy: Cloud SQL Proxy (Unix socket, no VPC needed)
@@ -206,6 +216,7 @@ env_vars=()
 [[ -n "$pg_port" ]] && env_vars+=("PGPORT=${pg_port}")
 [[ -n "$pg_sslmode" ]] && env_vars+=("PGSSLMODE=${pg_sslmode}")
 [[ -n "$pg_schema" ]] && env_vars+=("PG_SCHEMA=${pg_schema}")
+env_vars+=("ENABLE_CONTACT_DELETE=${enable_contact_delete}")
 
 # デプロイコマンド構築
 deploy_cmd=(

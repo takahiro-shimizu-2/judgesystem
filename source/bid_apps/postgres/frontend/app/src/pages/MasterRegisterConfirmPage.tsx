@@ -12,6 +12,7 @@ import { colors, fontSizes } from '../constants/styles';
 import type { PartnerFormData } from '../hooks/usePartnerForm';
 import type { OrdererFormData } from '../hooks/useOrdererForm';
 import type { StaffFormData } from '../hooks/useStaffForm';
+import { createStaff } from '../data';
 
 type FormType = 'partner' | 'orderer' | 'staff';
 
@@ -55,19 +56,28 @@ export default function MasterRegisterConfirmPage() {
     });
   };
 
-  const handleSubmit = () => {
-    // TODO: 実際のAPI呼び出し
-    console.log('登録データ:', formData);
-
-    // 成功時の遷移先
+  const handleSubmit = async () => {
     const redirectPath = {
       partner: '/partners',
       orderer: '/orderers',
       staff: '/staff',
     }[formType];
 
-    alert('登録が完了しました');
-    navigate(redirectPath);
+    try {
+      if (formType === 'staff') {
+        const created = await createStaff(formData as StaffFormData);
+        if (!created) {
+          throw new Error('Failed to create staff');
+        }
+      } else {
+        console.log('登録データ:', formData);
+      }
+      alert('登録が完了しました');
+      navigate(redirectPath);
+    } catch (error) {
+      console.error('Failed to submit registration:', error);
+      alert('登録に失敗しました。時間をおいて再度お試しください。');
+    }
   };
 
   const renderConfirmView = () => {

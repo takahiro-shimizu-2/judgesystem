@@ -39,6 +39,35 @@ export const updateWorkStatus = async (
   }
 };
 
+export const updateEvaluationAssignee = async (
+  evaluationNo: string,
+  stepId: string,
+  staffId: string
+): Promise<boolean> => {
+  try {
+    const response = await fetch(getApiUrl(`/api/evaluations/${evaluationNo}/assignees`), {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        stepId,
+        contactId: staffId || null,
+      }),
+    });
+
+    if (!response.ok) {
+      console.error(`Failed to update assignee: ${response.status} ${response.statusText}`);
+      return false;
+    }
+
+    return true;
+  } catch (error) {
+    console.error('Error updating assignee:', error);
+    return false;
+  }
+};
+
 // 類似案件のモックデータ（より多様な案件名）
 const similarCaseTemplates = [
   '令和{year}年度{district}地区道路拡幅工事',

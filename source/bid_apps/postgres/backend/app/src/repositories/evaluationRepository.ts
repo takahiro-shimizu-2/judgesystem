@@ -15,6 +15,7 @@ type QualifiedTables = {
   competingCompanyBids: string;
   announcementsEstimatedAmounts: string;
   evaluationStatuses: string;
+  evaluationAssignees: string;
 };
 
 export class EvaluationRepository {
@@ -169,6 +170,20 @@ export class EvaluationRepository {
            AND cb.company_name = cc.company_name
          GROUP BY cc.announcement_id
         ),
+        step_assignees AS (
+          SELECT
+            evaluation_no,
+            jsonb_agg(
+              jsonb_build_object(
+                'stepId', step_id,
+                'staffId', contact_id::text,
+                'assignedAt', assigned_at
+              )
+              ORDER BY step_id
+            ) AS assignees
+          FROM ${tables.evaluationAssignees}
+          GROUP BY evaluation_no
+        ),
         requirement_details AS (
           SELECT
             req1.announcement_no,
@@ -255,6 +270,7 @@ export class EvaluationRepository {
             'name', COALESCE(om.office_name, ''),
             'address', COALESCE(om.office_address, '')
           ) AS branch,
+          COALESCE(sa.assignees, '[]'::jsonb) AS "stepAssignees",
           COALESCE(req.requirements, '[]'::jsonb) AS requirements,
           ${statusExpression} AS status,
           ${workStatusExpression} AS "workStatus",
@@ -266,6 +282,7 @@ export class EvaluationRepository {
         LEFT JOIN requirement_details req
           ON req.announcement_no::text = cbj.announcement_no::text
          AND COALESCE(req.office_no::text, '-1') = COALESCE(cbj.office_no::text, '-1')
+        LEFT JOIN step_assignees sa ON sa.evaluation_no::text = cbj.evaluation_no::text
         WHERE cbj.evaluation_no::text = $1
         `,
         [id]
@@ -565,6 +582,7 @@ export class EvaluationRepository {
       competingCompanyBids: `${schemaPrefix}announcements_competing_company_bids_master`,
       announcementsEstimatedAmounts: `${schemaPrefix}announcements_estimated_amounts`,
       evaluationStatuses: `${schemaPrefix}${TABLES.evaluationStatuses}`,
+      evaluationAssignees: `${schemaPrefix}${TABLES.evaluationAssignees}`,
     };
   }
 

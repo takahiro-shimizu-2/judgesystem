@@ -170,6 +170,59 @@ export class EvaluationController {
   };
 
   /**
+   * GET /api/evaluations/:evaluationNo/assignees - Get assigned staff per step
+   */
+  getAssignees = async (req: Request, res: Response): Promise<void> => {
+    const { evaluationNo } = req.params;
+    console.log(`GET /api/evaluations/${evaluationNo}/assignees hit`);
+
+    try {
+      const assignees = await this.service.getAssignees(evaluationNo);
+      res.setHeader("Content-Type", "application/json");
+      res.status(200).json(assignees);
+    } catch (error) {
+      console.error(`ERROR in GET /api/evaluations/${evaluationNo}/assignees:`, error);
+      if (!res.headersSent) {
+        res.status(500).json({
+          error: "Internal Server Error",
+          message: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+  };
+
+  /**
+   * PUT /api/evaluations/:evaluationNo/assignees - Upsert staff assignment for a workflow step
+   */
+  updateAssignee = async (req: Request, res: Response): Promise<void> => {
+    const { evaluationNo } = req.params;
+    const { stepId, contactId } = req.body ?? {};
+    console.log(`PUT /api/evaluations/${evaluationNo}/assignees hit`);
+
+    if (!stepId) {
+      res.status(400).json({
+        error: "Bad Request",
+        message: "stepId is required",
+      });
+      return;
+    }
+
+    try {
+      const result = await this.service.updateAssignee(evaluationNo, stepId, contactId || null);
+      res.setHeader("Content-Type", "application/json");
+      res.status(200).json(result);
+    } catch (error) {
+      console.error(`ERROR in PUT /api/evaluations/${evaluationNo}/assignees:`, error);
+      if (!res.headersSent) {
+        res.status(500).json({
+          error: "Internal Server Error",
+          message: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+  };
+
+  /**
    * Helper: Parse array parameter from query string
    */
   private parseArrayParam(param: any): string[] {

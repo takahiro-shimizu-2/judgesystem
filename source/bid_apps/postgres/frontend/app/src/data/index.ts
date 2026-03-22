@@ -60,6 +60,7 @@ export type { DocumentType, DocumentOcr } from '../types';
 // 判定結果（メイン）
 export {
   updateWorkStatus,
+  updateEvaluationAssignee,
   mockSimilarCases,
   getSimilarCases,
 } from './evaluations';
@@ -71,4 +72,6 @@ export {
   findStaffByName,
   getStaffByDepartment,
   getAllDepartments,
+  createStaff,
+  refreshStaff,
 } from './staff';

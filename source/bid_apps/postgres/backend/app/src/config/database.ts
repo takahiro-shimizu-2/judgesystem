@@ -31,6 +31,7 @@ export const pool = new Pool(buildPoolConfig());
 export const TABLES = {
   companies: "backend_companies",
   orderers: "bid_orderers",
+  contacts: "workflow_contacts",
   partners: "partners_master",
   partnerCategories: "partners_categories",
   partnerPastProjects: "partners_past_projects",
@@ -39,6 +40,7 @@ export const TABLES = {
   partnerQualificationsOrderers: "partners_qualifications_orderers",
   partnerQualificationsOrdererItems: "partners_qualifications_orderer_items",
   evaluationStatuses: "backend_evaluation_statuses",
+  evaluationAssignees: "evaluation_assignees",
 } as const;
 
 export type TableName = (typeof TABLES)[keyof typeof TABLES];

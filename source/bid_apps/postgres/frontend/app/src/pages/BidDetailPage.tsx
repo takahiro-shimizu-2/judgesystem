@@ -13,7 +13,7 @@ import {
 import { useState, useCallback, useEffect } from "react";
 import { getApiUrl } from "../config/api";
 
-import { bidTypeConfig, updateWorkStatus } from "../data";
+import { bidTypeConfig, updateWorkStatus, updateEvaluationAssignee } from "../data";
 import type { BidEvaluation, Partner, SimilarCase, StepAssignee, WorkStatus } from "../types";
 import { priorityLabels, priorityColors } from "../constants/priority";
 import { WORKFLOW_STEP_CONFIG, WORKFLOW_STEP_IDS } from "../constants/workflow";
@@ -278,28 +278,31 @@ export default function BidDetailPage() {
   }, [targetAnnouncementNo, fetchSimilarCases]);
 
   // 担当者変更ハンドラ
-  const handleAssigneeChange = useCallback((stepId: string, staffId: string) => {
+  const handleAssigneeChange = useCallback(async (stepId: string, staffId: string) => {
+    if (!evaluation) return;
+    const success = await updateEvaluationAssignee(evaluation.evaluationNo, stepId, staffId);
+    if (!success) {
+      alert('担当者の更新に失敗しました。時間をおいて再度お試しください。');
+      return;
+    }
     setStepAssignees((prev) => {
       const existing = prev.find((a) => a.stepId === stepId);
       if (staffId === '') {
-        // 未割当に変更する場合は削除
         return prev.filter((a) => a.stepId !== stepId);
       }
       if (existing) {
-        // 既存の割り当てを更新
         return prev.map((a) =>
           a.stepId === stepId
             ? { ...a, staffId, assignedAt: new Date().toISOString() }
             : a
         );
       }
-      // 新規割り当て
       return [
         ...prev,
         { stepId, staffId, assignedAt: new Date().toISOString() },
       ];
     });
-  }, []);
+  }, [evaluation]);
 
   // 協力会社データ（全タブで共有）
   const [partners, setPartners] = useState<Partner[]>([
