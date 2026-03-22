@@ -29,7 +29,6 @@ const buildPoolConfig = (): PoolConfig => {
 export const pool = new Pool(buildPoolConfig());
 
 export const TABLES = {
-  companies: "backend_companies",
   orderers: "bid_orderers",
   contacts: "workflow_contacts",
   partners: "partners_master",
@@ -41,8 +40,8 @@ export const TABLES = {
   partnerQualificationsOrdererItems: "partners_qualifications_orderer_items",
   evaluationStatuses: "backend_evaluation_statuses",
   evaluationAssignees: "evaluation_assignees",
+  companyMaster: "company_master",
+  officeMaster: "office_master",
 } as const;
-
-export type TableName = (typeof TABLES)[keyof typeof TABLES];
 
 export const schemaPrefix = process.env.PG_SCHEMA ? `${process.env.PG_SCHEMA}.` : "";

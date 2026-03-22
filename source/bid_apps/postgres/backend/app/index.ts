@@ -1,15 +1,13 @@
-import express, { Request, Response } from "express";
+import express from "express";
 import cors from "cors";
 import compression from "compression";
-import { PoolClient } from "pg";
-import QueryStream from "pg-query-stream";
-import { pool, TABLES, TableName, schemaPrefix } from "./src/config/database";
 import {
   EvaluationController,
   AnnouncementController,
   PartnerController,
   OrdererController,
   ContactController,
+  CompanyController,
 } from "./src/controllers";
 
 const app = express();
@@ -29,74 +27,6 @@ app.use(compression());
 // Middleware to parse JSON body (must be before routes)
 app.use(express.json());
 
-// Streaming table handler to avoid 32MB limit
-const createTableHandler = (tableName: TableName) => {
-  const qualifiedTableName = `${schemaPrefix}${tableName}`;
-  return async (req: Request, res: Response): Promise<void> => {
-    console.log(`GET ${req.path} hit`);
-
-    let client: PoolClient | undefined;
-    try {
-      client = await pool.connect();
-
-      // Set headers
-      res.setHeader("Content-Type", "application/json");
-      res.setHeader("Cache-Control", "no-cache");
-
-      // Start JSON array
-      res.write("[");
-      let firstRow = true;
-
-      // Create query stream
-      const query = new QueryStream(`SELECT * FROM ${qualifiedTableName}`);
-      const stream = client.query(query);
-
-      stream.on("data", (row: unknown) => {
-        // Add comma before all rows except the first
-        if (!firstRow) {
-          res.write(",");
-        }
-        res.write(JSON.stringify(row));
-        firstRow = false;
-      });
-
-      stream.on("error", (err: Error) => {
-        console.error(`ERROR in ${req.path} stream:`, err);
-        if (!res.headersSent) {
-          res.status(500).json({
-            error: "Internal Server Error",
-            message: err.message,
-            path: req.path,
-            table: qualifiedTableName
-          });
-        } else {
-          // Stream already started, just end it
-          res.end();
-        }
-      });
-
-      stream.on("end", () => {
-        // Close JSON array
-        res.write("]");
-        res.end();
-        client?.release();
-      });
-    } catch (error) {
-      console.error(`ERROR in ${req.path}:`, error);
-      if (!res.headersSent) {
-        res.status(500).json({
-          error: "Internal Server Error",
-          message: error instanceof Error ? error.message : String(error),
-          stack: error instanceof Error ? error.stack : undefined,
-          path: req.path,
-          table: qualifiedTableName
-        });
-      }
-      client?.release();
-    }
-  };
-};
-
 // Root path
 app.get("/", (req, res) => {
   res.send("Backend API is running");
@@ -108,6 +38,7 @@ const announcementController = new AnnouncementController();
 const partnerController = new PartnerController();
 const ordererController = new OrdererController();
 const contactController = new ContactController();
+const companyController = new CompanyController();
 
 // Evaluation routes
 app.get("/api/evaluations/stats", evaluationController.getStats);
@@ -140,8 +71,8 @@ app.post("/api/contacts", contactController.create);
 app.patch("/api/contacts/:id", contactController.update);
 app.delete("/api/contacts/:id", contactController.delete);
 
-// Other table routes (using streaming handler)
-app.get("/api/companies", createTableHandler(TABLES.companies));
+// Company routes
+app.get("/api/companies", companyController.getList);
 
 // Cloud Run は PORT 環境変数を使う
 const port = process.env.PORT || 8080;

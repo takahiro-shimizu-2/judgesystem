@@ -16,6 +16,8 @@ interface CompanyWithDetails {
   priority: CompanyPriority;
   phone: string;
   email: string;
+  fax?: string | null;
+  postalCode?: string | null;
   representative: string;
   established: string;
   capital: number;
@@ -25,11 +27,18 @@ interface CompanyWithDetails {
 }
 
 const generateCompanies = async (): Promise<CompanyWithDetails[]> => {
-  const res = await fetch(getApiUrl('/api/companies'));
-  const data = await res.json();
-  //console.log("API response:", data);
-  return data;
-}
+  try {
+    const res = await fetch(getApiUrl('/api/companies'));
+    if (!res.ok) {
+      throw new Error(`Failed to load companies: ${res.status} ${res.statusText}`);
+    }
+    const data = await res.json();
+    return Array.isArray(data) ? data : [];
+  } catch (error) {
+    console.error('Failed to fetch companies:', error);
+    return [];
+  }
+};
 
 
 // エクスポート
