@@ -50,7 +50,7 @@ import {
 } from '../../../constants/styles';
 import { MEMO_TAGS, type MemoTag, type MemoTagConfig, type RecordMemo } from '../../../constants/memoTags';
 import type { PreSubmitDocument, BidEvaluation } from '../../../types';
-import { mockStaff, findStaffById } from '../../../data';
+import { useStaffDirectory } from '../../../contexts/StaffContext';
 import { PersonIcon } from '../../../constants/icons';
 
 // RecordMemoをCallMemoとして使用（後方互換性のため）
@@ -205,6 +205,7 @@ function MemoCard({
 // ============================================================================
 
 export function OrdererWorkflowSection({ evaluation, workflowAssigneeId }: OrdererWorkflowSectionProps) {
+  const { staff, findById } = useStaffDirectory();
   // 案件・発注者・自社情報
   const projectName = evaluation?.announcement?.title || '（案件名）';
   const ordererOrg = evaluation?.announcement?.organization || '（発注機関）';
@@ -622,16 +623,16 @@ export function OrdererWorkflowSection({ evaluation, workflowAssigneeId }: Order
                   sx={staffSelectStyles}
                   renderValue={(value) => {
                     if (!value) return <span style={{ color: colors.text.light, fontSize: fontSizes.xs }}>未割当</span>;
-                    const staff = findStaffById(value);
-                    return <span style={{ fontSize: fontSizes.xs }}>{staff?.name || '未割当'}</span>;
+                    const staffMember = findById(value);
+                    return <span style={{ fontSize: fontSizes.xs }}>{staffMember?.name || '未割当'}</span>;
                   }}
                 >
                   <MenuItem value="">
                     <em style={{ color: colors.text.light, fontSize: fontSizes.xs }}>未割当</em>
                   </MenuItem>
-                  {mockStaff.map((staff) => (
-                    <MenuItem key={staff.id} value={staff.id} sx={{ fontSize: fontSizes.xs }}>
-                      {staff.name}
+                  {staff.map((member) => (
+                    <MenuItem key={member.id} value={member.id} sx={{ fontSize: fontSizes.xs }}>
+                      {member.name}
                     </MenuItem>
                   ))}
                 </Select>
@@ -1124,16 +1125,16 @@ ${myName}
                     sx={staffSelectStyles}
                     renderValue={(value) => {
                       if (!value) return <span style={{ color: colors.text.light, fontSize: fontSizes.xs }}>未割当</span>;
-                      const staff = findStaffById(value);
-                      return <span style={{ fontSize: fontSizes.xs }}>{staff?.name || '未割当'}</span>;
+                      const staffMember = findById(value);
+                      return <span style={{ fontSize: fontSizes.xs }}>{staffMember?.name || '未割当'}</span>;
                     }}
                   >
                     <MenuItem value="">
                       <em style={{ color: colors.text.light, fontSize: fontSizes.xs }}>未割当</em>
                     </MenuItem>
-                    {mockStaff.map((staff) => (
-                      <MenuItem key={staff.id} value={staff.id} sx={{ fontSize: fontSizes.xs }}>
-                        {staff.name}
+                    {staff.map((member) => (
+                      <MenuItem key={member.id} value={member.id} sx={{ fontSize: fontSizes.xs }}>
+                        {member.name}
                       </MenuItem>
                     ))}
                   </Select>
@@ -1205,26 +1206,26 @@ ${myName}
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                 <PersonIcon sx={{ ...iconStyles.small, color: colors.accent.blue }} />
                 <FormControl size="small">
-                  <Select
-                    value={docsAssignee}
-                    onChange={(e) => setDocsAssignee(e.target.value)}
-                    displayEmpty
-                    sx={staffSelectStyles}
-                    renderValue={(value) => {
-                      if (!value) return <span style={{ color: colors.text.light, fontSize: fontSizes.xs }}>未割当</span>;
-                      const staff = findStaffById(value);
-                      return <span style={{ fontSize: fontSizes.xs }}>{staff?.name || '未割当'}</span>;
-                    }}
-                  >
-                    <MenuItem value="">
-                      <em style={{ color: colors.text.light, fontSize: fontSizes.xs }}>未割当</em>
+                <Select
+                  value={docsAssignee}
+                  onChange={(e) => setDocsAssignee(e.target.value)}
+                  displayEmpty
+                  sx={staffSelectStyles}
+                  renderValue={(value) => {
+                    if (!value) return <span style={{ color: colors.text.light, fontSize: fontSizes.xs }}>未割当</span>;
+                    const staffMember = findById(value);
+                    return <span style={{ fontSize: fontSizes.xs }}>{staffMember?.name || '未割当'}</span>;
+                  }}
+                >
+                  <MenuItem value="">
+                    <em style={{ color: colors.text.light, fontSize: fontSizes.xs }}>未割当</em>
+                  </MenuItem>
+                  {staff.map((member) => (
+                    <MenuItem key={member.id} value={member.id} sx={{ fontSize: fontSizes.xs }}>
+                      {member.name}
                     </MenuItem>
-                    {mockStaff.map((staff) => (
-                      <MenuItem key={staff.id} value={staff.id} sx={{ fontSize: fontSizes.xs }}>
-                        {staff.name}
-                      </MenuItem>
-                    ))}
-                  </Select>
+                  ))}
+                </Select>
                 </FormControl>
               </Box>
               <Button
@@ -1340,16 +1341,16 @@ ${myName}
                 sx={staffSelectStyles}
                 renderValue={(value) => {
                   if (!value) return <span style={{ color: colors.text.light, fontSize: fontSizes.xs }}>担当者</span>;
-                  const staff = findStaffById(value);
-                  return <span style={{ fontSize: fontSizes.xs }}>{staff?.name || '担当者'}</span>;
+                  const staffMember = findById(value);
+                  return <span style={{ fontSize: fontSizes.xs }}>{staffMember?.name || '担当者'}</span>;
                 }}
               >
                 <MenuItem value="">
                   <em style={{ color: colors.text.light, fontSize: fontSizes.xs }}>未割当</em>
                 </MenuItem>
-                {mockStaff.map((staff) => (
-                  <MenuItem key={staff.id} value={staff.id} sx={{ fontSize: fontSizes.xs }}>
-                    {staff.name}
+                {staff.map((member) => (
+                  <MenuItem key={member.id} value={member.id} sx={{ fontSize: fontSizes.xs }}>
+                    {member.name}
                   </MenuItem>
                 ))}
               </Select>

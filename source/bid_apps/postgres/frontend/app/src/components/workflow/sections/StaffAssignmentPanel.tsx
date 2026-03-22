@@ -5,7 +5,7 @@
 import { Box, Typography, Select, MenuItem, FormControl } from '@mui/material';
 import { PersonIcon } from '../../../constants/icons';
 import { colors, fontSizes, borderRadius, iconStyles } from '../../../constants/styles';
-import { mockStaff, findStaffById } from '../../../data';
+import { useStaffDirectory } from '../../../contexts/StaffContext';
 import type { StepAssignee } from '../../../types';
 
 // ============================================================================
@@ -75,6 +75,7 @@ export function StaffAssignmentPanel({
   currentStep,
   onAssigneeChange,
 }: StaffAssignmentPanelProps) {
+  const { staff, findById } = useStaffDirectory();
   // 現在のステップの担当者IDを取得
   const assignee = stepAssignees.find((a) => a.stepId === currentStep);
   const assignedStaffId = assignee?.staffId || '';
@@ -95,21 +96,21 @@ export function StaffAssignmentPanel({
             if (!value) {
               return <span style={STYLES.unassigned}>未割当</span>;
             }
-            const staff = findStaffById(value);
-            return staff?.name || '未割当';
+            const staffMember = findById(value);
+            return staffMember?.name || '未割当';
           }}
         >
           <MenuItem value="">
             <em style={{ color: colors.text.light }}>未割当</em>
           </MenuItem>
-          {mockStaff.map((staff) => (
-            <MenuItem key={staff.id} value={staff.id}>
+          {staff.map((member) => (
+            <MenuItem key={member.id} value={member.id}>
               <Box>
                 <Typography sx={{ fontSize: fontSizes.sm }}>
-                  {staff.name}
+                  {member.name}
                 </Typography>
                 <Typography sx={{ fontSize: fontSizes.xs, color: colors.text.muted }}>
-                  {staff.department}
+                  {member.department}
                 </Typography>
               </Box>
             </MenuItem>

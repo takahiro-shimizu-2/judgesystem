@@ -40,9 +40,9 @@ import {
   replacePlaceholders,
 } from '../../../constants/emailTemplates';
 import { findCompanyById } from '../../../data/companies';
-import { mockStaff, findStaffById } from '../../../data';
 import { PersonIcon } from '../../../constants/icons';
 import type { Partner, BidEvaluation } from '../../../types';
+import { useStaffDirectory } from '../../../contexts/StaffContext';
 
 // ============================================================================
 // 型定義
@@ -105,6 +105,7 @@ const STYLES = {
 // ============================================================================
 
 export function RequestSection({ evaluation, partners = [], workflowAssigneeId }: RequestSectionProps) {
+  const { staff, findById } = useStaffDirectory();
   // 入札書アップロード状態
   const [uploadedBid, setUploadedBid] = useState<UploadedBidDocument | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -412,16 +413,16 @@ export function RequestSection({ evaluation, partners = [], workflowAssigneeId }
                 sx={staffSelectStyles}
                 renderValue={(value) => {
                   if (!value) return <span style={{ color: colors.text.light, fontSize: fontSizes.xs }}>担当者</span>;
-                  const staff = findStaffById(value);
-                  return <span style={{ fontSize: fontSizes.xs }}>{staff?.name || '担当者'}</span>;
+                  const staffMember = findById(value);
+                  return <span style={{ fontSize: fontSizes.xs }}>{staffMember?.name || '担当者'}</span>;
                 }}
               >
                 <MenuItem value="">
                   <em style={{ color: colors.text.light, fontSize: fontSizes.xs }}>未割当</em>
                 </MenuItem>
-                {mockStaff.map((staff) => (
-                  <MenuItem key={staff.id} value={staff.id} sx={{ fontSize: fontSizes.xs }}>
-                    {staff.name}
+                {staff.map((member) => (
+                  <MenuItem key={member.id} value={member.id} sx={{ fontSize: fontSizes.xs }}>
+                    {member.name}
                   </MenuItem>
                 ))}
               </Select>

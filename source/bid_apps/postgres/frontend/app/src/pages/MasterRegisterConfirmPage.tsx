@@ -12,7 +12,7 @@ import { colors, fontSizes } from '../constants/styles';
 import type { PartnerFormData } from '../hooks/usePartnerForm';
 import type { OrdererFormData } from '../hooks/useOrdererForm';
 import type { StaffFormData } from '../hooks/useStaffForm';
-import { createStaff } from '../data';
+import { useStaffDirectory } from '../contexts/StaffContext';
 
 type FormType = 'partner' | 'orderer' | 'staff';
 
@@ -31,6 +31,7 @@ export default function MasterRegisterConfirmPage() {
   const location = useLocation();
   const navigate = useNavigate();
   const state = location.state as ConfirmPageState | null;
+  const { createStaff: createStaffEntry } = useStaffDirectory();
 
   // stateがない場合は登録ページにリダイレクト
   useEffect(() => {
@@ -65,7 +66,7 @@ export default function MasterRegisterConfirmPage() {
 
     try {
       if (formType === 'staff') {
-        const created = await createStaff(formData as StaffFormData);
+        const created = await createStaffEntry(formData as StaffFormData);
         if (!created) {
           throw new Error('Failed to create staff');
         }

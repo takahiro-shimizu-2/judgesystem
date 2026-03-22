@@ -39,8 +39,8 @@ import {
   replacePlaceholders,
 } from '../../../constants/emailTemplates';
 import { findCompanyById } from '../../../data/companies';
-import { mockStaff, findStaffById } from '../../../data';
 import { PersonIcon } from '../../../constants/icons';
+import { useStaffDirectory } from '../../../contexts/StaffContext';
 import type {
   BidEvaluation,
   Partner,
@@ -120,6 +120,7 @@ const AWARD_COLORS = {
 // ============================================================================
 
 export function AwardSection({ evaluation, partners = [], workflowAssigneeId }: AwardSectionProps) {
+  const { staff, findById } = useStaffDirectory();
   // 案件情報
   const projectName = evaluation?.announcement?.title || '';
   const requesterCompany = evaluation?.company;
@@ -457,16 +458,16 @@ export function AwardSection({ evaluation, partners = [], workflowAssigneeId }: 
                 sx={staffSelectStyles}
                 renderValue={(value) => {
                   if (!value) return <span style={{ color: colors.text.light, fontSize: fontSizes.xs }}>担当者</span>;
-                  const staff = findStaffById(value);
-                  return <span style={{ fontSize: fontSizes.xs }}>{staff?.name || '担当者'}</span>;
+                  const staffMember = findById(value);
+                  return <span style={{ fontSize: fontSizes.xs }}>{staffMember?.name || '担当者'}</span>;
                 }}
               >
                 <MenuItem value="">
                   <em style={{ color: colors.text.light, fontSize: fontSizes.xs }}>未割当</em>
                 </MenuItem>
-                {mockStaff.map((staff) => (
-                  <MenuItem key={staff.id} value={staff.id} sx={{ fontSize: fontSizes.xs }}>
-                    {staff.name}
+                {staff.map((member) => (
+                  <MenuItem key={member.id} value={member.id} sx={{ fontSize: fontSizes.xs }}>
+                    {member.name}
                   </MenuItem>
                 ))}
               </Select>

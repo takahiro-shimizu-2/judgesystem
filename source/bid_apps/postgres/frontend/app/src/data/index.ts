@@ -66,12 +66,3 @@ export {
 } from './evaluations';
 
 // 担当者
-export {
-  mockStaff,
-  findStaffById,
-  findStaffByName,
-  getStaffByDepartment,
-  getAllDepartments,
-  createStaff,
-  refreshStaff,
-} from './staff';

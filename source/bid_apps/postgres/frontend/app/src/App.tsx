@@ -13,6 +13,7 @@ import StaffListPage from './pages/StaffListPage';
 import AnalyticsPage from './pages/AnalyticsPage';
 import MasterRegisterPage from './pages/MasterRegisterPage';
 import MasterRegisterConfirmPage from './pages/MasterRegisterConfirmPage';
+import { StaffProvider } from './contexts/StaffContext';
 
 const theme = createTheme({
   palette: {
@@ -55,24 +56,26 @@ function App() {
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
-      <Router>
-        <MainLayout>
-          <Routes>
-            <Route path="/" element={<BidListPage />} />
-            <Route path="/detail/:id" element={<BidDetailPage />} />
-            <Route path="/announcements" element={<AnnouncementListPage />} />
-            <Route path="/announcements/:id" element={<AnnouncementDetailPage />} />
-            <Route path="/partners" element={<PartnerListPage />} />
-            <Route path="/partners/:id" element={<PartnerDetailPage />} />
-            <Route path="/orderers" element={<OrdererListPage />} />
-            <Route path="/orderers/:id" element={<OrdererDetailPage />} />
-            <Route path="/staff" element={<StaffListPage />} />
-            <Route path="/analytics" element={<AnalyticsPage />} />
-            <Route path="/master/register" element={<MasterRegisterPage />} />
-            <Route path="/master/register/confirm" element={<MasterRegisterConfirmPage />} />
-          </Routes>
-        </MainLayout>
-      </Router>
+      <StaffProvider>
+        <Router>
+          <MainLayout>
+            <Routes>
+              <Route path="/" element={<BidListPage />} />
+              <Route path="/detail/:id" element={<BidDetailPage />} />
+              <Route path="/announcements" element={<AnnouncementListPage />} />
+              <Route path="/announcements/:id" element={<AnnouncementDetailPage />} />
+              <Route path="/partners" element={<PartnerListPage />} />
+              <Route path="/partners/:id" element={<PartnerDetailPage />} />
+              <Route path="/orderers" element={<OrdererListPage />} />
+              <Route path="/orderers/:id" element={<OrdererDetailPage />} />
+              <Route path="/staff" element={<StaffListPage />} />
+              <Route path="/analytics" element={<AnalyticsPage />} />
+              <Route path="/master/register" element={<MasterRegisterPage />} />
+              <Route path="/master/register/confirm" element={<MasterRegisterConfirmPage />} />
+            </Routes>
+          </MainLayout>
+        </Router>
+      </StaffProvider>
     </ThemeProvider>
   );
 }

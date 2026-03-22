@@ -10,6 +10,7 @@ import {
   TextField,
   InputAdornment,
   IconButton,
+  Button,
 } from '@mui/material';
 import {
   Person as PersonIcon,
@@ -21,11 +22,11 @@ import {
   FilterAlt as FilterAltIcon,
 } from '@mui/icons-material';
 import type { GridSortModel } from '@mui/x-data-grid';
-import { mockStaff, getAllDepartments } from '../data';
 import { fontSizes, colors, pageStyles, iconStyles, borderRadius, listFilterChipStyles, rightPanelColors, rightPanelStyles } from '../constants/styles';
 import { CustomPagination } from '../components/bid';
 import { RightSidePanel } from '../components/layout';
 import { useSidebar } from '../contexts/SidebarContext';
+import { useStaffDirectory } from '../contexts/StaffContext';
 import type { Staff } from '../types';
 
 // 部署ごとの色設定
@@ -557,6 +558,7 @@ function StaffDisplayConditionsPanel({
 export default function StaffListPage() {
   const listContainerRef = useRef<HTMLDivElement>(null);
   const { rightPanelOpen, toggleRightPanel, closeRightPanel, isMobile } = useSidebar();
+  const { staff, loading, error, refresh } = useStaffDirectory();
 
   // 検索クエリ
   const [searchQuery, setSearchQuery] = useState('');
@@ -576,21 +578,29 @@ export default function StaffListPage() {
   });
 
   // 全部署リスト
-  const departments = useMemo(() => getAllDepartments(), []);
+  const departments = useMemo(() => {
+    const unique = new Set<string>();
+    staff.forEach((member) => {
+      if (member.department) {
+        unique.add(member.department);
+      }
+    });
+    return Array.from(unique.values());
+  }, [staff]);
 
   // アクティブなフィルター数
   const totalFilterCount = filters.departments.length;
 
   // フィルター適用後のデータ
   const filteredStaff = useMemo(() => {
-    return mockStaff.filter((staff) => {
+    return staff.filter((member) => {
       // 部署フィルター
-      if (filters.departments.length > 0 && !filters.departments.includes(staff.department)) {
+      if (filters.departments.length > 0 && !filters.departments.includes(member.department)) {
         return false;
       }
       return true;
     });
-  }, [filters]);
+  }, [filters, staff]);
 
   // 行データに変換
   const staffRows: RowData[] = useMemo(() => {
@@ -768,13 +778,26 @@ export default function StaffListPage() {
               py: 2,
             }}
           >
-            {paginatedRows.map((row) => (
-              <StaffCard key={row.id} row={row} />
-            ))}
-            {paginatedRows.length === 0 && (
+            {loading ? (
               <Box sx={{ p: 4, textAlign: 'center', color: colors.text.muted }}>
-                該当する担当者がいません
+                担当者データを読み込み中です…
               </Box>
+            ) : error ? (
+              <Box sx={{ p: 4, textAlign: 'center', color: colors.text.muted, display: 'flex', flexDirection: 'column', gap: 1.5, alignItems: 'center' }}>
+                <Typography sx={{ color: colors.status.error.main }}>担当者データの取得に失敗しました。</Typography>
+                <Button variant="outlined" size="small" onClick={refresh}>再読み込み</Button>
+              </Box>
+            ) : (
+              <>
+                {paginatedRows.map((row) => (
+                  <StaffCard key={row.id} row={row} />
+                ))}
+                {paginatedRows.length === 0 && (
+                  <Box sx={{ p: 4, textAlign: 'center', color: colors.text.muted }}>
+                    該当する担当者がいません
+                  </Box>
+                )}
+              </>
             )}
           </Box>
 
