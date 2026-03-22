@@ -1175,7 +1175,7 @@ class DBOperatorGCPVM(DBOperator):
     def createEvaluationAssignees(self, evaluation_assignees_tablename, workflow_contacts_tablename="workflow_contacts"):
         sql = fr"""
         create table `{self.project_id}.{self.dataset_name}.{evaluation_assignees_tablename}` (
-            evaluation_no int64,
+            evaluation_no string,
             step_id string,
             contact_id string,
             assigned_role string,
@@ -2195,7 +2195,7 @@ class DBOperatorSQLITE3(DBOperator):
     def createEvaluationAssignees(self, evaluation_assignees_tablename, workflow_contacts_tablename="workflow_contacts"):
         sql = fr"""
         create table {evaluation_assignees_tablename} (
-            evaluation_no integer not null,
+            evaluation_no text not null,
             step_id text not null,
             contact_id text not null,
             assigned_role text,
@@ -3025,7 +3025,7 @@ class DBOperatorPOSTGRES(DBOperator):
     def createEvaluationAssignees(self, evaluation_assignees_tablename, workflow_contacts_tablename="workflow_contacts"):
         sql = fr"""
         CREATE TABLE {evaluation_assignees_tablename} (
-            evaluation_no BIGINT NOT NULL,
+            evaluation_no TEXT NOT NULL,
             step_id TEXT NOT NULL,
             contact_id UUID NOT NULL,
             assigned_role TEXT,
@@ -7057,6 +7057,8 @@ if __name__ == "__main__":
             db_operator.createBidOrderersFromAnnouncements(bid_orderer_tablename="bid_orderers", bid_announcements_tablename="bid_announcements")
 
 
+        db_operator.dropTable("workflow_contacts")
+        db_operator.dropTable("evaluation_assignees")
         db_operator.createWorkflowContacts("workflow_contacts")
         db_operator.createEvaluationAssignees("evaluation_assignees", workflow_contacts_tablename="workflow_contacts")
         
