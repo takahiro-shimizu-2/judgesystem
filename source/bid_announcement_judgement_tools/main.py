@@ -645,6 +645,13 @@ class DBOperator:
         raise NotImplementedError
 
     @abstractmethod
+    def ensure_column(self, tablename, column_name, column_type):
+        """
+        対象テーブルに指定カラムが無い場合は追加する
+        """
+        raise NotImplementedError
+
+    @abstractmethod
     def createBidAnnouncements(self, bid_announcements_tablename):
         raise NotImplementedError
 
@@ -735,6 +742,17 @@ class DBOperator:
         Args:
             tablename: 対象テーブル名
             df_markdown: document_id / fileFormat / markdown_path を含む DataFrame
+        """
+        raise NotImplementedError
+
+    @abstractmethod
+    def updateOcrJsonPaths(self, tablename, df_json):
+        """
+        announcements_documents_master の ocr_json_path を更新する
+
+        Args:
+            tablename: 対象テーブル名
+            df_json: document_id / fileFormat / ocr_json_path を含む DataFrame
         """
         raise NotImplementedError
 
@@ -901,6 +919,15 @@ class DBOperatorGCPVM(DBOperator):
     def createIndex(self, index_name, table_name, columns):
         """BigQuery はインデックスをサポートしていないため未実装"""
         raise NotImplementedError("BigQuery does not support explicit indexes")
+
+    def ensure_column(self, tablename, column_name, column_type):
+        if not self.ifTableExists(tablename):
+            return
+        sql = f"""
+        ALTER TABLE `{self.project_id}.{self.dataset_name}.{tablename}`
+        ADD COLUMN IF NOT EXISTS `{column_name}` {column_type}
+        """
+        self.client.query(sql).result()
 
     def createBidAnnouncements(self, bid_announcements_tablename):
         sql = fr"""
@@ -1364,6 +1391,28 @@ class DBOperatorGCPVM(DBOperator):
         ON T.document_id = S.document_id AND T.fileFormat = S.fileFormat
         WHEN MATCHED THEN
           UPDATE SET T.markdown_path = S.markdown_path
+        """
+        job = self.client.query(sql)
+        job.result()
+        self.dropTable(tmp_table)
+        return job.num_dml_affected_rows
+
+    def updateOcrJsonPaths(self, tablename, df_json):
+        if df_json.empty:
+            return 0
+
+        tmp_table = "tmp_ocr_json_updates"
+        df_tmp = df_json[["document_id", "fileFormat", "ocr_json_path"]].dropna()
+        if df_tmp.empty:
+            return 0
+
+        self.uploadDataToTable(df_tmp, tmp_table, chunksize=5000)
+        sql = f"""
+        MERGE `{self.project_id}.{self.dataset_name}.{tablename}` AS T
+        USING `{self.project_id}.{self.dataset_name}.{tmp_table}` AS S
+        ON T.document_id = S.document_id AND T.fileFormat = S.fileFormat
+        WHEN MATCHED THEN
+          UPDATE SET T.ocr_json_path = S.ocr_json_path
         """
         job = self.client.query(sql)
         job.result()
@@ -1843,6 +1892,17 @@ class DBOperatorSQLITE3(DBOperator):
     def createIndex(self, index_name, table_name, columns):
         """SQLite3 のインデックス作成（未実装）"""
         raise NotImplementedError("SQLite3 index creation is not implemented yet")
+
+    def ensure_column(self, tablename, column_name, column_type):
+        if not self.ifTableExists(tablename):
+            return
+        info_sql = fr"PRAGMA table_info({tablename})"
+        df_info = pd.read_sql_query(info_sql, self.conn)
+        if column_name in df_info["name"].tolist():
+            return
+        alter_sql = fr"ALTER TABLE {tablename} ADD COLUMN {column_name} {column_type}"
+        self.cur.execute(alter_sql)
+        self.conn.commit()
 
     def createBidAnnouncements(self, bid_announcements_tablename):
         sql = fr"""
@@ -2347,6 +2407,16 @@ class DBOperatorSQLITE3(DBOperator):
         self.conn.commit()
         return len(values)
 
+    def updateOcrJsonPaths(self, tablename, df_json):
+        df_tmp = df_json[["document_id", "fileFormat", "ocr_json_path"]].dropna()
+        if df_tmp.empty:
+            return 0
+        sql = fr"UPDATE {tablename} SET ocr_json_path = ? WHERE document_id = ? AND fileFormat = ?"
+        values = [(row["ocr_json_path"], row["document_id"], row["fileFormat"]) for _, row in df_tmp.iterrows()]
+        self.cur.executemany(sql, values)
+        self.conn.commit()
+        return len(values)
+
     def mergeRequirements(self, target_tablename, source_tablename):
         """
         SQLite3で bid_requirements に新しいレコードを挿入
@@ -2626,6 +2696,12 @@ class DBOperatorPOSTGRES(DBOperator):
             print(f"✓ Index '{index_name}' created successfully")
         except Exception as e:
             print(f"✗ Index '{index_name}' failed: {str(e)}")
+
+    def ensure_column(self, tablename, column_name, column_type):
+        if not self.ifTableExists(tablename):
+            return
+        sql = f'ALTER TABLE {tablename} ADD COLUMN IF NOT EXISTS "{column_name}" {column_type}'
+        self.cur.execute(sql)
 
     def createBidAnnouncements(self, bid_announcements_tablename):
         sql = fr"""
@@ -3149,6 +3225,19 @@ class DBOperatorPOSTGRES(DBOperator):
         execute_values(self.cur, sql, records)
         return len(records)
 
+    def updateOcrJsonPaths(self, tablename, df_json):
+        df_tmp = df_json[["document_id", "fileFormat", "ocr_json_path"]].dropna()
+        if df_tmp.empty:
+            return 0
+        records = [(row["document_id"], row["fileFormat"], row["ocr_json_path"]) for _, row in df_tmp.iterrows()]
+        sql = f"""
+        UPDATE {tablename} AS t SET ocr_json_path = v.ocr_json_path
+        FROM (VALUES %s) AS v(document_id, "fileFormat", ocr_json_path)
+        WHERE t.document_id = v.document_id AND t."fileFormat" = v."fileFormat"
+        """
+        execute_values(self.cur, sql, records)
+        return len(records)
+
     def mergeRequirements(self, target_tablename, source_tablename):
         """
         PostgreSQL で bid_requirements に新しいレコードを挿入
@@ -3639,9 +3728,10 @@ class BidJudgementSan:
 
     """
 
-    def __init__(self, tablenamesconfig=None, db_operator=None):
+    def __init__(self, tablenamesconfig=None, db_operator=None, gemini_model="gemini-2.5-flash"):
         self.tablenamesconfig = tablenamesconfig
         self.db_operator=db_operator
+        self.gemini_model = gemini_model
 
 
     def step0_prepare_documents(
@@ -3659,6 +3749,7 @@ class BidJudgementSan:
         do_format_documents=True,
         do_download_pdfs=True,
         do_markdown=False,
+        do_ocr_json=False,
         do_count_pages=True,
         do_ocr=True,
         google_api_key="data/sec/google_ai_studio_api_key_mizu.txt",
@@ -3673,8 +3764,9 @@ class BidJudgementSan:
         2. ドキュメントリンク抽出（オプション）
         3. announcements_document_table に DB 保存（オプション）
         4. PDFダウンロード（オプション）
-        5. PDFページ数カウント（オプション）
-        6. Gemini OCR 実行（オプション）
+        5. OCR JSON生成（オプション）
+        6. PDFページ数カウント（オプション）
+        7. Gemini OCR 実行（オプション）
 
         出力ディレクトリ構造：
             {timestamp}/
@@ -3702,6 +3794,7 @@ class BidJudgementSan:
             do_format_documents: ドキュメント情報をフォーマットする場合 True
             do_download_pdfs: PDF をダウンロードする場合 True
             do_markdown: PDF 取得後に Gemini で Markdown を生成する場合 True
+            do_ocr_json: Gemini OCR JSON を生成する場合 True
             do_count_pages: PDF のページ数をカウントする場合 True
             do_ocr: Gemini OCR を実行する場合 True
             google_api_key: Google AI Studio API キーファイルのパス
@@ -3742,6 +3835,7 @@ class BidJudgementSan:
                      (1 if do_format_documents else 0) + \
                      (1 if do_download_pdfs else 0) + \
                      (1 if do_markdown else 0) + \
+                     (1 if do_ocr_json else 0) + \
                      (1 if do_count_pages else 0) + \
                      (1 if do_ocr else 0)
         step_num = 0
@@ -3817,14 +3911,29 @@ class BidJudgementSan:
         else:
             print("\n[Skipped] Generating Markdown summaries")
 
-        # 5. PDFページ数カウント（オプション）
+        # 5. OCR JSON生成（オプション）
+        if do_ocr_json:
+            step_num += 1
+            print(f"\n[{step_num}/{total_steps}] Generating OCR JSON artifacts...")
+            df_merged = self._step0_generate_ocr_json(
+                df_main=df_merged,
+                use_gcs=use_gcs,
+                google_api_key=google_api_key,
+                max_concurrency=ocr_max_concurrency,
+                max_api_calls_per_run=ocr_max_api_calls_per_run
+            )
+            print("OCR JSON generation completed.")
+        else:
+            print("\n[Skipped] Generating OCR JSON artifacts")
+
+        # 6. PDFページ数カウント（オプション）
         if do_count_pages:
             step_num += 1
             print(f"\n[{step_num}/{total_steps}] Counting PDF pages...")
             df_merged = self._step0_count_pages(df_merged)
             print(f"Updated DataFrame with pageCount info")
 
-        # 6. Gemini OCR 実行（オプション）
+        # 7. Gemini OCR 実行（オプション）
         if do_ocr:
             step_num += 1
             print(f"\n[{step_num}/{total_steps}] Running Gemini OCR...")
@@ -4302,6 +4411,7 @@ class BidJudgementSan:
             "extractedAt": [extracted_at] * df_merged.shape[0],
             "url": df_merged["pdf_full_url"],
             "markdown_path": [None] * df_merged.shape[0],
+            "ocr_json_path": [None] * df_merged.shape[0],
             "adhoc_index": df_merged["adhoc_index"],
             "base_link_parent": df_merged["base_link_parent"],
             "base_link": df_merged["base_link"],
@@ -4471,12 +4581,15 @@ class BidJudgementSan:
         if 'announcement_id' in df.columns:
             df['announcement_id'] = pd.to_numeric(df['announcement_id'], errors='coerce').fillna(0).astype('int64')
 
+        text_column_type = "STRING" if isinstance(self.db_operator, DBOperatorGCPVM) else "TEXT"
+
         if not self.db_operator.ifTableExists(tablename):
             # テーブルが存在しない場合は新規作成
             print(f"Creating new table: {tablename}")
             self.db_operator.uploadDataToTable(df, tablename, chunksize=5000)
             print(f"Created {tablename} with {len(df)} records")
         else:
+            self.db_operator.ensure_column(tablename, "ocr_json_path", text_column_type)
             # 既存テーブルがある場合は MERGE で追加
             print(f"Merging {len(df)} records into existing table: {tablename}")
             tmp_table = f"tmp_{tablename}_final"
@@ -4728,6 +4841,25 @@ class BidJudgementSan:
         else:
             return os.path.join("output", "markdown", f"md_{prefix}", filename)
 
+    def _build_ocr_json_path(self, document_id, file_format=None, use_gcs=False):
+        """
+        OCR JSON ファイルの保存先を生成
+        """
+        doc_id = str(document_id).strip()
+        if not doc_id:
+            doc_id = str(uuid.uuid4())
+        prefix = doc_id.split("_")[0] if "_" in doc_id else doc_id[:6]
+        prefix = prefix or "misc"
+
+        if file_format:
+            filename = f"{doc_id}.{file_format}.json"
+        else:
+            filename = f"{doc_id}.json"
+
+        if use_gcs:
+            return f"gs://ann-files/ocr_json/json_{prefix}/{filename}"
+        return os.path.join("output", "ocr_json", f"json_{prefix}", filename)
+
 
     def _step0_generate_markdown(
         self,
@@ -4810,7 +4942,7 @@ class BidJudgementSan:
                 self._PROMPT_MD,
                 document_id,
                 file_format,  # 実際のファイル形式を渡す
-                "gemini-2.5-flash",
+                self.gemini_model,
                 "md",
                 use_gcs,
                 save_path  # 実際のファイルパスを渡す
@@ -4865,6 +4997,151 @@ class BidJudgementSan:
                 tqdm.write(f"Failed to save Markdown for {document_id}.{file_format}: {e}")
 
         print(f"Markdown saved for {saved_count} documents")
+        return df_main
+
+    def _parse_ocr_json_payload(self, raw_text):
+        candidate = (raw_text or "").strip()
+        if candidate.startswith("```"):
+            lines = candidate.splitlines()
+            if len(lines) >= 3:
+                candidate = "\n".join(lines[1:-1]).strip()
+        json_start = candidate.find("{")
+        if json_start > 0:
+            candidate = candidate[json_start:]
+        try:
+            payload, _ = json.JSONDecoder().raw_decode(candidate)
+        except json.JSONDecodeError:
+            return {
+                "extracted_text": raw_text or "",
+                "normalized_structure": {
+                    "raw_response_text": raw_text or "",
+                    "parse_error": "invalid_json",
+                },
+            }
+
+        extracted_text = payload.get("extracted_text")
+        if not isinstance(extracted_text, str):
+            extracted_text = raw_text or ""
+
+        normalized_structure = payload.get("normalized_structure")
+        if not isinstance(normalized_structure, dict):
+            normalized_structure = {}
+        normalized_structure.setdefault("raw_response_text", raw_text or "")
+
+        return {
+            "extracted_text": extracted_text,
+            "normalized_structure": normalized_structure,
+        }
+
+    def _step0_generate_ocr_json(
+        self,
+        df_main,
+        use_gcs=False,
+        google_api_key=None,
+        max_concurrency=5,
+        max_api_calls_per_run=1000,
+        force_regenerate=False
+    ):
+        """
+        Gemini を使って OCR JSON を生成し保存する
+        """
+        if google_api_key is None:
+            raise ValueError("google_api_key is required for OCR JSON generation")
+
+        key_path = Path(google_api_key)
+        if not key_path.exists():
+            raise FileNotFoundError(f"Google API key file not found: {google_api_key}")
+
+        api_key = key_path.read_text().strip()
+        if not api_key:
+            raise ValueError("Google API key file is empty")
+
+        client = genai.Client(api_key=api_key)
+        df_main = df_main.copy()
+        df_main["document_id"] = df_main["document_id"].astype(str).str.strip()
+
+        doc_to_json_path = {}
+        params = []
+        skipped_docs = []
+
+        for _, row in df_main.iterrows():
+            document_id = str(row.get("document_id", "")).strip()
+            file_format = str(row.get("fileFormat", "")).strip().lower()
+            save_path = row.get("save_path")
+
+            if not document_id or file_format != "pdf":
+                continue
+
+            json_path = self._build_ocr_json_path(document_id, file_format=file_format, use_gcs=use_gcs)
+            key = (document_id, file_format)
+            if key in doc_to_json_path:
+                continue
+            doc_to_json_path[key] = json_path
+
+            if file_exists_gcs_or_local(json_path) and not force_regenerate:
+                mask = (df_main["document_id"] == document_id) & (df_main["fileFormat"] == file_format)
+                df_main.loc[mask, "ocr_json_path"] = json_path
+                continue
+
+            if pd.isna(save_path) or not file_exists_gcs_or_local(save_path):
+                skipped_docs.append(f"{document_id}.{file_format}")
+                continue
+
+            params.append([
+                self._PROMPT_OCR_JSON,
+                document_id,
+                file_format,
+                self.gemini_model,
+                "ocr_json",
+                use_gcs,
+                save_path
+            ])
+
+            if len(params) >= max_api_calls_per_run:
+                print(f"\nReached OCR JSON generation limit: {len(params)} documents in this run")
+                break
+
+        if skipped_docs:
+            print(f"Skipped {len(skipped_docs)} documents without accessible PDFs: {skipped_docs[:5]}")
+
+        if len(params) == 0:
+            print("No OCR JSON generation needed.")
+            return df_main
+
+        print(f"Calling Gemini for OCR JSON generation (documents: {len(params)}, max_concurrency={max_concurrency})")
+        start_time = time.time()
+        results = asyncio.run(self._call_parallel(client, params, max_concurrency))
+        elapsed_time = time.time() - start_time
+        print(f"OCR JSON generation completed in {elapsed_time:.2f} seconds")
+
+        saved_count = 0
+        for res in tqdm(results, desc="Processing OCR JSON responses"):
+            document_id = res.get("document_id")
+            file_format = res.get("file_format", "pdf")
+            key = (document_id, file_format)
+            json_path = doc_to_json_path.get(key)
+
+            if res.get("error") is not None:
+                tqdm.write(f"OCR JSON API error for {document_id}.{file_format}: {res.get('error')}")
+                continue
+
+            payload = self._parse_ocr_json_payload(res.get("result") or "")
+            try:
+                json_bytes = json.dumps(payload, ensure_ascii=False, indent=2).encode("utf-8")
+                if json_path.startswith("gs://"):
+                    gcs_upload_from_bytes(json_path, json_bytes, content_type="application/json; charset=utf-8")
+                else:
+                    path_obj = Path(json_path)
+                    path_obj.parent.mkdir(parents=True, exist_ok=True)
+                    path_obj.write_bytes(json_bytes)
+
+                mask = (df_main["document_id"] == document_id) & (df_main["fileFormat"] == file_format)
+                df_main.loc[mask, "ocr_json_path"] = json_path
+                saved_count += 1
+            except Exception as e:
+                tqdm.write(f"Failed to save OCR JSON for {document_id}.{file_format}: {e}")
+
+        print(f"OCR JSON saved for {saved_count} documents")
         return df_main
 
     def regenerate_markdown_from_database(
@@ -4931,6 +5208,75 @@ class BidJudgementSan:
 
         updated = self.db_operator.updateMarkdownPaths(tablename, df_updates)
         print(f"Updated markdown_path for {updated} documents.")
+
+    def regenerate_ocr_json_from_database(
+        self,
+        use_gcs=False,
+        google_api_key=None,
+        max_concurrency=5,
+        max_api_calls_per_run=1000,
+        document_ids=None,
+        only_missing=True,
+        overwrite_files=False
+    ):
+        """
+        既存 announcements_documents_master から OCR JSON を再生成する
+        """
+        tablename = self.tablenamesconfig.bid_announcements_document_table
+        json_type = "STRING" if isinstance(self.db_operator, DBOperatorGCPVM) else "TEXT"
+        if self.db_operator.ifTableExists(tablename):
+            self.db_operator.ensure_column(tablename, "ocr_json_path", json_type)
+        else:
+            print(f"Table {tablename} does not exist.")
+            return
+
+        where_clauses = []
+        if only_missing:
+            where_clauses.append("(ocr_json_path IS NULL OR ocr_json_path = '')")
+
+        if isinstance(self.db_operator, DBOperatorGCPVM):
+            where_clauses.append("LOWER(fileFormat) = 'pdf'")
+        elif isinstance(self.db_operator, DBOperatorPOSTGRES):
+            where_clauses.append("LOWER(\"fileFormat\") = 'pdf'")
+        else:
+            where_clauses.append("LOWER(fileFormat) = 'pdf'")
+
+        if document_ids:
+            sanitized = []
+            for doc_id in document_ids:
+                doc = doc_id.strip()
+                if doc:
+                    sanitized.append("'" + doc.replace("'", "''") + "'")
+            if sanitized:
+                where_clauses.append(f"document_id IN ({', '.join(sanitized)})")
+
+        where_clause = ""
+        if where_clauses:
+            where_clause = "WHERE " + " AND ".join(where_clauses)
+
+        df_main = self.db_operator.selectToTable(tablename, where_clause)
+        if df_main.empty:
+            print("No documents found for OCR JSON regeneration.")
+            return
+
+        print(f"Regenerating OCR JSON for {len(df_main)} documents...")
+        df_main = self._step0_generate_ocr_json(
+            df_main=df_main,
+            use_gcs=use_gcs,
+            google_api_key=google_api_key,
+            max_concurrency=max_concurrency,
+            max_api_calls_per_run=max_api_calls_per_run,
+            force_regenerate=overwrite_files
+        )
+
+        df_updates = df_main[["document_id", "fileFormat", "ocr_json_path"]].dropna()
+        df_updates = df_updates[df_updates["ocr_json_path"].astype(str).str.len() > 0]
+        if df_updates.empty:
+            print("No OCR JSON paths to update.")
+            return
+
+        updated = self.db_operator.updateOcrJsonPaths(tablename, df_updates)
+        print(f"Updated ocr_json_path for {updated} documents.")
 
 
     def _step0_count_pages(self, df):
@@ -5110,7 +5456,7 @@ class BidJudgementSan:
                     self._PROMPT_ANN,
                     document_id,
                     "pdf",
-                    "gemini-2.5-flash",
+                    self.gemini_model,
                     "ann",
                     use_gcs
                 ])
@@ -5122,7 +5468,7 @@ class BidJudgementSan:
                     self._PROMPT_REQ,
                     document_id,
                     "pdf",
-                    "gemini-2.5-flash",
+                    self.gemini_model,
                     "req",
                     use_gcs
                 ])
@@ -5820,6 +6166,15 @@ Execute
 ]
 }
 ```
+    """
+
+    _PROMPT_OCR_JSON = """
+You are an OCR and document-structure extraction system.
+Return plain extracted text from the PDF and a compact JSON structure summary.
+Output JSON with keys:
+- extracted_text
+- normalized_structure
+Do not add explanations outside JSON.
 """
 
     _PROMPT_MD = """
@@ -6232,6 +6587,16 @@ if __name__ == "__main__":
                        help="[--run_markdown_from_db専用] 既にmarkdown_pathがあるドキュメントも対象に含める")
     parser.add_argument("--markdown_overwrite_files", action="store_true",
                        help="[--run_markdown_from_db専用] 既存のMarkdownファイルを上書き生成する")
+    parser.add_argument("--run_ocr_json_from_db", action="store_true",
+                       help="既存DBデータを使ってOCR JSON生成のみ実行")
+    parser.add_argument("--ocr_json_document_ids", default=None,
+                       help="[--run_ocr_json_from_db専用] OCR JSON再生成対象document_id（カンマ区切り）")
+    parser.add_argument("--ocr_json_document_ids_file", default=None,
+                       help="[--run_ocr_json_from_db専用] OCR JSON再生成対象document_idをJSON/テキストファイルで指定")
+    parser.add_argument("--ocr_json_include_existing", action="store_true",
+                       help="[--run_ocr_json_from_db専用] 既にocr_json_pathがあるドキュメントも対象に含める")
+    parser.add_argument("--ocr_json_overwrite_files", action="store_true",
+                       help="[--run_ocr_json_from_db専用] 既存のOCR JSONファイルを上書き生成する")
     parser.add_argument("--stop_after_step1", action="store_true",
                        help="step1まで実行して終了")
     parser.add_argument("--step0_output_base_dir", default="output",
@@ -6252,12 +6617,16 @@ if __name__ == "__main__":
                        help="PDFダウンロード処理を実行")
     parser.add_argument("--step0_do_markdown", action="store_true",
                        help="PDFからMarkdown要約を生成")
+    parser.add_argument("--step0_do_ocr_json", action="store_true",
+                       help="PDFからOCR JSONを生成")
     parser.add_argument("--step0_do_count_pages", action="store_true",
                        help="ページ数カウント処理を実行")
     parser.add_argument("--step0_do_ocr", action="store_true",
                        help="Gemini OCR処理を実行")
     parser.add_argument("--step0_google_api_key", default="data/sec/google_ai_studio_api_key_mizu.txt",
                        help="Google AI Studio API キーファイルのパス")
+    parser.add_argument("--gemini_model", default="gemini-2.5-flash",
+                       help="Gemini APIで使用するモデル名")
     parser.add_argument("--step0_ocr_max_concurrency", type=int, default=5,
                        help="OCR並列実行数")
     parser.add_argument("--step0_ocr_max_api_calls_per_run", type=int, default=1000,
@@ -6292,6 +6661,11 @@ if __name__ == "__main__":
         markdown_document_ids_file = args.markdown_document_ids_file
         markdown_include_existing = args.markdown_include_existing
         markdown_overwrite_files = args.markdown_overwrite_files
+        run_ocr_json_from_db = args.run_ocr_json_from_db
+        ocr_json_document_ids_arg = args.ocr_json_document_ids
+        ocr_json_document_ids_file = args.ocr_json_document_ids_file
+        ocr_json_include_existing = args.ocr_json_include_existing
+        ocr_json_overwrite_files = args.ocr_json_overwrite_files
         stop_after_step1 = args.stop_after_step1
         step0_output_base_dir = args.step0_output_base_dir
         step0_topAgencyName = args.step0_topAgencyName
@@ -6302,9 +6676,11 @@ if __name__ == "__main__":
         step0_do_format_documents = args.step0_do_format_documents
         step0_do_download_pdfs = args.step0_do_download_pdfs
         step0_do_markdown = args.step0_do_markdown
+        step0_do_ocr_json = args.step0_do_ocr_json
         step0_do_count_pages = args.step0_do_count_pages
         step0_do_ocr = args.step0_do_ocr
         step0_google_api_key = args.step0_google_api_key
+        gemini_model = args.gemini_model
         step0_ocr_max_concurrency = args.step0_ocr_max_concurrency
         step0_ocr_max_api_calls_per_run = args.step0_ocr_max_api_calls_per_run
 
@@ -6334,13 +6710,20 @@ if __name__ == "__main__":
         step0_do_format_documents = False
         step0_do_download_pdfs = False
         step0_do_markdown = False
+        step0_do_ocr_json = False
         step0_do_count_pages = False
         step0_do_ocr = False
+        gemini_model = "gemini-2.5-flash"
         run_markdown_from_db = False
         markdown_document_ids_arg = None
         markdown_document_ids_file = None
         markdown_include_existing = False
         markdown_overwrite_files = False
+        run_ocr_json_from_db = False
+        ocr_json_document_ids_arg = None
+        ocr_json_document_ids_file = None
+        ocr_json_include_existing = False
+        ocr_json_overwrite_files = False
 
         step1_transfer_remove_table = False
         step3_remove_table = False
@@ -6369,7 +6752,8 @@ if __name__ == "__main__":
     # BidJudgementSan オブジェクト作成（共通）
     obj = BidJudgementSan(
         tablenamesconfig=TablenamesConfig,
-        db_operator=db_operator
+        db_operator=db_operator,
+        gemini_model=gemini_model
     )
 
     if stop_processing:
@@ -6430,7 +6814,46 @@ if __name__ == "__main__":
                 markdown_document_ids = normalized_file_ids
             else:
                 combined = markdown_document_ids + normalized_file_ids
-                markdown_document_ids = list(dict.fromkeys(combined))
+            markdown_document_ids = list(dict.fromkeys(combined))
+
+    ocr_json_document_ids = None
+    if run_ocr_json_from_db:
+        if ocr_json_document_ids_arg:
+            normalized = _normalize_document_ids(ocr_json_document_ids_arg.split(","))
+            if not normalized:
+                print("Error: --ocr_json_document_ids is specified but no valid IDs were provided.")
+                exit(1)
+            ocr_json_document_ids = normalized
+
+        if ocr_json_document_ids_file:
+            path = Path(ocr_json_document_ids_file)
+            if not path.exists():
+                print(f"Error: --ocr_json_document_ids_file not found: {ocr_json_document_ids_file}")
+                exit(1)
+            file_ids = []
+            if path.suffix.lower() == ".json":
+                try:
+                    data = json.loads(path.read_text(encoding="utf-8"))
+                except json.JSONDecodeError:
+                    print("Error: --ocr_json_document_ids_file must contain valid JSON.")
+                    exit(1)
+                if isinstance(data, list):
+                    file_ids = _normalize_document_ids(data)
+                else:
+                    print("Error: --ocr_json_document_ids_file must contain a JSON array when using JSON format.")
+                    exit(1)
+            else:
+                file_ids = _normalize_document_ids(path.read_text(encoding="utf-8").splitlines())
+
+            if not file_ids:
+                print("Error: --ocr_json_document_ids_file does not contain valid IDs.")
+                exit(1)
+
+            if ocr_json_document_ids is None:
+                ocr_json_document_ids = file_ids
+            else:
+                combined = ocr_json_document_ids + file_ids
+                ocr_json_document_ids = list(dict.fromkeys(combined))
 
     if run_step0_only:
         if input_list_file is None:
@@ -6449,6 +6872,7 @@ if __name__ == "__main__":
             do_format_documents=step0_do_format_documents,
             do_download_pdfs=step0_do_download_pdfs,
             do_markdown=step0_do_markdown,
+            do_ocr_json=step0_do_ocr_json,
             do_count_pages=step0_do_count_pages,
             do_ocr=step0_do_ocr,
             google_api_key=step0_google_api_key,
@@ -6471,6 +6895,18 @@ if __name__ == "__main__":
         )
         exit(0)
 
+    if run_ocr_json_from_db:
+        obj.regenerate_ocr_json_from_database(
+            use_gcs=(use_gcp_vm or use_postgres),
+            google_api_key=step0_google_api_key,
+            max_concurrency=step0_ocr_max_concurrency,
+            max_api_calls_per_run=step0_ocr_max_api_calls_per_run,
+            document_ids=ocr_json_document_ids,
+            only_missing=(not ocr_json_include_existing),
+            overwrite_files=ocr_json_overwrite_files
+        )
+        exit(0)
+
     # Step0: 公告ドキュメント準備処理（オプション）
     if run_step0_prepare_documents:
         if input_list_file is None:
@@ -6489,6 +6925,7 @@ if __name__ == "__main__":
             do_format_documents=step0_do_format_documents,
             do_download_pdfs=step0_do_download_pdfs,
             do_markdown=step0_do_markdown,
+            do_ocr_json=step0_do_ocr_json,
             do_count_pages=step0_do_count_pages,
             do_ocr=step0_do_ocr,
             google_api_key=step0_google_api_key,
