@@ -3764,9 +3764,10 @@ class BidJudgementSan:
         2. ドキュメントリンク抽出（オプション）
         3. announcements_document_table に DB 保存（オプション）
         4. PDFダウンロード（オプション）
-        5. OCR JSON生成（オプション）
-        6. PDFページ数カウント（オプション）
-        7. Gemini OCR 実行（オプション）
+        5. Markdown生成（オプション）
+        6. OCR JSON生成（オプション）
+        7. PDFページ数カウント（オプション）
+        8. Gemini OCR 実行（オプション）
 
         出力ディレクトリ構造：
             {timestamp}/
@@ -3896,6 +3897,7 @@ class BidJudgementSan:
             df_merged = self._step0_download_pdfs(df_merged, use_gcs=use_gcs)
             print(f"Updated DataFrame with pdf_is_saved info")
 
+        # 5. Markdown生成（オプション）
         if do_markdown:
             step_num += 1
             print(f"\n[{step_num}/{total_steps}] Generating Markdown summaries...")
@@ -3911,7 +3913,7 @@ class BidJudgementSan:
         else:
             print("\n[Skipped] Generating Markdown summaries")
 
-        # 5. OCR JSON生成（オプション）
+        # 6. OCR JSON生成（オプション）
         if do_ocr_json:
             step_num += 1
             print(f"\n[{step_num}/{total_steps}] Generating OCR JSON artifacts...")
@@ -3926,14 +3928,14 @@ class BidJudgementSan:
         else:
             print("\n[Skipped] Generating OCR JSON artifacts")
 
-        # 6. PDFページ数カウント（オプション）
+        # 7. PDFページ数カウント（オプション）
         if do_count_pages:
             step_num += 1
             print(f"\n[{step_num}/{total_steps}] Counting PDF pages...")
             df_merged = self._step0_count_pages(df_merged)
             print(f"Updated DataFrame with pageCount info")
 
-        # 7. Gemini OCR 実行（オプション）
+        # 8. Gemini OCR 実行（オプション）
         if do_ocr:
             step_num += 1
             print(f"\n[{step_num}/{total_steps}] Running Gemini OCR...")
@@ -3953,20 +3955,20 @@ class BidJudgementSan:
             df_announcements = pd.DataFrame()
             df_requirements = pd.DataFrame()
 
-        # 7. DB に保存（3つのテーブル）
+        # 9. DB に保存（3つのテーブル）
         print("\n" + "=" * 60)
         print("Saving data to database tables...")
         print("=" * 60)
 
-        # 7-1. announcements_documents_master
+        # 9-1. announcements_documents_master
         print("\n[1/3] Saving announcements_documents_master...")
         self._save_to_announcements_document_table(df_merged)
 
-        # 7-2. bid_announcements
+        # 9-2. bid_announcements
         print("\n[2/3] Saving bid_announcements...")
         self._save_to_bid_announcements(df_announcements)
 
-        # 7-3. bid_requirements
+        # 9-3. bid_requirements
         print("\n[3/3] Saving bid_requirements...")
         self._save_to_bid_requirements(df_requirements)
 
