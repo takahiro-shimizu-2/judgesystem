@@ -13,8 +13,6 @@
 - step0 : 公告ドキュメント準備処理（オプション）
   - HTML取得、リンク抽出、フォーマット処理を実行
   - announcements_document_table に DB 保存
-- step1 : 転写処理
-- step2 : OCR処理
 - step3 : 要件判定
 
 Usage example:
@@ -32,7 +30,6 @@ Usage example:
         --input_list_file data/urllistリスト_防衛省入札_1.txt \\
         --step0_output_base_dir output \\
         --sqlite3_db_file_path data/example.db \\
-        --step1_transfer_remove_table \\
         --step3_remove_table
 
     # Step0をスキップして既存のDBデータを使用（announcements_document_table が既に存在する場合）
@@ -46,7 +43,6 @@ Usage example:
         --bigquery_project_id PROJECT_ID \\
         --bigquery_dataset_name DATASET_NAME \\
         --use_gcp_vm \\
-        --step1_transfer_remove_table \\
         --step3_remove_table
 
     # PostgreSQL での実行例
@@ -57,7 +53,6 @@ Usage example:
         --postgres_user postgres \\
         --postgres_password your_password \\
         --use_postgres \\
-        --step1_transfer_remove_table \\
         --step3_remove_table
 
 Arguments:
@@ -122,7 +117,6 @@ Arguments:
 - --run_step0_only: (フラグ引数)
 
   step0のみ実行して終了する（データベース不要でテスト可能）。
-  このフラグを指定すると、step1以降は実行されない。
 
 - --step0_output_base_dir: (パラメータ引数)
 
@@ -140,10 +134,6 @@ Arguments:
 
   announcements_document ファイルのパス。
   このパラメータは非推奨です。現在の実装では announcements_document_table から DB 経由でデータを読み込みます。
-
-- --step1_transfer_remove_table: (フラグ引数)
-
-  step1の転写処理で、公告マスターと要件マスターを削除するかどうか。
 
 - --step3_remove_table: (フラグ引数)
 
@@ -3579,16 +3569,7 @@ class BidJudgementSan:
     """
     以下のステップを踏み、公告判定処理を行う。
 
-    - step0 : 判定前公告表アップロード
-    - step1 : 転写処理
-
-      公告マスターが無ければ公告マスターを作成する。要件マスターが無ければ要件マスターを作成する。
-        
-      判定前公告を公告マスターにコピーする。
-
-    - step2 : OCR処理
-    
-      公告pdfに対してOCRを行い、公告マスターと要件マスターを更新する。
+    - step0 : 判定前公告表アップロード（公告マスター／要件マスターの作成・更新まで実施）
 
     - step3 : 要件判定処理
     
@@ -6244,51 +6225,6 @@ Do not add explanations outside JSON.
 """
 
 
-    def step1_transfer_v2(self, remove_table=False):
-        """
-        step1 : 転写処理
-
-        公告マスターが無ければ公告マスターを作成する。
-
-        引数 remove_table に応じて、事前に公告マスターを削除する。
-
-        announcements_document_table (DB) から announcements (DB) に転記する。
-
-        注意: bid_requirements は step0 で作成済みのため、このステップでは処理しません。
-
-        Args:
-            remove_table (bool): 処理前に公告マスターを削除するかどうか（デフォルト: False）
-        """
-
-        tablename_announcements = self.tablenamesconfig.bid_announcements
-        tablename_bid_announcements_document_table = self.tablenamesconfig.bid_announcements_document_table
-
-        db_operator = self.db_operator
-
-        # announcements_document_table の存在確認
-        if not db_operator.ifTableExists(tablename=tablename_bid_announcements_document_table):
-            print(f"Error: {tablename_bid_announcements_document_table} does not exist.")
-            print("Please run step0_prepare_documents first to create announcements_document_table.")
-            return
-
-        # NOTE: bid_announcements は step0 の OCR 処理で作成・更新されるため、
-        #       step1 では何も処理しません。
-        print(f"\n[INFO] {tablename_announcements} is managed in step0 (no step1 processing needed)")
-
-        # 旧実装（コメントアウト）:
-        # テーブル 'bid_announcements' の存在確認・作成
-        # tmpcheck = db_operator.ifTableExists(tablename=tablename_announcements)
-        # if tmpcheck:
-        #     if remove_table:
-        #         db_operator.dropTable(tablename=tablename_announcements)
-        #         print(fr"DELETE existing table: {tablename_announcements}.")
-        #         tmpcheck = False
-        # if not tmpcheck:
-        #     db_operator.createBidAnnouncementsV2(bid_announcements_tablename=tablename_announcements)
-        #     print(fr"NEWLY CREATED: {tablename_announcements}.")
-        # else:
-        #     print(fr"ALREADY EXISTS: {tablename_announcements}.")
-
     def _classify_requirement_type(self, text):
         """
         要件文から requirement_type を判定
@@ -6435,7 +6371,24 @@ Do not add explanations outside JSON.
         tablename_sufficient_requirement_master = self.tablenamesconfig.sufficient_requirements
         tablename_insufficient_requirement_master = self.tablenamesconfig.insufficient_requirements
 
+        tablename_bid_announcements_document_table = self.tablenamesconfig.bid_announcements_document_table
+
         db_operator = self.db_operator
+
+        required_tables = [
+            tablename_bid_announcements_document_table,
+            tablename_announcements,
+            tablename_requirements
+        ]
+        missing_tables = [
+            name for name in required_tables
+            if not db_operator.ifTableExists(tablename=name)
+        ]
+        if missing_tables:
+            print("Error: 必要な基礎テーブルが存在しません。")
+            print(f"Missing tables: {', '.join(missing_tables)}")
+            print("step0_prepare_documents を実行してデータを作成してください。")
+            return
 
         # ループの外で全てのマスターデータを事前に読み込み（高速化のため）
         print("Loading master data files...")
@@ -6653,8 +6606,6 @@ if __name__ == "__main__":
                        help="--mark_missing_pdfs 実行時の最大チェック件数")
     parser.add_argument("--file_404_include_flagged", action="store_true",
                        help="file_404_flag=TRUE の行も対象に含める")
-    parser.add_argument("--stop_after_step1", action="store_true",
-                       help="step1まで実行して終了")
     parser.add_argument("--step0_output_base_dir", default="output",
                        help="step0の出力ベースディレクトリ（デフォルト: output）")
     parser.add_argument("--step0_topAgencyName", default="防衛省",
@@ -6696,7 +6647,6 @@ if __name__ == "__main__":
     parser.add_argument("--step0_ocr_max_api_calls_per_run", type=int, default=1000,
                        help="1回の実行での最大API呼び出し数")
 
-    parser.add_argument("--step1_transfer_remove_table", action="store_true")
     parser.add_argument("--step3_remove_table", action="store_true")
     parser.add_argument("--ocr_json_debug_output_path", default=None,
                        help="OCR JSON 生成対象の document_id とパスを書き出すCSVパス（デバッグ用途）")
@@ -6735,7 +6685,6 @@ if __name__ == "__main__":
         mark_missing_pdfs = args.mark_missing_pdfs
         file_404_check_limit = args.file_404_check_limit
         file_404_include_flagged = args.file_404_include_flagged
-        stop_after_step1 = args.stop_after_step1
         step0_output_base_dir = args.step0_output_base_dir
         step0_topAgencyName = args.step0_topAgencyName
         step0_no_merge = args.step0_no_merge
@@ -6757,8 +6706,6 @@ if __name__ == "__main__":
         step0_ocr_max_api_calls_per_run = args.step0_ocr_max_api_calls_per_run
         gemini_max_output_tokens = args.gemini_max_output_tokens
         ocr_json_debug_output_path = args.ocr_json_debug_output_path
-
-        step1_transfer_remove_table = args.step1_transfer_remove_table
         step3_remove_table = args.step3_remove_table
 
         if vertex_ai_project_id is None:
@@ -6777,7 +6724,6 @@ if __name__ == "__main__":
         input_list_file = None
         run_step0_prepare_documents = False
         run_step0_only = False
-        stop_after_step1 = False
         step0_output_base_dir = "output"
         step0_topAgencyName = "防衛省"
         step0_no_merge = False
@@ -6811,7 +6757,6 @@ if __name__ == "__main__":
         file_404_check_limit = None
         file_404_include_flagged = False
 
-        step1_transfer_remove_table = False
         step3_remove_table = False
 
     # データベースオペレーターの作成（共通）
@@ -7033,13 +6978,6 @@ if __name__ == "__main__":
             ocr_max_concurrency=step0_ocr_max_concurrency,
             ocr_max_api_calls_per_run=step0_ocr_max_api_calls_per_run
         )
-
-    obj.step1_transfer_v2(remove_table=step1_transfer_remove_table)
-
-    # step1で止まる場合
-    if stop_after_step1:
-        print("\n--stop_after_step1 specified. Exiting after step1.")
-        exit(0)
 
     obj.step3(remove_table=step3_remove_table)
     print("Ended step3.")
