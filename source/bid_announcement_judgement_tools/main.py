@@ -765,6 +765,17 @@ class DBOperator:
         raise NotImplementedError
 
     @abstractmethod
+    def updateFile404Flags(self, tablename, df_flags):
+        """
+        announcements_documents_master の file_404_flag を更新する
+
+        Args:
+            tablename: 対象テーブル名
+            df_flags: document_id / fileFormat / file_404_flag を含む DataFrame
+        """
+        raise NotImplementedError
+
+    @abstractmethod
     def mergeBidAnnouncements(self, target_tablename, source_tablename):
         """
         bid_announcements に新しいレコードを挿入する
@@ -1439,6 +1450,28 @@ class DBOperatorGCPVM(DBOperator):
         ON T.document_id = S.document_id AND T.fileFormat = S.fileFormat
         WHEN MATCHED THEN
           UPDATE SET T.ocr_json_path = S.ocr_json_path
+        """
+        job = self.client.query(sql)
+        job.result()
+        self.dropTable(tmp_table)
+        return job.num_dml_affected_rows
+
+    def updateFile404Flags(self, tablename, df_flags):
+        if df_flags.empty:
+            return 0
+
+        tmp_table = "tmp_file_404_updates"
+        df_tmp = df_flags[["document_id", "fileFormat", "file_404_flag"]].dropna(subset=["document_id", "fileFormat"])
+        if df_tmp.empty:
+            return 0
+
+        self.uploadDataToTable(df_tmp, tmp_table, chunksize=5000)
+        sql = f"""
+        MERGE `{self.project_id}.{self.dataset_name}.{tablename}` AS T
+        USING `{self.project_id}.{self.dataset_name}.{tmp_table}` AS S
+        ON T.document_id = S.document_id AND T.fileFormat = S.fileFormat
+        WHEN MATCHED THEN
+          UPDATE SET T.file_404_flag = S.file_404_flag
         """
         job = self.client.query(sql)
         job.result()
@@ -2222,6 +2255,16 @@ class DBOperatorSQLITE3(DBOperator):
             return 0
         sql = fr"UPDATE {tablename} SET ocr_json_path = ? WHERE document_id = ? AND fileFormat = ?"
         values = [(row["ocr_json_path"], row["document_id"], row["fileFormat"]) for _, row in df_tmp.iterrows()]
+        self.cur.executemany(sql, values)
+        self.conn.commit()
+        return len(values)
+
+    def updateFile404Flags(self, tablename, df_flags):
+        df_tmp = df_flags[["document_id", "fileFormat", "file_404_flag"]].dropna(subset=["document_id", "fileFormat"])
+        if df_tmp.empty:
+            return 0
+        sql = fr"UPDATE {tablename} SET file_404_flag = ? WHERE document_id = ? AND fileFormat = ?"
+        values = [(bool(row["file_404_flag"]), row["document_id"], row["fileFormat"]) for _, row in df_tmp.iterrows()]
         self.cur.executemany(sql, values)
         self.conn.commit()
         return len(values)
@@ -3071,6 +3114,19 @@ class DBOperatorPOSTGRES(DBOperator):
         execute_values(self.cur, sql, records)
         return len(records)
 
+    def updateFile404Flags(self, tablename, df_flags):
+        df_tmp = df_flags[["document_id", "fileFormat", "file_404_flag"]].dropna(subset=["document_id", "fileFormat"])
+        if df_tmp.empty:
+            return 0
+        records = [(row["document_id"], row["fileFormat"], bool(row["file_404_flag"])) for _, row in df_tmp.iterrows()]
+        sql = f"""
+        UPDATE {tablename} AS t SET file_404_flag = v.file_404_flag
+        FROM (VALUES %s) AS v(document_id, "fileFormat", file_404_flag)
+        WHERE t.document_id = v.document_id AND t."fileFormat" = v."fileFormat"
+        """
+        execute_values(self.cur, sql, records)
+        return len(records)
+
     def mergeRequirements(self, target_tablename, source_tablename):
         """
         PostgreSQL で bid_requirements に新しいレコードを挿入
@@ -3552,10 +3608,55 @@ class BidJudgementSan:
 
     """
 
-    def __init__(self, tablenamesconfig=None, db_operator=None, gemini_model="gemini-2.5-flash"):
+    def __init__(
+        self,
+        tablenamesconfig=None,
+        db_operator=None,
+        gemini_model="gemini-2.5-flash",
+        google_api_key_path=None,
+        gemini_use_vertex_ai=False,
+        vertex_ai_project_id=None,
+        vertex_ai_location="asia-northeast1",
+        gemini_max_output_tokens=None,
+        ocr_json_debug_output_path=None,
+    ):
         self.tablenamesconfig = tablenamesconfig
         self.db_operator=db_operator
         self.gemini_model = gemini_model
+        self.google_api_key_path = google_api_key_path
+        self.gemini_use_vertex_ai = gemini_use_vertex_ai
+        self.vertex_ai_project_id = vertex_ai_project_id
+        self.vertex_ai_location = vertex_ai_location or "asia-northeast1"
+        self.gemini_max_output_tokens = gemini_max_output_tokens
+        self.ocr_json_debug_output_path = ocr_json_debug_output_path
+
+    def _create_gemini_client(self, google_api_key=None):
+        """
+        Create a Gemini client configured for either Vertex AI or API key based authentication.
+        """
+        if self.gemini_use_vertex_ai:
+            project_id = self.vertex_ai_project_id
+            if not project_id:
+                raise ValueError("Vertex AI project ID is required when gemini_use_vertex_ai is enabled.")
+            return genai.Client(
+                vertexai=True,
+                project=project_id,
+                location=self.vertex_ai_location or "asia-northeast1",
+            )
+
+        key_path = google_api_key or self.google_api_key_path
+        if not key_path:
+            raise ValueError("google_api_key is required when Vertex AI is not enabled.")
+
+        path_obj = Path(key_path)
+        if not path_obj.exists():
+            raise FileNotFoundError(f"Google API key file not found: {path_obj}")
+
+        api_key = path_obj.read_text().strip()
+        if not api_key:
+            raise ValueError("Google API key file is empty")
+
+        return genai.Client(api_key=api_key)
 
 
     def step0_prepare_documents(
@@ -3622,7 +3723,7 @@ class BidJudgementSan:
             do_ocr_json: Gemini OCR JSON を生成する場合 True
             do_count_pages: PDF のページ数をカウントする場合 True
             do_ocr: Gemini OCR を実行する場合 True
-            google_api_key: Google AI Studio API キーファイルのパス
+            google_api_key: Google AI Studio API キーファイルのパス（Vertex AI を使用しない場合に参照）
             ocr_max_concurrency: OCR 実行時の最大並列数
             ocr_max_api_calls_per_run: 1回の実行での最大API呼び出し数（デフォルト: 1000）
         """
@@ -3746,7 +3847,8 @@ class BidJudgementSan:
                 use_gcs=use_gcs,
                 google_api_key=google_api_key,
                 max_concurrency=ocr_max_concurrency,
-                max_api_calls_per_run=ocr_max_api_calls_per_run
+                max_api_calls_per_run=ocr_max_api_calls_per_run,
+                debug_output_list_path=self.ocr_json_debug_output_path
             )
             print("OCR JSON generation completed.")
         else:
@@ -4245,6 +4347,7 @@ class BidJudgementSan:
             "save_path": df_merged["save_path"],
             "pdf_is_saved": [None] * df_merged.shape[0],
             "pdf_is_saved_date": [None] * df_merged.shape[0],
+            "file_404_flag": [False] * df_merged.shape[0],
             "orderer_id": [None] * df_merged.shape[0],
             "topAgencyName": [None] * df_merged.shape[0],
             "done": [False] * df_merged.shape[0],
@@ -4408,6 +4511,7 @@ class BidJudgementSan:
             df['announcement_id'] = pd.to_numeric(df['announcement_id'], errors='coerce').fillna(0).astype('int64')
 
         text_column_type = "STRING" if isinstance(self.db_operator, DBOperatorGCPVM) else "TEXT"
+        bool_column_type = "BOOL" if isinstance(self.db_operator, DBOperatorGCPVM) else "BOOLEAN"
 
         if not self.db_operator.ifTableExists(tablename):
             # テーブルが存在しない場合は新規作成
@@ -4416,6 +4520,7 @@ class BidJudgementSan:
             print(f"Created {tablename} with {len(df)} records")
         else:
             self.db_operator.ensure_column(tablename, "ocr_json_path", text_column_type)
+            self.db_operator.ensure_column(tablename, "file_404_flag", bool_column_type)
             # 既存テーブルがある場合は MERGE で追加
             print(f"Merging {len(df)} records into existing table: {tablename}")
             tmp_table = f"tmp_{tablename}_final"
@@ -4686,6 +4791,39 @@ class BidJudgementSan:
             return f"gs://ann-files/ocr_json/json_{prefix}/{filename}"
         return os.path.join("output", "ocr_json", f"json_{prefix}", filename)
 
+    def _path_exists_with_cache(self, file_path, file_cache):
+        """
+        save_path が指すファイルの存在をキャッシュ付きでチェック
+        """
+        if file_path is None or pd.isna(file_path):
+            return False
+
+        path_str = str(file_path).strip()
+        if not path_str:
+            return False
+
+        if path_str.startswith("gs://"):
+            parts = path_str.split("/")
+            if len(parts) >= 5:
+                dir_key = "/".join(parts[:5]) + "/"
+                if dir_key not in file_cache:
+                    file_cache[dir_key] = list_gcs_files_in_prefix(dir_key)
+                return path_str in file_cache[dir_key]
+            return file_exists_gcs_or_local(path_str)
+
+        normalized = os.path.normpath(path_str)
+        dir_key = os.path.dirname(normalized)
+        if dir_key not in file_cache:
+            if os.path.exists(dir_key):
+                file_cache[dir_key] = {
+                    os.path.join(dir_key, f)
+                    for f in os.listdir(dir_key)
+                    if os.path.isfile(os.path.join(dir_key, f))
+                }
+            else:
+                file_cache[dir_key] = set()
+        return normalized in file_cache[dir_key]
+
 
     def _step0_generate_markdown(
         self,
@@ -4702,18 +4840,7 @@ class BidJudgementSan:
         Args:
             force_regenerate: True の場合、既存の Markdown ファイルがあっても再生成する
         """
-        if google_api_key is None:
-            raise ValueError("google_api_key is required for Markdown generation")
-
-        key_path = Path(google_api_key)
-        if not key_path.exists():
-            raise FileNotFoundError(f"Google API key file not found: {google_api_key}")
-
-        api_key = key_path.read_text().strip()
-        if not api_key:
-            raise ValueError("Google API key file is empty")
-
-        client = genai.Client(api_key=api_key)
+        client = self._create_gemini_client(google_api_key)
         df_main = df_main.copy()
         df_main["document_id"] = df_main["document_id"].astype(str).str.strip()
 
@@ -4866,29 +4993,21 @@ class BidJudgementSan:
         google_api_key=None,
         max_concurrency=5,
         max_api_calls_per_run=1000,
-        force_regenerate=False
+        force_regenerate=False,
+        debug_output_list_path=None
     ):
         """
         Gemini を使って OCR JSON を生成し保存する
         """
-        if google_api_key is None:
-            raise ValueError("google_api_key is required for OCR JSON generation")
-
-        key_path = Path(google_api_key)
-        if not key_path.exists():
-            raise FileNotFoundError(f"Google API key file not found: {google_api_key}")
-
-        api_key = key_path.read_text().strip()
-        if not api_key:
-            raise ValueError("Google API key file is empty")
-
-        client = genai.Client(api_key=api_key)
+        client = self._create_gemini_client(google_api_key)
         df_main = df_main.copy()
         df_main["document_id"] = df_main["document_id"].astype(str).str.strip()
 
         doc_to_json_path = {}
         params = []
         skipped_docs = []
+        debug_records = []
+        file_cache = {}
 
         for _, row in df_main.iterrows():
             document_id = str(row.get("document_id", "")).strip()
@@ -4909,7 +5028,7 @@ class BidJudgementSan:
                 df_main.loc[mask, "ocr_json_path"] = json_path
                 continue
 
-            if pd.isna(save_path) or not file_exists_gcs_or_local(save_path):
+            if pd.isna(save_path) or not self._path_exists_with_cache(save_path, file_cache):
                 skipped_docs.append(f"{document_id}.{file_format}")
                 continue
 
@@ -4963,9 +5082,18 @@ class BidJudgementSan:
 
                 mask = (df_main["document_id"] == document_id) & (df_main["fileFormat"] == file_format)
                 df_main.loc[mask, "ocr_json_path"] = json_path
+                debug_records.append({"document_id": document_id, "ocr_json_path": json_path})
                 saved_count += 1
             except Exception as e:
                 tqdm.write(f"Failed to save OCR JSON for {document_id}.{file_format}: {e}")
+
+        if debug_output_list_path and debug_records:
+            try:
+                Path(debug_output_list_path).parent.mkdir(parents=True, exist_ok=True)
+                pd.DataFrame(debug_records).to_csv(debug_output_list_path, index=False, encoding="utf-8")
+                print(f"Debug list written to {debug_output_list_path}")
+            except Exception as e:
+                print(f"Failed to write debug list: {e}")
 
         print(f"OCR JSON saved for {saved_count} documents")
         return df_main
@@ -4978,12 +5106,15 @@ class BidJudgementSan:
         max_api_calls_per_run=1000,
         document_ids=None,
         only_missing=True,
-        overwrite_files=False
+        overwrite_files=False,
+        include_file_404_flagged=False
     ):
         """
         既存 announcements_documents_master から Markdown を再生成する
         """
         tablename = self.tablenamesconfig.bid_announcements_document_table
+        bool_column_type = "BOOL" if isinstance(self.db_operator, DBOperatorGCPVM) else "BOOLEAN"
+        self.db_operator.ensure_column(tablename, "file_404_flag", bool_column_type)
         where_clauses = []
 
         if only_missing:
@@ -4996,6 +5127,8 @@ class BidJudgementSan:
             where_clauses.append("LOWER(\"fileFormat\") = 'pdf'")
         else:
             where_clauses.append("LOWER(fileFormat) = 'pdf'")
+        if not include_file_404_flagged:
+            where_clauses.append("(file_404_flag IS NULL OR file_404_flag = FALSE)")
 
         if document_ids:
             sanitized = []
@@ -5043,7 +5176,8 @@ class BidJudgementSan:
         max_api_calls_per_run=1000,
         document_ids=None,
         only_missing=True,
-        overwrite_files=False
+        overwrite_files=False,
+        include_file_404_flagged=False
     ):
         """
         既存 announcements_documents_master から OCR JSON を再生成する
@@ -5055,6 +5189,8 @@ class BidJudgementSan:
         else:
             print(f"Table {tablename} does not exist.")
             return
+        bool_column_type = "BOOL" if isinstance(self.db_operator, DBOperatorGCPVM) else "BOOLEAN"
+        self.db_operator.ensure_column(tablename, "file_404_flag", bool_column_type)
 
         where_clauses = []
         if only_missing:
@@ -5075,6 +5211,8 @@ class BidJudgementSan:
                     sanitized.append("'" + doc.replace("'", "''") + "'")
             if sanitized:
                 where_clauses.append(f"document_id IN ({', '.join(sanitized)})")
+        if not include_file_404_flagged:
+            where_clauses.append("(file_404_flag IS NULL OR file_404_flag = FALSE)")
 
         where_clause = ""
         if where_clauses:
@@ -5092,7 +5230,8 @@ class BidJudgementSan:
             google_api_key=google_api_key,
             max_concurrency=max_concurrency,
             max_api_calls_per_run=max_api_calls_per_run,
-            force_regenerate=overwrite_files
+            force_regenerate=overwrite_files,
+            debug_output_list_path=self.ocr_json_debug_output_path
         )
 
         df_updates = df_main[["document_id", "fileFormat", "ocr_json_path"]].dropna()
@@ -5103,6 +5242,88 @@ class BidJudgementSan:
 
         updated = self.db_operator.updateOcrJsonPaths(tablename, df_updates)
         print(f"Updated ocr_json_path for {updated} documents.")
+
+
+    def mark_missing_pdfs(
+        self,
+        include_flagged=False,
+        limit=None
+    ):
+        """
+        save_path に PDF が存在しないドキュメントを検出し file_404_flag を更新
+        """
+        tablename = self.tablenamesconfig.bid_announcements_document_table
+        if not self.db_operator.ifTableExists(tablename):
+            print(f"Table {tablename} does not exist.")
+            return
+        bool_column_type = "BOOL" if isinstance(self.db_operator, DBOperatorGCPVM) else "BOOLEAN"
+        self.db_operator.ensure_column(tablename, "file_404_flag", bool_column_type)
+
+        where_clauses = []
+        if isinstance(self.db_operator, DBOperatorGCPVM):
+            file_format_expr = "LOWER(fileFormat)"
+        elif isinstance(self.db_operator, DBOperatorPOSTGRES):
+            file_format_expr = "LOWER(\"fileFormat\")"
+        else:
+            file_format_expr = "LOWER(fileFormat)"
+
+        where_clauses.append(f"{file_format_expr} = 'pdf'")
+        where_clauses.append("(save_path IS NOT NULL AND save_path <> '')")
+
+        if not include_flagged:
+            where_clauses.append("(file_404_flag IS NULL OR file_404_flag = FALSE)")
+
+        where_clause = ""
+        if where_clauses:
+            where_clause = "WHERE " + " AND ".join(where_clauses)
+
+        if limit is not None:
+            where_clause = f"{where_clause} LIMIT {int(limit)}" if where_clause else f"LIMIT {int(limit)}"
+
+        df_targets = self.db_operator.selectToTable(tablename, where_clause)
+        if df_targets.empty:
+            print("No documents matched for missing PDF check.")
+            return
+
+        file_cache = {}
+        updates = []
+        missing_count = 0
+        cleared_count = 0
+
+        for _, row in tqdm(df_targets.iterrows(), total=len(df_targets), desc="Checking PDF files"):
+            save_path = row.get("save_path")
+            exists = self._path_exists_with_cache(save_path, file_cache)
+            is_missing = not exists
+
+            current_flag = row.get("file_404_flag")
+            current_bool = False
+            if isinstance(current_flag, str):
+                current_bool = current_flag.strip().lower() == "true"
+            elif isinstance(current_flag, (int, np.integer, np.bool_)):
+                current_bool = bool(current_flag)
+            elif isinstance(current_flag, bool):
+                current_bool = current_flag
+
+            if current_bool == is_missing:
+                continue
+
+            updates.append({
+                "document_id": row.get("document_id"),
+                "fileFormat": row.get("fileFormat"),
+                "file_404_flag": is_missing
+            })
+            if is_missing:
+                missing_count += 1
+            else:
+                cleared_count += 1
+
+        if not updates:
+            print("No file_404_flag updates required.")
+            return
+
+        df_updates = pd.DataFrame(updates)
+        updated = self.db_operator.updateFile404Flags(tablename, df_updates)
+        print(f"file_404_flag updated for {updated} documents (missing={missing_count}, cleared={cleared_count}).")
 
 
     def _step0_count_pages(self, df):
@@ -5182,7 +5403,7 @@ class BidJudgementSan:
         Args:
             df_main: announcements_document の DataFrame
             use_gcs: GCS (gs://) を使用する場合 True
-            google_api_key: Google AI Studio API key filepath
+            google_api_key: Google AI Studio API key filepath (used when Vertex AI is disabled)
             max_concurrency: 並列実行数
             max_api_calls_per_run: 1回の実行での最大API呼び出し数（デフォルト: 1000）
 
@@ -5193,14 +5414,7 @@ class BidJudgementSan:
         print("Step0-6: OCR with Gemini")
         print("=" * 60)
 
-        # API key読み込み
-        if google_api_key is None:
-            raise ValueError("google_api_key is required for OCR processing")
-
-        with open(google_api_key, "r") as f:
-            api_key = f.read().strip()
-
-        client = genai.Client(api_key=api_key)
+        client = self._create_gemini_client(google_api_key)
 
         # DataFrameのコピーを作成（元のデータを変更しない）
         df_main = df_main.copy()
@@ -5738,6 +5952,15 @@ class BidJudgementSan:
         mime_type = mime_types.get(data_type.lower(), "application/pdf")
 
         # Gemini API呼び出し
+        config_kwargs = {}
+        if self.gemini_max_output_tokens is not None:
+            config_kwargs["max_output_tokens"] = self.gemini_max_output_tokens
+
+        if config_kwargs:
+            config = types.GenerateContentConfig(**config_kwargs)
+        else:
+            config = None
+
         response = client.models.generate_content(
             model=model,
             contents=[
@@ -5746,7 +5969,8 @@ class BidJudgementSan:
                     mime_type=mime_type,
                 ),
                 prompt
-            ]
+            ],
+            config=config
         )
 
         return response.text
@@ -6423,6 +6647,12 @@ if __name__ == "__main__":
                        help="[--run_ocr_json_from_db専用] 既にocr_json_pathがあるドキュメントも対象に含める")
     parser.add_argument("--ocr_json_overwrite_files", action="store_true",
                        help="[--run_ocr_json_from_db専用] 既存のOCR JSONファイルを上書き生成する")
+    parser.add_argument("--mark_missing_pdfs", action="store_true",
+                       help="save_path を走査し file_404_flag を更新する")
+    parser.add_argument("--file_404_check_limit", type=int, default=None,
+                       help="--mark_missing_pdfs 実行時の最大チェック件数")
+    parser.add_argument("--file_404_include_flagged", action="store_true",
+                       help="file_404_flag=TRUE の行も対象に含める")
     parser.add_argument("--stop_after_step1", action="store_true",
                        help="step1まで実行して終了")
     parser.add_argument("--step0_output_base_dir", default="output",
@@ -6450,9 +6680,17 @@ if __name__ == "__main__":
     parser.add_argument("--step0_do_ocr", action="store_true",
                        help="Gemini OCR処理を実行")
     parser.add_argument("--step0_google_api_key", default="data/sec/google_ai_studio_api_key_mizu.txt",
-                       help="Google AI Studio API キーファイルのパス")
+                       help="Google AI Studio API キーファイルのパス（Vertex AI未使用時に参照）")
+    parser.add_argument("--gemini_use_vertex_ai", action="store_true",
+                       help="Gemini 呼び出しに Vertex AI を使用する")
+    parser.add_argument("--vertex_ai_project_id", default=None,
+                       help="Vertex AI で使用する GCP プロジェクトID（未指定時は --bigquery_project_id を利用）")
+    parser.add_argument("--vertex_ai_location", default="asia-northeast1",
+                       help="Vertex AI のロケーション（デフォルト: asia-northeast1）")
     parser.add_argument("--gemini_model", default="gemini-2.5-flash",
                        help="Gemini APIで使用するモデル名")
+    parser.add_argument("--gemini_max_output_tokens", type=int, default=None,
+                       help="Gemini 応答時の max_output_tokens（未指定時はデフォルト値）")
     parser.add_argument("--step0_ocr_max_concurrency", type=int, default=5,
                        help="OCR並列実行数")
     parser.add_argument("--step0_ocr_max_api_calls_per_run", type=int, default=1000,
@@ -6460,6 +6698,8 @@ if __name__ == "__main__":
 
     parser.add_argument("--step1_transfer_remove_table", action="store_true")
     parser.add_argument("--step3_remove_table", action="store_true")
+    parser.add_argument("--ocr_json_debug_output_path", default=None,
+                       help="OCR JSON 生成対象の document_id とパスを書き出すCSVパス（デバッグ用途）")
 
     try:
         args = parser.parse_args()
@@ -6492,6 +6732,9 @@ if __name__ == "__main__":
         ocr_json_document_ids_file = args.ocr_json_document_ids_file
         ocr_json_include_existing = args.ocr_json_include_existing
         ocr_json_overwrite_files = args.ocr_json_overwrite_files
+        mark_missing_pdfs = args.mark_missing_pdfs
+        file_404_check_limit = args.file_404_check_limit
+        file_404_include_flagged = args.file_404_include_flagged
         stop_after_step1 = args.stop_after_step1
         step0_output_base_dir = args.step0_output_base_dir
         step0_topAgencyName = args.step0_topAgencyName
@@ -6506,12 +6749,20 @@ if __name__ == "__main__":
         step0_do_count_pages = args.step0_do_count_pages
         step0_do_ocr = args.step0_do_ocr
         step0_google_api_key = args.step0_google_api_key
+        gemini_use_vertex_ai = args.gemini_use_vertex_ai
+        vertex_ai_project_id = args.vertex_ai_project_id
+        vertex_ai_location = args.vertex_ai_location
         gemini_model = args.gemini_model
         step0_ocr_max_concurrency = args.step0_ocr_max_concurrency
         step0_ocr_max_api_calls_per_run = args.step0_ocr_max_api_calls_per_run
+        gemini_max_output_tokens = args.gemini_max_output_tokens
+        ocr_json_debug_output_path = args.ocr_json_debug_output_path
 
         step1_transfer_remove_table = args.step1_transfer_remove_table
         step3_remove_table = args.step3_remove_table
+
+        if vertex_ai_project_id is None:
+            vertex_ai_project_id = bigquery_project_id
     except:
         use_bigquery = False
         use_postgres = False
@@ -6539,7 +6790,13 @@ if __name__ == "__main__":
         step0_do_ocr_json = False
         step0_do_count_pages = False
         step0_do_ocr = False
+        step0_google_api_key = "data/sec/google_ai_studio_api_key_mizu.txt"
         gemini_model = "gemini-2.5-flash"
+        gemini_use_vertex_ai = False
+        vertex_ai_project_id = None
+        vertex_ai_location = "asia-northeast1"
+        gemini_max_output_tokens = None
+        ocr_json_debug_output_path = None
         run_markdown_from_db = False
         markdown_document_ids_arg = None
         markdown_document_ids_file = None
@@ -6550,6 +6807,9 @@ if __name__ == "__main__":
         ocr_json_document_ids_file = None
         ocr_json_include_existing = False
         ocr_json_overwrite_files = False
+        mark_missing_pdfs = False
+        file_404_check_limit = None
+        file_404_include_flagged = False
 
         step1_transfer_remove_table = False
         step3_remove_table = False
@@ -6579,7 +6839,13 @@ if __name__ == "__main__":
     obj = BidJudgementSan(
         tablenamesconfig=TablenamesConfig,
         db_operator=db_operator,
-        gemini_model=gemini_model
+        gemini_model=gemini_model,
+        google_api_key_path=step0_google_api_key,
+        gemini_use_vertex_ai=gemini_use_vertex_ai,
+        vertex_ai_project_id=vertex_ai_project_id,
+        vertex_ai_location=vertex_ai_location,
+        gemini_max_output_tokens=gemini_max_output_tokens,
+        ocr_json_debug_output_path=ocr_json_debug_output_path
     )
 
     if stop_processing:
@@ -6681,6 +6947,13 @@ if __name__ == "__main__":
                 combined = ocr_json_document_ids + file_ids
                 ocr_json_document_ids = list(dict.fromkeys(combined))
 
+    if mark_missing_pdfs:
+        obj.mark_missing_pdfs(
+            include_flagged=file_404_include_flagged,
+            limit=file_404_check_limit
+        )
+        exit(0)
+
     if run_step0_only:
         if input_list_file is None:
             print("Error: --input_list_file is required when --run_step0_only is specified")
@@ -6717,7 +6990,8 @@ if __name__ == "__main__":
             max_api_calls_per_run=step0_ocr_max_api_calls_per_run,
             document_ids=markdown_document_ids,
             only_missing=(not markdown_include_existing),
-            overwrite_files=markdown_overwrite_files
+            overwrite_files=markdown_overwrite_files,
+            include_file_404_flagged=file_404_include_flagged
         )
         exit(0)
 
@@ -6729,7 +7003,8 @@ if __name__ == "__main__":
             max_api_calls_per_run=step0_ocr_max_api_calls_per_run,
             document_ids=ocr_json_document_ids,
             only_missing=(not ocr_json_include_existing),
-            overwrite_files=ocr_json_overwrite_files
+            overwrite_files=ocr_json_overwrite_files,
+            include_file_404_flagged=file_404_include_flagged
         )
         exit(0)
 
@@ -6840,4 +7115,3 @@ if __name__ == "__main__":
         db_operator.dropTable("evaluation_assignees")
         db_operator.createWorkflowContacts("workflow_contacts")
         db_operator.createEvaluationAssignees("evaluation_assignees", workflow_contacts_tablename="workflow_contacts")
-
