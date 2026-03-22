@@ -698,6 +698,14 @@ class DBOperator:
         raise NotImplementedError
 
     @abstractmethod
+    def createWorkflowContacts(self, workflow_contacts_tablename):
+        raise NotImplementedError
+
+    @abstractmethod
+    def createEvaluationAssignees(self, evaluation_assignees_tablename, workflow_contacts_tablename="workflow_contacts"):
+        raise NotImplementedError
+
+    @abstractmethod
     def preupdateCompanyBidJudgement(self, company_bid_judgement_tablename, office_master_tablename, bid_announcements_tablename):
         raise NotImplementedError
 
@@ -1143,6 +1151,36 @@ class DBOperatorGCPVM(DBOperator):
             final_comment string,
             createdDate string,
             updatedDate string
+        )
+        """
+        self.client.query(sql).result()
+
+    def createWorkflowContacts(self, workflow_contacts_tablename):
+        sql = fr"""
+        create table `{self.project_id}.{self.dataset_name}.{workflow_contacts_tablename}` (
+            contact_id string default generate_uuid(),
+            name string,
+            role string,
+            department string,
+            email string,
+            phone string,
+            notes string,
+            is_active bool default true,
+            created_at timestamp default current_timestamp(),
+            updated_at timestamp default current_timestamp()
+        )
+        """
+        self.client.query(sql).result()
+
+    def createEvaluationAssignees(self, evaluation_assignees_tablename, workflow_contacts_tablename="workflow_contacts"):
+        sql = fr"""
+        create table `{self.project_id}.{self.dataset_name}.{evaluation_assignees_tablename}` (
+            evaluation_no int64,
+            step_id string,
+            contact_id string,
+            assigned_role string,
+            assigned_at timestamp default current_timestamp(),
+            assigned_by string
         )
         """
         self.client.query(sql).result()
@@ -2131,6 +2169,44 @@ class DBOperatorSQLITE3(DBOperator):
         """                
         self.cur.execute(sql)
 
+    def createWorkflowContacts(self, workflow_contacts_tablename):
+        sql = fr"""
+        create table {workflow_contacts_tablename} (
+            contact_id text primary key default (
+                lower(hex(randomblob(4))) || '-' ||
+                lower(hex(randomblob(2))) || '-' ||
+                '4' || substr(lower(hex(randomblob(2))), 2) || '-' ||
+                substr('89ab', abs(random()) % 4 + 1, 1) || substr(lower(hex(randomblob(2))), 2) || '-' ||
+                lower(hex(randomblob(6)))
+            ),
+            name text,
+            role text,
+            department text,
+            email text,
+            phone text,
+            notes text,
+            is_active boolean default 1,
+            created_at timestamp default current_timestamp,
+            updated_at timestamp default current_timestamp
+        )
+        """
+        self.cur.execute(sql)
+
+    def createEvaluationAssignees(self, evaluation_assignees_tablename, workflow_contacts_tablename="workflow_contacts"):
+        sql = fr"""
+        create table {evaluation_assignees_tablename} (
+            evaluation_no integer not null,
+            step_id text not null,
+            contact_id text not null,
+            assigned_role text,
+            assigned_at timestamp default current_timestamp,
+            assigned_by text,
+            primary key (evaluation_no, step_id),
+            foreign key(contact_id) references {workflow_contacts_tablename}(contact_id)
+        )
+        """
+        self.cur.execute(sql)
+
     def preupdateCompanyBidJudgement(self, company_bid_judgement_tablename, office_master_tablename, bid_announcements_tablename):
         sql = fr"""insert into {company_bid_judgement_tablename} (
             evaluation_no, 
@@ -2923,6 +2999,40 @@ class DBOperatorPOSTGRES(DBOperator):
             "createdDate" TEXT,
             "updatedDate" TEXT,
             UNIQUE(shortage_detail_no, evaluation_no, announcement_no, requirement_no, company_no, office_no, requirement_type)
+        )
+        """
+        self.cur.execute(sql)
+
+    def createWorkflowContacts(self, workflow_contacts_tablename):
+        # gen_random_uuid を使用できるように拡張機能を有効化
+        self.cur.execute('CREATE EXTENSION IF NOT EXISTS "pgcrypto"')
+        sql = fr"""
+        CREATE TABLE {workflow_contacts_tablename} (
+            contact_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            name TEXT,
+            role TEXT,
+            department TEXT,
+            email TEXT,
+            phone TEXT,
+            notes TEXT,
+            is_active BOOLEAN NOT NULL DEFAULT TRUE,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+        """
+        self.cur.execute(sql)
+
+    def createEvaluationAssignees(self, evaluation_assignees_tablename, workflow_contacts_tablename="workflow_contacts"):
+        sql = fr"""
+        CREATE TABLE {evaluation_assignees_tablename} (
+            evaluation_no BIGINT NOT NULL,
+            step_id TEXT NOT NULL,
+            contact_id UUID NOT NULL,
+            assigned_role TEXT,
+            assigned_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            assigned_by TEXT,
+            PRIMARY KEY (evaluation_no, step_id),
+            FOREIGN KEY (contact_id) REFERENCES {workflow_contacts_tablename}(contact_id)
         )
         """
         self.cur.execute(sql)
@@ -6946,6 +7056,10 @@ if __name__ == "__main__":
             db_operator.dropTable("bid_orderers")
             db_operator.createBidOrderersFromAnnouncements(bid_orderer_tablename="bid_orderers", bid_announcements_tablename="bid_announcements")
 
+
+        db_operator.createWorkflowContacts("workflow_contacts")
+        db_operator.createEvaluationAssignees("evaluation_assignees", workflow_contacts_tablename="workflow_contacts")
+        
         db_operator.createBackendCompanies(tablename="backend_companies_pre")
         db_operator.createBackendPartners(tablename="backend_partners_pre")
 
