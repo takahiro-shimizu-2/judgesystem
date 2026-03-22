@@ -13,6 +13,14 @@ interface StaffContextValue {
 }
 
 const StaffContext = createContext<StaffContextValue | undefined>(undefined);
+const mockContextValue: StaffContextValue = {
+  staff: [],
+  loading: false,
+  error: null,
+  refresh: async () => {},
+  createStaff: async () => null,
+  findById: () => undefined,
+};
 
 export function StaffProvider({ children }: { children: ReactNode }) {
   const [staff, setStaff] = useState<Staff[]>([]);
@@ -43,6 +51,7 @@ export function StaffProvider({ children }: { children: ReactNode }) {
       const created = await createStaffRecord(data);
       if (created) {
         setStaff((prev) => [...prev, created]);
+        setError(null);
       }
       return created;
     },
@@ -75,4 +84,24 @@ export function useStaffDirectory(): StaffContextValue {
     throw new Error('useStaffDirectory must be used within a StaffProvider');
   }
   return context;
+}
+
+interface MockStaffProviderProps {
+  children: ReactNode;
+  value?: Partial<StaffContextValue>;
+}
+
+export function MockStaffProvider({ children, value }: MockStaffProviderProps) {
+  const mergedValue: StaffContextValue = {
+    ...mockContextValue,
+    ...value,
+    staff: value?.staff ?? mockContextValue.staff,
+    loading: value?.loading ?? mockContextValue.loading,
+    error: value?.error ?? mockContextValue.error,
+    refresh: value?.refresh ?? mockContextValue.refresh,
+    createStaff: value?.createStaff ?? mockContextValue.createStaff,
+    findById: value?.findById ?? mockContextValue.findById,
+  };
+
+  return <StaffContext.Provider value={mergedValue}>{children}</StaffContext.Provider>;
 }
