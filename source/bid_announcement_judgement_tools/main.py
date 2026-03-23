@@ -4805,6 +4805,40 @@ class BidJudgementSan:
                 file_cache[dir_key] = set()
         return normalized in file_cache[dir_key]
 
+    def _load_ocr_json_extracted_text(self, json_path, use_gcs=False):
+        """
+        OCR JSON から extracted_text を取得する。存在しない場合は None。
+        """
+        if not isinstance(json_path, str) or json_path.strip() == "":
+            return None
+
+        try:
+            if use_gcs and json_path.startswith("gs://"):
+                from google.cloud import storage
+                storage_client = storage.Client()
+                bucket_name, blob_path = json_path.replace("gs://", "", 1).split("/", 1)
+                bucket = storage_client.bucket(bucket_name)
+                blob = bucket.blob(blob_path)
+                content = blob.download_as_text(encoding="utf-8")
+            else:
+                path_obj = Path(json_path)
+                if not path_obj.exists():
+                    return None
+                content = path_obj.read_text(encoding="utf-8")
+
+            data = json.loads(content)
+            extracted = data.get("extracted_text")
+            if isinstance(extracted, list):
+                extracted = "\n".join(str(x) for x in extracted)
+            if isinstance(extracted, (dict, list)):
+                extracted = json.dumps(extracted, ensure_ascii=False)
+            if isinstance(extracted, str):
+                extracted = extracted.strip()
+            return extracted or None
+        except Exception as e:
+            print(f"[WARN] Failed to load OCR JSON ({json_path}): {e}")
+            return None
+
 
     def _step0_generate_markdown(
         self,
@@ -5448,38 +5482,59 @@ class BidJudgementSan:
             print(f"[DEBUG] df_main contains {len(duplicate_docs)} duplicate document_ids (same PDF, multiple announcements):")
             print(f"[DEBUG] Duplicates: {duplicate_docs.to_dict()}")
 
-        # 要件文抽出用に処理済みdocument_idを記録（同じPDFを複数回APIに送らないため）
+        # 要件文抽出用に処理済みdocument_idを記録（同じPDF/テキストを複数回APIに送らないため）
         processed_docs = set()
+        pdf_path_cache = {}
+        missing_json_docs = set()
 
         for i, row in tqdm(df_main.iterrows(), total=len(df_main), desc="Checking documents"):
             document_id = row["document_id"]
             announcement_id = row["announcement_id"]
             ann_done = bool(row.get("done"))
             req_done = bool(req_done_lookup.get(announcement_id, False))
+            json_path = row.get("ocr_json_path")
 
             if ann_done and req_done:
                 continue
 
             # PDFファイルパス確認
-            if use_gcs:
-                pdf_path = f"gs://ann-files/pdf/pdf_{document_id.split('_')[0]}/{document_id}.pdf"
-                pdf_exists = True  # GCSの場合は存在チェックスキップ
-            else:
-                pdf_path = f"output/pdf/pdf_{document_id.split('_')[0]}/{document_id}.pdf"
-                pdf_exists = os.path.exists(pdf_path)
+            if document_id not in pdf_path_cache:
+                save_path = row.get("save_path")
+                if isinstance(save_path, str) and save_path.strip():
+                    pdf_path_cache[document_id] = save_path
+                else:
+                    if use_gcs:
+                        pdf_path_cache[document_id] = f"gs://ann-files/pdf/pdf_{document_id.split('_')[0]}/{document_id}.pdf"
+                    else:
+                        pdf_path_cache[document_id] = f"output/pdf/pdf_{document_id.split('_')[0]}/{document_id}.pdf"
 
+            pdf_path = pdf_path_cache.get(document_id)
+            pdf_exists = True
+            if pdf_path and not pdf_path.startswith("gs://"):
+                pdf_exists = os.path.exists(pdf_path)
             if not pdf_exists:
                 continue
+
+            text_override = None
+            if isinstance(json_path, str) and json_path.strip():
+                if file_exists_gcs_or_local(json_path):
+                    text_override = {"path": json_path}
+                else:
+                    missing_json_docs.add(document_id)
+            else:
+                missing_json_docs.add(document_id)
 
             # 公告情報抽出用パラメータ
             if not ann_done:
                 params.append([
                     self._PROMPT_ANN,
                     document_id,
-                    "pdf",
+                    "text" if text_override else "pdf",
                     self.gemini_model,
                     "ann",
-                    use_gcs
+                    use_gcs,
+                    pdf_path,
+                    text_override
                 ])
 
             # 要件文抽出用パラメータ（同じPDFを複数回APIに送らないため、document_idごとに1回のみ）
@@ -5488,13 +5543,14 @@ class BidJudgementSan:
                 params.append([
                     self._PROMPT_REQ,
                     document_id,
-                    "pdf",
+                    "text" if text_override else "pdf",
                     self.gemini_model,
                     "req",
-                    use_gcs
+                    use_gcs,
+                    pdf_path,
+                    text_override
                 ])
                 processed_docs.add(document_id)
-
             # 1回の実行での処理数制限チェック
             if len(params) >= max_api_calls_per_run:
                 ann_calls = len([p for p in params if p[4] == "ann"])
@@ -5503,6 +5559,9 @@ class BidJudgementSan:
                 print(f"\nReached batch processing limit: {len(params)} API calls for {unique_docs} documents (ann: {ann_calls}, req: {req_calls})")
                 print("Remaining documents will be processed in the next run.")
                 break
+
+        if missing_json_docs:
+            print(f"[INFO] Using PDF source for {len(missing_json_docs)} documents without OCR JSON text.")
 
         ann_calls_total = len([p for p in params if p[4] == "ann"])
         req_calls_total = len([p for p in params if p[4] == "req"])
@@ -5828,12 +5887,18 @@ class BidJudgementSan:
                 if item is None:
                     break
 
-                # paramsの形式: [prompt, document_id, data_type, model, type2, use_gcs, save_path(optional)]
-                if len(item) == 7:
+                # paramsの形式:
+                # [prompt, document_id, data_type, model, type2, use_gcs, save_path(optional), text_override(optional)]
+                text_override = None
+                if len(item) >= 8:
+                    prompt, document_id, data_type, model, type2, use_gcs, save_path, text_override = item
+                elif len(item) == 7:
                     prompt, document_id, data_type, model, type2, use_gcs, save_path = item
-                else:
+                elif len(item) == 6:
                     prompt, document_id, data_type, model, type2, use_gcs = item
                     save_path = None
+                else:
+                    raise ValueError("Unexpected parameter format for _call_parallel worker.")
 
                 for attempt in range(3):
                     try:
@@ -5845,7 +5910,8 @@ class BidJudgementSan:
                             data_type,
                             model,
                             use_gcs,
-                            save_path
+                            save_path,
+                            text_override=text_override
                         )
 
                         results.append({
@@ -5885,7 +5951,7 @@ class BidJudgementSan:
         return results
 
 
-    def _call_gemini(self, client, prompt, document_id, data_type, model="gemini-2.5-flash", use_gcs=True, save_path=None):
+    def _call_gemini(self, client, prompt, document_id, data_type, model="gemini-2.5-flash", use_gcs=True, save_path=None, text_override=None):
         """
         Gemini APIを呼び出してファイルを解析
 
@@ -5893,44 +5959,62 @@ class BidJudgementSan:
             save_path: 実際のファイルパス。指定時はこれを優先使用
         """
         # ファイルデータ取得
-        if save_path:
-            # save_pathが指定されている場合はそれを使用
-            if use_gcs and save_path.startswith("gs://"):
-                from google.cloud import storage
-                storage_client = storage.Client()
-                # gs://bucket/path/to/file.ext から bucket と path を抽出
-                parts = save_path.replace("gs://", "").split("/", 1)
-                bucket_name = parts[0]
-                blob_path = parts[1]
-                bucket = storage_client.bucket(bucket_name)
-                blob = bucket.blob(blob_path)
-                data = blob.download_as_bytes()
+        mime_type = None
+        data = None
+        if text_override is not None:
+            text_data = None
+            if isinstance(text_override, dict) and "path" in text_override:
+                text_data = self._load_ocr_json_extracted_text(text_override["path"], use_gcs=use_gcs)
+                if text_data is None:
+                    print(f"[WARN] Failed to load OCR JSON text for {document_id}; falling back to PDF.")
+                    text_override = None
+                    data_type = "pdf"
+            elif isinstance(text_override, str):
+                text_data = text_override
             else:
-                with open(save_path, "rb") as f:
-                    data = f.read()
-        else:
-            # 従来の方法（後方互換性）
-            if use_gcs:
-                from google.cloud import storage
-                storage_client = storage.Client()
-                bucket_name = "ann-files"
-                blob_path = f"pdf/pdf_{document_id.split('_')[0]}/{document_id}.pdf"
-                bucket = storage_client.bucket(bucket_name)
-                blob = bucket.blob(blob_path)
-                data = blob.download_as_bytes()
+                text_override = None
+                data_type = "pdf"
+
+            if text_override is not None and text_data is not None:
+                data = text_data.encode("utf-8")
+                mime_type = "text/plain"
+
+        if data is None:
+            if save_path:
+                # save_pathが指定されている場合はそれを使用
+                if use_gcs and save_path.startswith("gs://"):
+                    from google.cloud import storage
+                    storage_client = storage.Client()
+                    # gs://bucket/path/to/file.ext から bucket と path を抽出
+                    parts = save_path.replace("gs://", "").split("/", 1)
+                    bucket_name = parts[0]
+                    blob_path = parts[1]
+                    bucket = storage_client.bucket(bucket_name)
+                    blob = bucket.blob(blob_path)
+                    data = blob.download_as_bytes()
+                else:
+                    with open(save_path, "rb") as f:
+                        data = f.read()
             else:
-                pdf_path = f"output/pdf/pdf_{document_id.split('_')[0]}/{document_id}.pdf"
-                with open(pdf_path, "rb") as f:
-                    data = f.read()
+                # 従来の方法（後方互換性）
+                if use_gcs:
+                    from google.cloud import storage
+                    storage_client = storage.Client()
+                    bucket_name = "ann-files"
+                    blob_path = f"pdf/pdf_{document_id.split('_')[0]}/{document_id}.pdf"
+                    bucket = storage_client.bucket(bucket_name)
+                    blob = bucket.blob(blob_path)
+                    data = blob.download_as_bytes()
+                else:
+                    pdf_path = f"output/pdf/pdf_{document_id.split('_')[0]}/{document_id}.pdf"
+                    with open(pdf_path, "rb") as f:
+                        data = f.read()
 
-        # MIME typeのマッピング（Gemini API対応形式のみ）
-        # Geminiが対応: PDF, 画像, 動画, 音声, テキスト
-        # 非対応: Office形式(xlsx, docx等), zip等のアーカイブ
-        mime_types = {
-            "pdf": "application/pdf"
-        }
-
-        mime_type = mime_types.get(data_type.lower(), "application/pdf")
+            mime_types = {
+                "pdf": "application/pdf",
+                "text": "text/plain"
+            }
+            mime_type = mime_types.get(data_type.lower(), "application/pdf")
 
         # Gemini API呼び出し
         config_kwargs = {}
