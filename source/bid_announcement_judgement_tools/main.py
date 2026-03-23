@@ -130,6 +130,10 @@ Arguments:
 
   過去の結果とマージしない。
 
+- --step0_skip_db_save: (フラグ引数)
+
+  step0 の DataFrame 結果を DB に保存しない（ダウンロード済みのファイル確認や OCR のみ行いたい場合に使用）。
+
 - --announcements_documents_file: (パラメータ引数) [非推奨]
 
   announcements_document ファイルのパス。
@@ -3649,6 +3653,7 @@ class BidJudgementSan:
         extracted_at=None,
         base_digits=5,
         no_merge=False,
+        skip_db_save=False,
         use_gcs=False,
         do_fetch_html=True,
         do_extract_links=True,
@@ -3695,6 +3700,7 @@ class BidJudgementSan:
             extracted_at: 抽出日 (YYYY-MM-DD形式)。Noneなら現在日付
             base_digits: announcement_id のグルーピング桁数
             no_merge: 過去の結果とマージしないフラグ
+            skip_db_save: True の場合は DB 保存処理をスキップ
             use_gcs: GCS (gs://) を使用する場合 True（--use_postgres 指定時も自動で True 相当になる）
             do_fetch_html: HTML ページを取得する場合 True
             do_extract_links: ドキュメントリンクを抽出する場合 True
@@ -3863,6 +3869,14 @@ class BidJudgementSan:
             df_requirements = pd.DataFrame()
 
         # 9. DB に保存（3つのテーブル）
+        if skip_db_save:
+            print("\n" + "=" * 60)
+            print("Skipping database save (--step0_skip_db_save is ON).")
+            print("Generated DataFrame objects are kept in memory / files only.")
+            print("Step0 processing finished without DB merge.")
+            print("=" * 60)
+            return
+
         print("\n" + "=" * 60)
         print("Saving data to database tables...")
         print("=" * 60)
@@ -4788,7 +4802,11 @@ class BidJudgementSan:
             if len(parts) >= 5:
                 dir_key = "/".join(parts[:5]) + "/"
                 if dir_key not in file_cache:
-                    file_cache[dir_key] = list_gcs_files_in_prefix(dir_key)
+                    try:
+                        file_cache[dir_key] = list_gcs_files_in_prefix(dir_key)
+                    except Exception as e:
+                        print(f"[WARN] Failed to list GCS prefix {dir_key}: {e}")
+                        file_cache[dir_key] = set()
                 return path_str in file_cache[dir_key]
             return file_exists_gcs_or_local(path_str)
 
@@ -4872,6 +4890,7 @@ class BidJudgementSan:
         doc_to_md_path = {}
         params = []
         skipped_docs = []
+        file_cache = {}
 
         # 行ごとに処理（PDFのみ）
         for idx, row in df_main.iterrows():
@@ -4895,13 +4914,13 @@ class BidJudgementSan:
                 continue
             doc_to_md_path[key] = md_path
 
-            if file_exists_gcs_or_local(md_path) and not force_regenerate:
+            if self._path_exists_with_cache(md_path, file_cache) and not force_regenerate:
                 mask = (df_main["document_id"] == document_id) & (df_main["fileFormat"] == file_format)
                 df_main.loc[mask, "markdown_path"] = md_path
                 continue
 
             # ファイルパス存在チェック
-            if pd.isna(save_path) or not file_exists_gcs_or_local(save_path):
+            if pd.isna(save_path) or not self._path_exists_with_cache(save_path, file_cache):
                 skipped_docs.append(f"{document_id}.{file_format}")
                 continue
 
@@ -5526,10 +5545,11 @@ class BidJudgementSan:
 
             # 公告情報抽出用パラメータ
             if not ann_done:
+                # data_type は結果を pdf 保存先へ紐付けるキーとして使う（text_override があっても "pdf" を維持する）
                 params.append([
                     self._PROMPT_ANN,
                     document_id,
-                    "text" if text_override else "pdf",
+                    "pdf",
                     self.gemini_model,
                     "ann",
                     use_gcs,
@@ -5540,10 +5560,11 @@ class BidJudgementSan:
             # 要件文抽出用パラメータ（同じPDFを複数回APIに送らないため、document_idごとに1回のみ）
             # ただし、結果は同じdocument_idを参照する全てのannouncement_idに保存される
             if not req_done and document_id not in processed_docs:
+                # text_override 時も Markdown/OCR 保存先は pdf 名なので data_type は "pdf" 固定
                 params.append([
                     self._PROMPT_REQ,
                     document_id,
-                    "text" if text_override else "pdf",
+                    "pdf",
                     self.gemini_model,
                     "req",
                     use_gcs,
@@ -6696,6 +6717,8 @@ if __name__ == "__main__":
                        help="トップ機関名（デフォルト: 防衛省）")
     parser.add_argument("--step0_no_merge", action="store_true",
                        help="過去の結果とマージしない")
+    parser.add_argument("--step0_skip_db_save", action="store_true",
+                       help="step0結果をDBに保存せず終了する")
     parser.add_argument("--step0_timestamp", default=None,
                        help="既存のタイムスタンプディレクトリを使用（YYYYMMDDHHMM形式）")
     parser.add_argument("--step0_do_fetch_html", action="store_true",
@@ -6772,6 +6795,7 @@ if __name__ == "__main__":
         step0_output_base_dir = args.step0_output_base_dir
         step0_topAgencyName = args.step0_topAgencyName
         step0_no_merge = args.step0_no_merge
+        step0_skip_db_save = args.step0_skip_db_save
         step0_timestamp = args.step0_timestamp
         step0_do_fetch_html = args.step0_do_fetch_html
         step0_do_extract_links = args.step0_do_extract_links
@@ -6811,6 +6835,7 @@ if __name__ == "__main__":
         step0_output_base_dir = "output"
         step0_topAgencyName = "防衛省"
         step0_no_merge = False
+        step0_skip_db_save = False
         step0_timestamp = None
         step0_do_fetch_html = False
         step0_do_extract_links = False
@@ -6994,6 +7019,7 @@ if __name__ == "__main__":
             timestamp=step0_timestamp,
             topAgencyName=step0_topAgencyName,
             no_merge=step0_no_merge,
+            skip_db_save=step0_skip_db_save,
             use_gcs=(use_gcp_vm or use_postgres),
             do_fetch_html=step0_do_fetch_html,
             do_extract_links=step0_do_extract_links,
@@ -7049,6 +7075,7 @@ if __name__ == "__main__":
             timestamp=step0_timestamp,
             topAgencyName=step0_topAgencyName,
             no_merge=step0_no_merge,
+            skip_db_save=step0_skip_db_save,
             use_gcs=(use_gcp_vm or use_postgres),
             do_fetch_html=step0_do_fetch_html,
             do_extract_links=step0_do_extract_links,
