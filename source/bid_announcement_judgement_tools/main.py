@@ -5058,7 +5058,7 @@ class BidJudgementSan:
                 continue
             doc_to_json_path[key] = json_path
 
-            if file_exists_gcs_or_local(json_path) and not force_regenerate:
+            if self._path_exists_with_cache(json_path, file_cache) and not force_regenerate:
                 mask = (df_main["document_id"] == document_id) & (df_main["fileFormat"] == file_format)
                 df_main.loc[mask, "ocr_json_path"] = json_path
                 continue
