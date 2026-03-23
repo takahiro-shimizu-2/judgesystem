@@ -4806,7 +4806,7 @@ class BidJudgementSan:
                         file_cache[dir_key] = list_gcs_files_in_prefix(dir_key)
                     except Exception as e:
                         print(f"[WARN] Failed to list GCS prefix {dir_key}: {e}")
-                        file_cache[dir_key] = set()
+                        return file_exists_gcs_or_local(path_str)
                 return path_str in file_cache[dir_key]
             return file_exists_gcs_or_local(path_str)
 
