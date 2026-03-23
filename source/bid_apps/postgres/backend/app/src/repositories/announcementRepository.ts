@@ -1,6 +1,6 @@
 import { PoolClient } from "pg";
 import { pool, TABLES, schemaPrefix } from "../config/database";
-import { FilterParams } from "../types";
+import { FilterParams, SortOption } from "../types";
 import { downloadFileFromGCS, readMarkdownFromGCS } from "../utils/gcs";
 
 export class AnnouncementRepository {
@@ -41,7 +41,8 @@ export class AnnouncementRepository {
       const total = parseInt(countResult.rows[0].count);
 
       // Build ORDER BY clause
-      const orderByClause = this.buildOrderByClause(filters.sortField, filters.sortOrder);
+      const sortOptions = this.normalizeSortOptions(filters.sortOptions, filters.sortField, filters.sortOrder);
+      const orderByClause = this.buildOrderByClause(sortOptions);
 
       // Get paginated data
       const page = filters.page || 0;
@@ -78,7 +79,7 @@ export class AnnouncementRepository {
 
         FROM ${schemaPrefix}bid_announcements
         ${whereClause}
-        ${orderByClause}
+        ${orderByClause || 'ORDER BY announcement_no DESC'}
         LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
       `;
       const dataParams = [...queryParams, pageSize, offset];
@@ -463,13 +464,36 @@ export class AnnouncementRepository {
   }
 
   /**
+   * Normalize sort inputs (新旧パラメータ対応)
+   */
+  private normalizeSortOptions(
+    sortOptions?: SortOption[],
+    sortField?: string,
+    sortOrder?: string
+  ): SortOption[] | undefined {
+    if (sortOptions && sortOptions.length > 0) {
+      return sortOptions;
+    }
+
+    if (sortField) {
+      return [
+        {
+          field: sortField,
+          order: sortOrder === 'desc' ? 'desc' : 'asc',
+        },
+      ];
+    }
+
+    return undefined;
+  }
+
+  /**
    * Build ORDER BY clause
    * bid_announcements テーブルのカラム名に対応
    */
-  private buildOrderByClause(sortField?: string, sortOrder?: string): string {
-    if (!sortField) return '';
+  private buildOrderByClause(sortOptions?: SortOption[]): string {
+    if (!sortOptions || sortOptions.length === 0) return '';
 
-    const direction = sortOrder === 'desc' ? 'DESC' : 'ASC';
     const fieldMap: Record<string, string> = {
       announcementNo: 'announcement_no',
       no: 'announcement_no',
@@ -506,11 +530,28 @@ export class AnnouncementRepository {
       prefecture: '"workPlace"',
     };
 
-    if (fieldMap[sortField]) {
-      return `ORDER BY ${fieldMap[sortField]} ${direction} NULLS LAST`;
+    const orderParts: string[] = [];
+    let includesPrimary = false;
+
+    sortOptions.forEach(({ field, order }) => {
+      const target = fieldMap[field];
+      if (!target) return;
+
+      if (field === 'announcementNo' || field === 'no') {
+        includesPrimary = true;
+      }
+
+      const direction = order === 'desc' ? 'DESC' : 'ASC';
+      orderParts.push(`${target} ${direction} NULLS LAST`);
+    });
+
+    if (orderParts.length === 0) return '';
+
+    if (!includesPrimary) {
+      orderParts.push('announcement_no DESC');
     }
 
-    return '';
+    return `ORDER BY ${orderParts.join(', ')}`;
   }
 
   /**

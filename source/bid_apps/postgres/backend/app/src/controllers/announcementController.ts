@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import { AnnouncementService } from "../services";
-import { FilterParams } from "../types";
+import { FilterParams, SortOption } from "../types";
 
 export class AnnouncementController {
   private service: AnnouncementService;
@@ -34,6 +34,13 @@ export class AnnouncementController {
       const page = pageNum;
       const pageSize = pageSizeNum;
 
+      const sortFields = this.toStringArray(req.query.sortField);
+      const sortOrders = this.toSortOrderArray(req.query.sortOrder);
+      const sortOptions: SortOption[] = sortFields.map((field, index) => {
+        const order: "asc" | "desc" = sortOrders[index] ?? "asc";
+        return { field, order };
+      });
+
       const filters: FilterParams = {
         page,
         pageSize,
@@ -43,8 +50,9 @@ export class AnnouncementController {
         organizations: req.query.organizations ? (req.query.organizations as string).split(",") : undefined,
         prefectures: req.query.prefectures ? (req.query.prefectures as string).split(",") : undefined,
         searchQuery: req.query.searchQuery as string | undefined,
-        sortField: req.query.sortField as string | undefined,
-        sortOrder: (req.query.sortOrder as "asc" | "desc") || undefined,
+        sortField: sortOptions[0]?.field || this.getFirstString(req.query.sortField),
+        sortOrder: sortOptions[0]?.order || this.parseSortOrder(req.query.sortOrder),
+        sortOptions,
         ordererId: req.query.ordererId as string | undefined,
       };
 
@@ -221,4 +229,39 @@ export class AnnouncementController {
       }
     }
   };
+
+  private toStringArray(param: any): string[] {
+    if (!param) return [];
+    if (Array.isArray(param)) {
+      return param.map((value) => String(value));
+    }
+    return [String(param)];
+  }
+
+  private getFirstString(param: any): string | undefined {
+    if (!param) return undefined;
+    if (Array.isArray(param)) {
+      return param.length > 0 ? String(param[0]) : undefined;
+    }
+    if (typeof param === "string") {
+      return param;
+    }
+    return String(param);
+  }
+
+  private parseSortOrder(param: any): "asc" | "desc" | undefined {
+    const value = this.getFirstString(param);
+    if (value === "desc") {
+      return "desc";
+    }
+    if (value === "asc") {
+      return "asc";
+    }
+    return undefined;
+  }
+
+  private toSortOrderArray(param: any): Array<"asc" | "desc"> {
+    const strings = this.toStringArray(param);
+    return strings.map((value) => (value === "desc" ? "desc" : "asc"));
+  }
 }

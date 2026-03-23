@@ -1,3 +1,8 @@
+export interface SortOption {
+  field: string;
+  order: "asc" | "desc";
+}
+
 export interface FilterParams {
   page?: number;
   pageSize?: number;
@@ -11,6 +16,7 @@ export interface FilterParams {
   searchQuery?: string;
   sortField?: string;
   sortOrder?: "asc" | "desc";
+  sortOptions?: SortOption[];
   ordererId?: string;
 }
 

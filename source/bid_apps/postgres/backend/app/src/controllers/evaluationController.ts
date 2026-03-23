@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import { EvaluationService } from "../services";
-import { FilterParams } from "../types";
+import { FilterParams, SortOption } from "../types";
 
 export class EvaluationController {
   private service: EvaluationService;
@@ -227,10 +227,35 @@ export class EvaluationController {
    */
   private parseArrayParam(param: any): string[] {
     if (!param) return [];
-    return Array.isArray(param) ? param : [param];
+    if (Array.isArray(param)) {
+      return param.map((value) => String(value));
+    }
+    return [String(param)];
+  }
+
+  private parseSortOrderParam(param: any): "asc" | "desc" | undefined {
+    const [value] = this.parseArrayParam(param);
+    if (value === "desc") {
+      return "desc";
+    }
+    if (value === "asc") {
+      return "asc";
+    }
+    return undefined;
   }
 
   private buildFilterParams(req: Request, page: number, pageSize: number): FilterParams {
+    const sortFields = this.parseArrayParam(req.query.sortField);
+    const sortOrdersRaw = this.parseArrayParam(req.query.sortOrder);
+    const sortOptions: SortOption[] = sortFields.map((field, index) => {
+      const orderValue = sortOrdersRaw[index];
+      const order: "asc" | "desc" = orderValue === "desc" ? "desc" : "asc";
+      return {
+        field,
+        order,
+      };
+    });
+
     return {
       page,
       pageSize,
@@ -242,8 +267,9 @@ export class EvaluationController {
       organizations: this.parseArrayParam(req.query.organizations),
       prefectures: this.parseArrayParam(req.query.prefectures),
       searchQuery: (req.query.searchQuery as string) || "",
-      sortField: (req.query.sortField as string) || "",
-      sortOrder: (req.query.sortOrder as "asc" | "desc") || "asc",
+      sortField: sortOptions[0]?.field || sortFields[0] || "",
+      sortOrder: sortOptions[0]?.order || this.parseSortOrderParam(req.query.sortOrder) || "asc",
+      sortOptions,
       ordererId: req.query.ordererId as string | undefined,
     };
   }

@@ -92,9 +92,10 @@ async function fetchAnnouncements(params: {
 
   // ソート
   if (sortModel.length > 0) {
-    const sort = sortModel[0];
-    queryParams.append('sortField', sort.field);
-    queryParams.append('sortOrder', sort.sort || 'asc');
+    sortModel.forEach(sort => {
+      queryParams.append('sortField', sort.field);
+      queryParams.append('sortOrder', sort.sort || 'asc');
+    });
   }
 
   const response = await fetch(getApiUrl(`/api/announcements?${queryParams.toString()}`));

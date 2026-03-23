@@ -1,6 +1,6 @@
 import { pool, TABLES, schemaPrefix } from "../config/database";
 import { readMarkdownFromGCS } from "../utils/gcs";
-import { FilterParams } from "../types";
+import { FilterParams, SortOption } from "../types";
 
 type QualifiedTables = {
   companyBidJudgement: string;
@@ -45,9 +45,9 @@ export class EvaluationRepository {
       const total = parseInt(countResult.rows[0].count);
 
       // Build ORDER BY clause
+      const sortOptions = this.normalizeSortOptions(filters.sortOptions, filters.sortField, filters.sortOrder);
       const orderByClause = this.buildOrderByClause(
-        filters.sortField,
-        filters.sortOrder,
+        sortOptions,
         statusExpression,
         workStatusExpression,
         priorityExpression
@@ -91,7 +91,7 @@ export class EvaluationRepository {
           cbj."updatedDate" AS "evaluatedAt"
         ${baseFromClause}
         ${whereClause}
-        ${orderByClause || "ORDER BY cbj.evaluation_no DESC"}
+        ${orderByClause || 'ORDER BY cbj."updatedDate" DESC NULLS LAST, cbj.evaluation_no DESC'}
         LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
       `;
       const dataParams = [...queryParams, pageSize, offset];
@@ -537,19 +537,38 @@ export class EvaluationRepository {
     return { whereClause, queryParams, paramIndex };
   }
 
+  private normalizeSortOptions(
+    sortOptions?: SortOption[],
+    sortField?: string,
+    sortOrder?: string
+  ): SortOption[] | undefined {
+    if (sortOptions && sortOptions.length > 0) {
+      return sortOptions;
+    }
+
+    if (sortField) {
+      return [
+        {
+          field: sortField,
+          order: sortOrder === 'desc' ? 'desc' : 'asc',
+        },
+      ];
+    }
+
+    return undefined;
+  }
+
   /**
    * Build ORDER BY clause
    */
   private buildOrderByClause(
-    sortField: string | undefined,
-    sortOrder: string | undefined,
+    sortOptions: SortOption[] | undefined,
     statusExpression: string,
     workStatusExpression: string,
     priorityExpression: string
   ): string {
-    if (!sortField) return '';
+    if (!sortOptions || sortOptions.length === 0) return '';
 
-    const direction = sortOrder === 'desc' ? 'DESC' : 'ASC';
     const fieldMap: Record<string, string> = {
       evaluationNo: 'cbj.evaluation_no',
       status: statusExpression,
@@ -571,11 +590,28 @@ export class EvaluationRepository {
       prefecture: `ba."workPlace"`,
     };
 
-    if (fieldMap[sortField]) {
-      return `ORDER BY ${fieldMap[sortField]} ${direction} NULLS LAST`;
+    const orderParts: string[] = [];
+    let includesPrimary = false;
+
+    sortOptions.forEach(({ field, order }) => {
+      const column = fieldMap[field];
+      if (!column) return;
+
+      if (field === 'evaluationNo') {
+        includesPrimary = true;
+      }
+
+      const direction = order === 'desc' ? 'DESC' : 'ASC';
+      orderParts.push(`${column} ${direction} NULLS LAST`);
+    });
+
+    if (orderParts.length === 0) return '';
+
+    if (!includesPrimary) {
+      orderParts.push('cbj.evaluation_no DESC');
     }
 
-    return '';
+    return `ORDER BY ${orderParts.join(', ')}`;
   }
 
   private getQualifiedTables(): QualifiedTables {
