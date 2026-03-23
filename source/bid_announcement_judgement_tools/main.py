@@ -4893,7 +4893,8 @@ class BidJudgementSan:
         file_cache = {}
 
         # 行ごとに処理（PDFのみ）
-        for idx, row in df_main.iterrows():
+        iterator = tqdm(df_main.iterrows(), total=len(df_main), desc="Preparing Markdown tasks")
+        for idx, row in iterator:
             document_id = str(row.get("document_id", "")).strip()
             file_format = str(row.get("fileFormat", "")).strip().lower()
             save_path = row.get("save_path")
