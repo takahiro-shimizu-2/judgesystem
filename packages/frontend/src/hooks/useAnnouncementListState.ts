@@ -106,7 +106,6 @@ async function fetchAnnouncements(params: {
   }
 
   const result = await response.json();
-  console.log('Announcements API Response:', result);
   return result;
 }
 

@@ -58,7 +58,7 @@ export class EvaluationController {
    * GET /api/evaluations/:id - Get single evaluation by ID
    */
   getById = async (req: Request, res: Response): Promise<void> => {
-    logger.info("GET /api/evaluations/${req.params.id}");
+    logger.info(`GET /api/evaluations/${req.params.id}`);
 
     const { id } = req.params;
 
@@ -74,7 +74,7 @@ export class EvaluationController {
       res.setHeader("Cache-Control", "no-cache");
       res.status(200).json(evaluation);
     } catch (error) {
-      logger.error({ err: error }, "ERROR in GET /api/evaluations/${id}");
+      logger.error({ err: error }, `ERROR in GET /api/evaluations/${id}`);
       if (!res.headersSent) {
         res.status(500).json({
           error: "Internal Server Error",
@@ -88,7 +88,7 @@ export class EvaluationController {
    * PATCH /api/evaluations/:evaluationNo - Update workStatus
    */
   updateWorkStatus = async (req: Request, res: Response): Promise<void> => {
-    logger.info("PATCH /api/evaluations/${req.params.evaluationNo}");
+    logger.info(`PATCH /api/evaluations/${req.params.evaluationNo}`);
 
     const { evaluationNo } = req.params;
     const { workStatus, currentStep } = req.body;
@@ -104,7 +104,7 @@ export class EvaluationController {
       res.setHeader("Content-Type", "application/json");
       res.status(200).json(result);
     } catch (error) {
-      logger.error({ err: error }, "ERROR in PATCH /api/evaluations/${evaluationNo}");
+      logger.error({ err: error }, `ERROR in PATCH /api/evaluations/${evaluationNo}`);
 
       if (error instanceof Error && error.message.includes("Invalid workStatus")) {
         res.status(400).json({
@@ -175,14 +175,14 @@ export class EvaluationController {
    */
   getAssignees = async (req: Request, res: Response): Promise<void> => {
     const { evaluationNo } = req.params;
-    logger.info("GET /api/evaluations/${evaluationNo}/assignees");
+    logger.info(`GET /api/evaluations/${evaluationNo}/assignees`);
 
     try {
       const assignees = await this.service.getAssignees(evaluationNo);
       res.setHeader("Content-Type", "application/json");
       res.status(200).json(assignees);
     } catch (error) {
-      logger.error({ err: error }, "ERROR in GET /api/evaluations/${evaluationNo}/assignees");
+      logger.error({ err: error }, `ERROR in GET /api/evaluations/${evaluationNo}/assignees`);
       if (!res.headersSent) {
         res.status(500).json({
           error: "Internal Server Error",
@@ -198,7 +198,7 @@ export class EvaluationController {
   updateAssignee = async (req: Request, res: Response): Promise<void> => {
     const { evaluationNo } = req.params;
     const { stepId, contactId } = req.body ?? {};
-    logger.info("PUT /api/evaluations/${evaluationNo}/assignees");
+    logger.info(`PUT /api/evaluations/${evaluationNo}/assignees`);
 
     if (!stepId) {
       res.status(400).json({
@@ -213,7 +213,7 @@ export class EvaluationController {
       res.setHeader("Content-Type", "application/json");
       res.status(200).json(result);
     } catch (error) {
-      logger.error({ err: error }, "ERROR in PUT /api/evaluations/${evaluationNo}/assignees");
+      logger.error({ err: error }, `ERROR in PUT /api/evaluations/${evaluationNo}/assignees`);
       if (!res.headersSent) {
         res.status(500).json({
           error: "Internal Server Error",
@@ -228,14 +228,14 @@ export class EvaluationController {
    */
   getOrdererWorkflow = async (req: Request, res: Response): Promise<void> => {
     const { evaluationNo } = req.params;
-    logger.info("GET /api/evaluations/${evaluationNo}/orderer-workflow");
+    logger.info(`GET /api/evaluations/${evaluationNo}/orderer-workflow`);
 
     try {
       const state = await this.service.getOrdererWorkflow(evaluationNo);
       res.setHeader("Content-Type", "application/json");
       res.status(200).json(state);
     } catch (error) {
-      logger.error({ err: error }, "ERROR in GET /api/evaluations/${evaluationNo}/orderer-workflow");
+      logger.error({ err: error }, `ERROR in GET /api/evaluations/${evaluationNo}/orderer-workflow`);
       if (!res.headersSent) {
         res.status(500).json({
           error: "Internal Server Error",
@@ -250,14 +250,14 @@ export class EvaluationController {
    */
   updateOrdererWorkflow = async (req: Request, res: Response): Promise<void> => {
     const { evaluationNo } = req.params;
-    logger.info("PUT /api/evaluations/${evaluationNo}/orderer-workflow");
+    logger.info(`PUT /api/evaluations/${evaluationNo}/orderer-workflow`);
 
     try {
       const state = await this.service.updateOrdererWorkflow(evaluationNo, req.body ?? {});
       res.setHeader("Content-Type", "application/json");
       res.status(200).json(state);
     } catch (error) {
-      logger.error({ err: error }, "ERROR in PUT /api/evaluations/${evaluationNo}/orderer-workflow");
+      logger.error({ err: error }, `ERROR in PUT /api/evaluations/${evaluationNo}/orderer-workflow`);
       if (!res.headersSent) {
         res.status(500).json({
           error: "Internal Server Error",

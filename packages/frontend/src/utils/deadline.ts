@@ -40,6 +40,6 @@ export function getDeadlineInfo(days: number): DeadlineInfo {
  * 金額をフォーマット（万円表示）
  */
 export function formatAmountInManYen(min?: number, max?: number): string {
-  if (!min || !max) return '金額未定';
+  if (min == null || max == null) return '金額未定';
   return `${(min / 10000).toLocaleString()}〜${(max / 10000).toLocaleString()}万円`;
 }

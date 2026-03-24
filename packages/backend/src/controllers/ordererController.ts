@@ -30,7 +30,7 @@ export class OrdererController {
 
   getById = async (req: Request, res: Response): Promise<void> => {
     const { id } = req.params;
-    logger.info("GET /api/orderers/${id}");
+    logger.info(`GET /api/orderers/${id}`);
 
     try {
       const orderer = await this.service.getById(id);
@@ -43,7 +43,7 @@ export class OrdererController {
       res.setHeader("Cache-Control", "no-cache");
       res.status(200).json(orderer);
     } catch (error) {
-      logger.error({ err: error }, "ERROR in GET /api/orderers/${id}");
+      logger.error({ err: error }, `ERROR in GET /api/orderers/${id}`);
       if (!res.headersSent) {
         res.status(500).json({
           error: "Internal Server Error",

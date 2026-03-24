@@ -71,7 +71,7 @@ export default function MasterRegisterConfirmPage() {
           throw new Error('Failed to create staff');
         }
       } else {
-        console.log('登録データ:', formData);
+        // TODO: partner/orderer registration API call
       }
       alert('登録が完了しました');
       navigate(redirectPath);
