@@ -1,4 +1,72 @@
+# ==========================================
+# Environment & Secrets
+# ==========================================
+.env
+.env.*
+.env.local
+.env.*.local
+!.env.example
+!.env.local.example
+
+# ==========================================
+# Dependencies
+# ==========================================
+node_modules/
+.pnp
+.pnp.js
+
+# ==========================================
+# Python
+# ==========================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.venv/
+venv/
+ENV/
+*.egg-info/
+dist/
+build/
+*.egg
+
+# ==========================================
+# Build Output
+# ==========================================
+dist/
+build/
+*.tsbuildinfo
+
+# ==========================================
+# IDE & OS
+# ==========================================
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ==========================================
+# Logs
+# ==========================================
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ==========================================
+# Project-specific Data
+# ==========================================
 data/ocr
 data/pdf
 data/sec
-source/bid_apps/app_backend/postgres/command_example.txt
+
+# ==========================================
+# Runtime & Cache
+# ==========================================
+.cache/
+.parcel-cache/
+coverage/
+.nyc_output/
