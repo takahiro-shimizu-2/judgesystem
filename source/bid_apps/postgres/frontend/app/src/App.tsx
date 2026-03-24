@@ -1,19 +1,27 @@
+import { lazy, Suspense } from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
-import { ThemeProvider, createTheme, CssBaseline } from '@mui/material';
+import { ThemeProvider, createTheme, CssBaseline, CircularProgress, Box } from '@mui/material';
 import { MainLayout } from './components/layout';
-import BidListPage from './pages/BidListPage';
-import BidDetailPage from './pages/BidDetailPage';
-import AnnouncementListPage from './pages/AnnouncementListPage';
-import AnnouncementDetailPage from './pages/AnnouncementDetailPage';
-import PartnerListPage from './pages/PartnerListPage';
-import PartnerDetailPage from './pages/PartnerDetailPage';
-import OrdererListPage from './pages/OrdererListPage';
-import OrdererDetailPage from './pages/OrdererDetailPage';
-import StaffListPage from './pages/StaffListPage';
-import AnalyticsPage from './pages/AnalyticsPage';
-import MasterRegisterPage from './pages/MasterRegisterPage';
-import MasterRegisterConfirmPage from './pages/MasterRegisterConfirmPage';
 import { StaffProvider } from './contexts/StaffContext';
+
+const BidListPage = lazy(() => import('./pages/BidListPage'));
+const BidDetailPage = lazy(() => import('./pages/BidDetailPage'));
+const AnnouncementListPage = lazy(() => import('./pages/AnnouncementListPage'));
+const AnnouncementDetailPage = lazy(() => import('./pages/AnnouncementDetailPage'));
+const PartnerListPage = lazy(() => import('./pages/PartnerListPage'));
+const PartnerDetailPage = lazy(() => import('./pages/PartnerDetailPage'));
+const OrdererListPage = lazy(() => import('./pages/OrdererListPage'));
+const OrdererDetailPage = lazy(() => import('./pages/OrdererDetailPage'));
+const StaffListPage = lazy(() => import('./pages/StaffListPage'));
+const AnalyticsPage = lazy(() => import('./pages/AnalyticsPage'));
+const MasterRegisterPage = lazy(() => import('./pages/MasterRegisterPage'));
+const MasterRegisterConfirmPage = lazy(() => import('./pages/MasterRegisterConfirmPage'));
+
+const Loading = () => (
+  <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '50vh' }}>
+    <CircularProgress />
+  </Box>
+);
 
 const theme = createTheme({
   palette: {
@@ -59,20 +67,22 @@ function App() {
       <StaffProvider>
         <Router>
           <MainLayout>
-            <Routes>
-              <Route path="/" element={<BidListPage />} />
-              <Route path="/detail/:id" element={<BidDetailPage />} />
-              <Route path="/announcements" element={<AnnouncementListPage />} />
-              <Route path="/announcements/:id" element={<AnnouncementDetailPage />} />
-              <Route path="/partners" element={<PartnerListPage />} />
-              <Route path="/partners/:id" element={<PartnerDetailPage />} />
-              <Route path="/orderers" element={<OrdererListPage />} />
-              <Route path="/orderers/:id" element={<OrdererDetailPage />} />
-              <Route path="/staff" element={<StaffListPage />} />
-              <Route path="/analytics" element={<AnalyticsPage />} />
-              <Route path="/master/register" element={<MasterRegisterPage />} />
-              <Route path="/master/register/confirm" element={<MasterRegisterConfirmPage />} />
-            </Routes>
+            <Suspense fallback={<Loading />}>
+              <Routes>
+                <Route path="/" element={<BidListPage />} />
+                <Route path="/detail/:id" element={<BidDetailPage />} />
+                <Route path="/announcements" element={<AnnouncementListPage />} />
+                <Route path="/announcements/:id" element={<AnnouncementDetailPage />} />
+                <Route path="/partners" element={<PartnerListPage />} />
+                <Route path="/partners/:id" element={<PartnerDetailPage />} />
+                <Route path="/orderers" element={<OrdererListPage />} />
+                <Route path="/orderers/:id" element={<OrdererDetailPage />} />
+                <Route path="/staff" element={<StaffListPage />} />
+                <Route path="/analytics" element={<AnalyticsPage />} />
+                <Route path="/master/register" element={<MasterRegisterPage />} />
+                <Route path="/master/register/confirm" element={<MasterRegisterConfirmPage />} />
+              </Routes>
+            </Suspense>
           </MainLayout>
         </Router>
       </StaffProvider>

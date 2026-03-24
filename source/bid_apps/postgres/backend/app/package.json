@@ -17,7 +17,8 @@
     "pg": "^8.11.5",
     "pg-query-stream": "^4.5.3",
     "pino": "^10.3.1",
-    "pino-http": "^11.0.0"
+    "pino-http": "^11.0.0",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@types/compression": "^1.7.5",
