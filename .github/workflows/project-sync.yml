@@ -1,10 +1,9 @@
 name: Sync Issues to Project
 
+# Disabled: GitHub Project #1 does not exist yet.
+# Re-enable when project board is created and GH_PROJECT_TOKEN is configured.
 on:
-  issues:
-    types: [opened, labeled, unlabeled, closed, reopened]
-  pull_request:
-    types: [opened, closed, reopened]
+  workflow_dispatch: {}
 
 jobs:
   sync-to-project:

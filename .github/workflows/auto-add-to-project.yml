@@ -1,9 +1,9 @@
 name: Auto Add Issues to Project
 
-# When new issues are created, automatically add them to the project board
+# Disabled: GitHub Project #1 does not exist yet.
+# Re-enable when project board is created and GH_PROJECT_TOKEN is configured.
 on:
-  issues:
-    types: [opened]
+  workflow_dispatch: {}
 
 jobs:
   add-to-project:
