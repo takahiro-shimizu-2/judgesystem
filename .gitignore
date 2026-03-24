@@ -2,3 +2,4 @@ data/ocr
 data/pdf
 data/sec
 source/bid_apps/app_backend/postgres/command_example.txt
+node_modules/
