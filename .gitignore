@@ -51,3 +51,5 @@ data/ocr
 data/pdf
 data/sec
 .gitnexus
+.node_modules_ready
+packages/frontend/.vite/
