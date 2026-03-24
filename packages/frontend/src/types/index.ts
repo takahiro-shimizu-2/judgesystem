@@ -5,6 +5,9 @@
  *       import { priorityLabels } from '../constants/priority' を使用してください。
  */
 
+// shared パッケージからの re-export
+export type { EvaluationStatus, WorkStatus, RequirementCategory, CompanyPriority } from '@judgesystem/shared';
+
 // 各ファイルの型をre-export
 export * from './workflow';
 export * from './partner';
@@ -13,21 +16,7 @@ export * from './announcement';
 export * from './staff';
 
 import type { BidType } from './announcement';
-
-// 判定結果の種類
-export type EvaluationStatus = 'all_met' | 'other_only_unmet' | 'unmet';
-
-// 作業ステータスの種類
-export type WorkStatus = 'not_started' | 'in_progress' | 'completed';
-
-// 要件の種類
-export type RequirementCategory =
-  | '欠格要件'
-  | '所在地要件'
-  | '等級要件'
-  | '工事実績要件'
-  | '技術者要件'
-  | 'その他';
+import type { RequirementCategory } from '@judgesystem/shared';
 
 // 要件の判定結果
 export interface RequirementResult {
@@ -38,9 +27,6 @@ export interface RequirementResult {
   reason: string;
   evidence: string;
 }
-
-// 企業の優先順位
-export type CompanyPriority = 1 | 2 | 3 | 4 | 5;
 
 // 拠点情報
 export interface Branch {

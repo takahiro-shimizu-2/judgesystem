@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "description": "Bid Eligibility Judgment System",
+  "workspaces": ["packages/backend", "packages/frontend", "packages/shared"],
   "scripts": {
     "test": "echo \"No tests configured yet\" && exit 0"
   },

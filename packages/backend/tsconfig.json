@@ -12,7 +12,9 @@
     "moduleResolution": "node",
     "baseUrl": ".",
     "paths": {
-      "@/*": ["src/*"]
+      "@/*": ["src/*"],
+      "@judgesystem/shared": ["../shared/src/index.ts"],
+      "@judgesystem/shared/*": ["../shared/src/*"]
     }
   },
   "include": ["index.ts", "src/**/*"],

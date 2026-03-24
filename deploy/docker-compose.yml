@@ -45,5 +45,24 @@ services:
     depends_on:
       - backend
 
+  engine:
+    build:
+      context: ..
+      dockerfile: packages/engine/Dockerfile
+    volumes:
+      - ../data:/app/data
+    environment:
+      PGHOST: db
+      PGPORT: 5432
+      PGDATABASE: postgres
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      PGSSLMODE: disable
+    depends_on:
+      db:
+        condition: service_healthy
+    profiles:
+      - engine
+
 volumes:
   pgdata:

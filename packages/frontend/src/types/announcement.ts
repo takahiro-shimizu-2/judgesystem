@@ -1,28 +1,7 @@
 import type { Announcement } from './index';
 
-/**
- * 入札案件ステータス
- * - upcoming: 公告中（締切まで14日以上）
- * - ongoing: 締切間近（締切まで14日以内）
- * - awaiting_result: 結果待（締切後、落札結果待ち）
- * - closed: 終了（落札結果確定）
- */
-export type AnnouncementStatus = 'upcoming' | 'ongoing' | 'awaiting_result' | 'closed';
-
-/**
- * 入札形式
- */
-export type BidType =
-  | 'open_competitive'         // 一般競争入札
-  | 'planning_competition'     // 企画競争
-  | 'designated_competitive'   // 指名競争入札
-  | 'document_request'         // 資料提供招請
-  | 'opinion_request'          // 意見招請
-  | 'negotiated_contract'      // 随意契約
-  | 'open_counter'             // 見積(オープンカウンター)
-  | 'unknown'                  // その他・不明
-  | 'preferred_designation'    // 希望制指名競争入札
-  | 'other';
+// shared パッケージからの re-export
+export type { AnnouncementStatus, BidType } from '@judgesystem/shared';
 
 /**
  * 競争参加企業

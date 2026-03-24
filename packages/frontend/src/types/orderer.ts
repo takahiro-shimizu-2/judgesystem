@@ -1,5 +1,5 @@
-// 発注者カテゴリ
-export type OrdererCategory = 'national' | 'prefecture' | 'city' | 'other';
+// shared パッケージからの re-export
+export type { OrdererCategory } from '@judgesystem/shared';
 
 export interface Orderer {
   id: string;
