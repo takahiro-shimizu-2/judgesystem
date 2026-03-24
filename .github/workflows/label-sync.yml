@@ -6,7 +6,7 @@ name: 🏷️ Sync Labels to GitHub
 on:
   push:
     branches:
-      - main
+      - feat/judgesystem-cleanup
     paths:
       - '.github/labels.yml'
   workflow_dispatch:
