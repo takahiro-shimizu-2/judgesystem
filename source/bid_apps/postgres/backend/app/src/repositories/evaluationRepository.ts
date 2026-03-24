@@ -40,11 +40,6 @@ export class EvaluationRepository {
         workStatusExpression
       );
 
-      // Get total count
-      const countQuery = `SELECT COUNT(*) as count ${baseFromClause} ${whereClause}`;
-      const countResult = await client.query(countQuery, queryParams);
-      const total = parseInt(countResult.rows[0].count);
-
       // Build ORDER BY clause
       const sortOptions = this.normalizeSortOptions(filters.sortOptions, filters.sortField, filters.sortOrder);
       const orderByClause = this.buildOrderByClause(
@@ -54,13 +49,14 @@ export class EvaluationRepository {
         priorityExpression
       );
 
-      // Get paginated data
+      // Get paginated data with total count via Window function
       const page = filters.page || 0;
       const pageSize = filters.pageSize || 25;
       const offset = page * pageSize;
 
       const dataQuery = `
         SELECT
+          COUNT(*) OVER() AS total_count,
           cbj.evaluation_no::text AS id,
           cbj.evaluation_no::text AS "evaluationNo",
           jsonb_build_object(
@@ -98,8 +94,15 @@ export class EvaluationRepository {
       const dataParams = [...queryParams, pageSize, offset];
       const dataResult = await client.query(dataQuery, dataParams);
 
+      const total = dataResult.rows.length > 0
+        ? parseInt(dataResult.rows[0].total_count)
+        : 0;
+
+      // Remove total_count from each row
+      const data = dataResult.rows.map(({ total_count, ...row }) => row);
+
       return {
-        data: dataResult.rows,
+        data,
         total,
       };
     } finally {
