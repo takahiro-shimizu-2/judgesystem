@@ -77,7 +77,7 @@ pip install -r requirements.txt
 - `--sqlite3_db_file_path` で、db ファイルの保存先を指定する必要があります。
 
 ```
-python source/bid_announcement_judgement_tools/main.py --bid_announcements_pre_file data/bid_announcements_pre/bid_announcements_pre_1.txt --sqlite3_db_file_path data/example.db --google_ai_studio_api_key_filepath data/sec/google_ai_studio_api_key.txt
+python -m packages.engine.main --bid_announcements_pre_file data/bid_announcements_pre/bid_announcements_pre_1.txt --sqlite3_db_file_path data/example.db --google_ai_studio_api_key_filepath data/sec/google_ai_studio_api_key.txt
 ```
 
 ### GCP bigqueryを使用する場合
@@ -89,7 +89,7 @@ python source/bid_announcement_judgement_tools/main.py --bid_announcements_pre_f
   - `--bigquery_location`
 
 ```
-python source/bid_announcement_judgement_tools/main.py --bid_announcements_pre_file data/bid_announcements_pre/bid_announcements_pre_1.txt --bigquery_location "asia-northeast1" --bigquery_project_id vocal-raceway-473509-f1 --bigquery_dataset_name October_20251004  --google_ai_studio_api_key_filepath data/sec/google_ai_studio_api_key.txt --use_gcp_vm
+python -m packages.engine.main --bid_announcements_pre_file data/bid_announcements_pre/bid_announcements_pre_1.txt --bigquery_location "asia-northeast1" --bigquery_project_id vocal-raceway-473509-f1 --bigquery_dataset_name October_20251004  --google_ai_studio_api_key_filepath data/sec/google_ai_studio_api_key.txt --use_gcp_vm
 ```
 
 ## 資料類
@@ -100,7 +100,7 @@ pdoc で作成できます。作成ファイルはレポジトリには登録し
 
 以下を実行すれば、`doc/pdoc_bid_announcement_judgement_tools` 以下に html ファイルが作成されます。まずは `doc/pdoc_bid_announcement_judgement_tools/index.html` を参照してください。
 
-`pdoc source/bid_announcement_judgement_tools/main.py source/bid_announcement_judgement_tools/requirements/experience.py source/bid_announcement_judgement_tools/requirements/grade_item.py source/bid_announcement_judgement_tools/requirements/ineligibility.py source/bid_announcement_judgement_tools/requirements/location.py source/bid_announcement_judgement_tools/requirements/technician.py -o doc/pdoc_bid_announcement_judgement_tools`
+`pdoc packages/engine/main.py packages/engine/requirements/experience.py packages/engine/requirements/grade_item.py packages/engine/requirements/ineligibility.py packages/engine/requirements/location.py packages/engine/requirements/technician.py -o doc/pdoc_bid_announcement_judgement_tools`
 
 
 ### マスターデスクリプション
