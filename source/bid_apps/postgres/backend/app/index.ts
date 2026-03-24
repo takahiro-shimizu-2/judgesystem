@@ -5,6 +5,7 @@ import helmet from "helmet";
 import pinoHttp from "pino-http";
 import { logger } from "./src/utils/logger";
 import { errorHandler } from "./src/middleware/errorHandler";
+import { authenticate, authorize } from "./src/middleware/auth";
 import { pool } from "./src/config/database";
 import {
   EvaluationController,
@@ -79,16 +80,19 @@ const ordererController = new OrdererController();
 const contactController = new ContactController();
 const companyController = new CompanyController();
 
+// Apply authentication to all /api routes
+app.use("/api", authenticate);
+
 // Evaluation routes
 app.get("/api/evaluations/stats", evaluationController.getStats);
 app.get("/api/evaluations/status-counts", evaluationController.getStatusCounts);
 app.get("/api/evaluations", evaluationController.getList);
 app.get("/api/evaluations/:id", evaluationController.getById);
-app.patch("/api/evaluations/:evaluationNo", evaluationController.updateWorkStatus);
+app.patch("/api/evaluations/:evaluationNo", authorize("admin", "evaluator"), evaluationController.updateWorkStatus);
 app.get("/api/evaluations/:evaluationNo/assignees", evaluationController.getAssignees);
-app.put("/api/evaluations/:evaluationNo/assignees", evaluationController.updateAssignee);
+app.put("/api/evaluations/:evaluationNo/assignees", authorize("admin", "evaluator"), evaluationController.updateAssignee);
 app.get("/api/evaluations/:evaluationNo/orderer-workflow", evaluationController.getOrdererWorkflow);
-app.put("/api/evaluations/:evaluationNo/orderer-workflow", evaluationController.updateOrdererWorkflow);
+app.put("/api/evaluations/:evaluationNo/orderer-workflow", authorize("admin", "evaluator", "orderer"), evaluationController.updateOrdererWorkflow);
 
 // Announcement routes
 app.get("/api/announcements", announcementController.getList);
@@ -108,9 +112,9 @@ app.get("/api/orderers/:id", ordererController.getById);
 // Contact routes
 app.get("/api/contacts", contactController.getList);
 app.get("/api/contacts/:id", contactController.getById);
-app.post("/api/contacts", contactController.create);
-app.patch("/api/contacts/:id", contactController.update);
-app.delete("/api/contacts/:id", contactController.delete);
+app.post("/api/contacts", authorize("admin", "evaluator"), contactController.create);
+app.patch("/api/contacts/:id", authorize("admin", "evaluator"), contactController.update);
+app.delete("/api/contacts/:id", authorize("admin"), contactController.delete);
 
 // Company routes
 app.get("/api/companies", companyController.getList);
