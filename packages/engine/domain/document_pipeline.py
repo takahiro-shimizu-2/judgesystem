@@ -43,7 +43,6 @@ class DocumentPreparationMixin:
         do_ocr_json=False,
         do_count_pages=True,
         do_ocr=True,
-        google_api_key="data/sec/google_ai_studio_api_key_mizu.txt",
         ocr_max_concurrency=5,
         ocr_max_api_calls_per_run=1000
     ):
@@ -90,7 +89,6 @@ class DocumentPreparationMixin:
             do_ocr_json: Gemini OCR JSON を生成する場合 True
             do_count_pages: PDF のページ数をカウントする場合 True
             do_ocr: Gemini OCR を実行する場合 True
-            google_api_key: Google AI Studio API キーファイルのパス（Vertex AI を使用しない場合に参照）
             ocr_max_concurrency: OCR 実行時の最大並列数
             ocr_max_api_calls_per_run: 1回の実行での最大API呼び出し数（デフォルト: 1000）
         """
@@ -200,7 +198,6 @@ class DocumentPreparationMixin:
             df_merged = self._step0_generate_markdown(
                 df_main=df_merged,
                 use_gcs=use_gcs,
-                google_api_key=google_api_key,
                 max_concurrency=ocr_max_concurrency,
                 max_api_calls_per_run=ocr_max_api_calls_per_run,
                 force_regenerate=False
@@ -216,7 +213,6 @@ class DocumentPreparationMixin:
             df_merged = self._step0_generate_ocr_json(
                 df_main=df_merged,
                 use_gcs=use_gcs,
-                google_api_key=google_api_key,
                 max_concurrency=ocr_max_concurrency,
                 max_api_calls_per_run=ocr_max_api_calls_per_run,
                 debug_output_list_path=self.ocr_json_debug_output_path
@@ -241,7 +237,6 @@ class DocumentPreparationMixin:
             df_merged, df_announcements, df_requirements = self._step0_ocr_with_gemini(
                 df_main=df_merged,
                 use_gcs=use_gcs,
-                google_api_key=google_api_key,
                 max_concurrency=ocr_max_concurrency,
                 max_api_calls_per_run=ocr_max_api_calls_per_run
             )

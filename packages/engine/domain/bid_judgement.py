@@ -56,8 +56,6 @@ class BidJudgementSan(
         tablenamesconfig=None,
         db_operator=None,
         gemini_model="gemini-2.5-flash",
-        google_api_key_path=None,
-        gemini_use_vertex_ai=False,
         vertex_ai_project_id=None,
         vertex_ai_location="asia-northeast1",
         gemini_max_output_tokens=None,
@@ -66,8 +64,6 @@ class BidJudgementSan(
         self.tablenamesconfig = tablenamesconfig
         self.db_operator=db_operator
         self.gemini_model = gemini_model
-        self.google_api_key_path = google_api_key_path
-        self.gemini_use_vertex_ai = gemini_use_vertex_ai
         self.vertex_ai_project_id = vertex_ai_project_id
         self.vertex_ai_location = vertex_ai_location or "asia-northeast1"
         self.gemini_max_output_tokens = gemini_max_output_tokens
