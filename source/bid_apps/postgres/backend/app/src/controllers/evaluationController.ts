@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import { EvaluationService } from "../services";
 import { FilterParams, SortOption } from "../types";
 import { logger } from "../utils/logger";
+import { evaluationFiltersSchema } from "../validators/evaluationSchemas";
 
 export class EvaluationController {
   private service: EvaluationService;
@@ -17,22 +18,14 @@ export class EvaluationController {
     logger.info("GET /api/evaluations hit");
 
     try {
-      // Parse and validate pagination parameters
-      const pageNum = req.query.page ? parseInt(req.query.page as string, 10) : 0;
-      const pageSizeNum = req.query.pageSize ? parseInt(req.query.pageSize as string, 10) : 25;
-
-      // Validation
-      if (isNaN(pageNum) || pageNum < 0) {
-        res.status(400).json({ error: "Bad Request", message: "page must be a non-negative integer" });
-        return;
-      }
-      if (isNaN(pageSizeNum) || pageSizeNum < 1 || pageSizeNum > 1000) {
-        res.status(400).json({ error: "Bad Request", message: "pageSize must be an integer between 1 and 1000" });
+      // Validate query parameters with Zod
+      const parsed = evaluationFiltersSchema.safeParse(req.query);
+      if (!parsed.success) {
+        res.status(400).json({ error: "Bad Request", message: parsed.error.issues });
         return;
       }
 
-      const page = pageNum;
-      const pageSize = pageSizeNum;
+      const { page, pageSize } = parsed.data;
 
       const filters = this.buildFilterParams(req, page, pageSize);
 

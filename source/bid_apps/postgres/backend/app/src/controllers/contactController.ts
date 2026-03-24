@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import { ContactService } from "../services/contactService";
 import { logger } from "../utils/logger";
+import { createContactSchema } from "../validators/contactSchemas";
 
 export class ContactController {
   private service: ContactService;
@@ -52,15 +53,13 @@ export class ContactController {
 
   create = async (req: Request, res: Response): Promise<void> => {
     logger.info("POST /api/contacts hit");
-    const { name, department, email, phone } = req.body ?? {};
 
-    if (!name || !department || !email || !phone) {
-      res.status(400).json({
-        error: "Bad Request",
-        message: "name, department, email, and phone are required",
-      });
+    const parsed = createContactSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: "Bad Request", message: parsed.error.issues });
       return;
     }
+    const { name, department, email, phone } = parsed.data;
 
     try {
       const contact = await this.service.create({ name, department, email, phone });
