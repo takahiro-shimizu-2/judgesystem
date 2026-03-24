@@ -67,20 +67,6 @@ export async function deleteOrdererRecord(id: string): Promise<boolean> {
   }
 }
 
-// 後方互換: 静的キャッシュ
-let _ordererCache: Orderer[] | null = null;
-
-async function ensureCache(): Promise<Orderer[]> {
-  if (!_ordererCache) {
-    _ordererCache = await fetchOrdererList();
-  }
-  return _ordererCache;
-}
-
-export function invalidateOrdererCache(): void {
-  _ordererCache = null;
-}
-
 // 後方互換エクスポート（遅延初期化）
 export const mockOrderers: Orderer[] = await fetchOrdererList();
 

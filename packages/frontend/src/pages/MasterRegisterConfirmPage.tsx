@@ -81,11 +81,14 @@ export default function MasterRegisterConfirmPage() {
         }
       } else if (formType === 'orderer') {
         const ordererData = formData as OrdererFormData;
+        const { name, category, address, phone, fax, email } = ordererData;
+        if (!category) throw new Error('カテゴリが未選択です');
+        const apiData = { name, category, address, phone, fax, email };
         if (editMode && entityId) {
-          const updated = await updateOrdererRecord(entityId, ordererData);
+          const updated = await updateOrdererRecord(entityId, apiData);
           if (!updated) throw new Error('Failed to update orderer');
         } else {
-          const created = await createOrdererRecord(ordererData);
+          const created = await createOrdererRecord(apiData);
           if (!created) throw new Error('Failed to create orderer');
         }
       } else if (formType === 'partner') {
