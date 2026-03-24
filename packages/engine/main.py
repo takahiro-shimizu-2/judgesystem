@@ -14,13 +14,13 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from source.bid_announcement_judgement_tools.application.services import BidAnnouncementsApplication
-from source.bid_announcement_judgement_tools.cli.entry import main as cli_main
-from source.bid_announcement_judgement_tools.domain.bid_judgement import (
+from packages.engine.application.services import BidAnnouncementsApplication
+from packages.engine.cli.entry import main as cli_main
+from packages.engine.domain.bid_judgement import (
     BidJudgementSan,
     Master,
 )
-from source.bid_announcement_judgement_tools.repository.db_operator import (
+from packages.engine.repository.db_operator import (
     TablenamesConfig,
     DBOperator,
     DBOperatorGCPVM,

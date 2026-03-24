@@ -3,10 +3,10 @@ FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-COPY app/package*.json ./
+COPY package*.json ./
 RUN npm ci --ignore-scripts
 
-COPY app/ .
+COPY . .
 RUN npx tsc
 
 # Production stage

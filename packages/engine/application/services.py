@@ -5,8 +5,8 @@ import sys
 from pathlib import Path
 from typing import List, Optional
 
-from source.bid_announcement_judgement_tools.domain.bid_judgement import BidJudgementSan
-from source.bid_announcement_judgement_tools.repository.db_operator import (
+from packages.engine.domain.bid_judgement import BidJudgementSan
+from packages.engine.repository.db_operator import (
     TablenamesConfig,
     DBOperatorGCPVM,
     DBOperatorSQLITE3,

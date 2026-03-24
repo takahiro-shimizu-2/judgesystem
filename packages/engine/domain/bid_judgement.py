@@ -219,11 +219,11 @@ except ImportError:
     GCS_AVAILABLE = False
 
 try:
-    from source.bid_announcement_judgement_tools.requirements.ineligibility import checkIneligibilityDynamic
-    from source.bid_announcement_judgement_tools.requirements.experience import checkExperienceRequirement
-    from source.bid_announcement_judgement_tools.requirements.location import checkLocationRequirement
-    from source.bid_announcement_judgement_tools.requirements.grade_item import checkGradeAndItemRequirement
-    from source.bid_announcement_judgement_tools.requirements.technician import checkTechnicianRequirement
+    from packages.engine.requirements.ineligibility import checkIneligibilityDynamic
+    from packages.engine.requirements.experience import checkExperienceRequirement
+    from packages.engine.requirements.location import checkLocationRequirement
+    from packages.engine.requirements.grade_item import checkGradeAndItemRequirement
+    from packages.engine.requirements.technician import checkTechnicianRequirement
 except ModuleNotFoundError:
     from requirements.ineligibility import checkIneligibilityDynamic
     from requirements.experience import checkExperienceRequirement
@@ -599,11 +599,11 @@ def _process_judgement_chunk(args):
 
     # requirements モジュールの関数をimport（ワーカープロセス内で確実に利用可能にする）
     try:
-        from source.bid_announcement_judgement_tools.requirements.ineligibility import checkIneligibilityDynamic
-        from source.bid_announcement_judgement_tools.requirements.experience import checkExperienceRequirement
-        from source.bid_announcement_judgement_tools.requirements.location import checkLocationRequirement
-        from source.bid_announcement_judgement_tools.requirements.grade_item import checkGradeAndItemRequirement
-        from source.bid_announcement_judgement_tools.requirements.technician import checkTechnicianRequirement
+        from packages.engine.requirements.ineligibility import checkIneligibilityDynamic
+        from packages.engine.requirements.experience import checkExperienceRequirement
+        from packages.engine.requirements.location import checkLocationRequirement
+        from packages.engine.requirements.grade_item import checkGradeAndItemRequirement
+        from packages.engine.requirements.technician import checkTechnicianRequirement
     except ModuleNotFoundError:
         from requirements.ineligibility import checkIneligibilityDynamic
         from requirements.experience import checkExperienceRequirement

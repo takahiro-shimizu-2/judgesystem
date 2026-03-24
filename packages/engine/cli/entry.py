@@ -2,7 +2,7 @@
 
 import argparse
 
-from source.bid_announcement_judgement_tools.application.services import BidAnnouncementsApplication
+from packages.engine.application.services import BidAnnouncementsApplication
 
 
 def build_parser():
