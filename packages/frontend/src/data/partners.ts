@@ -1,39 +1,90 @@
 /**
  * 協力会社マスターデータ（企業情報を統合）
- * 全ての会社データの単一真実源（Single Source of Truth）
  */
-import type {
-  PartnerListItem
-  //PastProject,
-  //CompanyBranch,
-  //Qualifications,
-  //UnifiedQualificationItem,
-  //OrdererQualificationItem,
-  //OrdererQualification
-} from '../types';
+import type { PartnerListItem } from '../types';
 import { getApiUrl } from '../config/api';
-//import {
-//  unifiedMainCategories,
-//  unifiedSubCategories,
-//  ordererCategories,
-//  ordererRegions,
-//  ordererOrganizations,
-//  grades as qualificationGrades,
-//  type UnifiedMainCategory,
-//} from '../constants/qualifications';
 
-
-const generatePartners = async (): Promise<PartnerListItem[]> => {
-  const res = await fetch(getApiUrl('/api/partners'));
-  const data = await res.json();
-  //console.log("API response:", data);
-  return data;
+export async function fetchPartnerList(): Promise<PartnerListItem[]> {
+  const response = await fetch(getApiUrl('/api/partners'));
+  if (!response.ok) {
+    throw new Error(`Failed to load partners: ${response.status}`);
+  }
+  const data = await response.json();
+  return Array.isArray(data) ? data : [];
 }
 
-// API から取得した実データをキャッシュとして保持
-export const partners: PartnerListItem[] = await generatePartners();
+export async function createPartnerRecord(
+  data: {
+    name: string;
+    postalCode: string;
+    address: string;
+    phone: string;
+    fax: string;
+    email: string;
+    url: string;
+    representative: string;
+    established: string;
+    capital: string;
+    employeeCount: string;
+    categories: string[];
+    branches: { name: string; address: string }[];
+  }
+): Promise<PartnerListItem | null> {
+  try {
+    const response = await fetch(getApiUrl('/api/partners'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (!response.ok) {
+      throw new Error(`Failed to create partner: ${response.status}`);
+    }
+    return await response.json();
+  } catch (error) {
+    console.error('Failed to create partner:', error);
+    return null;
+  }
+}
 
-// 種別（100種類以上）- エクスポート
+export async function updatePartnerRecord(
+  id: string,
+  data: Record<string, unknown>
+): Promise<PartnerListItem | null> {
+  try {
+    const response = await fetch(getApiUrl(`/api/partners/${id}`), {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (!response.ok) {
+      throw new Error(`Failed to update partner: ${response.status}`);
+    }
+    return await response.json();
+  } catch (error) {
+    console.error('Failed to update partner:', error);
+    return null;
+  }
+}
+
+export async function deletePartnerRecord(id: string): Promise<boolean> {
+  try {
+    const response = await fetch(getApiUrl(`/api/partners/${id}`), {
+      method: 'DELETE',
+    });
+    if (!response.ok) {
+      throw new Error(`Failed to delete partner: ${response.status}`);
+    }
+    return true;
+  } catch (error) {
+    console.error('Failed to delete partner:', error);
+    return false;
+  }
+}
+
+// 後方互換エクスポート
+export const partners: PartnerListItem[] = await fetchPartnerList();
+
+// 種別（100種類以上）
 export const allCategories = [
   '土木一式', '建築一式', '大工', '左官', 'とび・土工', '石',
   '屋根', '電気', '管', 'タイル・れんが・ブロック', '鋼構造物',

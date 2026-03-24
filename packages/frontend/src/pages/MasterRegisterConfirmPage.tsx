@@ -13,12 +13,16 @@ import type { PartnerFormData } from '../hooks/usePartnerForm';
 import type { OrdererFormData } from '../hooks/useOrdererForm';
 import type { StaffFormData } from '../hooks/useStaffForm';
 import { useStaffDirectory } from '../contexts/StaffContext';
+import { createOrdererRecord, updateOrdererRecord } from '../data/orderers';
+import { createPartnerRecord, updatePartnerRecord } from '../data/partners';
 
 type FormType = 'partner' | 'orderer' | 'staff';
 
 interface ConfirmPageState {
   formData: PartnerFormData | OrdererFormData | StaffFormData;
   formType: FormType;
+  editMode?: boolean;
+  entityId?: string;
 }
 
 const formTypeConfig: Record<FormType, { label: string; icon: React.ReactElement; tabIndex: number }> = {
@@ -31,7 +35,7 @@ export default function MasterRegisterConfirmPage() {
   const location = useLocation();
   const navigate = useNavigate();
   const state = location.state as ConfirmPageState | null;
-  const { createStaff: createStaffEntry } = useStaffDirectory();
+  const { createStaff: createStaffEntry, updateStaff: updateStaffEntry } = useStaffDirectory();
 
   // stateがない場合は登録ページにリダイレクト
   useEffect(() => {
@@ -44,7 +48,7 @@ export default function MasterRegisterConfirmPage() {
     return null;
   }
 
-  const { formData, formType } = state;
+  const { formData, formType, editMode, entityId } = state;
   const config = formTypeConfig[formType];
 
   const handleBack = () => {
@@ -53,6 +57,8 @@ export default function MasterRegisterConfirmPage() {
         formData,
         formType,
         activeTab: config.tabIndex,
+        editMode,
+        entityId,
       },
     });
   };
@@ -66,18 +72,38 @@ export default function MasterRegisterConfirmPage() {
 
     try {
       if (formType === 'staff') {
-        const created = await createStaffEntry(formData as StaffFormData);
-        if (!created) {
-          throw new Error('Failed to create staff');
+        if (editMode && entityId) {
+          const updated = await updateStaffEntry(entityId, formData as StaffFormData);
+          if (!updated) throw new Error('Failed to update staff');
+        } else {
+          const created = await createStaffEntry(formData as StaffFormData);
+          if (!created) throw new Error('Failed to create staff');
         }
-      } else {
-        // TODO: partner/orderer registration API call
+      } else if (formType === 'orderer') {
+        const ordererData = formData as OrdererFormData;
+        if (editMode && entityId) {
+          const updated = await updateOrdererRecord(entityId, ordererData);
+          if (!updated) throw new Error('Failed to update orderer');
+        } else {
+          const created = await createOrdererRecord(ordererData);
+          if (!created) throw new Error('Failed to create orderer');
+        }
+      } else if (formType === 'partner') {
+        const partnerData = formData as PartnerFormData;
+        if (editMode && entityId) {
+          const updated = await updatePartnerRecord(entityId, partnerData as unknown as Record<string, unknown>);
+          if (!updated) throw new Error('Failed to update partner');
+        } else {
+          const created = await createPartnerRecord(partnerData);
+          if (!created) throw new Error('Failed to create partner');
+        }
       }
-      alert('登録が完了しました');
+
+      alert(editMode ? '更新が完了しました' : '登録が完了しました');
       navigate(redirectPath);
     } catch (error) {
       console.error('Failed to submit registration:', error);
-      alert('登録に失敗しました。時間をおいて再度お試しください。');
+      alert(editMode ? '更新に失敗しました。時間をおいて再度お試しください。' : '登録に失敗しました。時間をおいて再度お試しください。');
     }
   };
 
@@ -100,7 +126,9 @@ export default function MasterRegisterConfirmPage() {
         <Paper sx={formPageStyles.paper}>
           <Box sx={formPageStyles.header}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-              <Typography sx={formPageStyles.title}>登録内容の確認</Typography>
+              <Typography sx={formPageStyles.title}>
+                {editMode ? '更新内容の確認' : '登録内容の確認'}
+              </Typography>
               <Chip
                 icon={config.icon}
                 label={config.label}
@@ -115,6 +143,18 @@ export default function MasterRegisterConfirmPage() {
                   },
                 }}
               />
+              {editMode && (
+                <Chip
+                  label="編集モード"
+                  size="small"
+                  sx={{
+                    backgroundColor: `${colors.accent.blue}15`,
+                    color: colors.accent.blue,
+                    fontWeight: 600,
+                    fontSize: fontSizes.xs,
+                  }}
+                />
+              )}
             </Box>
           </Box>
 
@@ -135,7 +175,7 @@ export default function MasterRegisterConfirmPage() {
                 startIcon={<CheckIcon />}
                 sx={formSubmitButtonStyles}
               >
-                登録する
+                {editMode ? '更新する' : '登録する'}
               </Button>
             </Box>
           </Box>

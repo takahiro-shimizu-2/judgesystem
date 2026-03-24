@@ -15,9 +15,11 @@ import {
 interface StaffRegisterFormProps {
   onSubmit?: (data: StaffFormData) => void;
   initialData?: StaffFormData;
+  editMode?: boolean;
+  entityId?: string;
 }
 
-export function StaffRegisterForm({ onSubmit, initialData }: StaffRegisterFormProps) {
+export function StaffRegisterForm({ onSubmit, initialData, editMode, entityId }: StaffRegisterFormProps) {
   const navigate = useNavigate();
   const {
     formData,
@@ -29,7 +31,7 @@ export function StaffRegisterForm({ onSubmit, initialData }: StaffRegisterFormPr
     resetForm,
   } = useStaffForm();
 
-  // 確認画面から戻った場合、データを復元
+  // 確認画面から戻った場合 or 編集モードの場合、データを復元
   useEffect(() => {
     if (initialData) {
       Object.entries(initialData).forEach(([key, value]) => {
@@ -42,7 +44,7 @@ export function StaffRegisterForm({ onSubmit, initialData }: StaffRegisterFormPr
     if (validateAll()) {
       onSubmit?.(formData);
       navigate('/master/register/confirm', {
-        state: { formData, formType: 'staff' },
+        state: { formData, formType: 'staff', editMode, entityId },
       });
     }
   };

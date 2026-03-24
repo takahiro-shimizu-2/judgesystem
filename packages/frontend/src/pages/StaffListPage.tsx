@@ -2,6 +2,7 @@
  * 担当者一覧ページ（カード形式）
  */
 import { useCallback, useMemo, useState, useRef, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Box,
   Paper,
@@ -20,6 +21,8 @@ import {
   Close as CloseIcon,
   SwapVert as SortIcon,
   FilterAlt as FilterAltIcon,
+  Edit as EditIcon,
+  Delete as DeleteIcon,
 } from '@mui/icons-material';
 import type { GridSortModel } from '@mui/x-data-grid';
 import { fontSizes, colors, pageStyles, iconStyles, borderRadius, listFilterChipStyles, rightPanelColors, rightPanelStyles } from '../constants/styles';
@@ -44,7 +47,15 @@ interface RowData extends Staff {
 /**
  * 担当者カード
  */
-function StaffCard({ row }: { row: RowData }) {
+function StaffCard({
+  row,
+  onEdit,
+  onDelete,
+}: {
+  row: RowData;
+  onEdit: (staff: RowData) => void;
+  onDelete: (staff: RowData) => void;
+}) {
   const departmentColor = departmentColors[row.department] || colors.text.muted;
 
   return (
@@ -160,6 +171,37 @@ function StaffCard({ row }: { row: RowData }) {
             </Typography>
           </Box>
         </Box>
+      </Box>
+
+      {/* 右: 編集・削除ボタン */}
+      <Box
+        sx={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 0.5,
+          alignSelf: 'center',
+        }}
+      >
+        <IconButton
+          size="small"
+          onClick={() => onEdit(row)}
+          sx={{
+            color: colors.text.light,
+            '&:hover': { color: colors.accent.blue, backgroundColor: `${colors.accent.blue}15` },
+          }}
+        >
+          <EditIcon sx={{ fontSize: 18 }} />
+        </IconButton>
+        <IconButton
+          size="small"
+          onClick={() => onDelete(row)}
+          sx={{
+            color: colors.text.light,
+            '&:hover': { color: colors.accent.red, backgroundColor: `${colors.accent.red}15` },
+          }}
+        >
+          <DeleteIcon sx={{ fontSize: 18 }} />
+        </IconButton>
       </Box>
     </Box>
   );
@@ -557,8 +599,9 @@ function StaffDisplayConditionsPanel({
 
 export default function StaffListPage() {
   const listContainerRef = useRef<HTMLDivElement>(null);
+  const navigate = useNavigate();
   const { rightPanelOpen, toggleRightPanel, closeRightPanel, isMobile } = useSidebar();
-  const { staff, loading, error, refresh } = useStaffDirectory();
+  const { staff, loading, error, refresh, deleteStaff } = useStaffDirectory();
 
   // 検索クエリ
   const [searchQuery, setSearchQuery] = useState('');
@@ -664,6 +707,31 @@ export default function StaffListPage() {
     setSortModel([]);
     setFilters({ departments: [] });
   }, []);
+
+  const handleEdit = useCallback((row: RowData) => {
+    navigate('/master/register', {
+      state: {
+        editMode: true,
+        entityId: row.id,
+        formType: 'staff',
+        formData: {
+          name: row.name,
+          department: row.department,
+          email: row.email,
+          phone: row.phone,
+        },
+        activeTab: 2,
+      },
+    });
+  }, [navigate]);
+
+  const handleDelete = useCallback(async (row: RowData) => {
+    if (!window.confirm(`「${row.name}」を削除しますか？`)) return;
+    const success = await deleteStaff(row.id);
+    if (!success) {
+      alert('削除に失敗しました。');
+    }
+  }, [deleteStaff]);
 
   return (
     <Box
@@ -790,7 +858,7 @@ export default function StaffListPage() {
             ) : (
               <>
                 {paginatedRows.map((row) => (
-                  <StaffCard key={row.id} row={row} />
+                  <StaffCard key={row.id} row={row} onEdit={handleEdit} onDelete={handleDelete} />
                 ))}
                 {paginatedRows.length === 0 && (
                   <Box sx={{ p: 4, textAlign: 'center', color: colors.text.muted }}>

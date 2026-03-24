@@ -54,9 +54,11 @@ import {
 interface PartnerRegisterFormProps {
   onSubmit?: (data: PartnerFormData) => void;
   initialData?: PartnerFormData;
+  editMode?: boolean;
+  entityId?: string;
 }
 
-export function PartnerRegisterForm({ onSubmit, initialData }: PartnerRegisterFormProps) {
+export function PartnerRegisterForm({ onSubmit, initialData, editMode, entityId }: PartnerRegisterFormProps) {
   const navigate = useNavigate();
   const {
     formData,
@@ -97,7 +99,7 @@ export function PartnerRegisterForm({ onSubmit, initialData }: PartnerRegisterFo
     if (validateAll()) {
       onSubmit?.(formData);
       navigate('/master/register/confirm', {
-        state: { formData, formType: 'partner' },
+        state: { formData, formType: 'partner', editMode, entityId },
       });
     }
   };

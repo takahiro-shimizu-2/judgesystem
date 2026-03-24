@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import type { Staff } from '../types';
-import { fetchStaffList, createStaffRecord } from '../data/staff';
+import { fetchStaffList, createStaffRecord, updateStaffRecord, deleteStaffRecord } from '../data/staff';
 
 interface StaffContextValue {
   staff: Staff[];
@@ -9,6 +9,8 @@ interface StaffContextValue {
   error: string | null;
   refresh: () => Promise<void>;
   createStaff: (data: Pick<Staff, 'name' | 'department' | 'email' | 'phone'>) => Promise<Staff | null>;
+  updateStaff: (id: string, data: Partial<Pick<Staff, 'name' | 'department' | 'email' | 'phone'>>) => Promise<Staff | null>;
+  deleteStaff: (id: string) => Promise<boolean>;
   findById: (id: string) => Staff | undefined;
 }
 
@@ -19,6 +21,8 @@ const mockContextValue: StaffContextValue = {
   error: null,
   refresh: async () => {},
   createStaff: async () => null,
+  updateStaff: async () => null,
+  deleteStaff: async () => false,
   findById: () => undefined,
 };
 
@@ -58,6 +62,30 @@ export function StaffProvider({ children }: { children: ReactNode }) {
     []
   );
 
+  const updateStaff = useCallback(
+    async (id: string, data: Partial<Pick<Staff, 'name' | 'department' | 'email' | 'phone'>>) => {
+      const updated = await updateStaffRecord(id, data);
+      if (updated) {
+        setStaff((prev) => prev.map((s) => (s.id === id ? updated : s)));
+        setError(null);
+      }
+      return updated;
+    },
+    []
+  );
+
+  const deleteStaff = useCallback(
+    async (id: string) => {
+      const deleted = await deleteStaffRecord(id);
+      if (deleted) {
+        setStaff((prev) => prev.filter((s) => s.id !== id));
+        setError(null);
+      }
+      return deleted;
+    },
+    []
+  );
+
   const findById = useCallback(
     (id: string) => staff.find((member) => member.id === id),
     [staff]
@@ -70,9 +98,11 @@ export function StaffProvider({ children }: { children: ReactNode }) {
       error,
       refresh: loadStaff,
       createStaff,
+      updateStaff,
+      deleteStaff,
       findById,
     }),
-    [staff, loading, error, loadStaff, createStaff, findById]
+    [staff, loading, error, loadStaff, createStaff, updateStaff, deleteStaff, findById]
   );
 
   return <StaffContext.Provider value={value}>{children}</StaffContext.Provider>;
@@ -100,6 +130,8 @@ export function MockStaffProvider({ children, value }: MockStaffProviderProps) {
     error: value?.error ?? mockContextValue.error,
     refresh: value?.refresh ?? mockContextValue.refresh,
     createStaff: value?.createStaff ?? mockContextValue.createStaff,
+    updateStaff: value?.updateStaff ?? mockContextValue.updateStaff,
+    deleteStaff: value?.deleteStaff ?? mockContextValue.deleteStaff,
     findById: value?.findById ?? mockContextValue.findById,
   };
 

@@ -104,10 +104,16 @@ app.get("/api/announcements/:announcementNo/documents/:documentId/preview", anno
 // Partner routes
 app.get("/api/partners", partnerController.getList);
 app.get("/api/partners/:id", partnerController.getById);
+app.post("/api/partners", authorize("admin", "evaluator"), partnerController.create);
+app.patch("/api/partners/:id", authorize("admin", "evaluator"), partnerController.update);
+app.delete("/api/partners/:id", authorize("admin"), partnerController.delete);
 
 // Orderer routes
 app.get("/api/orderers", ordererController.getList);
 app.get("/api/orderers/:id", ordererController.getById);
+app.post("/api/orderers", authorize("admin", "evaluator"), ordererController.create);
+app.patch("/api/orderers/:id", authorize("admin", "evaluator"), ordererController.update);
+app.delete("/api/orderers/:id", authorize("admin"), ordererController.delete);
 
 // Contact routes
 app.get("/api/contacts", contactController.getList);
@@ -118,6 +124,10 @@ app.delete("/api/contacts/:id", authorize("admin"), contactController.delete);
 
 // Company routes
 app.get("/api/companies", companyController.getList);
+app.get("/api/companies/:id", companyController.getById);
+app.post("/api/companies", authorize("admin", "evaluator"), companyController.create);
+app.patch("/api/companies/:id", authorize("admin", "evaluator"), companyController.update);
+app.delete("/api/companies/:id", authorize("admin"), companyController.delete);
 
 // Global error handler (must be after all routes)
 app.use(errorHandler);

@@ -1,3 +1,4 @@
+import { PoolClient } from "pg";
 import { pool, TABLES, schemaPrefix } from "../config/database";
 
 type PartnerBaseRow = {
@@ -72,6 +73,22 @@ type OrdererItemRow = {
   grade: string | null;
 };
 
+export interface PartnerInput {
+  name: string;
+  postalCode: string;
+  address: string;
+  phone: string;
+  fax: string;
+  email: string;
+  url: string;
+  representative: string;
+  established: string;
+  capital: string;
+  employeeCount: string;
+  categories: string[];
+  branches: { name: string; address: string }[];
+}
+
 export class PartnerRepository {
   /**
    * Get all partners
@@ -126,6 +143,9 @@ export class PartnerRepository {
 
   private async fetchPartners(partnerId?: string): Promise<any[]> {
     const { clause, params } = this.getFilter(partnerId);
+    const masterWhereClause = partnerId
+      ? `WHERE COALESCE(is_active, true) AND partner_id = $1`
+      : `WHERE COALESCE(is_active, true)`;
     const client = await pool.connect();
 
     try {
@@ -149,7 +169,7 @@ export class PartnerRepository {
             "capital",
             "employeeCount"
           FROM ${schemaPrefix}${TABLES.partners}
-          ${clause}
+          ${masterWhereClause}
           ORDER BY "no"
         `,
         params
@@ -365,6 +385,183 @@ export class PartnerRepository {
       });
 
       return Array.from(partnerMap.values());
+    } finally {
+      client.release();
+    }
+  }
+
+  /**
+   * Create a new partner with categories and branches
+   */
+  async create(input: PartnerInput): Promise<any> {
+    const client: PoolClient = await pool.connect();
+    try {
+      await client.query("BEGIN");
+
+      const masterResult = await client.query<{ id: string }>(
+        `
+          INSERT INTO ${schemaPrefix}${TABLES.partners}
+            (partner_id, name, "postalCode", address, phone, fax, email, url,
+             representative, establishment_date, capital, "employeeCount",
+             "createdDate", "updatedDate")
+          VALUES
+            (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11,
+             NOW()::text, NOW()::text)
+          RETURNING partner_id AS id
+        `,
+        [
+          input.name,
+          input.postalCode,
+          input.address,
+          input.phone,
+          input.fax,
+          input.email,
+          input.url,
+          input.representative,
+          input.established,
+          input.capital,
+          input.employeeCount,
+        ]
+      );
+
+      const partnerId = masterResult.rows[0]?.id;
+      if (!partnerId) {
+        throw new Error("Failed to create partner");
+      }
+
+      for (const category of input.categories) {
+        await client.query(
+          `INSERT INTO ${schemaPrefix}${TABLES.partnerCategories} (partner_id, categories) VALUES ($1, $2)`,
+          [partnerId, category]
+        );
+      }
+
+      for (const branch of input.branches) {
+        await client.query(
+          `INSERT INTO ${schemaPrefix}${TABLES.partnerBranches} (partner_id, name, address) VALUES ($1, $2, $3)`,
+          [partnerId, branch.name, branch.address]
+        );
+      }
+
+      await client.query("COMMIT");
+
+      const record = await this.findById(partnerId);
+      if (!record) {
+        throw new Error("Failed to load created partner");
+      }
+      return record;
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  /**
+   * Update an existing partner
+   */
+  async update(id: string, input: Partial<PartnerInput>): Promise<any | null> {
+    const client: PoolClient = await pool.connect();
+    try {
+      await client.query("BEGIN");
+
+      const fieldMap: Record<string, string> = {
+        name: "name",
+        postalCode: '"postalCode"',
+        address: "address",
+        phone: "phone",
+        fax: "fax",
+        email: "email",
+        url: "url",
+        representative: "representative",
+        established: "establishment_date",
+        capital: "capital",
+        employeeCount: '"employeeCount"',
+      };
+
+      const setClauses: string[] = [];
+      const values: unknown[] = [id];
+      let paramIndex = 2;
+
+      for (const [inputKey, columnName] of Object.entries(fieldMap)) {
+        const value = (input as Record<string, unknown>)[inputKey];
+        if (value !== undefined) {
+          setClauses.push(`${columnName} = $${paramIndex}`);
+          values.push(value);
+          paramIndex += 1;
+        }
+      }
+
+      setClauses.push(`"updatedDate" = NOW()::text`);
+
+      const updateResult = await client.query(
+        `
+          UPDATE ${schemaPrefix}${TABLES.partners}
+          SET ${setClauses.join(", ")}
+          WHERE partner_id = $1
+          RETURNING partner_id AS id
+        `,
+        values
+      );
+
+      if (updateResult.rowCount === 0) {
+        await client.query("ROLLBACK");
+        return null;
+      }
+
+      if (input.categories !== undefined) {
+        await client.query(
+          `DELETE FROM ${schemaPrefix}${TABLES.partnerCategories} WHERE partner_id = $1`,
+          [id]
+        );
+        for (const category of input.categories) {
+          await client.query(
+            `INSERT INTO ${schemaPrefix}${TABLES.partnerCategories} (partner_id, categories) VALUES ($1, $2)`,
+            [id, category]
+          );
+        }
+      }
+
+      if (input.branches !== undefined) {
+        await client.query(
+          `DELETE FROM ${schemaPrefix}${TABLES.partnerBranches} WHERE partner_id = $1`,
+          [id]
+        );
+        for (const branch of input.branches) {
+          await client.query(
+            `INSERT INTO ${schemaPrefix}${TABLES.partnerBranches} (partner_id, name, address) VALUES ($1, $2, $3)`,
+            [id, branch.name, branch.address]
+          );
+        }
+      }
+
+      await client.query("COMMIT");
+
+      return await this.findById(id);
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  /**
+   * Soft delete a partner (set is_active = FALSE)
+   */
+  async delete(id: string): Promise<boolean> {
+    const client = await pool.connect();
+    try {
+      const result = await client.query(
+        `
+          UPDATE ${schemaPrefix}${TABLES.partners}
+          SET is_active = FALSE, "updatedDate" = NOW()::text
+          WHERE partner_id = $1
+        `,
+        [id]
+      );
+      return (result.rowCount ?? 0) > 0;
     } finally {
       client.release();
     }

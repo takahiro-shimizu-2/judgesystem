@@ -174,6 +174,7 @@ CREATE TABLE IF NOT EXISTS company_master (
   main_business TEXT,
   telephone TEXT,
   name_of_representative TEXT,
+  is_active BOOLEAN DEFAULT TRUE,
   article_70_flag TEXT,
   article_71_flag TEXT,
   bankruptcy_flag TEXT,
@@ -227,6 +228,7 @@ CREATE TABLE IF NOT EXISTS partners_master (
   establishment_date TEXT,
   capital TEXT,
   "employeeCount" INTEGER DEFAULT 0,
+  is_active BOOLEAN DEFAULT TRUE,
   "createdDate" TEXT,
   "updatedDate" TEXT
 );
@@ -299,8 +301,12 @@ CREATE TABLE IF NOT EXISTS agency_master (
   agency_level INTEGER,
   sort_order INTEGER,
   agency_area TEXT,
+  phone TEXT DEFAULT '',
+  fax TEXT DEFAULT '',
+  email TEXT DEFAULT '',
   official_url TEXT,
   remarks TEXT,
+  is_active BOOLEAN DEFAULT TRUE,
   created_at TEXT,
   updated_at TEXT
 );

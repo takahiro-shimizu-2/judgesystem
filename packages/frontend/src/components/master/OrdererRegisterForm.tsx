@@ -19,9 +19,11 @@ import type { OrdererCategory } from '../../types/orderer';
 interface OrdererRegisterFormProps {
   onSubmit?: (data: OrdererFormData) => void;
   initialData?: OrdererFormData;
+  editMode?: boolean;
+  entityId?: string;
 }
 
-export function OrdererRegisterForm({ onSubmit, initialData }: OrdererRegisterFormProps) {
+export function OrdererRegisterForm({ onSubmit, initialData, editMode, entityId }: OrdererRegisterFormProps) {
   const navigate = useNavigate();
   const {
     formData,
@@ -49,7 +51,7 @@ export function OrdererRegisterForm({ onSubmit, initialData }: OrdererRegisterFo
     if (validateAll()) {
       onSubmit?.(formData);
       navigate('/master/register/confirm', {
-        state: { formData, formType: 'orderer' },
+        state: { formData, formType: 'orderer', editMode, entityId },
       });
     }
   };

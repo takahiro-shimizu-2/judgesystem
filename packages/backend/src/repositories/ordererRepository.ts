@@ -33,6 +33,15 @@ type OrdererQueryRow = {
   lastAnnouncementDate: string | null;
 };
 
+export interface OrdererInput {
+  name: string;
+  category: string; // 'national' | 'prefecture' | 'city'
+  address: string;
+  phone: string;
+  fax: string;
+  email: string;
+}
+
 export class OrdererRepository {
   private readonly agencyTable = `${schemaPrefix}${TABLES.orderers}`;
   private readonly announcementsTable = `${schemaPrefix}bid_announcements`;
@@ -75,9 +84,9 @@ export class OrdererRepository {
           ELSE 'city'
         END AS category,
         COALESCE(ag.agency_area, '') AS address,
-        '' AS phone,
-        '' AS fax,
-        '' AS email,
+        COALESCE(ag.phone, '') AS phone,
+        COALESCE(ag.fax, '') AS fax,
+        COALESCE(ag.email, '') AS email,
         COALESCE(dept.departments, '[]'::jsonb) AS departments,
         COALESCE(stats.announcement_count, 0) AS "announcementCount",
         0 AS "awardCount",
@@ -88,7 +97,8 @@ export class OrdererRepository {
         ON stats.orderer_id = ag.agency_name
       LEFT JOIN orderer_departments AS dept
         ON dept.orderer_id = ag.agency_name
-      ${whereClause}
+      WHERE COALESCE(ag.is_active, true)
+      ${whereClause ? `AND ${whereClause.replace(/^\s*WHERE\s+/i, "")}` : ""}
     `;
   }
 
@@ -140,5 +150,107 @@ export class OrdererRepository {
       return null;
     }
     return this.mapRow(rows[0]);
+  }
+
+  private categoryToLevel(category: string): number {
+    switch (category) {
+      case "national":
+        return 0;
+      case "prefecture":
+        return 1;
+      case "city":
+      default:
+        return 2;
+    }
+  }
+
+  async create(input: OrdererInput): Promise<Orderer> {
+    const sql = `
+      INSERT INTO ${this.agencyTable}
+        (agency_no, agency_name, agency_level, agency_area, phone, fax, email, sort_order, created_at, updated_at)
+      VALUES (
+        (SELECT COALESCE(MAX(agency_no), 0) + 1 FROM ${this.agencyTable}),
+        $1, $2, $3, $4, $5, $6,
+        (SELECT COALESCE(MAX(agency_no), 0) + 1 FROM ${this.agencyTable}),
+        NOW(), NOW()
+      )
+      RETURNING agency_no::text AS id
+    `;
+    const rows = await this.executeQuery(sql, [
+      input.name,
+      this.categoryToLevel(input.category),
+      input.address,
+      input.phone,
+      input.fax,
+      input.email,
+    ]) as unknown as { id: string }[];
+    const createdId = rows[0]?.id;
+    if (!createdId) {
+      throw new Error("Failed to create orderer");
+    }
+    const record = await this.findById(createdId);
+    if (!record) {
+      throw new Error("Failed to load created orderer");
+    }
+    return record;
+  }
+
+  async update(id: string, input: Partial<OrdererInput>): Promise<Orderer | null> {
+    const fields: string[] = [];
+    const values: any[] = [];
+    let index = 1;
+
+    const fieldMap: Record<string, string> = {
+      name: "agency_name",
+      address: "agency_area",
+      phone: "phone",
+      fax: "fax",
+      email: "email",
+    };
+
+    (Object.keys(fieldMap) as (keyof typeof fieldMap)[]).forEach((key) => {
+      if (input[key as keyof OrdererInput] !== undefined) {
+        fields.push(`${fieldMap[key]} = $${index + 1}`);
+        values.push(input[key as keyof OrdererInput]);
+        index += 1;
+      }
+    });
+
+    if (input.category !== undefined) {
+      fields.push(`agency_level = $${index + 1}`);
+      values.push(this.categoryToLevel(input.category));
+      index += 1;
+    }
+
+    if (fields.length === 0) {
+      return await this.findById(id);
+    }
+
+    const sql = `
+      UPDATE ${this.agencyTable}
+      SET ${fields.join(", ")}, updated_at = NOW()
+      WHERE agency_no::text = $1
+      RETURNING agency_no::text AS id
+    `;
+    const result = await this.executeQuery(sql, [id, ...values]) as unknown as { id: string }[];
+    if (result.length === 0) {
+      return null;
+    }
+    return await this.findById(id);
+  }
+
+  async delete(id: string): Promise<boolean> {
+    const sql = `
+      UPDATE ${this.agencyTable}
+      SET is_active = FALSE, updated_at = NOW()
+      WHERE agency_no::text = $1
+    `;
+    const client = await pool.connect();
+    try {
+      const result = await client.query(sql, [id]);
+      return (result.rowCount ?? 0) > 0;
+    } finally {
+      client.release();
+    }
   }
 }
