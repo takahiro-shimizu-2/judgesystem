@@ -292,7 +292,7 @@ class Master:
 
     @staticmethod
     def test():
-        master = Master()
+        master = Master(sqlite3_db_file_path="data/example.db")
         print(master.getAgencyMaster())
         print(master.getCompanyMaster())
         print(master.getConstructionMaster())

@@ -28,7 +28,7 @@ class TablenamesConfig:
     bid_announcements_document_table:str = "announcements_documents_master"
 
 
-class DBOperator:
+class DBOperator(ABC):
     """
     データベースを操作するクラス。
 

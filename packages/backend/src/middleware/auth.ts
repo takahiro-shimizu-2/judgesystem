@@ -18,8 +18,15 @@ declare global {
   }
 }
 
-const JWT_SECRET = process.env.JWT_SECRET || "dev-secret-change-in-production";
+const JWT_SECRET = process.env.JWT_SECRET || "";
 const AUTH_ENABLED = (process.env.AUTH_ENABLED ?? "false").toLowerCase() === "true";
+if (AUTH_ENABLED && !process.env.JWT_SECRET) {
+    console.error("FATAL: JWT_SECRET environment variable is required when AUTH_ENABLED=true");
+    process.exit(1);
+}
+if (!AUTH_ENABLED && process.env.NODE_ENV === "production") {
+    console.warn("WARNING: Authentication is disabled in production. Set AUTH_ENABLED=true.");
+}
 
 export function authenticate(req: Request, res: Response, next: NextFunction): void {
   if (!AUTH_ENABLED) {
