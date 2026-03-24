@@ -1,19 +1,20 @@
-# Node.js の公式イメージ
-FROM node:18
-
-# 作業ディレクトリ
+# Stage 1: Build
+FROM node:20-alpine AS builder
 WORKDIR /app
-
-# package.json をコピーして依存関係をインストール
 COPY app/package*.json ./
-RUN npm install
+RUN npm ci --only=production
 COPY app/ .
-
-# TypeScript をビルド（index.ts → index.js）
 RUN npx tsc
 
-# Cloud Run は 8080 を使う
+# Stage 2: Production
+FROM node:20-alpine AS production
+WORKDIR /app
+RUN addgroup -g 1001 -S nodejs && adduser -S nodejs -u 1001
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/package.json ./
+USER nodejs
 ENV PORT=8080
-
-# コンテナ起動時に実行するコマンド
+EXPOSE 8080
+HEALTHCHECK --interval=30s --timeout=3s CMD wget --no-verbose --tries=1 --spider http://localhost:8080/health || exit 1
 CMD ["node", "dist/index.js"]

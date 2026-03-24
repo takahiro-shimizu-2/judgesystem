@@ -23,6 +23,12 @@ const buildPoolConfig = (): PoolConfig => {
     };
   }
 
+  // Pool optimization for scalability
+  config.max = parseInt(process.env.PG_POOL_MAX || "20", 10);
+  config.min = parseInt(process.env.PG_POOL_MIN || "5", 10);
+  config.idleTimeoutMillis = parseInt(process.env.PG_IDLE_TIMEOUT || "30000", 10);
+  config.connectionTimeoutMillis = parseInt(process.env.PG_CONNECT_TIMEOUT || "5000", 10);
+
   return config;
 };
 

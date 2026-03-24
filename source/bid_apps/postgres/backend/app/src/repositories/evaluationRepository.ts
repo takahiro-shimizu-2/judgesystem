@@ -39,11 +39,6 @@ export class EvaluationRepository {
         workStatusExpression
       );
 
-      // Get total count
-      const countQuery = `SELECT COUNT(*) as count ${baseFromClause} ${whereClause}`;
-      const countResult = await client.query(countQuery, queryParams);
-      const total = parseInt(countResult.rows[0].count);
-
       // Build ORDER BY clause
       const sortOptions = this.normalizeSortOptions(filters.sortOptions, filters.sortField, filters.sortOrder);
       const orderByClause = this.buildOrderByClause(
@@ -53,7 +48,7 @@ export class EvaluationRepository {
         priorityExpression
       );
 
-      // Get paginated data
+      // Get paginated data with window function for total count (single query)
       const page = filters.page || 0;
       const pageSize = filters.pageSize || 25;
       const offset = page * pageSize;
@@ -88,7 +83,8 @@ export class EvaluationRepository {
           ${statusExpression} AS status,
           ${workStatusExpression} AS "workStatus",
           ${currentStepExpression} AS "currentStep",
-          cbj."updatedDate" AS "evaluatedAt"
+          cbj."updatedDate" AS "evaluatedAt",
+          COUNT(*) OVER () AS total_count
         ${baseFromClause}
         ${whereClause}
         ${orderByClause || 'ORDER BY cbj."updatedDate" DESC NULLS LAST, cbj.evaluation_no DESC'}
@@ -96,6 +92,8 @@ export class EvaluationRepository {
       `;
       const dataParams = [...queryParams, pageSize, offset];
       const dataResult = await client.query(dataQuery, dataParams);
+
+      const total = dataResult.rows.length > 0 ? parseInt(dataResult.rows[0].total_count, 10) : 0;
 
       return {
         data: dataResult.rows,
