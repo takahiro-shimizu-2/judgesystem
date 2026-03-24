@@ -33,8 +33,11 @@ import {
   SwapVert as SortIcon,
   FilterAlt as FilterIcon,
   Close as CloseIcon,
+  Edit as EditIcon,
+  Delete as DeleteIcon,
 } from '@mui/icons-material';
 import { bidTypeConfig } from '../data';
+import { deletePartnerRecord } from '../data/partners';
 import { colors, pageStyles, fontSizes, chipStyles, iconStyles, borderRadius, rightPanelColors } from '../constants/styles';
 import { workStatusConfig } from '../constants/workStatus';
 import { evaluationStatusConfig } from '../constants/status';
@@ -1141,9 +1144,46 @@ export default function PartnerDetailPage() {
             </Typography>
           </Box>
           <Box sx={{ textAlign: 'right', flexShrink: 0, ml: 3, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
-            <Typography sx={{ fontSize: fontSizes.md, color: colors.text.light }}>
-              No. {String(safePartner.no).padStart(8, '0')}
-            </Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 1 }}>
+              <Typography sx={{ fontSize: fontSizes.md, color: colors.text.light }}>
+                No. {String(safePartner.no).padStart(8, '0')}
+              </Typography>
+              <IconButton
+                size="small"
+                onClick={() => navigate('/master/register', {
+                  state: {
+                    editMode: true, entityId: safePartner.id, formType: 'partner',
+                    formData: {
+                      name: safePartner.name, postalCode: safePartner.postalCode, address: safePartner.address,
+                      phone: safePartner.phone, email: safePartner.email, fax: safePartner.fax, url: safePartner.url ?? '',
+                      representative: safePartner.representative, established: safePartner.established,
+                      capital: safePartner.capital != null ? String(safePartner.capital) : '',
+                      employeeCount: safePartner.employeeCount != null ? String(safePartner.employeeCount) : '',
+                      categories: safePartner.categories, surveyCount: safePartner.surveyCount != null ? String(safePartner.surveyCount) : '0',
+                      resultCount: safePartner.resultCount != null ? String(safePartner.resultCount) : '0',
+                      rating: safePartner.rating ?? 0, branches: safePartner.branches,
+                      unifiedQualifications: safePartner.qualifications?.unified ?? [],
+                      ordererQualifications: safePartner.qualifications?.orderers ?? [],
+                    },
+                    activeTab: 0,
+                  },
+                })}
+                sx={{ color: colors.text.light, '&:hover': { color: colors.accent.blue, backgroundColor: `${colors.accent.blue}15` } }}
+              >
+                <EditIcon sx={{ fontSize: 18 }} />
+              </IconButton>
+              <IconButton
+                size="small"
+                onClick={async () => {
+                  if (!window.confirm(`「${safePartner.name}」を削除しますか？`)) return;
+                  const success = await deletePartnerRecord(safePartner.id);
+                  if (success) { navigate('/partners'); } else { alert('削除に失敗しました。'); }
+                }}
+                sx={{ color: colors.text.light, '&:hover': { color: colors.accent.red, backgroundColor: `${colors.accent.red}15` } }}
+              >
+                <DeleteIcon sx={{ fontSize: 18 }} />
+              </IconButton>
+            </Box>
             <Typography sx={{ fontSize: fontSizes.xl, fontWeight: 700, color: colors.accent.blue }}>
               <Typography component="span" sx={{ fontSize: fontSizes.sm, fontWeight: 500, color: colors.text.muted }}>
                 対応案件実績{" "}

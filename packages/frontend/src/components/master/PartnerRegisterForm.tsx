@@ -404,7 +404,7 @@ export function PartnerRegisterForm({ onSubmit, initialData, editMode, entityId 
                   <Autocomplete
                     freeSolo
                     size="small"
-                    options={qual.mainCategory ? [...unifiedSubCategories[qual.mainCategory as UnifiedMainCategory]] : []}
+                    options={qual.mainCategory && unifiedSubCategories[qual.mainCategory as UnifiedMainCategory] ? [...unifiedSubCategories[qual.mainCategory as UnifiedMainCategory]] : []}
                     value={qual.category}
                     onChange={(_, newValue) => updateUnifiedQualification(index, 'category', newValue || '')}
                     onInputChange={(_, newValue) => updateUnifiedQualification(index, 'category', newValue)}
