@@ -1,6 +1,9 @@
 // shared パッケージからの re-export
 export type { OrdererCategory } from '@judgesystem/shared';
 
+// shared パッケージから import（このファイル内で使用するため）
+import type { OrdererCategory } from '@judgesystem/shared';
+
 export interface Orderer {
   id: string;
   no: number;                // NO

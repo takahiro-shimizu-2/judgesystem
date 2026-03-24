@@ -8,6 +8,9 @@
 // shared パッケージからの re-export
 export type { EvaluationStatus, WorkStatus, RequirementCategory, CompanyPriority } from '@judgesystem/shared';
 
+// shared パッケージから import（このファイル内で使用するため）
+import type { EvaluationStatus, WorkStatus, RequirementCategory, CompanyPriority } from '@judgesystem/shared';
+
 // 各ファイルの型をre-export
 export * from './workflow';
 export * from './partner';
@@ -16,7 +19,6 @@ export * from './announcement';
 export * from './staff';
 
 import type { BidType } from './announcement';
-import type { RequirementCategory } from '@judgesystem/shared';
 
 // 要件の判定結果
 export interface RequirementResult {
