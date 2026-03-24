@@ -11,6 +11,7 @@ import json
 import uuid
 import warnings
 from datetime import datetime
+from multiprocessing import Pool, cpu_count
 
 import pandas as pd
 import numpy as np
@@ -291,7 +292,7 @@ class Master:
 
     @staticmethod
     def test():
-        master = Master(sqlite3_db_file_path="data/example.db")
+        master = Master()
         print(master.getAgencyMaster())
         print(master.getCompanyMaster())
         print(master.getConstructionMaster())
