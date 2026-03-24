@@ -3,7 +3,6 @@
 import re
 import pandas as pd
 import argparse
-import time
 
 #######################################
 # 業種・等級要件の判定
@@ -168,7 +167,7 @@ def checkAllMinistryUnified(requiredItems, agencyMap, officeLicenses, constructi
             if requiredScore:
                 scoreLicenses = []
                 for lic in gradeLicenses:
-                    if type(lic["license_score"]) != 'number':
+                    if not isinstance(lic["license_score"], (int, float)):
                         continue
                     if checkScore(lic["license_score"], requiredScore, scoreComparison):
                         scoreLicenses.append(lic)
@@ -248,9 +247,9 @@ def checkSpecificAgency(agency, agencyMap, officeLicenses, constructionMap, requ
             if requiredScore:
                 scoreLicenses = []
                 for lic in gradeLicenses:
-                    if type(lic["license_score"]) != "number":
+                    if not isinstance(lic["license_score"], (int, float)):
                         continue
-                    if checkScore(lic.license_score, requiredScore, scoreComparison):
+                    if checkScore(lic["license_score"], requiredScore, scoreComparison):
                         scoreLicenses.append(lic)
                 if len(scoreLicenses) == 0:
                     return {
@@ -309,7 +308,7 @@ def checkDefault(requiredItems, officeLicenses, constructionMap, agencyMap, requ
             if requiredScore:
                 scoreLicenses = []
                 for lic in gradeLicenses:
-                    if type(lic["license_score"]) != "number":
+                    if not isinstance(lic["license_score"], (int, float)):
                         continue
                     if checkScore(lic["license_score"], requiredScore, scoreComparison):
                         scoreLicenses.append(lic)

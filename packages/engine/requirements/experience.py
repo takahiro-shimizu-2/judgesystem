@@ -189,11 +189,11 @@ def extractExperienceConditions(text):
             conditions["agencyScoreRequirements"][agency] = minScore
 
     # 5. 工事成績条件
-    scoreMatch1 = re.search(r"(?:成績|評定|点数|工事成績).*?(\d+)(?:\.\d+)?\s*点以上/", text)
+    scoreMatch1 = re.search(r"(?:成績|評定|点数|工事成績).*?(\d+)(?:\.\d+)?\s*点以上", text)
     if scoreMatch1:
         conditions["minScore"] = float(scoreMatch1[1])
     elif "点以上" in text:
-        scoreMatch2 = re.search(r"(\d+)(?:\.\d+)?\s*点以上/", text)
+        scoreMatch2 = re.search(r"(\d+)(?:\.\d+)?\s*点以上", text)
         if scoreMatch2:
             conditions["minScore"] = float(scoreMatch2[1])
 
@@ -317,7 +317,7 @@ def filterExperiencesByConditions(experiences, conditions):
         # 5. 工事成績条件（全般）
         if matches and conditions["minScore"] is not None:
             score = 0
-            if type(exp["final_score"]) == 'number':
+            if isinstance(exp["final_score"], (int, float)):
                 score = exp["final_score"]
 
             if score < conditions["minScore"]:
@@ -344,7 +344,7 @@ def filterExperiencesByConditions(experiences, conditions):
                 if isThisAgency:
                     # 成績点のチェック
                     score = 0
-                    if type(exp["final_score"]) == 'number':
+                    if isinstance(exp["final_score"], (int, float)):
                         score = exp["final_score"]
 
                     if score < minScore:
@@ -369,7 +369,7 @@ def filterExperiencesByConditions(experiences, conditions):
 def generateSuccessReason(matchingExperiences, conditions, agency_data=pd.read_csv("data/master/agency_master.txt",sep="\t"), construction_data=pd.read_csv("data/master/construction_master.txt",sep="\t")):
     # 最も新しい実績情報を1件だけ取得
     # mostRecentExperience = matchingExperiences.sort((a, b) => b.completion_date - a.completion_date)[0];
-    mostRecentExperience = sorted(matchingExperiences, key=lambda x: x.completion_date, reverse=True)
+    mostRecentExperience = sorted(matchingExperiences, key=lambda x: x["completion_date"], reverse=True)[0]
 
     # 発注機関情報を取得 - ここが重要
     agencyInfo = getAgencyInfo(
@@ -436,11 +436,11 @@ def generateSuccessReason(matchingExperiences, conditions, agency_data=pd.read_c
         for agency, minScore in conditions["agencyScoreRequirements"].items():
             isThisAgency = (agencyInfo["agency_name"] and agency in agencyInfo["agency_name"]) or (agencyInfo["parent_name"] and agency in agencyInfo["parent_name"])
 
-            if isThisAgency and type(mostRecentExperience["final_score"]) == 'number':
-                conditionDetails.append(fr"{agency}発注の成績{minScore}点以上の条件に対して成績{mostRecentExperience.final_score}点を獲得")
+            if isThisAgency and isinstance(mostRecentExperience["final_score"], (int, float)):
+                conditionDetails.append(fr"{agency}発注の成績{minScore}点以上の条件に対して成績{mostRecentExperience['final_score']}点を獲得")
 
     # 5. 一般的な成績点条件
-    if conditions["minScore"] is not None and type(mostRecentExperience["final_score"]) == 'number':
+    if conditions["minScore"] is not None and isinstance(mostRecentExperience["final_score"], (int, float)):
         conditionDetails.append(fr"成績{conditions['minScore']}点以上の条件に対して成績{mostRecentExperience['final_score']}点を獲得")
 
     # 6. 工事種別条件
@@ -452,7 +452,7 @@ def generateSuccessReason(matchingExperiences, conditions, agency_data=pd.read_c
                 break
                 
     if matchedType:
-        conditionDetails.push(fr"{matchedType}工事の条件に対して{constructionName}を実施")
+        conditionDetails.append(fr"{matchedType}工事の条件に対して{constructionName}を実施")
 
     # 基本工事情報 - 実際の発注機関名を使用
     result = fr"{agencyName}発注の{constructionName} {completionDateStr}完成"
@@ -462,14 +462,14 @@ def generateSuccessReason(matchingExperiences, conditions, agency_data=pd.read_c
         result += fr"、JV出資比率{mostRecentExperience['jv_ratio']}%"
 
     # 成績点情報
-    if type(mostRecentExperience["final_score"] == 'number') and mostRecentExperience["final_score"] > 0:
+    if isinstance(mostRecentExperience["final_score"], (int, float)) and mostRecentExperience["final_score"] > 0:
         result += fr"、成績{mostRecentExperience['final_score']}点"
 
     result += ")"
 
     # 詳細な条件クリア情報を追加
     if len(conditionDetails) > 0:
-        result += "、" + conditionDetails.join("、")
+        result += "、" + "、".join(conditionDetails)
 
     # 合計件数があれば表示
     if len(matchingExperiences) > 1:
@@ -513,19 +513,19 @@ def generateFailureReason(conditions):
     # 5. 工事種別条件
     if len(conditions["constructionTypes"]) > 0:
         if len(conditions["constructionTypes"]) == 1:
-            reasons.append(fr"${conditions['constructionTypes'][0]}工事の実績がない")
+            reasons.append(fr"{conditions['constructionTypes'][0]}工事の実績がない")
         else:
-            reasons.append(fr"{conditions['constructionTypes'].join('・')}などの工事実績がない")
+            reasons.append(fr"{'・'.join(conditions['constructionTypes'])}などの工事実績がない")
 
     # 6. 発注機関固有の条件
     # if (Object.keys(conditions.agencyScoreRequirements).length > 0) {
-    if len(conditions["agencyScoreRequirements"].keys()).length > 0:
+    if len(conditions["agencyScoreRequirements"].keys()) > 0:
         for agency, minScore in conditions["agencyScoreRequirements"].items():
             reasons.append(fr"{agency}発注の成績{minScore}点以上の実績がない")
 
     # 理由がある場合は連結して返す
     if len(reasons) > 0:
-        return reasons.join("、")
+        return "、".join(reasons)
 
     # 特定の理由が特定できない場合のデフォルトメッセージ
     return "要求される実績条件を満たす工事実績が確認できません"

@@ -227,15 +227,15 @@ def getEmployeeQualifications(
 
     # 指定された会社に所属し、退職していない従業員を抽出
     # 特定の拠点が指定されている場合はそれもチェック
-    subData = employeeData[(employeeData["company_no"] == companyNo) & (employeeData["is_retired_flg"])]
-    subData = subData[(employeeData["office_no"] == officeNo)]
+    subData = employeeData[(employeeData["company_no"] == companyNo) & (~employeeData["is_retired_flg"])]
+    subData = subData[(subData["office_no"] == officeNo)]
 
     # 欠損対応は必要？
     for index, row in subData.iterrows():
         employees.append({
             "employee_no": row["employee_no"],
             "employee_name": row["employee_name"],
-            "office_no": row["office_nid"]
+            "office_no": row["office_no"]
         })
 
     if len(employees) == 0:
@@ -269,7 +269,7 @@ def getEmployeeQualifications(
                 # 該当する従業員情報を取得
                 # employee = employees.find(emp => emp.employee_no === employeeNo)
                 employee = next((emp for emp in employees if emp["employee_no"] == employeeNo), None)
-                qualifications.push({
+                qualifications.append({
                     "employee_no": employeeNo,
                     "employee_name": employee["employee_name"] if employee else "不明",
                     "office_no": employee["office_no"] if employee else None,
@@ -288,7 +288,7 @@ def getEmployeeExperiences(companyNo, officeNo, employeeData = pd.read_csv("data
     # employeeData = pd.read_csv("data/master/employee_master.txt", sep="\t")
     employees = []
 
-    subData = employeeData[(employeeData["company_no"]==companyNo) & (employeeData["is_retired_flg"])]
+    subData = employeeData[(employeeData["company_no"]==companyNo) & (~employeeData["is_retired_flg"])]
     for index, row in subData.iterrows():
         if row["office_no"] == officeNo:
             employees.append({
@@ -320,7 +320,7 @@ def getEmployeeExperiences(companyNo, officeNo, employeeData = pd.read_csv("data
     # employeeIds = employees.map(emp => emp.employee_no)
     employeeIds = [v["employee_no"] for v in employees]
 
-    subData = expData["employee_no"].isin(employeeIds)
+    subData = expData[expData["employee_no"].isin(employeeIds)]
     for index, row in subData.iterrows():
         employee = next((emp for emp in employees if emp["employee_no"] == row["employee_no"]), None)
         experiences.append({
@@ -387,7 +387,7 @@ def extractTechnicianRequirements(text):
             if qual == '2級土木施工管理技士':
                 types = ['土木', '鋼構造物塗装', '薬液注入']
                 for type_ in types:
-                    if qual + '（' + type_ + '）' in text or qual + '(' + type_ + ')' in text or qual + type in text:
+                    if qual + '（' + type_ + '）' in text or qual + '(' + type_ + ')' in text or qual + type_ in text:
                         requirements["requiredQualifications"].append(qual + '（' + type_ + '）')
             elif qual == '2級建築施工管理技士':
                 types = ['建築', '躯体', '仕上げ']
@@ -443,7 +443,7 @@ def checkMonitoringEngineerRequirement(employeeQualifications):
         # 両方の資格を持つ従業員を特定
         qualifiedEmployees = []
         for empNo in employeesWithCert:
-            if employeesWithTraining[empNo]:
+            if employeesWithTraining.get(empNo):
                 qualifiedEmployees.append({
                     "name": employeesWithCert[empNo],
                     "qualifications": ["監理技術者資格者証", "監理技術者講習修了証"]
@@ -457,13 +457,13 @@ def checkMonitoringEngineerRequirement(employeeQualifications):
 
         # 防御的プログラミング: nameプロパティのチェック
         # validEmployees = qualifiedEmployees.filter(emp => emp && emp.name)
-        validEmployees = [emp for emp in qualifiedEmployees if emp and getattr(emp, "name", None)]
+        validEmployees = [emp for emp in qualifiedEmployees if emp and emp.get("name")]
         # empNames = validEmployees.map(emp => emp.name)
         empNames = [emp["name"] for emp in validEmployees]
 
         return {
             "is_ok": True,
-            "reason": fr"監理技術者の要件を満たす技術者が{len(validEmployees)}名います：" + empNames.join("、")
+            "reason": f"監理技術者の要件を満たす技術者が{len(validEmployees)}名います：" + "、".join(empNames)
         }
     except:
         return {
@@ -506,13 +506,13 @@ def checkExperienceRequirements(requirements, employeeExperiences, matchingEmplo
             employeeExperienceYears = {}
 
             for exp in relevantExperiences:
-                if not employeeExperienceYears[exp["employee_name"]]:
+                if not employeeExperienceYears.get(exp["employee_name"]):
                     employeeExperienceYears[exp["employee_name"]] = 0
 
                 # 開始日と終了日が正しい日付形式の場合のみ計算
                 if isinstance(exp["start_date"], datetime) and isinstance(exp["end_date"], datetime):
                     diffTime = abs(exp["end_date"] - exp["start_date"])
-                    diffYears = diffTime / (1000 * 60 * 60 * 24 * 365.25)
+                    diffYears = diffTime.days / 365.25
                     employeeExperienceYears[exp["employee_name"]] += diffYears
 
             # 要件年数を満たす従業員がいるかチェック
@@ -524,7 +524,7 @@ def checkExperienceRequirements(requirements, employeeExperiences, matchingEmplo
             if len(experiencedEmployees) == 0:
                 return {
                     "is_ok": False,
-                    "reason": requirements["experienceYears"] + "年以上の実務経験を持つ技術者がいません"
+                    "reason": str(requirements["experienceYears"]) + "年以上の実務経験を持つ技術者がいません"
                 }
 
         # 工事成績要件のチェック
@@ -532,11 +532,11 @@ def checkExperienceRequirements(requirements, employeeExperiences, matchingEmplo
             # 工事成績が要件を満たす経験があるかチェック
             #highScoreExperiences = relevantExperiences.filter(exp =>
             #    typeof exp.final_score === 'number' && exp.final_score >= requirements.experienceScore)
-            highScoreExperiences = [exp for exp in relevantExperiences if type(exp["final_score"]) == "number" and exp["final_score"] >= requirements["experienceScore"]]
+            highScoreExperiences = [exp for exp in relevantExperiences if isinstance(exp["final_score"], (int, float)) and exp["final_score"] >= requirements["experienceScore"]]
             if len(highScoreExperiences) == 0:
                 return {
                     "is_ok": False,
-                    "reason": "工事成績" + requirements["experienceScore"] + "点以上の実績を持つ技術者がいません"
+                    "reason": "工事成績" + str(requirements["experienceScore"]) + "点以上の実績を持つ技術者がいません"
                 }
 
         return {
@@ -563,18 +563,18 @@ def generateTechnicianSuccessReason(matchingEmployees):
         # 防御的プログラミング: map前に各要素の正当性チェック
         employeeInfos = []
         for emp in displayEmployees:
-            if not emp or type(emp) != 'object':
+            if not emp or not isinstance(emp, dict):
                 continue
 
-        name = emp.get("name") or "不明な技術者"
-        quals = "資格あり"
+            name = emp.get("name") or "不明な技術者"
+            quals = "資格あり"
 
-        if isinstance(emp["qualifications"], list):
-            quals = emp.qualifications.join("、")
+            if isinstance(emp.get("qualifications"), list):
+                quals = "、".join(emp.get("qualifications", []))
 
             employeeInfos.append(name + "（" + quals + "）")
 
-        result = "技術者要件を満たす技術者が" + matchingEmployees.length + "名います："
+        result = "技術者要件を満たす技術者が" + str(len(matchingEmployees)) + "名います："
 
         # 技術者情報がある場合は追加
         if len(employeeInfos) > 0:
@@ -583,7 +583,7 @@ def generateTechnicianSuccessReason(matchingEmployees):
 
             # 表示されていない技術者がいる場合
             if len(matchingEmployees) > 3:
-                result += " ほか" + (matchingEmployees.length - 3) + "名"
+                result += " ほか" + str(len(matchingEmployees) - 3) + "名"
         return result
     except:
         # エラーが発生した場合でも最低限の情報を返す
@@ -620,7 +620,7 @@ def matchTechnicianRequirements(requirements, employeeQualifications, employeeEx
             # 各従業員が持つ資格をリスト化
             employeeQuals = {}
             for qual in employeeQualifications:
-                if not employeeQuals[qual["employee_no"]]:
+                if not employeeQuals.get(qual["employee_no"]):
                     employeeQuals[qual["employee_no"]] = {
                         "name": qual["employee_name"],
                         "qualifications": []
@@ -645,14 +645,14 @@ def matchTechnicianRequirements(requirements, employeeQualifications, employeeEx
                 if hasRequiredQual:
                     qualificationMatch = True
                     matchingEmployees.append({
-                        "name": emp.name,
+                        "name": emp["name"],
                         "qualifications": matchedQuals
                     })
 
             if not qualificationMatch:
                 return {
                     "is_ok": False,
-                    "reason": "必要な資格（" + requirements["requiredQualifications"].join("、") + "）を持つ技術者がいません"
+                    "reason": "必要な資格（" + "、".join(requirements["requiredQualifications"]) + "）を持つ技術者がいません"
                 }
 
             # 経験要件のチェック

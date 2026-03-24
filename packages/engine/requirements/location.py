@@ -13,7 +13,6 @@ import pandas as pd
 # agencyData:発注者機関マスターから、管轄地域情報を取得
 def expandRegionToPrefectures(regionName=None, agencyData=pd.read_csv("data/master/agency_master.txt",sep="\t")):
     if regionName is None:
-        regionName = "北海道"
         regionName = "東北"
     
     target_data = agencyData[(agencyData["agency_name"] == regionName) & (agencyData["agency_area"].notnull())]
@@ -37,7 +36,7 @@ def expandRegionToPrefectures(regionName=None, agencyData=pd.read_csv("data/mast
         "沖縄防衛局": ["沖縄県"]
     }
 
-    return regionPrefectureMap[regionName]
+    return regionPrefectureMap.get(regionName, [])
 
 def getOfficeLocation(officeNo, officeData = pd.read_csv("data/master/office_master.txt",sep="\t")):
     
@@ -231,7 +230,7 @@ def extractOfficeTypes(requirementText):
     if requirementText.find("営業拠点") >= 0 and len(extractedOfficeTypes) == 0:
         # 全種類の拠点を認める - 拠点種別の制約を緩める
         # ※ ただし地域条件は維持する - 地域条件を無視するような変更は行わない
-        extractedOfficeTypes.append("本店", "本社", "HEADQUARTER", "支店", "BRANCH", "営業所", "SALES_OFFICE", "出張所")
+        extractedOfficeTypes.extend(["本店", "本社", "HEADQUARTER", "支店", "BRANCH", "営業所", "SALES_OFFICE", "出張所"])
 
     return extractedOfficeTypes
 
