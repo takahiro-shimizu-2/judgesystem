@@ -8,10 +8,25 @@
  */
 import type {
   WorkStatus,
-  SimilarCase
+  SimilarCase,
+  OrdererWorkflowState,
 } from '../types';
 import { mockCompanies } from './companies';
 import { getApiUrl } from '../config/api';
+
+const EMPTY_ORDERER_WORKFLOW_STATE: OrdererWorkflowState = {
+  callMemos: [],
+  evaluations: [],
+  preSubmitDocs: [],
+  transcriptions: [],
+};
+
+export const createEmptyOrdererWorkflowState = (): OrdererWorkflowState => ({
+  callMemos: [],
+  evaluations: [],
+  preSubmitDocs: [],
+  transcriptions: [],
+});
 
 export const updateWorkStatus = async (
   evaluationNo: string,
@@ -65,6 +80,56 @@ export const updateEvaluationAssignee = async (
   } catch (error) {
     console.error('Error updating assignee:', error);
     return false;
+  }
+};
+
+export const fetchOrdererWorkflowState = async (
+  evaluationNo: string
+): Promise<OrdererWorkflowState> => {
+  try {
+    const response = await fetch(getApiUrl(`/api/evaluations/${evaluationNo}/orderer-workflow`));
+    if (!response.ok) {
+      console.error(`Failed to fetch orderer workflow: ${response.status} ${response.statusText}`);
+      return createEmptyOrdererWorkflowState();
+    }
+
+    const data = await response.json();
+    return {
+      ...EMPTY_ORDERER_WORKFLOW_STATE,
+      ...data,
+    };
+  } catch (error) {
+    console.error('Error fetching orderer workflow:', error);
+    return createEmptyOrdererWorkflowState();
+  }
+};
+
+export const updateOrdererWorkflowState = async (
+  evaluationNo: string,
+  state: OrdererWorkflowState
+): Promise<OrdererWorkflowState | null> => {
+  try {
+    const response = await fetch(getApiUrl(`/api/evaluations/${evaluationNo}/orderer-workflow`), {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(state),
+    });
+
+    if (!response.ok) {
+      console.error(`Failed to update orderer workflow: ${response.status} ${response.statusText}`);
+      return null;
+    }
+
+    const data = await response.json();
+    return {
+      ...EMPTY_ORDERER_WORKFLOW_STATE,
+      ...data,
+    };
+  } catch (error) {
+    console.error('Error updating orderer workflow:', error);
+    return null;
   }
 };
 

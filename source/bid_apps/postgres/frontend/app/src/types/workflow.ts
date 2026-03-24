@@ -57,6 +57,11 @@ export interface PreSubmitDocument {
   name: string;
   status: 'pending' | 'submitted';
   dueDate?: string;
+  uploadedAt?: string;
+  fileName?: string;
+  contentType?: string;
+  dataUrl?: string;
+  size?: number;
 }
 
 // ============================================================================
@@ -135,6 +140,35 @@ export interface Partner {
   surveyApproved: boolean;   // 現地調査OK
   receivedDocuments: PartnerReceivedDocument[]; // 受信資料
   assignedStaffId?: string;  // 担当者ID
+}
+
+// ============================================================================
+// 発注者ワークフロー関連
+// ============================================================================
+
+export type WorkflowMemoTag = 'question' | 'answer' | 'memo' | 'idea' | 'evaluation';
+
+export interface WorkflowRecordMemo {
+  id: string;
+  createdAt: string;
+  updatedAt?: string;
+  content: string;
+  tag: WorkflowMemoTag;
+  parentId?: string;
+}
+
+export interface WorkflowTranscription {
+  id: string;
+  createdAt: string;
+  updatedAt?: string;
+  content: string;
+}
+
+export interface OrdererWorkflowState {
+  callMemos: WorkflowRecordMemo[];
+  evaluations: WorkflowRecordMemo[];
+  preSubmitDocs: PreSubmitDocument[];
+  transcriptions: WorkflowTranscription[];
 }
 
 // ============================================================================

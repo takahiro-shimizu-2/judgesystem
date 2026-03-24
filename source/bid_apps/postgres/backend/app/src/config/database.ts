@@ -40,6 +40,7 @@ export const TABLES = {
   partnerQualificationsOrdererItems: "partners_qualifications_orderer_items",
   evaluationStatuses: "backend_evaluation_statuses",
   evaluationAssignees: "evaluation_assignees",
+  evaluationOrdererWorkflowStates: "evaluation_orderer_workflow_states",
   companyMaster: "company_master",
   officeMaster: "office_master",
 } as const;

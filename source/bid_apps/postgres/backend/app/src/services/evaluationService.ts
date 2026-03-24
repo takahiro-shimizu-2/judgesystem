@@ -1,13 +1,20 @@
-import { EvaluationRepository, EvaluationAssignmentRepository } from "../repositories";
+import {
+  EvaluationRepository,
+  EvaluationAssignmentRepository,
+  EvaluationOrdererWorkflowRepository,
+} from "../repositories";
 import { FilterParams, PaginatedResponse } from "../types";
+import type { OrdererWorkflowState } from "../repositories/evaluationOrdererWorkflowRepository";
 
 export class EvaluationService {
   private repository: EvaluationRepository;
   private assignmentRepository: EvaluationAssignmentRepository;
+  private ordererWorkflowRepository: EvaluationOrdererWorkflowRepository;
 
   constructor() {
     this.repository = new EvaluationRepository();
     this.assignmentRepository = new EvaluationAssignmentRepository();
+    this.ordererWorkflowRepository = new EvaluationOrdererWorkflowRepository();
   }
 
   /**
@@ -80,5 +87,16 @@ export class EvaluationService {
     }
 
     return await this.assignmentRepository.upsert(evaluationNo, stepId, contactId);
+  }
+
+  async getOrdererWorkflow(evaluationNo: string): Promise<OrdererWorkflowState> {
+    return await this.ordererWorkflowRepository.findByEvaluation(evaluationNo);
+  }
+
+  async updateOrdererWorkflow(
+    evaluationNo: string,
+    state: OrdererWorkflowState
+  ): Promise<OrdererWorkflowState> {
+    return await this.ordererWorkflowRepository.upsert(evaluationNo, state);
   }
 }

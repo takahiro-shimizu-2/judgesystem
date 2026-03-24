@@ -223,6 +223,50 @@ export class EvaluationController {
   };
 
   /**
+   * GET /api/evaluations/:evaluationNo/orderer-workflow - Get saved orderer workflow state
+   */
+  getOrdererWorkflow = async (req: Request, res: Response): Promise<void> => {
+    const { evaluationNo } = req.params;
+    console.log(`GET /api/evaluations/${evaluationNo}/orderer-workflow hit`);
+
+    try {
+      const state = await this.service.getOrdererWorkflow(evaluationNo);
+      res.setHeader("Content-Type", "application/json");
+      res.status(200).json(state);
+    } catch (error) {
+      console.error(`ERROR in GET /api/evaluations/${evaluationNo}/orderer-workflow:`, error);
+      if (!res.headersSent) {
+        res.status(500).json({
+          error: "Internal Server Error",
+          message: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+  };
+
+  /**
+   * PUT /api/evaluations/:evaluationNo/orderer-workflow - Save orderer workflow state
+   */
+  updateOrdererWorkflow = async (req: Request, res: Response): Promise<void> => {
+    const { evaluationNo } = req.params;
+    console.log(`PUT /api/evaluations/${evaluationNo}/orderer-workflow hit`);
+
+    try {
+      const state = await this.service.updateOrdererWorkflow(evaluationNo, req.body ?? {});
+      res.setHeader("Content-Type", "application/json");
+      res.status(200).json(state);
+    } catch (error) {
+      console.error(`ERROR in PUT /api/evaluations/${evaluationNo}/orderer-workflow:`, error);
+      if (!res.headersSent) {
+        res.status(500).json({
+          error: "Internal Server Error",
+          message: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+  };
+
+  /**
    * Helper: Parse array parameter from query string
    */
   private parseArrayParam(param: any): string[] {

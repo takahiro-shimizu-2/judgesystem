@@ -12,14 +12,28 @@ import {
 
 const app = express();
 
-app.use(cors({
-  origin: process.env.CORS_ORIGIN || "http://localhost:5173",
+const corsOrigins = (process.env.CORS_ORIGIN || "http://localhost:5173")
+  .split(",")
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+
+const corsOptions: cors.CorsOptions = {
+  origin: (requestOrigin, callback) => {
+    if (!requestOrigin || corsOrigins.includes(requestOrigin)) {
+      callback(null, true);
+      return;
+    }
+
+    callback(new Error(`Origin ${requestOrigin} is not allowed by CORS`));
+  },
   methods: ["GET", "HEAD", "PUT", "PATCH", "POST", "DELETE", "OPTIONS"],
   allowedHeaders: ["*"],
   credentials: false
-}));
+};
 
-app.options("*", cors());
+app.use(cors(corsOptions));
+
+app.options("*", cors(corsOptions));
 
 // gzip圧縮を有効化
 app.use(compression());
@@ -48,6 +62,8 @@ app.get("/api/evaluations/:id", evaluationController.getById);
 app.patch("/api/evaluations/:evaluationNo", evaluationController.updateWorkStatus);
 app.get("/api/evaluations/:evaluationNo/assignees", evaluationController.getAssignees);
 app.put("/api/evaluations/:evaluationNo/assignees", evaluationController.updateAssignee);
+app.get("/api/evaluations/:evaluationNo/orderer-workflow", evaluationController.getOrdererWorkflow);
+app.put("/api/evaluations/:evaluationNo/orderer-workflow", evaluationController.updateOrdererWorkflow);
 
 // Announcement routes
 app.get("/api/announcements", announcementController.getList);

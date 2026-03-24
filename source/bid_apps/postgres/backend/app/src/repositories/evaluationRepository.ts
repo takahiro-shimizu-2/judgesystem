@@ -201,7 +201,7 @@ export class EvaluationRepository {
                 'name', req1.requirement_text,
                 'isMet', req2.is_met,
                 'reason', req2.requirement_description,
-                'evidence', 'dummy_evidence'
+                'evidence', COALESCE(req1.requirement_text, req2.requirement_description, '')
               )
               ORDER BY req1.requirement_no
             ) AS requirements
@@ -581,7 +581,22 @@ export class EvaluationRepository {
       bidType: `ba."bidType"`,
       deadline: `(
         CASE
-          WHEN ba."bidEndDate" ~ '^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$'
+          WHEN ba."bidEndDate" ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
+            AND substring(ba."bidEndDate" FROM 6 FOR 2)::int BETWEEN 1 AND 12
+            AND substring(ba."bidEndDate" FROM 9 FOR 2)::int BETWEEN 1 AND (
+              CASE
+                WHEN substring(ba."bidEndDate" FROM 6 FOR 2)::int IN (1, 3, 5, 7, 8, 10, 12) THEN 31
+                WHEN substring(ba."bidEndDate" FROM 6 FOR 2)::int IN (4, 6, 9, 11) THEN 30
+                WHEN (
+                  substring(ba."bidEndDate" FROM 1 FOR 4)::int % 400 = 0
+                  OR (
+                    substring(ba."bidEndDate" FROM 1 FOR 4)::int % 4 = 0
+                    AND substring(ba."bidEndDate" FROM 1 FOR 4)::int % 100 <> 0
+                  )
+                ) THEN 29
+                ELSE 28
+              END
+            )
             THEN ba."bidEndDate"
           ELSE NULL
         END
@@ -599,6 +614,21 @@ export class EvaluationRepository {
 
       if (field === 'evaluationNo') {
         includesPrimary = true;
+      }
+
+      if (field === 'deadline') {
+        const currentDateKey = `to_char(CURRENT_DATE, 'YYYY-MM-DD')`;
+        const activeFirstClause = `${column} IS NULL`;
+        const expiredLastClause = `CASE WHEN ${column} IS NOT NULL AND ${column} < ${currentDateKey} THEN 1 ELSE 0 END`;
+        const activeDeadlineClause = `CASE WHEN ${column} >= ${currentDateKey} THEN ${column} ELSE NULL END`;
+        const expiredDeadlineClause = `CASE WHEN ${column} < ${currentDateKey} THEN ${column} ELSE NULL END`;
+        const activeDirection = order === 'desc' ? 'DESC' : 'ASC';
+
+        orderParts.push(`${activeFirstClause} ASC`);
+        orderParts.push(`${expiredLastClause} ASC`);
+        orderParts.push(`${activeDeadlineClause} ${activeDirection} NULLS LAST`);
+        orderParts.push(`${expiredDeadlineClause} DESC NULLS LAST`);
+        return;
       }
 
       const direction = order === 'desc' ? 'DESC' : 'ASC';
