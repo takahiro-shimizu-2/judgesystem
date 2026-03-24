@@ -174,9 +174,9 @@ LOCATION=asia-northeast1
 # プロジェクト設定
 gcloud config set project $PROJECT_ID
 # リポジトリ名
-REPO_NAME=bidapp-backend-postgres
+REPO_NAME=bidapp-backend-postgres-dev
 # イメージ名
-IMAGE_NAME=bidapp-backend-postgres
+IMAGE_NAME=bidapp-backend-postgres-dev
 # タグ名
 TAG_NAME=v1
 
