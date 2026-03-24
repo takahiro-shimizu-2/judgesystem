@@ -34,12 +34,21 @@ type OrdererQueryRow = {
 };
 
 export class OrdererRepository {
-  private readonly orderersTable = `${schemaPrefix}${TABLES.orderers}`;
+  private readonly agencyTable = `${schemaPrefix}${TABLES.orderers}`;
   private readonly announcementsTable = `${schemaPrefix}bid_announcements`;
 
   private buildBaseQuery(whereClause = ""): string {
     return `
-      WITH orderer_departments AS (
+      WITH announcement_stats AS (
+        SELECT
+          orderer_id,
+          COUNT(*)::integer AS announcement_count,
+          MAX("publishDate") AS last_announcement_date
+        FROM ${this.announcementsTable}
+        WHERE orderer_id IS NOT NULL AND TRIM(orderer_id) <> ''
+        GROUP BY orderer_id
+      ),
+      orderer_departments AS (
         SELECT
           orderer_id,
           jsonb_agg(department ORDER BY department) AS departments
@@ -57,25 +66,28 @@ export class OrdererRepository {
         GROUP BY orderer_id
       )
       SELECT
-        bo.orderer_id AS id,
-        COALESCE(
-          bo."no",
-          ROW_NUMBER() OVER (ORDER BY bo.orderer_id)
-        )::integer AS "no",
-        COALESCE(bo.name, '') AS name,
-        COALESCE(bo.category, 'other') AS category,
-        COALESCE(bo.address, '') AS address,
-        COALESCE(bo.phone, '') AS phone,
-        COALESCE(bo.fax, '') AS fax,
-        COALESCE(bo.email, '') AS email,
+        ag.agency_no::text AS id,
+        ag.sort_order AS "no",
+        COALESCE(ag.agency_name, '') AS name,
+        CASE ag.agency_level
+          WHEN 0 THEN 'national'
+          WHEN 1 THEN 'prefecture'
+          ELSE 'city'
+        END AS category,
+        COALESCE(ag.agency_area, '') AS address,
+        '' AS phone,
+        '' AS fax,
+        '' AS email,
         COALESCE(dept.departments, '[]'::jsonb) AS departments,
-        COALESCE(bo.announcementcount, 0)::integer AS "announcementCount",
-        COALESCE(bo.awardcount, 0)::integer AS "awardCount",
-        COALESCE(bo.averageamount, 0)::double precision AS "averageAmount",
-        COALESCE(bo.lastannouncementdate::text, '') AS "lastAnnouncementDate"
-      FROM ${this.orderersTable} AS bo
+        COALESCE(stats.announcement_count, 0) AS "announcementCount",
+        0 AS "awardCount",
+        0 AS "averageAmount",
+        COALESCE(stats.last_announcement_date, '') AS "lastAnnouncementDate"
+      FROM ${this.agencyTable} AS ag
+      LEFT JOIN announcement_stats AS stats
+        ON stats.orderer_id = ag.agency_name
       LEFT JOIN orderer_departments AS dept
-        ON dept.orderer_id = bo.orderer_id
+        ON dept.orderer_id = ag.agency_name
       ${whereClause}
     `;
   }
@@ -111,7 +123,7 @@ export class OrdererRepository {
 
   async findAll(): Promise<Orderer[]> {
     const query = `
-      ${this.buildBaseQuery("WHERE bo.orderer_id IS NOT NULL")}
+      ${this.buildBaseQuery()}
       ORDER BY "no"
     `;
     const rows = await this.executeQuery(query);
@@ -120,7 +132,7 @@ export class OrdererRepository {
 
   async findById(id: string): Promise<Orderer | null> {
     const query = `
-      ${this.buildBaseQuery("WHERE bo.orderer_id = $1")}
+      ${this.buildBaseQuery("WHERE ag.agency_no::text = $1")}
       LIMIT 1
     `;
     const rows = await this.executeQuery(query, [id]);
