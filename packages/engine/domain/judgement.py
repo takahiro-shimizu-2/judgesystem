@@ -207,7 +207,6 @@ class JudgementMixin:
             tablename_sufficient_requirement_master,
             tablename_insufficient_requirement_master
         ]
-        target_tablename = tablenames[0]
         for i, target_tablename in enumerate(tablenames):
 
             tmpcheck = db_operator.ifTableExists(tablename = target_tablename)
@@ -236,12 +235,6 @@ class JudgementMixin:
         print(fr"Upload {tablename_office_master}")
         db_operator.uploadDataToTable(data=master_data_office, tablename=tablename_office_master, chunksize=5000)
 
-        if False:
-            db_operator.preupdateCompanyBidJudgement(
-                company_bid_judgement_tablename=tablename_company_bid_judgement,
-                office_master_tablename=tablename_office_master,
-                bid_announcements_tablename=tablename_announcements
-            )
         df0 = db_operator.preselectCompanyBidJudgement(
             company_bid_judgement_tablename=tablename_company_bid_judgement,
             office_master_tablename=tablename_office_master,
