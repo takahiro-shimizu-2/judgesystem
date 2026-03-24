@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import { ContactService } from "../services/contactService";
+import { logger } from "../utils/logger";
 
 export class ContactController {
   private service: ContactService;
@@ -9,13 +10,13 @@ export class ContactController {
   }
 
   getList = async (_req: Request, res: Response): Promise<void> => {
-    console.log("GET /api/contacts hit");
+    logger.info("GET /api/contacts hit");
     try {
       const contacts = await this.service.getList();
       res.setHeader("Content-Type", "application/json");
       res.status(200).json(contacts);
     } catch (error) {
-      console.error("ERROR in GET /api/contacts:", error);
+      logger.error({ err: error }, "ERROR in GET /api/contacts");
       if (!res.headersSent) {
         res.status(500).json({
           error: "Internal Server Error",
@@ -27,7 +28,7 @@ export class ContactController {
 
   getById = async (req: Request, res: Response): Promise<void> => {
     const { id } = req.params;
-    console.log(`GET /api/contacts/${id} hit`);
+    logger.info({ id }, "GET /api/contacts/:id hit");
 
     try {
       const contact = await this.service.getById(id);
@@ -39,7 +40,7 @@ export class ContactController {
       res.setHeader("Content-Type", "application/json");
       res.status(200).json(contact);
     } catch (error) {
-      console.error(`ERROR in GET /api/contacts/${id}:`, error);
+      logger.error({ err: error, id }, "ERROR in GET /api/contacts/:id");
       if (!res.headersSent) {
         res.status(500).json({
           error: "Internal Server Error",
@@ -50,7 +51,7 @@ export class ContactController {
   };
 
   create = async (req: Request, res: Response): Promise<void> => {
-    console.log("POST /api/contacts hit");
+    logger.info("POST /api/contacts hit");
     const { name, department, email, phone } = req.body ?? {};
 
     if (!name || !department || !email || !phone) {
@@ -66,7 +67,7 @@ export class ContactController {
       res.setHeader("Content-Type", "application/json");
       res.status(201).json(contact);
     } catch (error) {
-      console.error("ERROR in POST /api/contacts:", error);
+      logger.error({ err: error }, "ERROR in POST /api/contacts");
       if (!res.headersSent) {
         res.status(500).json({
           error: "Internal Server Error",
@@ -78,7 +79,7 @@ export class ContactController {
 
   update = async (req: Request, res: Response): Promise<void> => {
     const { id } = req.params;
-    console.log(`PATCH /api/contacts/${id} hit`);
+    logger.info({ id }, "PATCH /api/contacts/:id hit");
 
     try {
       const contact = await this.service.update(id, req.body ?? {});
@@ -90,7 +91,7 @@ export class ContactController {
       res.setHeader("Content-Type", "application/json");
       res.status(200).json(contact);
     } catch (error) {
-      console.error(`ERROR in PATCH /api/contacts/${id}:`, error);
+      logger.error({ err: error, id }, "ERROR in PATCH /api/contacts/:id");
       if (!res.headersSent) {
         res.status(500).json({
           error: "Internal Server Error",
@@ -109,7 +110,7 @@ export class ContactController {
     }
 
     const { id } = req.params;
-    console.log(`DELETE /api/contacts/${id} hit`);
+    logger.info({ id }, "DELETE /api/contacts/:id hit");
 
     try {
       const deleted = await this.service.delete(id);
@@ -120,7 +121,7 @@ export class ContactController {
 
       res.status(204).send();
     } catch (error) {
-      console.error(`ERROR in DELETE /api/contacts/${id}:`, error);
+      logger.error({ err: error, id }, "ERROR in DELETE /api/contacts/:id");
       if (!res.headersSent) {
         res.status(500).json({
           error: "Internal Server Error",

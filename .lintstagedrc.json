@@ -1,0 +1,5 @@
+{
+  "source/bid_apps/postgres/frontend/app/src/**/*.{ts,tsx}": [
+    "eslint --fix"
+  ]
+}

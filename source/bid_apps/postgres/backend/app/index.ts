@@ -1,6 +1,10 @@
 import express from "express";
 import cors from "cors";
+import helmet from "helmet";
 import compression from "compression";
+import pinoHttp from "pino-http";
+import { logger } from "./src/utils/logger";
+import { errorHandler } from "./src/middleware/errorHandler";
 import {
   EvaluationController,
   AnnouncementController,
@@ -35,14 +39,37 @@ app.use(cors(corsOptions));
 
 app.options("*", cors(corsOptions));
 
+// Security headers
+app.use(helmet());
+
+// Structured request logging
+app.use(pinoHttp({ logger }));
+
 // gzip圧縮を有効化
 app.use(compression());
 
 // Middleware to parse JSON body (must be before routes)
 app.use(express.json());
 
+// Health check endpoints
+app.get("/health", (_req, res) => {
+  res.status(200).json({ status: "ok", timestamp: new Date().toISOString() });
+});
+
+app.get("/readiness", async (_req, res) => {
+  try {
+    const { pool } = await import("./src/config/database");
+    const client = await pool.connect();
+    await client.query("SELECT 1");
+    client.release();
+    res.status(200).json({ status: "ready", database: "connected" });
+  } catch {
+    res.status(503).json({ status: "not ready", database: "disconnected" });
+  }
+});
+
 // Root path
-app.get("/", (req, res) => {
+app.get("/", (_req, res) => {
   res.send("Backend API is running");
 });
 
@@ -90,9 +117,27 @@ app.delete("/api/contacts/:id", contactController.delete);
 // Company routes
 app.get("/api/companies", companyController.getList);
 
+// Global error handler (must be after all routes)
+app.use(errorHandler);
+
 // Cloud Run は PORT 環境変数を使う
 const port = process.env.PORT || 8080;
 
-app.listen(port, () => {
-  console.log(`API server running on port ${port}`);
+const server = app.listen(port, () => {
+  logger.info({ port }, "API server running");
 });
+
+function gracefulShutdown(signal: string) {
+  logger.info({ signal }, "Received shutdown signal");
+  server.close(() => {
+    logger.info("HTTP server closed");
+    process.exit(0);
+  });
+  setTimeout(() => {
+    logger.error("Forced shutdown after timeout");
+    process.exit(1);
+  }, 10000);
+}
+
+process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
+process.on("SIGINT", () => gracefulShutdown("SIGINT"));

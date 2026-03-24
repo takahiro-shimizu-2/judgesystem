@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import { PoolClient } from "pg";
 import QueryStream from "pg-query-stream";
 import { pool, schemaPrefix } from "../config/database";
+import { logger } from "../utils/logger";
 
 export class CompanyController {
   private buildCompaniesQuery(): string {
@@ -52,7 +53,7 @@ export class CompanyController {
   }
 
   getList = async (_req: Request, res: Response) => {
-    console.log("GET /api/companies hit");
+    logger.info("GET /api/companies hit");
 
     let client: PoolClient | undefined;
     let stream: QueryStream | undefined;
@@ -90,7 +91,7 @@ export class CompanyController {
       });
 
       stream.on("error", (err: Error) => {
-        console.error("ERROR in GET /api/companies stream:", err);
+        logger.error({ err }, "ERROR in GET /api/companies stream");
         if (!res.headersSent) {
           res.status(500).json({
             error: "Internal Server Error",
@@ -113,7 +114,7 @@ export class CompanyController {
         releaseClient();
       });
     } catch (error) {
-      console.error("ERROR in GET /api/companies:", error);
+      logger.error({ err: error }, "ERROR in GET /api/companies");
       if (!res.headersSent) {
         res.status(500).json({
           error: "Internal Server Error",
