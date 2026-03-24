@@ -591,7 +591,7 @@ export class AnnouncementRepository {
       const gcsPath = row.save_path?.startsWith('gs://') ? row.save_path : undefined;
       if (!gcsPath) {
         const message = `Document ${documentId} for announcement ${announcementNo} has no GCS save_path`;
-        console.warn(message);
+        logger.warn(message);
         throw new Error("Document file not found in storage");
       }
 

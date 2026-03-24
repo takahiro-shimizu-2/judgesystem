@@ -147,7 +147,6 @@ async function fetchEvaluations(params: {
   }
 
   const result = await response.json();
-  console.log('API Response:', result);
   return result;
 }
 

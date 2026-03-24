@@ -38,7 +38,7 @@ export class PartnerController {
    * GET /api/partners/:id - Get single partner by ID
    */
   getById = async (req: Request, res: Response): Promise<void> => {
-    logger.info("GET /api/partners/${req.params.id}");
+    logger.info(`GET /api/partners/${req.params.id}`);
 
     const { id } = req.params;
 
@@ -54,7 +54,7 @@ export class PartnerController {
       res.setHeader("Cache-Control", "no-cache");
       res.status(200).json(partner);
     } catch (error) {
-      logger.error({ err: error }, "ERROR in GET /api/partners/${id}");
+      logger.error({ err: error }, `ERROR in GET /api/partners/${id}`);
       if (!res.headersSent) {
         res.status(500).json({
           error: "Internal Server Error",

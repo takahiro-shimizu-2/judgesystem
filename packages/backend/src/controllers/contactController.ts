@@ -28,7 +28,7 @@ export class ContactController {
 
   getById = async (req: Request, res: Response): Promise<void> => {
     const { id } = req.params;
-    logger.info("GET /api/contacts/${id}");
+    logger.info(`GET /api/contacts/${id}`);
 
     try {
       const contact = await this.service.getById(id);
@@ -40,7 +40,7 @@ export class ContactController {
       res.setHeader("Content-Type", "application/json");
       res.status(200).json(contact);
     } catch (error) {
-      logger.error({ err: error }, "ERROR in GET /api/contacts/${id}");
+      logger.error({ err: error }, `ERROR in GET /api/contacts/${id}`);
       if (!res.headersSent) {
         res.status(500).json({
           error: "Internal Server Error",
@@ -79,7 +79,7 @@ export class ContactController {
 
   update = async (req: Request, res: Response): Promise<void> => {
     const { id } = req.params;
-    logger.info("PATCH /api/contacts/${id}");
+    logger.info(`PATCH /api/contacts/${id}`);
 
     try {
       const contact = await this.service.update(id, req.body ?? {});
@@ -91,7 +91,7 @@ export class ContactController {
       res.setHeader("Content-Type", "application/json");
       res.status(200).json(contact);
     } catch (error) {
-      logger.error({ err: error }, "ERROR in PATCH /api/contacts/${id}");
+      logger.error({ err: error }, `ERROR in PATCH /api/contacts/${id}`);
       if (!res.headersSent) {
         res.status(500).json({
           error: "Internal Server Error",
@@ -110,7 +110,7 @@ export class ContactController {
     }
 
     const { id } = req.params;
-    logger.info("DELETE /api/contacts/${id}");
+    logger.info(`DELETE /api/contacts/${id}`);
 
     try {
       const deleted = await this.service.delete(id);
@@ -121,7 +121,7 @@ export class ContactController {
 
       res.status(204).send();
     } catch (error) {
-      logger.error({ err: error }, "ERROR in DELETE /api/contacts/${id}");
+      logger.error({ err: error }, `ERROR in DELETE /api/contacts/${id}`);
       if (!res.headersSent) {
         res.status(500).json({
           error: "Internal Server Error",
