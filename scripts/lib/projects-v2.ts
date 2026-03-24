@@ -1,7 +1,7 @@
 /**
  * GitHub Projects V2 Integration
  *
- * Local copy of the Miyabi Projects V2 client so `my-app` workflows can run
+ * Local copy of the Miyabi Projects V2 client so `judgesystem` workflows can run
  * in this repository without depending on Miyabi's monorepo internals.
  */
 

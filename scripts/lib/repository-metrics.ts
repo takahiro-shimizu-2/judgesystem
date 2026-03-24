@@ -84,7 +84,7 @@ interface RawSkillRun {
   score?: number;
 }
 
-const DEFAULT_REPOSITORY = 'takahiro-shimizu-1/my-app';
+const DEFAULT_REPOSITORY = 'takahiro-shimizu-2/judgesystem';
 
 export function resolveRepositoryContext(
   repository = process.env.GITHUB_REPOSITORY || process.env.REPOSITORY || DEFAULT_REPOSITORY,

@@ -346,7 +346,7 @@ async function main() {
     process.exit(1);
   }
 
-  const repository = process.env.GITHUB_REPOSITORY || process.env.REPOSITORY || 'takahiro-shimizu-1/my-app';
+  const repository = process.env.GITHUB_REPOSITORY || process.env.REPOSITORY || 'takahiro-shimizu-2/judgesystem';
   const [owner, repo] = repository.split('/');
   const command = process.argv[2];
   const issueNumber = parseNumberArg('--issue');
