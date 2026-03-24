@@ -56,6 +56,14 @@ scoring_algorithm:
 4. **脆弱性パターン**: eval(), innerHTML, document.write
 5. **npm audit**: 依存関係の既知脆弱性
 
+## コード影響分析（GitNexus）
+
+静的解析の前に実行:
+
+1. `gitnexus_detect_changes({scope: "all"})` → 変更されたシンボル・影響を受けるプロセスを特定
+2. 影響範囲がHIGH/CRITICALの場合、品質スコアの減点対象に追加
+3. レビューコメントに影響範囲レポートを含める
+
 ## 実行フロー
 
 1. **静的解析実行**: ESLint + TypeScriptコンパイラ実行
