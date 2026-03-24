@@ -2,6 +2,7 @@ import { lazy, Suspense } from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { ThemeProvider, createTheme, CssBaseline, CircularProgress, Box } from '@mui/material';
 import { MainLayout } from './components/layout';
+import { ErrorBoundary } from './components/common/ErrorBoundary';
 import { StaffProvider } from './contexts/StaffContext';
 
 const BidListPage = lazy(() => import('./pages/BidListPage'));
@@ -64,10 +65,11 @@ function App() {
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
-      <StaffProvider>
-        <Router>
-          <MainLayout>
-            <Suspense fallback={<Loading />}>
+      <ErrorBoundary>
+        <StaffProvider>
+          <Router>
+            <MainLayout>
+              <Suspense fallback={<Loading />}>
               <Routes>
                 <Route path="/" element={<BidListPage />} />
                 <Route path="/detail/:id" element={<BidDetailPage />} />
@@ -82,10 +84,11 @@ function App() {
                 <Route path="/master/register" element={<MasterRegisterPage />} />
                 <Route path="/master/register/confirm" element={<MasterRegisterConfirmPage />} />
               </Routes>
-            </Suspense>
-          </MainLayout>
-        </Router>
-      </StaffProvider>
+              </Suspense>
+            </MainLayout>
+          </Router>
+        </StaffProvider>
+      </ErrorBoundary>
     </ThemeProvider>
   );
 }

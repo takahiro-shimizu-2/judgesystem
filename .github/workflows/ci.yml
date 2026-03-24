@@ -1,0 +1,62 @@
+name: CI
+
+on:
+  push:
+    branches: [main, feat/**, fix/**]
+  pull_request:
+    branches: [main, feat/**, fix/**]
+
+jobs:
+  backend-check:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: source/bid_apps/postgres/backend/app
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: source/bid_apps/postgres/backend/app/package-lock.json
+
+      - run: npm ci
+      - run: npx tsc --noEmit
+
+  frontend-check:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: source/bid_apps/postgres/frontend/app
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: source/bid_apps/postgres/frontend/app/package-lock.json
+
+      - run: npm ci
+      - run: npx tsc --noEmit
+      - run: npm run build
+
+  security-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Backend audit
+        working-directory: source/bid_apps/postgres/backend/app
+        run: npm audit --audit-level=high || true
+
+      - name: Frontend audit
+        working-directory: source/bid_apps/postgres/frontend/app
+        run: npm audit --audit-level=high || true
