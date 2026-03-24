@@ -34,9 +34,12 @@
 
 ### アーキテクチャ
 
-- `source/bid_announcement_judgement_tools/` - Python判定エンジン（PDF解析・OCR・適格性判定）
-- `source/bid_apps/postgres/backend/` - Express API（TypeScript, 3-layer architecture）
-- `source/bid_apps/postgres/frontend/` - React UI（MUI v7, Vite 7）
+- `packages/engine/` - Python判定エンジン（PDF解析・OCR・適格性判定）
+- `packages/backend/` - Express API（TypeScript, 3-layer architecture）
+- `packages/frontend/` - React UI（MUI v7, Vite 7）
+- `packages/shared/` - 共有型・定数パッケージ（@judgesystem/shared）
+- `deploy/` - docker-compose, cloudbuild
+- `db/migrations/` - SQLマイグレーション
 
 ### 技術スタック
 

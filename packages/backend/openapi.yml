@@ -1,0 +1,307 @@
+openapi: 3.0.3
+info:
+  title: Bid Eligibility Judgment System API
+  version: 0.1.0
+  description: Backend API for bid evaluation, announcements, partners, orderers, contacts, and companies.
+
+servers:
+  - url: http://localhost:8080
+    description: Local development
+  - url: https://bidapp-backend-postgres-50843898931.asia-northeast1.run.app
+    description: Cloud Run production
+
+paths:
+  /health:
+    get:
+      summary: Health check
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+                  timestamp:
+                    type: string
+                    format: date-time
+
+  /readiness:
+    get:
+      summary: Readiness check (DB connectivity)
+      responses:
+        '200':
+          description: Service is ready
+        '503':
+          description: Service is not ready
+
+  /api/evaluations:
+    get:
+      summary: List evaluations with filters and pagination
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 0
+        - name: pageSize
+          in: query
+          schema:
+            type: integer
+            default: 25
+            maximum: 1000
+        - name: statuses
+          in: query
+          schema:
+            type: array
+            items:
+              type: string
+        - name: workStatuses
+          in: query
+          schema:
+            type: array
+            items:
+              type: string
+        - name: searchQuery
+          in: query
+          schema:
+            type: string
+        - name: sortField
+          in: query
+          schema:
+            type: string
+        - name: sortOrder
+          in: query
+          schema:
+            type: string
+            enum: [asc, desc]
+      responses:
+        '200':
+          description: Paginated evaluation list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Evaluation'
+                  total:
+                    type: integer
+                  page:
+                    type: integer
+                  pageSize:
+                    type: integer
+
+  /api/evaluations/{id}:
+    get:
+      summary: Get evaluation by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Single evaluation
+        '404':
+          description: Not found
+
+  /api/announcements:
+    get:
+      summary: List announcements with filters and pagination
+      responses:
+        '200':
+          description: Paginated announcement list
+
+  /api/announcements/{announcementNo}:
+    get:
+      summary: Get announcement by number
+      parameters:
+        - name: announcementNo
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Single announcement
+        '404':
+          description: Not found
+
+  /api/partners:
+    get:
+      summary: List all partners
+      responses:
+        '200':
+          description: Partner list
+
+  /api/partners/{id}:
+    get:
+      summary: Get partner by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Single partner
+        '404':
+          description: Not found
+
+  /api/orderers:
+    get:
+      summary: List all orderers
+      responses:
+        '200':
+          description: Orderer list
+
+  /api/orderers/{id}:
+    get:
+      summary: Get orderer by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Single orderer
+        '404':
+          description: Not found
+
+  /api/contacts:
+    get:
+      summary: List all contacts
+      responses:
+        '200':
+          description: Contact list
+    post:
+      summary: Create a new contact
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateContact'
+      responses:
+        '201':
+          description: Created contact
+        '400':
+          description: Validation error
+
+  /api/contacts/{id}:
+    get:
+      summary: Get contact by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Single contact
+        '404':
+          description: Not found
+    patch:
+      summary: Update a contact
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateContact'
+      responses:
+        '200':
+          description: Updated contact
+        '404':
+          description: Not found
+    delete:
+      summary: Delete a contact (requires ENABLE_CONTACT_DELETE=true)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Deleted
+        '403':
+          description: Deletion disabled
+        '404':
+          description: Not found
+
+  /api/companies:
+    get:
+      summary: List all companies (streaming)
+      responses:
+        '200':
+          description: Company list as JSON array stream
+
+components:
+  schemas:
+    Evaluation:
+      type: object
+      properties:
+        id:
+          type: string
+        evaluationNo:
+          type: string
+        announcement:
+          type: object
+        company:
+          type: object
+        branch:
+          type: object
+        status:
+          type: string
+          enum: [all_met, other_only_unmet, unmet]
+        workStatus:
+          type: string
+          enum: [not_started, in_progress, completed]
+        currentStep:
+          type: integer
+        evaluatedAt:
+          type: string
+
+    CreateContact:
+      type: object
+      required: [name, department, email, phone]
+      properties:
+        name:
+          type: string
+        department:
+          type: string
+        email:
+          type: string
+          format: email
+        phone:
+          type: string
+
+    UpdateContact:
+      type: object
+      properties:
+        name:
+          type: string
+        department:
+          type: string
+        email:
+          type: string
+          format: email
+        phone:
+          type: string
