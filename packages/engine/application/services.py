@@ -29,8 +29,6 @@ class BidAnnouncementsApplication:
             tablenamesconfig=self.tablenamesconfig,
             db_operator=self.db_operator,
             gemini_model=args.gemini_model,
-            google_api_key_path=args.step0_google_api_key,
-            gemini_use_vertex_ai=args.gemini_use_vertex_ai,
             vertex_ai_project_id=vertex_ai_project_id,
             vertex_ai_location=args.vertex_ai_location,
             gemini_max_output_tokens=args.gemini_max_output_tokens,
@@ -143,7 +141,6 @@ class BidAnnouncementsApplication:
             do_ocr_json=self.args.step0_do_ocr_json,
             do_count_pages=self.args.step0_do_count_pages,
             do_ocr=self.args.step0_do_ocr,
-            google_api_key=self.args.step0_google_api_key,
             ocr_max_concurrency=self.args.step0_ocr_max_concurrency,
             ocr_max_api_calls_per_run=self.args.step0_ocr_max_api_calls_per_run,
         )
@@ -154,7 +151,6 @@ class BidAnnouncementsApplication:
         """
         self.service.regenerate_markdown_from_database(
             use_gcs=self.use_gcs,
-            google_api_key=self.args.step0_google_api_key,
             max_concurrency=self.args.step0_ocr_max_concurrency,
             max_api_calls_per_run=self.args.step0_ocr_max_api_calls_per_run,
             document_ids=document_ids,
@@ -169,7 +165,6 @@ class BidAnnouncementsApplication:
         """
         self.service.regenerate_ocr_json_from_database(
             use_gcs=self.use_gcs,
-            google_api_key=self.args.step0_google_api_key,
             max_concurrency=self.args.step0_ocr_max_concurrency,
             max_api_calls_per_run=self.args.step0_ocr_max_api_calls_per_run,
             document_ids=document_ids,

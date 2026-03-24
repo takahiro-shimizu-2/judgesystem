@@ -2,7 +2,7 @@
 """
 OCR/Markdown/Gemini 関連メソッドを提供する Mixin。
 
-PDF ダウンロード、Markdown 生成、OCR JSON 生成、Gemini API 呼び出し、
+PDF ダウンロード、Markdown 生成、OCR JSON 生成、Vertex AI 経由 Gemini 呼び出し、
 _convertJson、DB 再生成系メソッドを含む。
 """
 
@@ -38,33 +38,18 @@ from packages.engine.domain.master import (
 class OcrProcessingMixin:
     """OCR/Markdown/Gemini関連メソッドを提供するMixin"""
 
-    def _create_gemini_client(self, google_api_key=None):
+    def _create_gemini_client(self):
         """
-        Create a Gemini client configured for either Vertex AI or API key based authentication.
+        Create a Gemini client configured for Vertex AI authentication.
         """
-        if self.gemini_use_vertex_ai:
-            project_id = self.vertex_ai_project_id
-            if not project_id:
-                raise ValueError("Vertex AI project ID is required when gemini_use_vertex_ai is enabled.")
-            return genai.Client(
-                vertexai=True,
-                project=project_id,
-                location=self.vertex_ai_location or "asia-northeast1",
-            )
-
-        key_path = google_api_key or self.google_api_key_path
-        if not key_path:
-            raise ValueError("google_api_key is required when Vertex AI is not enabled.")
-
-        path_obj = Path(key_path)
-        if not path_obj.exists():
-            raise FileNotFoundError(f"Google API key file not found: {path_obj}")
-
-        api_key = path_obj.read_text().strip()
-        if not api_key:
-            raise ValueError("Google API key file is empty")
-
-        return genai.Client(api_key=api_key)
+        project_id = self.vertex_ai_project_id
+        if not project_id:
+            raise ValueError("Vertex AI project ID is required. Specify --vertex_ai_project_id or --bigquery_project_id.")
+        return genai.Client(
+            vertexai=True,
+            project=project_id,
+            location=self.vertex_ai_location or "asia-northeast1",
+        )
 
 
     def _step0_download_pdfs(self, df, use_gcs=False):
@@ -297,7 +282,6 @@ class OcrProcessingMixin:
         self,
         df_main,
         use_gcs=False,
-        google_api_key=None,
         max_concurrency=5,
         max_api_calls_per_run=1000,
         force_regenerate=False
@@ -305,7 +289,7 @@ class OcrProcessingMixin:
         """
         PDF から Gemini を使って Markdown 要約を生成し保存する
         """
-        client = self._create_gemini_client(google_api_key)
+        client = self._create_gemini_client()
         df_main = df_main.copy()
         df_main["document_id"] = df_main["document_id"].astype(str).str.strip()
 
@@ -450,7 +434,6 @@ class OcrProcessingMixin:
         self,
         df_main,
         use_gcs=False,
-        google_api_key=None,
         max_concurrency=5,
         max_api_calls_per_run=1000,
         force_regenerate=False,
@@ -459,7 +442,7 @@ class OcrProcessingMixin:
         """
         Gemini を使って OCR JSON を生成し保存する
         """
-        client = self._create_gemini_client(google_api_key)
+        client = self._create_gemini_client()
         df_main = df_main.copy()
         df_main["document_id"] = df_main["document_id"].astype(str).str.strip()
 
@@ -561,7 +544,6 @@ class OcrProcessingMixin:
     def regenerate_markdown_from_database(
         self,
         use_gcs=False,
-        google_api_key=None,
         max_concurrency=5,
         max_api_calls_per_run=1000,
         document_ids=None,
@@ -607,7 +589,6 @@ class OcrProcessingMixin:
         df_main = self._step0_generate_markdown(
             df_main=df_main,
             use_gcs=use_gcs,
-            google_api_key=google_api_key,
             max_concurrency=max_concurrency,
             max_api_calls_per_run=max_api_calls_per_run,
             force_regenerate=overwrite_files
@@ -626,7 +607,6 @@ class OcrProcessingMixin:
     def regenerate_ocr_json_from_database(
         self,
         use_gcs=False,
-        google_api_key=None,
         max_concurrency=5,
         max_api_calls_per_run=1000,
         document_ids=None,
@@ -678,7 +658,6 @@ class OcrProcessingMixin:
         df_main = self._step0_generate_ocr_json(
             df_main=df_main,
             use_gcs=use_gcs,
-            google_api_key=google_api_key,
             max_concurrency=max_concurrency,
             max_api_calls_per_run=max_api_calls_per_run,
             force_regenerate=overwrite_files,
@@ -823,7 +802,6 @@ class OcrProcessingMixin:
         self,
         df_main,
         use_gcs=False,
-        google_api_key=None,
         max_concurrency=5,
         max_api_calls_per_run=1000
     ):
@@ -834,7 +812,7 @@ class OcrProcessingMixin:
         print("Step0-6: OCR with Gemini")
         print("=" * 60)
 
-        client = self._create_gemini_client(google_api_key)
+        client = self._create_gemini_client()
 
         df_main = df_main.copy()
         df_main["document_id"] = df_main["document_id"].astype(str).str.strip()

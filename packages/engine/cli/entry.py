@@ -83,10 +83,6 @@ def build_parser():
                         help="ページ数カウント処理を実行")
     parser.add_argument("--step0_do_ocr", action="store_true",
                         help="Gemini OCR処理を実行")
-    parser.add_argument("--step0_google_api_key", default="data/sec/google_ai_studio_api_key_mizu.txt",
-                        help="Google AI Studio API キーファイルのパス（Vertex AI未使用時に参照）")
-    parser.add_argument("--gemini_use_vertex_ai", action="store_true",
-                        help="Vertex AI 経由で Gemini を利用する")
     parser.add_argument("--vertex_ai_project_id", default=None,
                         help="Vertex AI プロジェクト ID（未指定時は BigQuery project を利用）")
     parser.add_argument("--vertex_ai_location", default="asia-northeast1",
