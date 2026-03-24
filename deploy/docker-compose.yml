@@ -2,48 +2,70 @@ services:
   db:
     image: postgres:16-alpine
     ports:
-      - "5432:5432"
+      - "${DB_PORT:-5434}:5432"
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: postgres
     volumes:
       - pgdata:/var/lib/postgresql/data
+      - ../db/init:/docker-entrypoint-initdb.d:ro
+      - ../data/master:/master-data:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 5s
       timeout: 5s
       retries: 5
 
+  install:
+    image: node:22-alpine
+    working_dir: /app
+    command: sh -c "npm install --prefer-offline && echo ready > /app/.node_modules_ready"
+    volumes:
+      - ..:/app
+      - node_modules:/app/node_modules
+
   backend:
-    build:
-      context: ../packages/backend
-      dockerfile: Dockerfile
+    image: node:22-alpine
+    working_dir: /app
+    command: sh -c "until [ -f /app/.node_modules_ready ]; do sleep 1; done && npx tsx watch --tsconfig packages/backend/tsconfig.json packages/backend/index.ts"
     ports:
-      - "8080:8080"
+      - "${BACKEND_PORT:-3080}:3080"
+    volumes:
+      - ..:/app
+      - node_modules:/app/node_modules
     environment:
-      PORT: 8080
+      PORT: 3080
       PGHOST: db
       PGPORT: 5432
       PGDATABASE: postgres
       PGUSER: postgres
       PGPASSWORD: postgres
       PGSSLMODE: disable
-      CORS_ORIGIN: http://localhost:5173
+      AUTH_ENABLED: "false"
+      CORS_ORIGIN: http://localhost:${FRONTEND_PORT:-3173}
     depends_on:
       db:
         condition: service_healthy
+      install:
+        condition: service_completed_successfully
 
   frontend:
-    build:
-      context: ../packages/frontend
-      dockerfile: Dockerfile
+    image: node:22-alpine
+    working_dir: /app/packages/frontend
+    command: sh -c "npx vite --host 0.0.0.0 --port 3173"
     ports:
-      - "5173:5173"
+      - "${FRONTEND_PORT:-3173}:3173"
+    volumes:
+      - ..:/app
+      - node_modules:/app/node_modules
     environment:
-      VITE_API_URL: http://localhost:8080
+      VITE_API_URL: http://localhost:${BACKEND_PORT:-3080}
     depends_on:
-      - backend
+      install:
+        condition: service_completed_successfully
+      backend:
+        condition: service_started
 
   engine:
     build:
@@ -66,3 +88,4 @@ services:
 
 volumes:
   pgdata:
+  node_modules:
