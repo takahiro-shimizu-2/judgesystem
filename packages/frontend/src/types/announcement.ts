@@ -3,6 +3,9 @@ import type { Announcement } from './index';
 // shared パッケージからの re-export
 export type { AnnouncementStatus, BidType } from '@judgesystem/shared';
 
+// shared パッケージから import（このファイル内で使用するため）
+import type { AnnouncementStatus } from '@judgesystem/shared';
+
 /**
  * 競争参加企業
  */
