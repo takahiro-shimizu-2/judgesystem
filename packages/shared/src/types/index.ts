@@ -23,4 +23,3 @@ export type PartnerStatus =
 export type OrdererCategory = 'national' | 'prefecture' | 'city' | 'other';
 export type RequirementCategory = '欠格要件' | '所在地要件' | '等級要件' | '工事実績要件' | '技術者要件' | 'その他';
 export type CompanyPriority = 1 | 2 | 3 | 4 | 5;
-export type WorkflowStepId = 'judgment' | 'orderer' | 'partner' | 'request' | 'award';
