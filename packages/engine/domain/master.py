@@ -12,7 +12,6 @@ import uuid
 import warnings
 from datetime import datetime
 
-
 import pandas as pd
 import numpy as np
 import fitz  # PyMuPDF for page counting
@@ -292,7 +291,7 @@ class Master:
 
     @staticmethod
     def test():
-        master = Master(sqlite3_db_file_path="data/example.db")
+        master = Master()
         print(master.getAgencyMaster())
         print(master.getCompanyMaster())
         print(master.getConstructionMaster())
@@ -304,81 +303,6 @@ class Master:
         print(master.getEmployeeExperienceMaster())
         print(master.getTechnicianQualificationMaster())
 
-
-
-def _convert_requirement_text_dict(requirement_texts):
-    """
-    要件テキストを変換してDataFrame用の辞書を作成（multiprocessing用グローバル関数）
-
-    Args:
-        requirement_texts: {"announcement_no": int, "資格・条件": list}
-
-    Returns:
-        dict: DataFrame作成用の辞書
-    """
-    announcement_no = requirement_texts["announcement_no"]
-
-    # 資格・条件が空の場合はデフォルトレコードを返す
-    if not requirement_texts["資格・条件"] or len(requirement_texts["資格・条件"]) == 0:
-        return {
-            "announcement_no": [announcement_no],
-            "requirement_no": [0],
-            "requirement_type": ["その他要件"],
-            "requirement_text": ["No requirements specified"],
-            "createdDate": [datetime.now().strftime('%Y-%m-%d %H:%M:%S')],
-            "updatedDate": [datetime.now().strftime('%Y-%m-%d %H:%M:%S')]
-        }
-
-    announcement_no_list = []
-    requirement_no_list = []
-    requirement_type_list = []
-    requirement_text_list = []
-    createdDate_list = []
-    updatedDate_list = []
-
-    req_type_list_search_list = {
-        "欠格要件":[
-            "70条","71条","会社更生法","民事再生法","更生手続",
-            "再生手続","情報保全","資本関係","人的関係","滞納",
-            "外国法","取引停止","破産","暴力団","指名停止",
-            "後見人","法人格取消"
-        ],
-        "業種・等級要件":["競争参加資格","一般競争","指名競争","等級","総合審査"],
-        "所在地要件":["所在","県内","市内","防衛局管内","本店が","支店が"],
-        "技術者要件":[
-            "施工管理技士","技術士","資格者証","電気工事士","建築士",
-            "基幹技能者","監理技術者","主任技術者","監理技術者資格者証","監理技術者講習修了証"
-        ],
-        "実績要件":[
-            "実績","工事成績","元請けとして","元請として","点以上",
-            "jv比率","過去実績"
-        ],
-        "その他要件":["jv","共同企業体","出資比率"]
-    }
-
-    for i, text in enumerate(requirement_texts["資格・条件"]):
-        has_other_req = True
-        text_lower = text.lower()
-        for req_type, search_list in req_type_list_search_list.items():
-            search_str = "|".join(search_list)
-            if (req_type != "その他要件" and re.search(search_str, text_lower)) or (req_type == "その他要件" and re.search(search_str, text_lower)) or (req_type == "その他要件" and not re.search(search_str, text_lower) and has_other_req):
-                announcement_no_list.append(announcement_no)
-                requirement_no_list.append(i)
-                requirement_type_list.append(req_type)
-                requirement_text_list.append(text)
-                createdDate_list.append(datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
-                updatedDate_list.append(datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
-                has_other_req = False
-
-    new_dict = {
-        "announcement_no":announcement_no_list,
-        "requirement_no":requirement_no_list,
-        "requirement_type":requirement_type_list,
-        "requirement_text":requirement_text_list,
-        "createdDate":createdDate_list,
-        "updatedDate":updatedDate_list
-    }
-    return new_dict
 
 
 def _process_judgement_chunk(args):
