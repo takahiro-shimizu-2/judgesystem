@@ -8,16 +8,13 @@ import {
   Paper,
   Typography,
   Chip,
-  IconButton,
 } from '@mui/material';
 import {
   Business as BusinessIcon,
-  Edit as EditIcon,
-  Delete as DeleteIcon,
 } from '@mui/icons-material';
 import type { GridSortModel } from '@mui/x-data-grid';
 import { mockOrderers, ordererCategoryConfig } from '../data';
-import { deleteOrdererRecord } from '../data/orderers';
+
 import { fontSizes, colors, pageStyles, iconStyles, borderRadius, listFilterChipStyles } from '../constants/styles';
 import { getOrganizationGroup } from '../constants/organizations';
 import { allPrefectures } from '../constants/prefectures';
@@ -54,7 +51,7 @@ interface RowData {
 /**
  * 発注者カード
  */
-function OrdererCard({ row, onClick, onEdit, onDelete }: { row: RowData; onClick: () => void; onEdit: (e: React.MouseEvent) => void; onDelete: (e: React.MouseEvent) => void }) {
+function OrdererCard({ row, onClick }: { row: RowData; onClick: () => void }) {
   const categoryConfig = ordererCategoryConfig[row.category];
 
   return (
@@ -177,24 +174,6 @@ function OrdererCard({ row, onClick, onEdit, onDelete }: { row: RowData; onClick
         >
           最終公告: {row.lastAnnouncementDate}
         </Typography>
-      </Box>
-
-      {/* 編集・削除ボタン */}
-      <Box
-        sx={{
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 0.5,
-          alignSelf: 'center',
-          flexShrink: 0,
-        }}
-      >
-        <IconButton size="small" onClick={onEdit} sx={{ color: colors.text.light, '&:hover': { color: colors.accent.blue, backgroundColor: `${colors.accent.blue}15` } }}>
-          <EditIcon sx={{ fontSize: 18 }} />
-        </IconButton>
-        <IconButton size="small" onClick={onDelete} sx={{ color: colors.text.light, '&:hover': { color: colors.accent.red, backgroundColor: `${colors.accent.red}15` } }}>
-          <DeleteIcon sx={{ fontSize: 18 }} />
-        </IconButton>
       </Box>
 
       {/* 右: 統計情報 */}
@@ -405,37 +384,6 @@ export default function OrdererListPage() {
     navigate(`/orderers/${id}`);
   };
 
-  const handleEdit = useCallback((row: RowData) => {
-    navigate('/master/register', {
-      state: {
-        editMode: true,
-        entityId: row.id,
-        formType: 'orderer',
-        formData: {
-          name: row.name,
-          category: row.category,
-          address: row.address,
-          phone: '',
-          fax: '',
-          email: '',
-          website: '',
-          departments: [],
-        },
-        activeTab: 1,
-      },
-    });
-  }, [navigate]);
-
-  const handleDelete = useCallback(async (row: RowData) => {
-    if (!window.confirm(`「${row.name}」を削除しますか？`)) return;
-    const success = await deleteOrdererRecord(row.id);
-    if (success) {
-      window.location.reload();
-    } else {
-      alert('削除に失敗しました。');
-    }
-  }, []);
-
   const handleClearAll = useCallback(() => {
     setSearchQuery('');
     setSortModel([]);
@@ -551,8 +499,6 @@ export default function OrdererListPage() {
                 key={row.id}
                 row={row}
                 onClick={() => handleCardClick(row.id)}
-                onEdit={(e) => { e.stopPropagation(); handleEdit(row); }}
-                onDelete={(e) => { e.stopPropagation(); handleDelete(row); }}
               />
             ))}
             {paginatedRows.length === 0 && (

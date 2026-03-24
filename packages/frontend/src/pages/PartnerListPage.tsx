@@ -9,17 +9,13 @@ import {
   Typography,
   Chip,
   Rating,
-  IconButton,
 } from '@mui/material';
 import {
   Business as BusinessIcon,
   Phone as PhoneIcon,
-  Edit as EditIcon,
-  Delete as DeleteIcon,
 } from '@mui/icons-material';
 import type { GridSortModel } from '@mui/x-data-grid';
 import { partners, allCategories } from '../data';
-import { deletePartnerRecord } from '../data/partners';
 import { colors, pageStyles, fontSizes, chipStyles, listFilterChipStyles, iconStyles, borderRadius } from '../constants/styles';
 import { allPrefectures, extractPrefecture } from '../constants/prefectures';
 import { CustomPagination } from '../components/bid';
@@ -46,7 +42,7 @@ interface RowData {
 /**
  * 会社情報カード
  */
-function PartnerCard({ row, onClick, onEdit, onDelete }: { row: RowData; onClick: () => void; onEdit: (e: React.MouseEvent) => void; onDelete: (e: React.MouseEvent) => void }) {
+function PartnerCard({ row, onClick }: { row: RowData; onClick: () => void }) {
   // 評価に応じた色
   const getRatingColor = (rating: number | null) => {
     if (rating == null) return colors.text.muted;
@@ -206,24 +202,6 @@ function PartnerCard({ row, onClick, onEdit, onDelete }: { row: RowData; onClick
             />
           ))}
         </Box>
-      </Box>
-
-      {/* 編集・削除ボタン */}
-      <Box
-        sx={{
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 0.5,
-          alignSelf: 'center',
-          flexShrink: 0,
-        }}
-      >
-        <IconButton size="small" onClick={onEdit} sx={{ color: colors.text.light, '&:hover': { color: colors.accent.blue, backgroundColor: `${colors.accent.blue}15` } }}>
-          <EditIcon sx={{ fontSize: 18 }} />
-        </IconButton>
-        <IconButton size="small" onClick={onDelete} sx={{ color: colors.text.light, '&:hover': { color: colors.accent.red, backgroundColor: `${colors.accent.red}15` } }}>
-          <DeleteIcon sx={{ fontSize: 18 }} />
-        </IconButton>
       </Box>
 
       {/* 右: 評価と実績 */}
@@ -456,48 +434,6 @@ export default function PartnerListPage() {
     navigate(`/partners/${id}`);
   };
 
-  const handleEdit = useCallback((row: RowData) => {
-    const partner = partners.find((p) => p.id === row.id);
-    navigate('/master/register', {
-      state: {
-        editMode: true,
-        entityId: row.id,
-        formType: 'partner',
-        formData: {
-          name: row.name,
-          postalCode: partner?.postalCode ?? '',
-          address: row.address,
-          phone: row.phone,
-          email: partner?.email ?? '',
-          fax: partner?.fax ?? '',
-          url: partner?.url ?? '',
-          representative: partner?.representative ?? '',
-          established: partner?.established ?? '',
-          capital: partner?.capital != null ? String(partner.capital) : '',
-          employeeCount: partner?.employeeCount != null ? String(partner.employeeCount) : '',
-          categories: row.categories,
-          surveyCount: row.surveyCount != null ? String(row.surveyCount) : '0',
-          resultCount: row.resultCount != null ? String(row.resultCount) : '0',
-          rating: row.rating ?? 0,
-          branches: partner?.branches ?? [],
-          unifiedQualifications: partner?.qualifications?.unified ?? [],
-          ordererQualifications: partner?.qualifications?.orderers ?? [],
-        },
-        activeTab: 0,
-      },
-    });
-  }, [navigate]);
-
-  const handleDelete = useCallback(async (row: RowData) => {
-    if (!window.confirm(`「${row.name}」を削除しますか？`)) return;
-    const success = await deletePartnerRecord(row.id);
-    if (success) {
-      window.location.reload();
-    } else {
-      alert('削除に失敗しました。');
-    }
-  }, []);
-
   const handleClearAll = useCallback(() => {
     setSearchQuery('');
     setSortModel([]);
@@ -643,8 +579,6 @@ export default function PartnerListPage() {
                 key={row.id}
                 row={row}
                 onClick={() => handleCardClick(row.id)}
-                onEdit={(e) => { e.stopPropagation(); handleEdit(row); }}
-                onDelete={(e) => { e.stopPropagation(); handleDelete(row); }}
               />
             ))}
             {paginatedRows.length === 0 && (
