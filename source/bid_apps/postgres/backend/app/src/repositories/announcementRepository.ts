@@ -2,6 +2,7 @@ import { PoolClient } from "pg";
 import { pool, TABLES, schemaPrefix } from "../config/database";
 import { FilterParams, SortOption } from "../types";
 import { downloadFileFromGCS, readMarkdownFromGCS } from "../utils/gcs";
+import { logger } from "../utils/logger";
 
 export class AnnouncementRepository {
   private getStatusExpression(): string {
@@ -226,7 +227,7 @@ export class AnnouncementRepository {
               } catch (error) {
                 // Markdownファイルが存在しない場合でもページ全体は表示可能にする
                 // 開発中なので詳細なエラー情報はログに出力
-                console.error(`Failed to load markdown for document ${doc.id}:`, error);
+                logger.error({ err: error }, `Failed to load markdown for document ${doc.id}`);
                 content = '文字起こしデータがありません'; // エラー時はメッセージを表示
               }
             } else {
@@ -348,7 +349,7 @@ export class AnnouncementRepository {
         competitors: row.competitors ?? [],
       }));
     } catch (error) {
-      console.error(`ERROR fetching similar cases for announcement ${announcementNo}:`, error);
+      logger.error({ err: error }, `ERROR fetching similar cases for announcement ${announcementNo}`);
       throw error;
     } finally {
       client.release();

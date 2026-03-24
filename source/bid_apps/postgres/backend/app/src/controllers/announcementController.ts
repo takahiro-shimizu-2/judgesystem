@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import { AnnouncementService } from "../services";
 import { FilterParams, SortOption } from "../types";
+import { logger } from "../utils/logger";
 
 export class AnnouncementController {
   private service: AnnouncementService;
@@ -13,8 +14,8 @@ export class AnnouncementController {
    * GET /api/announcements - Get announcements list with filters
    */
   getList = async (req: Request, res: Response): Promise<void> => {
-    console.log(`GET /api/announcements hit`);
-    console.log(`Query params:`, req.query);
+    logger.info("GET /api/announcements");
+    logger.info({ query: req.query }, "Query params");
 
     try {
       // Parse and validate pagination parameters
@@ -58,13 +59,13 @@ export class AnnouncementController {
 
       const result = await this.service.getList(filters);
 
-      console.log(`Response: ${result.data.length} rows, total: ${result.total}, page: ${result.page}`);
+      logger.info(`Response: ${result.data.length} rows, total: ${result.total}, page: ${result.page}`);
 
       res.setHeader("Content-Type", "application/json");
       res.setHeader("Cache-Control", "no-cache");
       res.status(200).json(result);
     } catch (error) {
-      console.error(`ERROR in GET /api/announcements:`, error);
+      logger.error({ err: error }, "ERROR in GET /api/announcements");
       if (!res.headersSent) {
         res.status(500).json({
           error: "Internal Server Error",
@@ -78,7 +79,7 @@ export class AnnouncementController {
    * GET /api/announcements/:announcementNo - Get single announcement by announcement_no
    */
   getByNo = async (req: Request, res: Response): Promise<void> => {
-    console.log(`GET /api/announcements/${req.params.announcementNo} hit`);
+    logger.info("GET /api/announcements/${req.params.announcementNo}");
 
     const { announcementNo } = req.params;
     const announcementNoInt = parseInt(announcementNo, 10);
@@ -100,7 +101,7 @@ export class AnnouncementController {
       res.setHeader("Cache-Control", "no-cache");
       res.status(200).json(announcement);
     } catch (error) {
-      console.error(`ERROR in GET /api/announcements/${announcementNo}:`, error);
+      logger.error({ err: error }, "ERROR in GET /api/announcements/${announcementNo}");
       if (!res.headersSent) {
         res.status(500).json({
           error: "Internal Server Error",
@@ -114,7 +115,7 @@ export class AnnouncementController {
    * GET /api/announcements/:announcementNo/progressing-companies
    */
   getProgressingCompanies = async (req: Request, res: Response): Promise<void> => {
-    console.log(`GET /api/announcements/${req.params.announcementNo}/progressing-companies hit`);
+    logger.info("GET /api/announcements/${req.params.announcementNo}/progressing-companies");
 
     const { announcementNo } = req.params;
     const announcementNoInt = parseInt(announcementNo, 10);
@@ -130,7 +131,7 @@ export class AnnouncementController {
       res.setHeader("Cache-Control", "no-cache");
       res.status(200).json(rows);
     } catch (error) {
-      console.error(`ERROR in GET /api/announcements/${announcementNo}/progressing-companies:`, error);
+      logger.error({ err: error }, "ERROR in GET /api/announcements/${announcementNo}/progressing-companies");
       if (!res.headersSent) {
         res.status(500).json({
           error: "Internal Server Error",
@@ -144,7 +145,7 @@ export class AnnouncementController {
    * GET /api/announcements/:announcementNo/similar-cases
    */
   getSimilarCases = async (req: Request, res: Response): Promise<void> => {
-    console.log(`GET /api/announcements/${req.params.announcementNo}/similar-cases hit`);
+    logger.info("GET /api/announcements/${req.params.announcementNo}/similar-cases");
 
     const { announcementNo } = req.params;
     const announcementNoInt = parseInt(announcementNo, 10);
@@ -160,7 +161,7 @@ export class AnnouncementController {
       res.setHeader("Cache-Control", "no-cache");
       res.status(200).json(rows);
     } catch (error) {
-      console.error(`ERROR in GET /api/announcements/${announcementNo}/similar-cases:`, error);
+      logger.error({ err: error }, "ERROR in GET /api/announcements/${announcementNo}/similar-cases");
       if (!res.headersSent) {
         res.status(500).json({
           error: "Internal Server Error",
@@ -217,10 +218,7 @@ export class AnnouncementController {
       res.setHeader("Content-Disposition", `inline; filename*=UTF-8''${encodeURIComponent(sanitizedFilename)}`);
       res.send(file.data);
     } catch (error) {
-      console.error(
-        `ERROR in GET /api/announcements/${announcementNo}/documents/${documentId}/preview:`,
-        error
-      );
+      logger.error({ err: error }, `ERROR in GET /api/announcements/${announcementNo}/documents/${documentId}/preview`);
       if (!res.headersSent) {
         res.status(500).json({
           error: "Internal Server Error",

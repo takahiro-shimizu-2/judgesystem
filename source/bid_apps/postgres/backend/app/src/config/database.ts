@@ -26,7 +26,13 @@ const buildPoolConfig = (): PoolConfig => {
   return config;
 };
 
-export const pool = new Pool(buildPoolConfig());
+export const pool = new Pool({
+  ...buildPoolConfig(),
+  max: Number(process.env.PG_POOL_MAX ?? "20"),
+  min: Number(process.env.PG_POOL_MIN ?? "5"),
+  idleTimeoutMillis: Number(process.env.PG_IDLE_TIMEOUT ?? "30000"),
+  connectionTimeoutMillis: Number(process.env.PG_CONNECT_TIMEOUT ?? "5000"),
+});
 
 export const TABLES = {
   orderers: "bid_orderers",

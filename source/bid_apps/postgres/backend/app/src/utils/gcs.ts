@@ -1,4 +1,5 @@
 import { Storage, File } from '@google-cloud/storage';
+import { logger } from './logger';
 
 // GCS クライアントを初期化
 const storage = new Storage();
@@ -35,7 +36,7 @@ export async function readMarkdownFromGCS(gcsPath: string): Promise<string> {
     const [content] = await file.download();
     return content.toString('utf-8');
   } catch (error) {
-    console.error(`Failed to read from GCS: ${gcsPath}`, error);
+    logger.error({ err: error }, `Failed to read from GCS: ${gcsPath}`);
     throw new Error(`Failed to read markdown from GCS: ${gcsPath}`);
   }
 }
@@ -49,7 +50,7 @@ export async function downloadFileFromGCS(gcsPath: string): Promise<Buffer> {
     const [content] = await file.download();
     return content;
   } catch (error) {
-    console.error(`Failed to download file from GCS: ${gcsPath}`, error);
+    logger.error({ err: error }, `Failed to download file from GCS: ${gcsPath}`);
     throw new Error(`Failed to download file from GCS: ${gcsPath}`);
   }
 }

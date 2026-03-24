@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import { PartnerService } from "../services/partnerService";
+import { logger } from "../utils/logger";
 
 export class PartnerController {
   private service: PartnerService;
@@ -12,18 +13,18 @@ export class PartnerController {
    * GET /api/partners - Get all partners
    */
   getList = async (req: Request, res: Response): Promise<void> => {
-    console.log(`GET /api/partners hit`);
+    logger.info("GET /api/partners");
 
     try {
       const partners = await this.service.getList();
 
-      console.log(`Response: ${partners.length} partners`);
+      logger.info(`Response: ${partners.length} partners`);
 
       res.setHeader("Content-Type", "application/json");
       res.setHeader("Cache-Control", "no-cache");
       res.status(200).json(partners);
     } catch (error) {
-      console.error(`ERROR in GET /api/partners:`, error);
+      logger.error({ err: error }, "ERROR in GET /api/partners");
       if (!res.headersSent) {
         res.status(500).json({
           error: "Internal Server Error",
@@ -37,7 +38,7 @@ export class PartnerController {
    * GET /api/partners/:id - Get single partner by ID
    */
   getById = async (req: Request, res: Response): Promise<void> => {
-    console.log(`GET /api/partners/${req.params.id} hit`);
+    logger.info("GET /api/partners/${req.params.id}");
 
     const { id } = req.params;
 
@@ -53,7 +54,7 @@ export class PartnerController {
       res.setHeader("Cache-Control", "no-cache");
       res.status(200).json(partner);
     } catch (error) {
-      console.error(`ERROR in GET /api/partners/${id}:`, error);
+      logger.error({ err: error }, "ERROR in GET /api/partners/${id}");
       if (!res.headersSent) {
         res.status(500).json({
           error: "Internal Server Error",

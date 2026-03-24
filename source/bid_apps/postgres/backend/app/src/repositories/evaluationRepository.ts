@@ -1,6 +1,7 @@
 import { pool, TABLES, schemaPrefix } from "../config/database";
 import { readMarkdownFromGCS } from "../utils/gcs";
 import { FilterParams, SortOption } from "../types";
+import { logger } from "../utils/logger";
 
 type QualifiedTables = {
   companyBidJudgement: string;
@@ -710,7 +711,7 @@ export class EvaluationRepository {
           try {
             content = await readMarkdownFromGCS(doc.markdown_path);
           } catch (error) {
-            console.error(`Failed to load markdown for document ${doc.id}:`, error);
+            logger.error({ err: error }, `Failed to load markdown for document ${doc.id}`);
           }
         }
         return {

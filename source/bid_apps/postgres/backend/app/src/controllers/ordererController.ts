@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import { OrdererService } from "../services/ordererService";
+import { logger } from "../utils/logger";
 
 export class OrdererController {
   private service: OrdererService;
@@ -9,7 +10,7 @@ export class OrdererController {
   }
 
   getList = async (_req: Request, res: Response): Promise<void> => {
-    console.log("GET /api/orderers hit");
+    logger.info("GET /api/orderers");
 
     try {
       const orderers = await this.service.getList();
@@ -17,7 +18,7 @@ export class OrdererController {
       res.setHeader("Cache-Control", "no-cache");
       res.status(200).json(orderers);
     } catch (error) {
-      console.error("ERROR in GET /api/orderers:", error);
+      logger.error({ err: error }, "ERROR in GET /api/orderers");
       if (!res.headersSent) {
         res.status(500).json({
           error: "Internal Server Error",
@@ -29,7 +30,7 @@ export class OrdererController {
 
   getById = async (req: Request, res: Response): Promise<void> => {
     const { id } = req.params;
-    console.log(`GET /api/orderers/${id} hit`);
+    logger.info("GET /api/orderers/${id}");
 
     try {
       const orderer = await this.service.getById(id);
@@ -42,7 +43,7 @@ export class OrdererController {
       res.setHeader("Cache-Control", "no-cache");
       res.status(200).json(orderer);
     } catch (error) {
-      console.error(`ERROR in GET /api/orderers/${id}:`, error);
+      logger.error({ err: error }, "ERROR in GET /api/orderers/${id}");
       if (!res.headersSent) {
         res.status(500).json({
           error: "Internal Server Error",
