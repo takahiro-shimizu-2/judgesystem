@@ -93,6 +93,19 @@ services:
       backend:
         condition: service_started
 
+  fetch-partners:
+    build:
+      context: ..
+      dockerfile: db/scripts/Dockerfile
+    volumes:
+      - ${GOOGLE_APPLICATION_CREDENTIALS:-./.gcp-key.json}:/app/credentials.json:ro
+      - ../data/master:/app/output
+    environment:
+      GOOGLE_APPLICATION_CREDENTIALS: /app/credentials.json
+    command: ["--output-dir", "/app/output"]
+    profiles:
+      - tools
+
   engine:
     build:
       context: ..
