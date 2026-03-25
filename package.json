@@ -8,7 +8,8 @@
     "test": "echo \"No tests configured yet\" && exit 0",
     "state:check": "tsx scripts/label-state-machine.ts check",
     "state:transition": "tsx scripts/label-state-machine.ts transition",
-    "state:assign-agent": "tsx scripts/label-state-machine.ts assign-agent"
+    "state:assign-agent": "tsx scripts/label-state-machine.ts assign-agent",
+    "fetch:partners": "docker compose -f deploy/docker-compose.yml --profile tools run --rm fetch-partners"
   },
   "devDependencies": {
     "tsx": "^4.19.0",

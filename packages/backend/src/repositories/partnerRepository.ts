@@ -22,6 +22,7 @@ type PartnerBaseRow = {
 
 type CategoryRow = {
   partner_id: string;
+  category_group: string | null;
   categories: string | null;
 };
 
@@ -73,6 +74,19 @@ type OrdererItemRow = {
   grade: string | null;
 };
 
+export interface PartnerFilterParams {
+  page?: number;
+  pageSize?: number;
+  searchQuery?: string;
+  prefectures?: string[];
+  categories?: string[];
+  ratings?: number[];
+  hasSurvey?: "yes" | "no";
+  hasPrimeQualification?: "yes" | "no";
+  sortField?: string;
+  sortOrder?: "asc" | "desc";
+}
+
 export interface PartnerInput {
   name: string;
   postalCode: string;
@@ -85,13 +99,190 @@ export interface PartnerInput {
   established: string;
   capital: string;
   employeeCount: string;
-  categories: string[];
+  categories: { group: string | null; name: string }[];
   branches: { name: string; address: string }[];
 }
 
 export class PartnerRepository {
   /**
-   * Get all partners
+   * Get partners with server-side filtering, sorting and pagination
+   */
+  async findWithFilters(
+    filters: PartnerFilterParams
+  ): Promise<{ data: any[]; total: number }> {
+    const page = filters.page || 0;
+    const pageSize = filters.pageSize || 25;
+    const offset = page * pageSize;
+
+    const conditions: string[] = ["COALESCE(is_active, true)"];
+    const params: unknown[] = [];
+    let paramIndex = 1;
+
+    // Search query: name, address, phone, or category name
+    if (filters.searchQuery) {
+      const escaped = filters.searchQuery.replace(/[%_\\]/g, "\\$&");
+      const pattern = `%${escaped}%`;
+      conditions.push(`(
+        p."name" ILIKE $${paramIndex}
+        OR p."address" ILIKE $${paramIndex}
+        OR p."phone" ILIKE $${paramIndex}
+        OR EXISTS (
+          SELECT 1 FROM ${schemaPrefix}${TABLES.partnerCategories} pc
+          WHERE pc.partner_id = p.partner_id AND pc.categories ILIKE $${paramIndex}
+        )
+      )`);
+      params.push(pattern);
+      paramIndex++;
+    }
+
+    // Prefecture filter (address starts with prefecture name)
+    if (filters.prefectures && filters.prefectures.length > 0) {
+      const prefConditions = filters.prefectures.map((pref) => {
+        params.push(`${pref}%`);
+        return `p."address" LIKE $${paramIndex++}`;
+      });
+      conditions.push(`(${prefConditions.join(" OR ")})`);
+    }
+
+    // Category filter
+    if (filters.categories && filters.categories.length > 0) {
+      conditions.push(`EXISTS (
+        SELECT 1 FROM ${schemaPrefix}${TABLES.partnerCategories} pc
+        WHERE pc.partner_id = p.partner_id AND pc.categories = ANY($${paramIndex})
+      )`);
+      params.push(filters.categories);
+      paramIndex++;
+    }
+
+    // Rating filter
+    if (filters.ratings && filters.ratings.length > 0) {
+      conditions.push(`p."rating" = ANY($${paramIndex})`);
+      params.push(filters.ratings);
+      paramIndex++;
+    }
+
+    // Survey filter
+    if (filters.hasSurvey === "yes") {
+      conditions.push(`COALESCE(p."surveyCount", 0) > 0`);
+    } else if (filters.hasSurvey === "no") {
+      conditions.push(`COALESCE(p."surveyCount", 0) = 0`);
+    }
+
+    // Prime qualification filter
+    if (filters.hasPrimeQualification === "yes") {
+      conditions.push(`(
+        EXISTS (SELECT 1 FROM ${schemaPrefix}${TABLES.partnerQualificationsUnified} q WHERE q.partner_id = p.partner_id)
+        OR EXISTS (SELECT 1 FROM ${schemaPrefix}${TABLES.partnerQualificationsOrderers} q WHERE q.partner_id = p.partner_id)
+      )`);
+    } else if (filters.hasPrimeQualification === "no") {
+      conditions.push(`(
+        NOT EXISTS (SELECT 1 FROM ${schemaPrefix}${TABLES.partnerQualificationsUnified} q WHERE q.partner_id = p.partner_id)
+        AND NOT EXISTS (SELECT 1 FROM ${schemaPrefix}${TABLES.partnerQualificationsOrderers} q WHERE q.partner_id = p.partner_id)
+      )`);
+    }
+
+    const whereClause = `WHERE ${conditions.join(" AND ")}`;
+
+    // Sort
+    const sortFieldMap: Record<string, string> = {
+      name: 'p."name"',
+      rating: 'p."rating"',
+      resultCount: 'p."resultCount"',
+      surveyCount: 'p."surveyCount"',
+      address: 'p."address"',
+      no: 'p."no"',
+    };
+    const sortColumn =
+      filters.sortField && sortFieldMap[filters.sortField]
+        ? sortFieldMap[filters.sortField]
+        : 'p."no"';
+    const sortDirection = filters.sortOrder === "desc" ? "DESC" : "ASC";
+    const nullsLast = ["rating", "resultCount", "surveyCount"].includes(
+      filters.sortField || ""
+    )
+      ? " NULLS LAST"
+      : "";
+
+    const client = await pool.connect();
+    try {
+      params.push(pageSize, offset);
+
+      const masterResult = await client.query(
+        `
+          SELECT
+            p.partner_id AS id,
+            p."no",
+            p."name",
+            p."address",
+            p."phone",
+            p."surveyCount",
+            p."rating",
+            p."resultCount",
+            (
+              EXISTS (SELECT 1 FROM ${schemaPrefix}${TABLES.partnerQualificationsUnified} q WHERE q.partner_id = p.partner_id)
+              OR EXISTS (SELECT 1 FROM ${schemaPrefix}${TABLES.partnerQualificationsOrderers} q WHERE q.partner_id = p.partner_id)
+            ) AS "hasPrimeQualification",
+            COUNT(*) OVER() AS total_count
+          FROM ${schemaPrefix}${TABLES.partners} p
+          ${whereClause}
+          ORDER BY ${sortColumn} ${sortDirection}${nullsLast}
+          LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
+        `,
+        params
+      );
+
+      const total =
+        masterResult.rows.length > 0
+          ? parseInt(masterResult.rows[0].total_count)
+          : 0;
+
+      if (masterResult.rows.length === 0) {
+        return { data: [], total: 0 };
+      }
+
+      // Fetch categories only for paginated partner IDs
+      const partnerIds = masterResult.rows.map((r: any) => r.id);
+      const categoryResult = await client.query<CategoryRow>(
+        `SELECT partner_id, category_group, categories
+         FROM ${schemaPrefix}${TABLES.partnerCategories}
+         WHERE partner_id = ANY($1)`,
+        [partnerIds]
+      );
+
+      const categoryMap = new Map<
+        string,
+        { group: string | null; name: string }[]
+      >();
+      categoryResult.rows.forEach((row) => {
+        if (!row.partner_id || !row.categories) return;
+        const list = categoryMap.get(row.partner_id) || [];
+        list.push({ group: row.category_group || null, name: row.categories });
+        categoryMap.set(row.partner_id, list);
+      });
+
+      const data = masterResult.rows.map(
+        ({ total_count, ...row }: any) => ({
+          id: row.id,
+          no: this.toNumberOrDefault(row.no, 0),
+          name: this.normalizeString(row.name),
+          address: this.normalizeString(row.address),
+          phone: this.normalizeString(row.phone),
+          surveyCount: this.toNumber(row.surveyCount),
+          rating: this.toNumber(row.rating),
+          resultCount: this.toNumber(row.resultCount),
+          hasPrimeQualification: row.hasPrimeQualification === true,
+          categories: categoryMap.get(row.id) || [],
+        })
+      );
+
+      return { data, total };
+    } finally {
+      client.release();
+    }
+  }
+
+  /**
+   * Get all partners (full detail)
    */
   async findAll(): Promise<any[]> {
     return this.fetchPartners();
@@ -176,7 +367,7 @@ export class PartnerRepository {
       );
 
       const categoryResult = await client.query<CategoryRow>(
-        `SELECT partner_id, categories FROM ${schemaPrefix}${TABLES.partnerCategories} ${clause}`,
+        `SELECT partner_id, category_group, categories FROM ${schemaPrefix}${TABLES.partnerCategories} ${clause}`,
         params
       );
 
@@ -264,7 +455,7 @@ export class PartnerRepository {
           established: this.normalizeString(row.established),
           capital: this.toNumber(row.capital),
           employeeCount: this.toNumber(row.employeeCount),
-          categories: [] as string[],
+          categories: [] as { group: string | null; name: string }[],
           pastProjects: [] as any[],
           branches: [] as any[],
           qualifications: {
@@ -279,7 +470,7 @@ export class PartnerRepository {
         }
         const partner = partnerMap.get(row.partner_id);
         if (partner) {
-          partner.categories.push(row.categories);
+          partner.categories.push({ group: row.category_group || null, name: row.categories });
         }
       });
 
@@ -431,8 +622,8 @@ export class PartnerRepository {
 
       for (const category of input.categories) {
         await client.query(
-          `INSERT INTO ${schemaPrefix}${TABLES.partnerCategories} (partner_id, categories) VALUES ($1, $2)`,
-          [partnerId, category]
+          `INSERT INTO ${schemaPrefix}${TABLES.partnerCategories} (partner_id, category_group, categories) VALUES ($1, $2, $3)`,
+          [partnerId, category.group, category.name]
         );
       }
 
@@ -517,8 +708,8 @@ export class PartnerRepository {
         );
         for (const category of input.categories) {
           await client.query(
-            `INSERT INTO ${schemaPrefix}${TABLES.partnerCategories} (partner_id, categories) VALUES ($1, $2)`,
-            [id, category]
+            `INSERT INTO ${schemaPrefix}${TABLES.partnerCategories} (partner_id, category_group, categories) VALUES ($1, $2, $3)`,
+            [id, category.group, category.name]
           );
         }
       }

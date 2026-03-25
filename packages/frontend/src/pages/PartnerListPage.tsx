@@ -1,7 +1,7 @@
 /**
  * 会社情報一覧ページ（カード形式 + 右パネル）
  */
-import { useCallback, useMemo, useState, useRef, useEffect } from 'react';
+import { useCallback, useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Box,
@@ -9,15 +9,17 @@ import {
   Typography,
   Chip,
   Rating,
+  CircularProgress,
 } from '@mui/material';
 import {
   Business as BusinessIcon,
   Phone as PhoneIcon,
 } from '@mui/icons-material';
 import type { GridSortModel } from '@mui/x-data-grid';
-import { partners, allCategories } from '../data';
+import { fetchPartnerList, allCategories } from '../data';
+import type { PartnerListRow } from '../data';
 import { colors, pageStyles, fontSizes, chipStyles, listFilterChipStyles, iconStyles, borderRadius } from '../constants/styles';
-import { allPrefectures, extractPrefecture } from '../constants/prefectures';
+import { extractPrefecture } from '../constants/prefectures';
 import { CustomPagination } from '../components/bid';
 import { RightSidePanel } from '../components/layout';
 import { PartnerDisplayConditionsPanel, type PartnerFilterState } from '../components/partner';
@@ -35,7 +37,7 @@ interface RowData {
   rating: number | null;
   resultCount: number | null;
   hasPrimeQualification: boolean;
-  categories: string[];
+  categories: { group: string | null; name: string }[];
   prefecture: string;
 }
 
@@ -189,10 +191,10 @@ function PartnerCard({ row, onClick }: { row: RowData; onClick: () => void }) {
 
         {/* 4行目: カテゴリ */}
         <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
-          {row.categories.map((category, index) => (
+          {row.categories.map((cat, index) => (
             <Chip
               key={index}
-              label={category}
+              label={cat.name}
               size="small"
               sx={{
                 ...chipStyles.small,
@@ -260,11 +262,6 @@ function PartnerCard({ row, onClick }: { row: RowData; onClick: () => void }) {
   );
 }
 
-// 日本語検索対応
-function japaneseIncludes(target: string, query: string): boolean {
-  return target.toLowerCase().includes(query.toLowerCase());
-}
-
 // ナビゲーション追跡用
 const NAV_TRACKING_KEY = 'lastVisitedPath';
 
@@ -274,8 +271,14 @@ export default function PartnerListPage() {
   const [conditionTab, setConditionTab] = useState<'sort' | 'filter'>('sort');
   const listContainerRef = useRef<HTMLDivElement>(null);
 
-  // 検索クエリ
+  // サーバーサイド データ
+  const [loading, setLoading] = useState(true);
+  const [partnerRows, setPartnerRows] = useState<RowData[]>([]);
+  const [total, setTotal] = useState(0);
+
+  // 検索クエリ（入力値とデバウンス後の値を分離）
   const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
 
   // ソートモデル
   const [sortModel, setSortModel] = useState<GridSortModel>([]);
@@ -293,7 +296,6 @@ export default function PartnerListPage() {
   const [paginationModel, setPaginationModel] = useState<{ page: number; pageSize: number }>(() => {
     try {
       const lastPath = sessionStorage.getItem(NAV_TRACKING_KEY);
-      // /partners/* からの戻りの場合はlocalStorageから復元
       if (lastPath && /^\/partners\//.test(lastPath)) {
         const saved = localStorage.getItem('partnerlist-page');
         if (saved) return JSON.parse(saved);
@@ -306,122 +308,79 @@ export default function PartnerListPage() {
   useEffect(() => {
     try {
       localStorage.setItem('partnerlist-page', JSON.stringify(paginationModel));
-      // 一覧ページのパスを保存（他の一覧から来た場合のページリセット用）
       sessionStorage.setItem(NAV_TRACKING_KEY, '/partners');
     } catch { /* ignore */ }
   }, [paginationModel]);
 
-  // アクティブなフィルター数
-  const totalFilterCount = filters.ratings.length +
-    (filters.hasPrimeQualification !== 'all' ? 1 : 0) +
-    filters.categories.length +
-    (filters.hasSurvey !== 'all' ? 1 : 0) +
-    filters.prefectures.length;
+  // 検索デバウンス（300ms）
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(searchQuery), 300);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
 
-  // フィルター適用後のデータ
-  const filteredPartners = useMemo(() => {
-    return partners.filter((partner) => {
-      // 検索
-      if (searchQuery.trim()) {
-        const q = searchQuery.trim();
-        if (!japaneseIncludes(partner.name, q) &&
-            !japaneseIncludes(partner.address, q) &&
-            !japaneseIncludes(partner.phone, q) &&
-            !partner.categories.some(c => japaneseIncludes(c, q))) {
-          return false;
+  // デバウンス後の検索・フィルタ・ソート変更時にページを0にリセット
+  const isFirstRender = useRef(true);
+  useEffect(() => {
+    if (isFirstRender.current) {
+      isFirstRender.current = false;
+      return;
+    }
+    setPaginationModel((prev) => (prev.page === 0 ? prev : { ...prev, page: 0 }));
+  }, [debouncedSearch, filters, sortModel]);
+
+  // サーバーからデータ取得
+  useEffect(() => {
+    const controller = new AbortController();
+    const fetchData = async () => {
+      setLoading(true);
+      try {
+        const sort = sortModel[0];
+        const result = await fetchPartnerList(
+          {
+            page: paginationModel.page,
+            pageSize: paginationModel.pageSize,
+            q: debouncedSearch || undefined,
+            prefectures: filters.prefectures.length > 0 ? filters.prefectures : undefined,
+            categories: filters.categories.length > 0 ? filters.categories : undefined,
+            ratings: filters.ratings.length > 0 ? filters.ratings : undefined,
+            hasSurvey: filters.hasSurvey !== 'all' ? filters.hasSurvey : undefined,
+            hasPrimeQualification: filters.hasPrimeQualification !== 'all' ? filters.hasPrimeQualification : undefined,
+            sort: sort?.field,
+            order: sort?.sort ?? undefined,
+          },
+          controller.signal,
+        );
+        if (!controller.signal.aborted) {
+          setPartnerRows(
+            result.data.map((p: PartnerListRow) => ({
+              id: p.id,
+              no: String(p.no).padStart(8, '0'),
+              name: p.name,
+              address: p.address,
+              phone: p.phone,
+              surveyCount: p.surveyCount,
+              rating: p.rating,
+              resultCount: p.resultCount,
+              hasPrimeQualification: p.hasPrimeQualification,
+              categories: p.categories,
+              prefecture: extractPrefecture(p.address) || '',
+            })),
+          );
+          setTotal(result.total);
+        }
+      } catch (err) {
+        if (!controller.signal.aborted) {
+          console.error('Failed to fetch partners:', err);
+        }
+      } finally {
+        if (!controller.signal.aborted) {
+          setLoading(false);
         }
       }
-      // 評価フィルター
-      if (filters.ratings.length > 0) {
-        if (partner.rating == null || !filters.ratings.includes(partner.rating)) {
-          return false;
-        }
-      }
-      // 元請資格フィルター
-      if (filters.hasPrimeQualification !== 'all') {
-        const hasQualification = partner.qualifications.unified.length > 0 || partner.qualifications.orderers.length > 0;
-        if (filters.hasPrimeQualification === 'yes' && !hasQualification) return false;
-        if (filters.hasPrimeQualification === 'no' && hasQualification) return false;
-      }
-      // 種別フィルター
-      if (filters.categories.length > 0 && !filters.categories.some(c => partner.categories.includes(c))) {
-        return false;
-      }
-      // 現地調査実績フィルター
-      if (filters.hasSurvey !== 'all') {
-        const surveyCount = partner.surveyCount ?? 0;
-        if (filters.hasSurvey === 'yes' && surveyCount === 0) return false;
-        if (filters.hasSurvey === 'no' && surveyCount > 0) return false;
-      }
-      // 都道府県フィルター
-      if (filters.prefectures.length > 0) {
-        const pref = extractPrefecture(partner.address);
-        if (!pref || !filters.prefectures.includes(pref)) return false;
-      }
-      return true;
-    });
-  }, [searchQuery, filters]);
-
-  // 行データに変換
-  const partnerRows: RowData[] = useMemo(() => {
-    return filteredPartners.map((p) => ({
-      id: p.id,
-      no: String(p.no).padStart(8, '0'),
-      name: p.name,
-      address: p.address,
-      phone: p.phone,
-      surveyCount: p.surveyCount ?? null,
-      rating: p.rating ?? null,
-      resultCount: p.resultCount ?? null,
-      hasPrimeQualification: p.qualifications.unified.length > 0 || p.qualifications.orderers.length > 0,
-      categories: p.categories,
-      prefecture: extractPrefecture(p.address) || '',
-    }));
-  }, [filteredPartners]);
-
-  // ソート適用
-  const sortedRows = useMemo(() => {
-    if (sortModel.length === 0) return partnerRows;
-
-    return [...partnerRows].sort((a, b) => {
-      for (const sort of sortModel) {
-        let comparison = 0;
-        const field = sort.field as keyof RowData;
-
-        if (field === 'rating' || field === 'resultCount' || field === 'surveyCount') {
-          const aValue = a[field] as number | null;
-          const bValue = b[field] as number | null;
-          if (aValue == null && bValue == null) {
-            comparison = 0;
-          } else if (aValue == null) {
-            comparison = -1;
-          } else if (bValue == null) {
-            comparison = 1;
-          } else {
-            comparison = aValue - bValue;
-          }
-        } else if (field === 'prefecture') {
-          const idxA = allPrefectures.indexOf(a.prefecture);
-          const idxB = allPrefectures.indexOf(b.prefecture);
-          comparison = (idxA === -1 ? 99 : idxA) - (idxB === -1 ? 99 : idxB);
-        } else {
-          comparison = String(a[field]).localeCompare(String(b[field]));
-        }
-
-        if (comparison !== 0) {
-          return sort.sort === 'desc' ? -comparison : comparison;
-        }
-      }
-      return 0;
-    });
-  }, [partnerRows, sortModel]);
-
-  // ページネーション適用
-  const paginatedRows = useMemo(() => {
-    const start = paginationModel.page * paginationModel.pageSize;
-    const end = start + paginationModel.pageSize;
-    return sortedRows.slice(start, end);
-  }, [sortedRows, paginationModel]);
+    };
+    fetchData();
+    return () => controller.abort();
+  }, [debouncedSearch, filters, sortModel, paginationModel]);
 
   // ページ変更時にスクロール位置をリセット
   useEffect(() => {
@@ -429,6 +388,13 @@ export default function PartnerListPage() {
       listContainerRef.current.scrollTop = 0;
     }
   }, [paginationModel.page]);
+
+  // アクティブなフィルター数
+  const totalFilterCount = filters.ratings.length +
+    (filters.hasPrimeQualification !== 'all' ? 1 : 0) +
+    filters.categories.length +
+    (filters.hasSurvey !== 'all' ? 1 : 0) +
+    filters.prefectures.length;
 
   const handleCardClick = (id: string) => {
     navigate(`/partners/${id}`);
@@ -572,19 +538,33 @@ export default function PartnerListPage() {
               minHeight: 0,
               backgroundColor: colors.background.hover,
               py: 2,
+              position: 'relative',
             }}
           >
-            {paginatedRows.map((row) => (
-              <PartnerCard
-                key={row.id}
-                row={row}
-                onClick={() => handleCardClick(row.id)}
-              />
-            ))}
-            {paginatedRows.length === 0 && (
-              <Box sx={{ p: 4, textAlign: 'center', color: colors.text.muted }}>
-                該当する会社がありません
+            {loading && partnerRows.length === 0 ? (
+              <Box sx={{ p: 4, textAlign: 'center' }}>
+                <CircularProgress size={32} />
               </Box>
+            ) : (
+              <>
+                {loading && (
+                  <Box sx={{ position: 'absolute', top: 8, left: '50%', transform: 'translateX(-50%)', zIndex: 1 }}>
+                    <CircularProgress size={20} />
+                  </Box>
+                )}
+                {partnerRows.map((row) => (
+                  <PartnerCard
+                    key={row.id}
+                    row={row}
+                    onClick={() => handleCardClick(row.id)}
+                  />
+                ))}
+                {!loading && partnerRows.length === 0 && (
+                  <Box sx={{ p: 4, textAlign: 'center', color: colors.text.muted }}>
+                    該当する会社がありません
+                  </Box>
+                )}
+              </>
             )}
           </Box>
 
@@ -592,7 +572,7 @@ export default function PartnerListPage() {
           <CustomPagination
             page={paginationModel.page}
             pageSize={paginationModel.pageSize}
-            rowCount={sortedRows.length}
+            rowCount={total}
             onPageChange={(page) => setPaginationModel({ ...paginationModel, page })}
             onPageSizeChange={(pageSize) => setPaginationModel({ page: 0, pageSize })}
           />

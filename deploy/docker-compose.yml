@@ -17,7 +17,7 @@ services:
 
   db-migrate:
     image: ghcr.io/amacneil/dbmate:2
-    command: ["up", "--wait", "--no-dump-schema"]
+    command: ["up"]
     environment:
       DATABASE_URL: "postgres://postgres:postgres@db:5432/postgres?sslmode=disable"
     volumes:
@@ -92,6 +92,19 @@ services:
         condition: service_completed_successfully
       backend:
         condition: service_started
+
+  fetch-partners:
+    build:
+      context: ..
+      dockerfile: db/scripts/Dockerfile
+    volumes:
+      - ${GOOGLE_APPLICATION_CREDENTIALS:-./.gcp-key.json}:/app/credentials.json:ro
+      - ../data/master:/app/output
+    environment:
+      GOOGLE_APPLICATION_CREDENTIALS: /app/credentials.json
+    command: ["--output-dir", "/app/output"]
+    profiles:
+      - tools
 
   engine:
     build:

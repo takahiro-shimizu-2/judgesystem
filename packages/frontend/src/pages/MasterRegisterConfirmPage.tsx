@@ -97,7 +97,10 @@ export default function MasterRegisterConfirmPage() {
           const updated = await updatePartnerRecord(entityId, partnerData as unknown as Record<string, unknown>);
           if (!updated) throw new Error('Failed to update partner');
         } else {
-          const created = await createPartnerRecord(partnerData);
+          const created = await createPartnerRecord({
+            ...partnerData,
+            categories: partnerData.categories.map((name) => ({ group: null, name })),
+          });
           if (!created) throw new Error('Failed to create partner');
         }
       }

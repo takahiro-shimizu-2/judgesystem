@@ -27,7 +27,7 @@ echo "Source: $MASTER_DIR"
 echo ""
 
 # Build psql script in a temp file
-SCRIPT=$(mktemp /tmp/seed_XXXXXX.sql)
+SCRIPT=$(mktemp /tmp/seed_XXXXXX)
 trap "rm -f $SCRIPT" EXIT
 
 echo "BEGIN;" > "$SCRIPT"
@@ -75,15 +75,15 @@ load_data() {
   fi
 
   # Auto-detect delimiter from file extension
-  local delimiter
+  local copy_opts
   case "$file" in
-    *.csv) delimiter="," ;;
-    *)     delimiter="E'\\t'" ;;
+    *.csv) copy_opts="FORMAT csv, HEADER true, NULL ''" ;;
+    *)     copy_opts="FORMAT csv, DELIMITER E'\\t', HEADER true, NULL ''" ;;
   esac
 
   local table_name="${table_spec%%(*}"
   echo "  LOAD $basename -> $table_name ($((lines - 1)) rows)"
-  echo "\\COPY ${table_spec} FROM '${file}' WITH (FORMAT csv, DELIMITER ${delimiter}, HEADER true, NULL '')" >> "$SCRIPT"
+  echo "\\COPY ${table_spec} FROM '${file}' WITH (${copy_opts})" >> "$SCRIPT"
 }
 
 # --- Master data tables ---
@@ -94,11 +94,11 @@ load_data "$MASTER_DIR/company_master.txt" \
 load_data "$MASTER_DIR/office_master.txt" \
   'office_master(office_no, company_no, office_name, office_type, office_address, office_telephone, office_postal_code, office_email, office_fax, "Located_Prefecture", created_date, updated_date)'
 
-load_data "$MASTER_DIR/partners_master.txt" \
-  'partners_master(partner_id, "no", name, "postalCode", address, phone, email, fax, url, "surveyCount", rating, "resultCount", representative, establishment_date, capital, "employeeCount")'
+load_data "$MASTER_DIR/partners_master.csv" \
+  'partners_master(partner_id, name, "postalCode", address, phone, email, fax, url, "surveyCount", rating, "resultCount", representative, establishment_date, capital, "employeeCount", detail_url, region)'
 
-load_data "$MASTER_DIR/partners_categories.txt" \
-  'partners_categories(partner_id, categories)'
+load_data "$MASTER_DIR/partners_categories.csv" \
+  'partners_categories(partner_id, category_group, categories)'
 
 load_data "$MASTER_DIR/partners_branches.txt" \
   'partners_branches(partner_id, name, address)'

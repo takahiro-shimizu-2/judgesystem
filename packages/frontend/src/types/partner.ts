@@ -94,7 +94,7 @@ export interface PartnerListItem {
   surveyCount: number | null;     // 現地調査回数
   rating: number | null;          // 評価（0〜3、0.5刻み）
   resultCount: number | null;     // 実績数
-  categories: string[];    // 種別（最大30個程度）
+  categories: { group: string | null; name: string }[];    // 種別（最大30個程度）
   pastProjects: PastProject[]; // 過去案件
   // 企業情報（統合）
   representative: string;  // 代表者

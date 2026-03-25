@@ -37,10 +37,13 @@ export {
 
 // 協力会社
 export {
-  partners,
-  findPartnerById,
-  findPartnerByName,
+  fetchPartnerList,
   allCategories,
+} from './partners';
+export type {
+  PartnerListParams,
+  PartnerListRow,
+  PaginatedPartnerResponse,
 } from './partners';
 
 // 案件
