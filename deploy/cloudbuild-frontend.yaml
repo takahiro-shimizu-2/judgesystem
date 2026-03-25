@@ -1,0 +1,31 @@
+steps:
+  # Docker イメージをビルド
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '--target'
+      - 'production'
+      - '--build-arg'
+      - 'VITE_API_URL=${_VITE_API_URL}'
+      - '-t'
+      - '${_LOCATION}-docker.pkg.dev/${PROJECT_ID}/${_REPO_NAME}/${_IMAGE_NAME}:${_TAG_NAME}'
+      - '-f'
+      - 'packages/frontend/Dockerfile'
+      - '.'
+
+  # Artifact Registry にプッシュ
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'push'
+      - '${_LOCATION}-docker.pkg.dev/${PROJECT_ID}/${_REPO_NAME}/${_IMAGE_NAME}:${_TAG_NAME}'
+
+# 置換変数（デフォルト値）
+substitutions:
+  _LOCATION: asia-northeast1
+  _REPO_NAME: bidapp-frontend-postgres
+  _IMAGE_NAME: bidapp-frontend-postgres
+  _TAG_NAME: v1
+  _VITE_API_URL: http://localhost:8080
+
+images:
+  - '${_LOCATION}-docker.pkg.dev/${PROJECT_ID}/${_REPO_NAME}/${_IMAGE_NAME}:${_TAG_NAME}'

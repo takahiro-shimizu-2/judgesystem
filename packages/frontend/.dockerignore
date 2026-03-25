@@ -1,0 +1,43 @@
+# Dependencies
+node_modules
+
+# Build output
+dist
+
+# Git
+.git
+.gitignore
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# Docker
+Dockerfile
+docker-compose*.yml
+.dockerignore
+
+# Documentation
+README.md
+*.md
+
+# Test files
+coverage
+.nyc_output
+
+# Large screenshot files (not needed in container)
+screencapture-www2-njss-info-offers-search-2026-01-09-03_21_54.png
+システム遷移図.png
+詳細画面_UIイメージ.png
+入札業務フローのコピー.png
+入札業務フローのコピー (1).png

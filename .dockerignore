@@ -1,0 +1,27 @@
+# Exclude local dependencies and large data
+node_modules/
+packages/*/node_modules/
+
+# Build artifacts and local outputs
+dist/
+output/
+data/
+data.db/
+
+# IDE / editor folders
+.vscode/
+.idea/
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Tests / temp
+tmp/
+temp/
+
+# Engine sources are not needed for backend/frontend images
+packages/engine/

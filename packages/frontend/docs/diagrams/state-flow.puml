@@ -1,0 +1,74 @@
+@startuml state-flow
+!theme plain
+skinparam backgroundColor #FEFEFE
+
+title 入札可否判定システム UI - 状態管理フロー図
+
+state "App" as app {
+  state "SidebarProvider" as provider #E8F4FC {
+    state "isOpen: boolean" as isOpen
+    state "toggle(): void" as toggle
+  }
+}
+
+state "BidListPage" as bidList #FEF3C7 {
+  state "useBidListState()" as bidHook {
+    state "filters: FilterState" as filters
+    state "searchQuery: string" as search
+    state "paginationModel" as pagination
+    state "localStorage" as storage #ECFDF5
+  }
+
+  state "DataGrid" as grid
+  state "FilterModal" as modal
+}
+
+state "PartnerListPage" as partnerList #EFF6FF {
+  state "useListPageState()" as listHook {
+    state "searchQuery: string" as pSearch
+    state "paginationModel" as pPagination
+    state "gridKey: number" as gridKey
+  }
+
+  state "DataGrid" as pGrid
+}
+
+' Transitions
+[*] --> app
+app --> bidList : Route: /
+app --> partnerList : Route: /partners
+
+provider --> bidList : useSidebar()
+provider --> partnerList : useSidebar()
+
+isOpen --> gridKey : onChange → setTimeout → increment
+
+filters --> storage : persist
+storage --> filters : restore
+
+filters --> grid : filter rows
+search --> grid : filter rows
+pagination --> grid : paginate
+
+pSearch --> pGrid : filter rows
+pPagination --> pGrid : paginate
+
+note right of provider
+  グローバル状態
+  サイドバー開閉を
+  全ページで共有
+end note
+
+note right of storage
+  フィルター状態を
+  localStorageに永続化
+  (BidListPageのみ)
+end note
+
+note right of gridKey
+  サイドバー開閉時に
+  DataGridを再レンダリング
+  (列幅の再計算)
+end note
+
+@enduml

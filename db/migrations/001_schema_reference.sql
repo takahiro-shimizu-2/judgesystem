@@ -1,0 +1,25 @@
+-- ============================================================
+-- Schema Reference Document
+-- ============================================================
+-- This file documents the tables created and managed by the
+-- Python engine (packages/engine/). These tables are created
+-- automatically by the engine's ORM layer (SQLAlchemy).
+--
+-- This file is NOT executed as a migration. It serves as
+-- documentation for the database schema.
+-- ============================================================
+
+-- Tables managed by Python engine:
+--
+-- bid_announcements          - 入札公告情報
+-- bid_announcement_documents - 公告添付資料
+-- bid_announcement_results   - 落札結果
+-- company_master             - 企業マスター
+-- office_master              - 事業所マスター
+-- backend_evaluation_statuses - 判定ステータス（Backend APIと共有）
+-- evaluation_assignees       - 判定担当者
+-- evaluation_orderer_workflow_states - 発注者ワークフロー状態
+-- workflow_contacts          - ワークフロー連絡先
+-- partners_master            - 協力会社マスター
+--
+-- See packages/engine/repository/db_operator.py for full DDL.

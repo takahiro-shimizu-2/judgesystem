@@ -1,0 +1,140 @@
+@startuml component
+!theme plain
+skinparam componentStyle rectangle
+skinparam backgroundColor #FEFEFE
+
+title 入札可否判定システム UI - コンポーネント図
+
+package "Browser" {
+  package "React Application" {
+
+    package "Pages" <<Rectangle>> #E8F4FC {
+      [BidListPage] as BLP
+      [BidDetailPage] as BDP
+      [AnnouncementListPage] as ALP
+      [AnnouncementDetailPage] as ADP
+      [PartnerListPage] as PLP
+      [PartnerDetailPage] as PDP
+      [OrdererListPage] as OLP
+      [OrdererDetailPage] as ODP
+      [AnalyticsPage] as AP
+    }
+
+    package "Layout" <<Rectangle>> #F1F5F9 {
+      [MainLayout]
+      [Sidebar]
+    }
+
+    package "Components" <<Rectangle>> #FEF3C7 {
+      package "common" {
+        [ContactInfo]
+        [ConfigChip]
+        [StatusChips]
+        [DetailComponents]
+        [CollapsibleSection]
+        [FloatingButtons]
+      }
+
+      package "bid" {
+        [BidListHeader]
+        [FilterModal]
+        [DisplayConditionsPanel]
+        [CustomPagination]
+        [StatusCell]
+        [WorkStatusCell]
+        [PriorityCell]
+      }
+
+      package "workflow" {
+        [WorkflowStepper]
+        [WorkflowSection]
+        package "sections" {
+          [JudgmentSection]
+          [OrdererSection]
+          [PartnerSection]
+          [RequestSection]
+          [AwardSection]
+          [BidInfoSection]
+        }
+      }
+
+      package "templates" {
+        [ListPageTemplate]
+      }
+    }
+
+    package "State" <<Rectangle>> #ECFDF5 {
+      [SidebarContext]
+      [useBidListState]
+      [useListPageState]
+    }
+
+    package "Data" <<Rectangle>> #FEF2F2 {
+      [evaluations.ts]
+      [announcements.ts]
+      [partners.ts]
+      [orderers.ts]
+      [companies.ts]
+    }
+
+    package "Constants" <<Rectangle>> #EFF6FF {
+      [styles.ts]
+      [status.ts]
+      [workStatus.ts]
+      [priority.ts]
+      [icons.ts]
+    }
+  }
+}
+
+' Layout relationships
+[MainLayout] --> [Sidebar]
+[MainLayout] --> BLP
+[MainLayout] --> BDP
+[MainLayout] --> ALP
+[MainLayout] --> ADP
+[MainLayout] --> PLP
+[MainLayout] --> PDP
+[MainLayout] --> OLP
+[MainLayout] --> ODP
+[MainLayout] --> AP
+
+' Page to Component relationships
+BLP --> [BidListHeader]
+BLP --> [FilterModal]
+BLP --> [DisplayConditionsPanel]
+BLP --> [CustomPagination]
+BLP --> [StatusCell]
+BLP --> [WorkStatusCell]
+
+BDP --> [WorkflowStepper]
+BDP --> [WorkflowSection]
+BDP --> [BidInfoSection]
+BDP --> [FloatingButtons]
+
+ALP --> [ListPageTemplate]
+PLP --> [ListPageTemplate]
+OLP --> [ListPageTemplate]
+
+' State relationships
+BLP --> [useBidListState]
+ALP --> [useListPageState]
+PLP --> [useListPageState]
+OLP --> [useListPageState]
+
+[MainLayout] --> [SidebarContext]
+[Sidebar] --> [SidebarContext]
+
+' Data relationships
+BLP ..> [evaluations.ts] : import
+ALP ..> [announcements.ts] : import
+PLP ..> [partners.ts] : import
+OLP ..> [orderers.ts] : import
+
+' Styling
+BLP ..> [styles.ts] : import
+[StatusCell] ..> [status.ts] : import
+[WorkStatusCell] ..> [workStatus.ts] : import
+[PriorityCell] ..> [priority.ts] : import
+
+@enduml
