@@ -120,7 +120,8 @@ export class PartnerRepository {
 
     // Search query: name, address, phone, or category name
     if (filters.searchQuery) {
-      const pattern = `%${filters.searchQuery}%`;
+      const escaped = filters.searchQuery.replace(/[%_\\]/g, "\\$&");
+      const pattern = `%${escaped}%`;
       conditions.push(`(
         p."name" ILIKE $${paramIndex}
         OR p."address" ILIKE $${paramIndex}
