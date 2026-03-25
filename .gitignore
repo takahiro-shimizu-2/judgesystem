@@ -46,6 +46,9 @@ yarn-error.log*
 coverage/
 .nyc_output/
 
+# GCP service account keys
+.gcp-*.json
+
 # Project-specific data
 data/ocr
 data/pdf

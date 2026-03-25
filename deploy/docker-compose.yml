@@ -17,7 +17,7 @@ services:
 
   db-migrate:
     image: ghcr.io/amacneil/dbmate:2
-    command: ["up", "--wait", "--no-dump-schema"]
+    command: ["up"]
     environment:
       DATABASE_URL: "postgres://postgres:postgres@db:5432/postgres?sslmode=disable"
     volumes:

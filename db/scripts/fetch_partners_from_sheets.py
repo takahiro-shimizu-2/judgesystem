@@ -71,7 +71,6 @@ CATEGORY_COLUMNS = [
 # seed.sh が期待する partners_master.csv のカラム順
 MASTER_CSV_COLUMNS = [
     "partner_id",
-    "no",
     "name",
     "postalCode",
     "address",
@@ -222,7 +221,6 @@ def transform_row(row: dict, sheet_name: str):
 
     master = {
         "partner_id": partner_id,
-        "no": "",
         "name": name,
         "postalCode": str(row.get("郵便番号", "")).strip(),
         "address": address,
