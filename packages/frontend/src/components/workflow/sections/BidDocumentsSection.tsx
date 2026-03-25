@@ -441,7 +441,6 @@ export function BidDocumentsSection({ announcement }: BidDocumentsSectionProps) 
     const typeConfig = getDocumentTypeConfig(doc.type);
     const formatConfig = getFileFormatConfig(doc.fileFormat);
     const title = doc.title || typeConfig.label;
-    const isPdf = (doc.fileFormat || '').toLowerCase() === 'pdf';
 
     return (
       <Box
