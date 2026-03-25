@@ -1,0 +1,13 @@
+-- migrate:up
+
+ALTER TABLE agency_master ADD COLUMN IF NOT EXISTS phone TEXT DEFAULT '';
+ALTER TABLE agency_master ADD COLUMN IF NOT EXISTS fax TEXT DEFAULT '';
+ALTER TABLE agency_master ADD COLUMN IF NOT EXISTS email TEXT DEFAULT '';
+ALTER TABLE agency_master ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE;
+
+-- migrate:down
+
+ALTER TABLE agency_master DROP COLUMN IF EXISTS phone;
+ALTER TABLE agency_master DROP COLUMN IF EXISTS fax;
+ALTER TABLE agency_master DROP COLUMN IF EXISTS email;
+ALTER TABLE agency_master DROP COLUMN IF EXISTS is_active;
