@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import { PartnerService } from "../services/partnerService";
+import { PartnerFilterParams } from "../repositories/partnerRepository";
 import { logger } from "../utils/logger";
 
 export class PartnerController {
@@ -9,20 +10,75 @@ export class PartnerController {
     this.service = new PartnerService();
   }
 
+  private parseCommaSeparated(value: unknown): string[] {
+    if (!value) return [];
+    return String(value).split(",").filter(Boolean);
+  }
+
   /**
-   * GET /api/partners - Get all partners
+   * GET /api/partners - Get partners with pagination, search, and filters
    */
   getList = async (req: Request, res: Response): Promise<void> => {
     logger.info("GET /api/partners");
 
     try {
-      const partners = await this.service.getList();
+      const pageNum = req.query.page
+        ? parseInt(req.query.page as string, 10)
+        : 0;
+      const pageSizeNum = req.query.pageSize
+        ? parseInt(req.query.pageSize as string, 10)
+        : 25;
 
-      logger.info(`Response: ${partners.length} partners`);
+      if (isNaN(pageNum) || pageNum < 0) {
+        res.status(400).json({
+          error: "Bad Request",
+          message: "page must be a non-negative integer",
+        });
+        return;
+      }
+      if (isNaN(pageSizeNum) || pageSizeNum < 1 || pageSizeNum > 1000) {
+        res.status(400).json({
+          error: "Bad Request",
+          message: "pageSize must be an integer between 1 and 1000",
+        });
+        return;
+      }
+
+      const ratingsRaw = this.parseCommaSeparated(req.query.ratings);
+      const ratings = ratingsRaw.map(Number).filter((n) => !isNaN(n));
+
+      const filters: PartnerFilterParams = {
+        page: pageNum,
+        pageSize: pageSizeNum,
+        searchQuery: (req.query.q as string) || undefined,
+        prefectures: this.parseCommaSeparated(req.query.prefecture),
+        categories: this.parseCommaSeparated(req.query.category),
+        ratings: ratings.length > 0 ? ratings : undefined,
+        hasSurvey:
+          req.query.hasSurvey === "yes" || req.query.hasSurvey === "no"
+            ? (req.query.hasSurvey as "yes" | "no")
+            : undefined,
+        hasPrimeQualification:
+          req.query.hasPrimeQualification === "yes" ||
+          req.query.hasPrimeQualification === "no"
+            ? (req.query.hasPrimeQualification as "yes" | "no")
+            : undefined,
+        sortField: (req.query.sort as string) || undefined,
+        sortOrder:
+          req.query.order === "asc" || req.query.order === "desc"
+            ? (req.query.order as "asc" | "desc")
+            : undefined,
+      };
+
+      const result = await this.service.getList(filters);
+
+      logger.info(
+        `Response: ${result.data.length}/${result.total} partners (page ${result.page})`
+      );
 
       res.setHeader("Content-Type", "application/json");
       res.setHeader("Cache-Control", "no-cache");
-      res.status(200).json(partners);
+      res.status(200).json(result);
     } catch (error) {
       logger.error({ err: error }, "ERROR in GET /api/partners");
       if (!res.headersSent) {

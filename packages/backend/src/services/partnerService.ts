@@ -1,4 +1,5 @@
-import { PartnerRepository, PartnerInput } from "../repositories/partnerRepository";
+import { PartnerRepository, PartnerInput, PartnerFilterParams } from "../repositories/partnerRepository";
+import { PaginatedResponse } from "../types";
 
 export class PartnerService {
   private repository: PartnerRepository;
@@ -8,10 +9,13 @@ export class PartnerService {
   }
 
   /**
-   * Get all partners
+   * Get partners with server-side filtering, sorting and pagination
    */
-  async getList() {
-    return await this.repository.findAll();
+  async getList(filters: PartnerFilterParams): Promise<PaginatedResponse<any>> {
+    const { data, total } = await this.repository.findWithFilters(filters);
+    const page = filters.page || 0;
+    const pageSize = filters.pageSize || 25;
+    return { data, total, page, pageSize };
   }
 
   /**

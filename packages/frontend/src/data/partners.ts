@@ -4,13 +4,62 @@
 import type { PartnerListItem } from '../types';
 import { getApiUrl } from '../config/api';
 
-export async function fetchPartnerList(): Promise<PartnerListItem[]> {
-  const response = await fetch(getApiUrl('/api/partners'));
+export interface PartnerListParams {
+  page?: number;
+  pageSize?: number;
+  q?: string;
+  prefectures?: string[];
+  categories?: string[];
+  ratings?: number[];
+  hasSurvey?: string;
+  hasPrimeQualification?: string;
+  sort?: string;
+  order?: string;
+}
+
+export interface PartnerListRow {
+  id: string;
+  no: number;
+  name: string;
+  address: string;
+  phone: string;
+  surveyCount: number | null;
+  rating: number | null;
+  resultCount: number | null;
+  hasPrimeQualification: boolean;
+  categories: { group: string | null; name: string }[];
+}
+
+export interface PaginatedPartnerResponse {
+  data: PartnerListRow[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+export async function fetchPartnerList(
+  params?: PartnerListParams,
+  signal?: AbortSignal,
+): Promise<PaginatedPartnerResponse> {
+  const sp = new URLSearchParams();
+  if (params?.page != null) sp.set('page', String(params.page));
+  if (params?.pageSize != null) sp.set('pageSize', String(params.pageSize));
+  if (params?.q) sp.set('q', params.q);
+  if (params?.prefectures?.length) sp.set('prefecture', params.prefectures.join(','));
+  if (params?.categories?.length) sp.set('category', params.categories.join(','));
+  if (params?.ratings?.length) sp.set('ratings', params.ratings.join(','));
+  if (params?.hasSurvey) sp.set('hasSurvey', params.hasSurvey);
+  if (params?.hasPrimeQualification) sp.set('hasPrimeQualification', params.hasPrimeQualification);
+  if (params?.sort) sp.set('sort', params.sort);
+  if (params?.order) sp.set('order', params.order);
+
+  const qs = sp.toString();
+  const url = getApiUrl(`/api/partners${qs ? `?${qs}` : ''}`);
+  const response = await fetch(url, { signal });
   if (!response.ok) {
     throw new Error(`Failed to load partners: ${response.status}`);
   }
-  const data = await response.json();
-  return Array.isArray(data) ? data : [];
+  return await response.json();
 }
 
 export async function createPartnerRecord(
@@ -81,9 +130,6 @@ export async function deletePartnerRecord(id: string): Promise<boolean> {
   }
 }
 
-// 後方互換エクスポート
-export const partners: PartnerListItem[] = await fetchPartnerList();
-
 // 種別（100種類以上）
 export const allCategories = [
   '土木一式', '建築一式', '大工', '左官', 'とび・土工', '石',
@@ -108,9 +154,3 @@ export const allCategories = [
   'ISO9001', 'ISO14001', 'ISO45001', 'COHSMS', 'エコアクション21',
 ];
 
-// ヘルパー関数
-export const findPartnerById = (id: string): PartnerListItem | undefined =>
-  partners.find(p => p.id === id);
-
-export const findPartnerByName = (name: string): PartnerListItem | undefined =>
-  partners.find(p => p.name === name);
