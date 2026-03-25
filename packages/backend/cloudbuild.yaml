@@ -1,0 +1,18 @@
+steps:
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '--file'
+      - 'packages/backend/Dockerfile'
+      - '-t'
+      - '${_LOCATION}-docker.pkg.dev/${PROJECT_ID}/${_REPO_NAME}/${_REPO_NAME}:${_TAG_NAME}'
+      - '.'
+
+images:
+  - '${_LOCATION}-docker.pkg.dev/${PROJECT_ID}/${_REPO_NAME}/${_REPO_NAME}:${_TAG_NAME}'
+
+substitutions:
+  _LOCATION: asia-northeast1
+  _REPO_NAME: bidapp-backend-postgres-dev
+  _IMAGE_NAME: bidapp-backend-postgres-dev
+  _TAG_NAME: latest

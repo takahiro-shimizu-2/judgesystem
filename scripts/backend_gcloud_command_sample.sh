@@ -195,9 +195,8 @@ fi
 # LOCATION-docker.pkg.dev/PROJECT_ID/REPOSITORY/IMAGE_NAME:TAG
 # (gcr.io/PROJECT_ID/REPOSITORY/IMAGE_NAME:TAG)
 gcloud builds submit \
-  --tag $LOCATION-docker.pkg.dev/$PROJECT_ID/$REPO_NAME/$REPO_NAME:$TAG_NAME \
-  --file packages/backend/Dockerfile \
-  .
+  --config=packages/backend/cloudbuild.yaml \
+  --substitutions=_LOCATION=$LOCATION,_REPO_NAME=$REPO_NAME,_IMAGE_NAME=$IMAGE_NAME,_TAG_NAME=$TAG_NAME
 
 # 接続タイプに応じてPGHOSTを設定
 if [[ "$connection_type" == "proxy" ]]; then
