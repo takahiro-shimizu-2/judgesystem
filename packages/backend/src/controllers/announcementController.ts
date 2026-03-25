@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import { AnnouncementService } from "../services";
-import { FilterParams, SortOption } from "../types";
+import { AnnouncementFilterParams, SortOption } from "../types";
 import { logger } from "../utils/logger";
 
 export class AnnouncementController {
@@ -42,7 +42,7 @@ export class AnnouncementController {
         return { field, order };
       });
 
-      const filters: FilterParams = {
+      const filters: AnnouncementFilterParams = {
         page,
         pageSize,
         statuses: req.query.statuses ? (req.query.statuses as string).split(",") : undefined,

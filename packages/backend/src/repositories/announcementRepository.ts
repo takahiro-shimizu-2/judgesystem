@@ -1,6 +1,6 @@
 import { PoolClient } from "pg";
 import { pool, TABLES, schemaPrefix } from "../config/database";
-import { FilterParams, SortOption } from "../types";
+import { AnnouncementFilterParams, SortOption } from "../types";
 import type {
   AnnouncementListItem,
   AnnouncementDetail,
@@ -33,7 +33,7 @@ export class AnnouncementRepository {
    * Get paginated announcements list with filters
    * bid_announcements テーブルから一覧表示に必要な最小限のデータを取得
    */
-  async findWithFilters(filters: FilterParams): Promise<{ data: AnnouncementListItem[]; total: number }> {
+  async findWithFilters(filters: AnnouncementFilterParams): Promise<{ data: AnnouncementListItem[]; total: number }> {
     const client = await pool.connect();
     try {
       // Build WHERE clause
@@ -367,7 +367,7 @@ export class AnnouncementRepository {
    * Build WHERE clause from filters
    * bid_announcements テーブルのカラム名に対応
    */
-  private buildWhereClause(filters: FilterParams): {
+  private buildWhereClause(filters: AnnouncementFilterParams): {
     whereClause: string;
     queryParams: unknown[];
     paramIndex: number;
