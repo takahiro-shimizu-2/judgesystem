@@ -4,6 +4,9 @@
 
 set -e # 失敗したら止める
 
+REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$REPO_ROOT"
+
 if [[ $# -eq 0 ]]; then
   echo "引数がありません。--urlを指定してください。"
   exit 1
@@ -64,7 +67,7 @@ fi
 # Cloud Build → Artifact Registry
 # cloudbuild.yaml を使用して VITE_API_URL をビルド引数として渡す
 gcloud builds submit \
-  --config=cloudbuild.yaml \
+  --config=deploy/cloudbuild-frontend.yaml \
   --substitutions=_VITE_API_URL="$URL",_LOCATION="$LOCATION",_REPO_NAME="$REPO_NAME",_IMAGE_NAME="$IMAGE_NAME",_TAG_NAME="$TAG_NAME"
 
 # Cloud Run デプロイ

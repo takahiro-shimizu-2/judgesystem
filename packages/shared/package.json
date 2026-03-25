@@ -2,11 +2,22 @@
   "name": "@judgesystem/shared",
   "version": "0.1.0",
   "private": true,
-  "main": "./src/index.ts",
-  "types": "./src/index.ts",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "prepare": "npm run build",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "typescript": "^5.7.0"
+  },
   "exports": {
-    ".": "./src/index.ts",
-    "./types": "./src/types/index.ts",
-    "./constants": "./src/constants/index.ts"
+    ".": "./dist/index.js",
+    "./types": "./dist/types/index.d.ts",
+    "./constants": "./dist/constants/index.js"
   }
 }

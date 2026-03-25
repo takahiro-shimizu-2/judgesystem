@@ -3,10 +3,11 @@ FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-COPY package*.json ./
-RUN npm ci --ignore-scripts
+# Copy all packages so that local dependencies are available
+COPY packages ./packages
 
-COPY . .
+WORKDIR /app/packages/backend
+RUN npm ci
 RUN npx tsc
 
 # Production stage
@@ -15,12 +16,16 @@ FROM node:20-alpine AS production
 RUN addgroup -g 1001 -S nodejs && \
     adduser -S appuser -u 1001
 
-WORKDIR /app
+WORKDIR /app/packages/backend
 
-COPY --from=builder /app/package*.json ./
-RUN npm ci --omit=dev --ignore-scripts
+# Copy package metadata for production install
+COPY packages/backend/package*.json ./
+# Bring along the shared package for local dependency resolution
+COPY packages/shared /app/packages/shared
+RUN npm ci --omit=dev
 
-COPY --from=builder /app/dist/ ./dist/
+# Copy build output
+COPY --from=builder /app/packages/backend/dist ./dist
 
 USER appuser
 
@@ -38,11 +43,10 @@ CMD ["node", "dist/index.js"]
 FROM node:22-alpine AS development
 
 WORKDIR /app
+COPY packages ./packages
 
-COPY package*.json ./
+WORKDIR /app/packages/backend
 RUN npm ci
-
-COPY . .
 
 EXPOSE 8080
 

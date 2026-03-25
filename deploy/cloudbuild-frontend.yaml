@@ -10,7 +10,7 @@ steps:
       - '-t'
       - '${_LOCATION}-docker.pkg.dev/${PROJECT_ID}/${_REPO_NAME}/${_IMAGE_NAME}:${_TAG_NAME}'
       - '-f'
-      - 'Dockerfile'
+      - 'packages/frontend/Dockerfile'
       - '.'
 
   # Artifact Registry にプッシュ

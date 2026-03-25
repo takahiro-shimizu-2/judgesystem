@@ -4,6 +4,9 @@
 
 set -e # 失敗したら止める
 
+REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$REPO_ROOT"
+
 
 frontend_url=""
 project_id=""
@@ -191,7 +194,10 @@ fi
 # Cloud Build → Artifact Registry
 # LOCATION-docker.pkg.dev/PROJECT_ID/REPOSITORY/IMAGE_NAME:TAG
 # (gcr.io/PROJECT_ID/REPOSITORY/IMAGE_NAME:TAG)
-gcloud builds submit --tag $LOCATION-docker.pkg.dev/$PROJECT_ID/$REPO_NAME/$REPO_NAME:$TAG_NAME
+gcloud builds submit \
+  --tag $LOCATION-docker.pkg.dev/$PROJECT_ID/$REPO_NAME/$REPO_NAME:$TAG_NAME \
+  --file packages/backend/Dockerfile \
+  .
 
 # 接続タイプに応じてPGHOSTを設定
 if [[ "$connection_type" == "proxy" ]]; then
