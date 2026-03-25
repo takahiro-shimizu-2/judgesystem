@@ -209,6 +209,23 @@ CREATE TABLE IF NOT EXISTS office_master (
   updated_date TEXT
 );
 
+-- office_work_achivements_master
+CREATE TABLE IF NOT EXISTS office_work_achivements_master (
+  office_experience_no TEXT PRIMARY KEY,
+  office_no INTEGER,
+  agency_no INTEGER,
+  construction_no TEXT,
+  project_name TEXT,
+  contractor_layer TEXT,
+  start_date TEXT,
+  completion_date TEXT,
+  final_score NUMERIC,
+  total_amount BIGINT,
+  is_jv_flag BOOLEAN,
+  jv_ratio NUMERIC,
+  remarks TEXT
+);
+
 -- partners_master
 CREATE TABLE IF NOT EXISTS partners_master (
   partner_id TEXT PRIMARY KEY,
