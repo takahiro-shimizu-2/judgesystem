@@ -5,7 +5,10 @@
   "description": "Bid Eligibility Judgment System",
   "workspaces": ["packages/backend", "packages/frontend", "packages/shared"],
   "scripts": {
-    "test": "echo \"No tests configured yet\" && exit 0"
+    "test": "echo \"No tests configured yet\" && exit 0",
+    "state:check": "tsx scripts/label-state-machine.ts check",
+    "state:transition": "tsx scripts/label-state-machine.ts transition",
+    "state:assign-agent": "tsx scripts/label-state-machine.ts assign-agent"
   },
   "devDependencies": {
     "tsx": "^4.19.0",
