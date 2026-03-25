@@ -112,6 +112,27 @@ services:
     profiles:
       - engine
 
+  partner-import:
+    build:
+      context: ..
+      dockerfile: packages/engine/Dockerfile
+    entrypoint: ["python", "-m", "packages.engine.cli.import_partners_from_sheets"]
+    volumes:
+      - ${GOOGLE_APPLICATION_CREDENTIALS:-./.gcp-key.json}:/app/credentials.json:ro
+    environment:
+      GOOGLE_APPLICATION_CREDENTIALS: /app/credentials.json
+      PGHOST: db
+      PGPORT: 5432
+      PGDATABASE: postgres
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      PGSSLMODE: disable
+    depends_on:
+      db-migrate:
+        condition: service_completed_successfully
+    profiles:
+      - import
+
 volumes:
   pgdata:
   node_modules:

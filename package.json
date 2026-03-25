@@ -9,8 +9,8 @@
     "state:check": "tsx scripts/label-state-machine.ts check",
     "state:transition": "tsx scripts/label-state-machine.ts transition",
     "state:assign-agent": "tsx scripts/label-state-machine.ts assign-agent",
-    "import:partners": "python -m packages.engine.cli.import_partners_from_sheets",
-    "import:partners:dry-run": "python -m packages.engine.cli.import_partners_from_sheets --dry-run"
+    "import:partners": "docker compose -f deploy/docker-compose.yml --profile import run --rm partner-import",
+    "import:partners:dry-run": "docker compose -f deploy/docker-compose.yml --profile import run --rm partner-import --dry-run"
   },
   "devDependencies": {
     "tsx": "^4.19.0",

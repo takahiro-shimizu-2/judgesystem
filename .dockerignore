@@ -23,5 +23,6 @@ Thumbs.db
 tmp/
 temp/
 
-# Engine sources are not needed for backend/frontend images
-packages/engine/
+# Engine: exclude heavy non-essential files, keep source
+packages/engine/__pycache__/
+packages/engine/backup/
