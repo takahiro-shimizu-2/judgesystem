@@ -318,12 +318,8 @@ CREATE TABLE IF NOT EXISTS agency_master (
   agency_level INTEGER,
   sort_order INTEGER,
   agency_area TEXT,
-  phone TEXT DEFAULT '',
-  fax TEXT DEFAULT '',
-  email TEXT DEFAULT '',
   official_url TEXT,
   remarks TEXT,
-  is_active BOOLEAN DEFAULT TRUE,
   created_at TEXT,
   updated_at TEXT
 );
