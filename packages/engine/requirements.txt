@@ -30,6 +30,7 @@ google-genai==1.56.0
 google-resumable-media==2.8.0
 googleapis-common-protos==1.72.0
 greenlet==3.3.2
+gspread==6.6.0
 grpcio==1.76.0
 grpcio-status==1.76.0
 h11==0.16.0

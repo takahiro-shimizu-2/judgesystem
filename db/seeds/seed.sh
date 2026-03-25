@@ -95,7 +95,7 @@ load_data "$MASTER_DIR/office_master.txt" \
   'office_master(office_no, company_no, office_name, office_type, office_address, office_telephone, office_postal_code, office_email, office_fax, "Located_Prefecture", created_date, updated_date)'
 
 load_data "$MASTER_DIR/partners_master.txt" \
-  'partners_master(partner_id, "no", name, "postalCode", address, phone, email, fax, url, "surveyCount", rating, "resultCount", representative, establishment_date, capital, "employeeCount")'
+  'partners_master(partner_id, "no", name, "postalCode", address, phone, email, fax, url, "surveyCount", rating, "resultCount", representative, establishment_date, capital, "employeeCount", detail_url, region)'
 
 load_data "$MASTER_DIR/partners_categories.txt" \
   'partners_categories(partner_id, categories)'

@@ -8,7 +8,9 @@
     "test": "echo \"No tests configured yet\" && exit 0",
     "state:check": "tsx scripts/label-state-machine.ts check",
     "state:transition": "tsx scripts/label-state-machine.ts transition",
-    "state:assign-agent": "tsx scripts/label-state-machine.ts assign-agent"
+    "state:assign-agent": "tsx scripts/label-state-machine.ts assign-agent",
+    "import:partners": "python -m packages.engine.cli.import_partners_from_sheets",
+    "import:partners:dry-run": "python -m packages.engine.cli.import_partners_from_sheets --dry-run"
   },
   "devDependencies": {
     "tsx": "^4.19.0",
