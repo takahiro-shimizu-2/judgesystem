@@ -1,6 +1,13 @@
 import { PoolClient } from "pg";
 import { pool, TABLES, schemaPrefix } from "../config/database";
 import { FilterParams, SortOption } from "../types";
+import type {
+  AnnouncementListItem,
+  AnnouncementDetail,
+  ProgressingCompany,
+  SimilarCase,
+  DocumentFile,
+} from "../types/announcement";
 import { downloadFileFromGCS, readMarkdownFromGCS } from "../utils/gcs";
 import { logger } from "../utils/logger";
 
@@ -26,7 +33,7 @@ export class AnnouncementRepository {
    * Get paginated announcements list with filters
    * bid_announcements テーブルから一覧表示に必要な最小限のデータを取得
    */
-  async findWithFilters(filters: FilterParams): Promise<{ data: any[]; total: number }> {
+  async findWithFilters(filters: FilterParams): Promise<{ data: AnnouncementListItem[]; total: number }> {
     const client = await pool.connect();
     try {
       // Build WHERE clause
@@ -99,7 +106,7 @@ export class AnnouncementRepository {
    * Find single announcement by announcement_no
    * bid_announcements をベースに、documents と competing_companies を取得
    */
-  async findByNo(announcementNo: number): Promise<any | null> {
+  async findByNo(announcementNo: number): Promise<AnnouncementDetail | null> {
     const client = await pool.connect();
     try {
       const result = await client.query(
@@ -218,7 +225,7 @@ export class AnnouncementRepository {
       // documents の各アイテムについて、markdown_path から content を取得
       if (announcement.documents && Array.isArray(announcement.documents)) {
         const documentsWithContent = await Promise.all(
-          announcement.documents.map(async (doc: any) => {
+          announcement.documents.map(async (doc: { markdown_path?: string; id?: string | number; [key: string]: unknown }) => {
             let content = '';
 
             if (doc.markdown_path && doc.markdown_path.startsWith('gs://')) {
@@ -254,7 +261,7 @@ export class AnnouncementRepository {
   /**
    * Get progressing companies (in_progress / completed) for a given announcement
    */
-  async findProgressingCompanies(announcementNo: number): Promise<any[]> {
+  async findProgressingCompanies(announcementNo: number): Promise<ProgressingCompany[]> {
     const client = await pool.connect();
     try {
       const statusExpression = this.getStatusExpression();
@@ -295,7 +302,7 @@ export class AnnouncementRepository {
   /**
    * Get similar cases for a specific announcement (by announcement_no)
    */
-  async findSimilarCases(announcementNo: number): Promise<any[]> {
+  async findSimilarCases(announcementNo: number): Promise<SimilarCase[]> {
     const client = await pool.connect();
     try {
       const announcementIdCandidates = [`ann-${announcementNo}`, String(announcementNo)];
@@ -362,11 +369,11 @@ export class AnnouncementRepository {
    */
   private buildWhereClause(filters: FilterParams): {
     whereClause: string;
-    queryParams: any[];
+    queryParams: unknown[];
     paramIndex: number;
   } {
     const whereClauses: string[] = [];
-    const queryParams: any[] = [];
+    const queryParams: unknown[] = [];
     let paramIndex = 1;
 
     // ステータスフィルター（文字列比較で安全に）
@@ -558,7 +565,7 @@ export class AnnouncementRepository {
   /**
    * 指定した資料ファイルを GCS から取得
    */
-  async getDocumentFile(announcementNo: number, documentId: string): Promise<{ data: Buffer; fileFormat: string; title: string } | null> {
+  async getDocumentFile(announcementNo: number, documentId: string): Promise<DocumentFile | null> {
     const client = await pool.connect();
     try {
       const result = await client.query(
