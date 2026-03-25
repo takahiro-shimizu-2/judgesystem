@@ -3,9 +3,24 @@ export interface SortOption {
   order: "asc" | "desc";
 }
 
-export interface FilterParams {
+/**
+ * Base filter parameters shared across all domains.
+ * Contains pagination, search, and sort fields.
+ */
+export interface BaseFilterParams {
   page?: number;
   pageSize?: number;
+  searchQuery?: string;
+  sortField?: string;
+  sortOrder?: "asc" | "desc";
+  sortOptions?: SortOption[];
+}
+
+/**
+ * Evaluation-specific filter parameters.
+ * Extends BaseFilterParams with evaluation domain fields.
+ */
+export interface EvaluationFilterParams extends BaseFilterParams {
   statuses?: string[];
   workStatuses?: string[];
   priorities?: string[];
@@ -13,10 +28,25 @@ export interface FilterParams {
   bidTypes?: string[];
   organizations?: string[];
   prefectures?: string[];
-  searchQuery?: string;
-  sortField?: string;
-  sortOrder?: "asc" | "desc";
-  sortOptions?: SortOption[];
+  ordererId?: string;
+}
+
+/**
+ * Backward-compatible alias for EvaluationFilterParams.
+ * @deprecated Use EvaluationFilterParams directly.
+ */
+export type FilterParams = EvaluationFilterParams;
+
+/**
+ * Announcement-specific filter parameters.
+ * Extends BaseFilterParams with announcement domain fields.
+ */
+export interface AnnouncementFilterParams extends BaseFilterParams {
+  statuses?: string[];
+  bidTypes?: string[];
+  categories?: string[];
+  organizations?: string[];
+  prefectures?: string[];
   ordererId?: string;
 }
 

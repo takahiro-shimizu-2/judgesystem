@@ -1,5 +1,6 @@
 import { PoolClient } from "pg";
 import { pool, TABLES, schemaPrefix } from "../config/database";
+import { BaseFilterParams } from "../types";
 
 type PartnerBaseRow = {
   id: string;
@@ -74,17 +75,12 @@ type OrdererItemRow = {
   grade: string | null;
 };
 
-export interface PartnerFilterParams {
-  page?: number;
-  pageSize?: number;
-  searchQuery?: string;
+export interface PartnerFilterParams extends BaseFilterParams {
   prefectures?: string[];
   categories?: string[];
   ratings?: number[];
   hasSurvey?: "yes" | "no";
   hasPrimeQualification?: "yes" | "no";
-  sortField?: string;
-  sortOrder?: "asc" | "desc";
 }
 
 export interface PartnerInput {
