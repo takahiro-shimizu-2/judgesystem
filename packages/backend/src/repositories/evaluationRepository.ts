@@ -1,6 +1,12 @@
 import { pool, TABLES, schemaPrefix } from "../config/database";
 import { readMarkdownFromGCS } from "../utils/gcs";
 import { FilterParams, SortOption } from "../types";
+import type {
+  EvaluationListItem,
+  EvaluationDetail,
+  EvaluationWorkStatusResult,
+  EvaluationStats,
+} from "../types/evaluation";
 import { logger } from "../utils/logger";
 import { escapeLikePattern } from "../utils/sql";
 
@@ -24,7 +30,7 @@ export class EvaluationRepository {
   /**
    * Get paginated evaluations list with filters
    */
-  async findWithFilters(filters: FilterParams): Promise<{ data: any[]; total: number }> {
+  async findWithFilters(filters: FilterParams): Promise<{ data: EvaluationListItem[]; total: number }> {
     const client = await pool.connect();
     try {
       const tables = this.getQualifiedTables();
@@ -100,7 +106,7 @@ export class EvaluationRepository {
         : 0;
 
       // Remove total_count from each row
-      const data = dataResult.rows.map(({ total_count, ...row }) => row);
+      const data: EvaluationListItem[] = dataResult.rows.map(({ total_count, ...row }: any) => row);
 
       return {
         data,
@@ -114,7 +120,7 @@ export class EvaluationRepository {
   /**
    * Find single evaluation by ID
    */
-  async findById(id: string): Promise<any | null> {
+  async findById(id: string): Promise<EvaluationDetail | null> {
     const client = await pool.connect();
     try {
       const tables = this.getQualifiedTables();
@@ -331,7 +337,7 @@ export class EvaluationRepository {
     evaluationNo: string,
     workStatus: string,
     currentStep?: string
-  ): Promise<any | null> {
+  ): Promise<EvaluationWorkStatusResult | null> {
     const client = await pool.connect();
     try {
       const qualifiedTableName = `${schemaPrefix}${TABLES.evaluationStatuses}`;
@@ -356,7 +362,7 @@ export class EvaluationRepository {
   /**
    * Get statistics for analytics dashboard
    */
-  async getStats(): Promise<any> {
+  async getStats(): Promise<EvaluationStats> {
     const client = await pool.connect();
     try {
       const tables = this.getQualifiedTables();
@@ -462,11 +468,11 @@ export class EvaluationRepository {
     workStatusExpression: string
   ): {
     whereClause: string;
-    queryParams: any[];
+    queryParams: unknown[];
     paramIndex: number;
   } {
     const whereClauses: string[] = [];
-    const queryParams: any[] = [];
+    const queryParams: unknown[] = [];
     let paramIndex = 1;
 
     if (filters.statuses && filters.statuses.length > 0) {
@@ -707,9 +713,9 @@ export class EvaluationRepository {
     return `1`;
   }
 
-  private async attachDocumentContents(documents: any[]): Promise<any[]> {
+  private async attachDocumentContents(documents: Record<string, unknown>[]): Promise<Record<string, unknown>[]> {
     return Promise.all(
-      documents.map(async (doc: any) => {
+      documents.map(async (doc: Record<string, unknown>) => {
         let content = "文字起こしデータがありません";
         if (doc.markdown_path && typeof doc.markdown_path === "string" && doc.markdown_path.startsWith("gs://")) {
           try {

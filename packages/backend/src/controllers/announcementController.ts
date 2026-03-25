@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import { AnnouncementService } from "../services";
-import { FilterParams, SortOption } from "../types";
+import { AnnouncementFilterParams, SortOption } from "../types";
 import { logger } from "../utils/logger";
 
 export class AnnouncementController {
@@ -42,7 +42,7 @@ export class AnnouncementController {
         return { field, order };
       });
 
-      const filters: FilterParams = {
+      const filters: AnnouncementFilterParams = {
         page,
         pageSize,
         statuses: req.query.statuses ? (req.query.statuses as string).split(",") : undefined,
@@ -69,7 +69,9 @@ export class AnnouncementController {
       if (!res.headersSent) {
         res.status(500).json({
           error: "Internal Server Error",
-          message: error instanceof Error ? error.message : String(error),
+          message: process.env.NODE_ENV === "production"
+            ? "An unexpected error occurred"
+            : error instanceof Error ? error.message : String(error),
         });
       }
     }
@@ -105,7 +107,9 @@ export class AnnouncementController {
       if (!res.headersSent) {
         res.status(500).json({
           error: "Internal Server Error",
-          message: error instanceof Error ? error.message : String(error),
+          message: process.env.NODE_ENV === "production"
+            ? "An unexpected error occurred"
+            : error instanceof Error ? error.message : String(error),
         });
       }
     }
@@ -135,7 +139,9 @@ export class AnnouncementController {
       if (!res.headersSent) {
         res.status(500).json({
           error: "Internal Server Error",
-          message: error instanceof Error ? error.message : String(error),
+          message: process.env.NODE_ENV === "production"
+            ? "An unexpected error occurred"
+            : error instanceof Error ? error.message : String(error),
         });
       }
     }
@@ -165,7 +171,9 @@ export class AnnouncementController {
       if (!res.headersSent) {
         res.status(500).json({
           error: "Internal Server Error",
-          message: error instanceof Error ? error.message : String(error),
+          message: process.env.NODE_ENV === "production"
+            ? "An unexpected error occurred"
+            : error instanceof Error ? error.message : String(error),
         });
       }
     }
@@ -222,7 +230,9 @@ export class AnnouncementController {
       if (!res.headersSent) {
         res.status(500).json({
           error: "Internal Server Error",
-          message: error instanceof Error ? error.message : String(error),
+          message: process.env.NODE_ENV === "production"
+            ? "An unexpected error occurred"
+            : error instanceof Error ? error.message : String(error),
         });
       }
     }
