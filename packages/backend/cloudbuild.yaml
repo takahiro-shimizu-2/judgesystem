@@ -5,11 +5,11 @@ steps:
       - '--file'
       - 'packages/backend/Dockerfile'
       - '-t'
-      - '${_LOCATION}-docker.pkg.dev/${PROJECT_ID}/${_REPO_NAME}/${_REPO_NAME}:${_TAG_NAME}'
+      - '${_LOCATION}-docker.pkg.dev/${PROJECT_ID}/${_REPO_NAME}/${_IMAGE_NAME}:${_TAG_NAME}'
       - '.'
 
 images:
-  - '${_LOCATION}-docker.pkg.dev/${PROJECT_ID}/${_REPO_NAME}/${_REPO_NAME}:${_TAG_NAME}'
+  - '${_LOCATION}-docker.pkg.dev/${PROJECT_ID}/${_REPO_NAME}/${_IMAGE_NAME}:${_TAG_NAME}'
 
 substitutions:
   _LOCATION: asia-northeast1
