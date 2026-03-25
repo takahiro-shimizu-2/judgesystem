@@ -3,7 +3,7 @@
 
 -- Evaluation list filtering (most common query pattern)
 CREATE INDEX IF NOT EXISTS idx_evaluation_statuses_evaluation_no
-  ON backend_evaluation_statuses (evaluation_no);
+  ON backend_evaluation_statuses ("evaluationNo");
 
 CREATE INDEX IF NOT EXISTS idx_evaluation_statuses_work_status
   ON backend_evaluation_statuses (work_status);
