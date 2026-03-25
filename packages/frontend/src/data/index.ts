@@ -18,9 +18,7 @@
 
 // 発注者
 export {
-  mockOrderers,
-  findOrdererById,
-  findOrdererByName,
+  fetchOrdererList,
 } from './orderers';
 
 // 発注者の型・設定は適切な場所から re-export
@@ -29,11 +27,10 @@ export type { OrdererCategory } from '../types/orderer';
 
 // 企業
 export {
-  mockCompanies,
-  findCompanyById,
-  findCompanyByName,
+  fetchCompanyList,
   getCompanyPriority,
 } from './companies';
+export type { CompanyWithDetails } from './companies';
 
 // 協力会社
 export {

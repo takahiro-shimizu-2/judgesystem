@@ -5,12 +5,17 @@ import type { Orderer } from '../types/orderer';
 import { getApiUrl } from '../config/api';
 
 export async function fetchOrdererList(): Promise<Orderer[]> {
-  const response = await fetch(getApiUrl('/api/orderers'));
-  if (!response.ok) {
-    throw new Error(`Failed to load orderers: ${response.status}`);
+  try {
+    const response = await fetch(getApiUrl('/api/orderers'));
+    if (!response.ok) {
+      throw new Error(`Failed to load orderers: ${response.status}`);
+    }
+    const data = await response.json();
+    return Array.isArray(data) ? data : [];
+  } catch (error) {
+    console.error('Failed to fetch orderers:', error);
+    return [];
   }
-  const data = await response.json();
-  return Array.isArray(data) ? data : [];
 }
 
 export async function createOrdererRecord(
@@ -67,11 +72,3 @@ export async function deleteOrdererRecord(id: string): Promise<boolean> {
   }
 }
 
-// 後方互換エクスポート（遅延初期化）
-export const mockOrderers: Orderer[] = await fetchOrdererList();
-
-export const findOrdererById = (id: string): Orderer | undefined =>
-  mockOrderers.find(o => o.id === id);
-
-export const findOrdererByName = (name: string): Orderer | undefined =>
-  mockOrderers.find(o => o.name === name);

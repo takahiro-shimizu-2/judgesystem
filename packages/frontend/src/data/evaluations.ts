@@ -11,7 +11,6 @@ import type {
   SimilarCase,
   OrdererWorkflowState,
 } from '../types';
-import { mockCompanies } from './companies';
 import { getApiUrl } from '../config/api';
 
 const EMPTY_ORDERER_WORKFLOW_STATE: OrdererWorkflowState = {
@@ -165,8 +164,15 @@ const districts = [
 const generateSimilarCases = (): SimilarCase[] => {
   const cases: SimilarCase[] = [];
 
-  // 企業マスターから落札企業を選択
-  const topCompanies = mockCompanies.slice(0, 30).map(c => c.name);
+  // 落札企業リスト（ハードコード）
+  const topCompanies = [
+    '大成建設', '鹿島建設', '清水建設', '大林組', '竹中工務店',
+    '前田建設工業', '戸田建設', '三井住友建設', '西松建設', 'フジタ',
+    '熊谷組', '安藤ハザマ', '五洋建設', '東急建設', '奥村組',
+    '長谷工コーポレーション', '東亜建設工業', '鉄建建設', '飛島建設', '淺沼組',
+    'ピーエス三菱', '佐藤工業', '錢高組', '東洋建設', '青木あすなろ建設',
+    '若築建設', '大豊建設', '不動テトラ', '松井建設', '北野建設',
+  ];
 
   for (let i = 0; i < 50; i++) {
     const template = similarCaseTemplates[i % similarCaseTemplates.length];

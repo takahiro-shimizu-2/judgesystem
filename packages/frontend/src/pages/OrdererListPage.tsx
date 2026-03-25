@@ -8,12 +8,14 @@ import {
   Paper,
   Typography,
   Chip,
+  CircularProgress,
 } from '@mui/material';
 import {
   Business as BusinessIcon,
 } from '@mui/icons-material';
 import type { GridSortModel } from '@mui/x-data-grid';
-import { mockOrderers, ordererCategoryConfig } from '../data';
+import { fetchOrdererList, ordererCategoryConfig } from '../data';
+import type { Orderer } from '../types/orderer';
 
 import { fontSizes, colors, pageStyles, iconStyles, borderRadius, listFilterChipStyles } from '../constants/styles';
 import { getOrganizationGroup } from '../constants/organizations';
@@ -29,11 +31,6 @@ function extractPrefecture(address: string): string {
   const match = address.match(/^(北海道|東京都|大阪府|京都府|.{2,3}県)/);
   return match ? match[1] : '';
 }
-
-// ユニークな都道府県を取得
-const uniquePrefectures = Array.from(
-  new Set(mockOrderers.map((o) => extractPrefecture(o.address)).filter(Boolean))
-).sort();
 
 // 行データの型
 interface RowData {
@@ -249,6 +246,30 @@ export default function OrdererListPage() {
   const listContainerRef = useRef<HTMLDivElement>(null);
   const { rightPanelOpen, toggleRightPanel, closeRightPanel, isMobile } = useSidebar();
 
+  // 発注者データ（遅延取得）
+  const [orderers, setOrderers] = useState<Orderer[]>([]);
+  const [loadingOrderers, setLoadingOrderers] = useState(true);
+
+  useEffect(() => {
+    let isMounted = true;
+    fetchOrdererList().then((data) => {
+      if (isMounted) {
+        setOrderers(data);
+        setLoadingOrderers(false);
+      }
+    });
+    return () => { isMounted = false; };
+  }, []);
+
+  // ユニークな都道府県を取得
+  const uniquePrefectures = useMemo(
+    () =>
+      Array.from(
+        new Set(orderers.map((o) => extractPrefecture(o.address)).filter(Boolean))
+      ).sort(),
+    [orderers],
+  );
+
   // 検索クエリ
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -289,7 +310,7 @@ export default function OrdererListPage() {
 
   // フィルター適用後のデータ
   const filteredOrderers = useMemo(() => {
-    return mockOrderers.filter((orderer) => {
+    return orderers.filter((orderer) => {
       // 種別フィルター
       if (filters.categories.length > 0 && !filters.categories.includes(orderer.category)) {
         return false;
@@ -306,7 +327,7 @@ export default function OrdererListPage() {
       }
       return true;
     });
-  }, [filters]);
+  }, [filters, orderers]);
 
   // 行データに変換
   const ordererRows: RowData[] = useMemo(() => {
@@ -494,17 +515,25 @@ export default function OrdererListPage() {
               py: 2,
             }}
           >
-            {paginatedRows.map((row) => (
-              <OrdererCard
-                key={row.id}
-                row={row}
-                onClick={() => handleCardClick(row.id)}
-              />
-            ))}
-            {paginatedRows.length === 0 && (
-              <Box sx={{ p: 4, textAlign: 'center', color: colors.text.muted }}>
-                該当する発注者がありません
+            {loadingOrderers ? (
+              <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
+                <CircularProgress size={32} />
               </Box>
+            ) : (
+              <>
+                {paginatedRows.map((row) => (
+                  <OrdererCard
+                    key={row.id}
+                    row={row}
+                    onClick={() => handleCardClick(row.id)}
+                  />
+                ))}
+                {paginatedRows.length === 0 && (
+                  <Box sx={{ p: 4, textAlign: 'center', color: colors.text.muted }}>
+                    該当する発注者がありません
+                  </Box>
+                )}
+              </>
             )}
           </Box>
 

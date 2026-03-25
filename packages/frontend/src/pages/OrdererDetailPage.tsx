@@ -30,7 +30,8 @@ import {
   Edit as EditIcon,
   Delete as DeleteIcon,
 } from '@mui/icons-material';
-import { mockOrderers, ordererCategoryConfig, announcementStatusConfig, bidTypeConfig } from '../data';
+import { fetchOrdererList, ordererCategoryConfig, announcementStatusConfig, bidTypeConfig } from '../data';
+import type { Orderer } from '../types/orderer';
 import { deleteOrdererRecord } from '../data/orderers';
 import { categories } from '../constants/categories';
 import { bidTypes } from '../constants/bidType';
@@ -777,7 +778,20 @@ export default function OrdererDetailPage() {
     }
   }, [rightPanelOpen, toggleRightPanel]);
 
-  const orderer = mockOrderers.find((o) => o.id === id);
+  // 発注者データを遅延取得
+  const [orderer, setOrderer] = useState<Orderer | undefined>(undefined);
+  const [ordererLoading, setOrdererLoading] = useState(true);
+
+  useEffect(() => {
+    let isMounted = true;
+    fetchOrdererList().then((list) => {
+      if (isMounted) {
+        setOrderer(list.find((o) => o.id === id));
+        setOrdererLoading(false);
+      }
+    });
+    return () => { isMounted = false; };
+  }, [id]);
 
   // この発注者の案件をAPIから取得
   const [ordererAnnouncements, setOrdererAnnouncements] = useState<any[]>([]);
@@ -897,6 +911,14 @@ export default function OrdererDetailPage() {
   const handleAnnouncementClick = (announcementId: string) => {
     navigate(`/announcements/${announcementId}`);
   };
+
+  if (ordererLoading) {
+    return (
+      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
+        <Typography sx={{ color: colors.text.light }}>読み込み中...</Typography>
+      </Box>
+    );
+  }
 
   if (!orderer) {
     return (

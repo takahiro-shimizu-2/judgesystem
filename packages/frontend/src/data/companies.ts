@@ -4,8 +4,8 @@
 import type { CompanyPriority } from '../types';
 import { getApiUrl } from '../config/api';
 
-// 企業詳細情報（内部型）
-interface CompanyWithDetails {
+// 企業詳細情報
+export interface CompanyWithDetails {
   id: string;
   no: number;
   name: string;
@@ -102,16 +102,6 @@ export async function deleteCompanyRecord(id: string): Promise<boolean> {
     return false;
   }
 }
-
-// 後方互換エクスポート
-export const mockCompanies: CompanyWithDetails[] = await fetchCompanyList();
-
-// ヘルパー関数
-export const findCompanyById = (id: string): CompanyWithDetails | undefined =>
-  mockCompanies.find(c => c.id === id);
-
-export const findCompanyByName = (name: string): CompanyWithDetails | undefined =>
-  mockCompanies.find(c => c.name === name);
 
 export const getCompanyPriority = (_name: string): CompanyPriority => {
   return 5;

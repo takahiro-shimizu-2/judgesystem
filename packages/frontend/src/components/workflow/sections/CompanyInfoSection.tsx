@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react';
 import { Box, Typography, Link } from '@mui/material';
 import { colors, fontSizes, iconStyles } from '../../../constants/styles';
 import {
@@ -9,7 +10,7 @@ import {
 } from '@mui/icons-material';
 import { InfoRow } from '../../common';
 import type { Company, Branch } from '../../../types';
-import { findCompanyById } from '../../../data/companies';
+import { fetchCompanyList, type CompanyWithDetails } from '../../../data/companies';
 
 interface CompanyInfoSectionProps {
   company: Company;
@@ -54,7 +55,16 @@ const renderEmailValue = (email?: string | null) => {
  * 企業情報セクションコンポーネント
  */
 export function CompanyInfoSection({ company, branch }: CompanyInfoSectionProps) {
-  const companyDetails = findCompanyById(company.id);
+  const [companyDetails, setCompanyDetails] = useState<CompanyWithDetails | undefined>(undefined);
+
+  useEffect(() => {
+    let isMounted = true;
+    fetchCompanyList().then((list) => {
+      if (isMounted) setCompanyDetails(list.find(c => c.id === company.id));
+    });
+    return () => { isMounted = false; };
+  }, [company.id]);
+
   const branchPhone = branch?.phone?.trim();
   const branchEmail = branch?.email?.trim();
   const branchFax = branch?.fax?.trim();
