@@ -1,7 +1,14 @@
+# Share TypeScript version across stages
+ARG TYPESCRIPT_VERSION=5.9.3
+
 # Build stage
 FROM node:20-alpine AS builder
+ARG TYPESCRIPT_VERSION
 
 WORKDIR /app
+
+# Install TypeScript globally so shared package prepare can run
+RUN npm install -g typescript@${TYPESCRIPT_VERSION}
 
 # Copy all packages so that local dependencies are available
 COPY packages ./packages
@@ -12,9 +19,13 @@ RUN npx tsc
 
 # Production stage
 FROM node:20-alpine AS production
+ARG TYPESCRIPT_VERSION
 
 RUN addgroup -g 1001 -S nodejs && \
     adduser -S appuser -u 1001
+
+# Install TypeScript globally for shared package build step
+RUN npm install -g typescript@${TYPESCRIPT_VERSION}
 
 WORKDIR /app/packages/backend
 
@@ -41,9 +52,13 @@ CMD ["node", "dist/index.js"]
 
 # Development stage
 FROM node:22-alpine AS development
+ARG TYPESCRIPT_VERSION
 
 WORKDIR /app
 COPY packages ./packages
+
+# Install TypeScript globally for shared package
+RUN npm install -g typescript@${TYPESCRIPT_VERSION}
 
 WORKDIR /app/packages/backend
 RUN npm ci

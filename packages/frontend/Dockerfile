@@ -4,8 +4,12 @@
 
 # Stage 1: Build
 FROM node:22-alpine AS builder
+ARG TYPESCRIPT_VERSION=5.9.3
 
 WORKDIR /app
+
+# Install TypeScript globally so shared package prepare can run
+RUN npm install -g typescript@${TYPESCRIPT_VERSION}
 
 # Copy packages so shared dependency is available
 COPY packages ./packages
@@ -43,9 +47,13 @@ CMD ["nginx", "-g", "daemon off;"]
 # Stage 3: Development (optional target)
 # ============================================
 FROM node:22-alpine AS development
+ARG TYPESCRIPT_VERSION=5.9.3
 
 WORKDIR /app
 COPY packages ./packages
+
+# Install TypeScript globally for shared package build
+RUN npm install -g typescript@${TYPESCRIPT_VERSION}
 
 WORKDIR /app/packages/frontend
 
