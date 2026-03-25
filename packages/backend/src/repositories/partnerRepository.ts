@@ -1,5 +1,6 @@
 import { PoolClient } from "pg";
 import { pool, TABLES, schemaPrefix } from "../config/database";
+import { escapeLikePattern } from "../utils/sql";
 import { BaseFilterParams } from "../types";
 import type {
   PartnerListSummary,
@@ -127,7 +128,7 @@ export class PartnerRepository {
 
     // Search query: name, address, phone, or category name
     if (filters.searchQuery) {
-      const escaped = filters.searchQuery.replace(/[%_\\]/g, "\\$&");
+      const escaped = escapeLikePattern(filters.searchQuery);
       const pattern = `%${escaped}%`;
       conditions.push(`(
         p."name" ILIKE $${paramIndex}

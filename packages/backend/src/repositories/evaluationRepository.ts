@@ -8,6 +8,7 @@ import type {
   EvaluationStats,
 } from "../types/evaluation";
 import { logger } from "../utils/logger";
+import { escapeLikePattern } from "../utils/sql";
 
 type QualifiedTables = {
   companyBidJudgement: string;
@@ -520,7 +521,7 @@ export class EvaluationRepository {
         .map((_, i) => `ba."workPlace" ILIKE $${paramIndex + i}`)
         .join(' OR ');
       whereClauses.push(`(${prefLikes})`);
-      filters.prefectures.forEach(p => queryParams.push(`%${p}%`));
+      filters.prefectures.forEach(p => queryParams.push(`%${escapeLikePattern(p)}%`));
       paramIndex += filters.prefectures.length;
     }
 
@@ -531,7 +532,7 @@ export class EvaluationRepository {
         `cm.company_name ILIKE $${paramIndex} OR ` +
         `ba.category ILIKE $${paramIndex})`
       );
-      queryParams.push(`%${filters.searchQuery}%`);
+      queryParams.push(`%${escapeLikePattern(filters.searchQuery)}%`);
       paramIndex++;
     }
 
