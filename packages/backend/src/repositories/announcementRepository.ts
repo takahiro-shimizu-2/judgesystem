@@ -4,6 +4,113 @@ import { FilterParams, SortOption } from "../types";
 import { downloadFileFromGCS, readMarkdownFromGCS } from "../utils/gcs";
 import { logger } from "../utils/logger";
 
+// ── Domain return types ──────────────────────────────────────────────
+
+/** Announcement status derived from deadline date */
+export type AnnouncementStatus = "upcoming" | "ongoing" | "awaiting_result" | "closed";
+
+/** Minimal announcement row returned by findWithFilters (list view) */
+export interface AnnouncementListItem {
+  id: string;
+  announcementNo: number;
+  title: string;
+  organization: string;
+  category: string;
+  bidType: string;
+  workLocation: string;
+  publishDate: string;
+  deadline: string;
+  status: AnnouncementStatus;
+}
+
+/** Department nested in announcement detail */
+export interface AnnouncementDepartmentDetail {
+  postalCode: string;
+  address: string;
+  name: string;
+  contactPerson: string;
+  phone: string;
+  fax: string;
+  email: string;
+}
+
+/** Document attached to an announcement */
+export interface AnnouncementDocument {
+  id: string;
+  type: string;
+  title: string;
+  fileFormat: string;
+  pageCount: number | null;
+  extractedAt: string | null;
+  url: string;
+  content?: string;
+  markdown_path?: string;
+}
+
+/** Competing company in an announcement */
+export interface AnnouncementCompetingCompany {
+  name: string;
+  isWinner: boolean;
+  bidAmounts: number[];
+}
+
+/** Full announcement detail returned by findByNo */
+export interface AnnouncementDetail {
+  id: string;
+  no: number;
+  announcementNo: number;
+  ordererId: string;
+  title: string;
+  organization: string;
+  category: string;
+  bidType: string;
+  workLocation: string;
+  department: AnnouncementDepartmentDetail;
+  publishDate: string;
+  explanationStartDate: string;
+  explanationEndDate: string;
+  applicationStartDate: string;
+  applicationEndDate: string;
+  bidStartDate: string;
+  bidEndDate: string;
+  deadline: string;
+  status: AnnouncementStatus;
+  estimatedAmountMin: number | null;
+  estimatedAmountMax: number | null;
+  actualAmount: number | null;
+  winningCompanyId: string | null;
+  winningCompanyName: string | null;
+  documents: AnnouncementDocument[];
+  competingCompanies: AnnouncementCompetingCompany[];
+}
+
+/** Company progress info for an announcement */
+export interface ProgressingCompany {
+  evaluationId: string;
+  announcementNo: string;
+  companyId: string;
+  companyName: string;
+  branchId: string;
+  branchName: string;
+  branchAddress: string;
+  companyAddress: string;
+  priority: number;
+  workStatus: string;
+  evaluationStatus: string;
+  updatedAt: string | null;
+}
+
+/** Similar case linked to an announcement */
+export interface SimilarCase {
+  id: string;
+  announcementId: string;
+  similarAnnouncementId: string;
+  caseName: string;
+  winningCompany: string;
+  winningAmount: number | null;
+  competitors: string[];
+}
+
 export class AnnouncementRepository {
   private getStatusExpression(): string {
     return `
@@ -26,7 +133,7 @@ export class AnnouncementRepository {
    * Get paginated announcements list with filters
    * bid_announcements テーブルから一覧表示に必要な最小限のデータを取得
    */
-  async findWithFilters(filters: FilterParams): Promise<{ data: any[]; total: number }> {
+  async findWithFilters(filters: FilterParams): Promise<{ data: AnnouncementListItem[]; total: number }> {
     const client = await pool.connect();
     try {
       // Build WHERE clause
@@ -99,7 +206,7 @@ export class AnnouncementRepository {
    * Find single announcement by announcement_no
    * bid_announcements をベースに、documents と competing_companies を取得
    */
-  async findByNo(announcementNo: number): Promise<any | null> {
+  async findByNo(announcementNo: number): Promise<AnnouncementDetail | null> {
     const client = await pool.connect();
     try {
       const result = await client.query(
@@ -213,12 +320,12 @@ export class AnnouncementRepository {
         return null;
       }
 
-      const announcement = result.rows[0];
+      const announcement = result.rows[0] as AnnouncementDetail;
 
       // documents の各アイテムについて、markdown_path から content を取得
       if (announcement.documents && Array.isArray(announcement.documents)) {
         const documentsWithContent = await Promise.all(
-          announcement.documents.map(async (doc: any) => {
+          announcement.documents.map(async (doc: AnnouncementDocument) => {
             let content = '';
 
             if (doc.markdown_path && doc.markdown_path.startsWith('gs://')) {
@@ -254,7 +361,7 @@ export class AnnouncementRepository {
   /**
    * Get progressing companies (in_progress / completed) for a given announcement
    */
-  async findProgressingCompanies(announcementNo: number): Promise<any[]> {
+  async findProgressingCompanies(announcementNo: number): Promise<ProgressingCompany[]> {
     const client = await pool.connect();
     try {
       const statusExpression = this.getStatusExpression();
@@ -295,7 +402,7 @@ export class AnnouncementRepository {
   /**
    * Get similar cases for a specific announcement (by announcement_no)
    */
-  async findSimilarCases(announcementNo: number): Promise<any[]> {
+  async findSimilarCases(announcementNo: number): Promise<SimilarCase[]> {
     const client = await pool.connect();
     try {
       const announcementIdCandidates = [`ann-${announcementNo}`, String(announcementNo)];
@@ -362,11 +469,11 @@ export class AnnouncementRepository {
    */
   private buildWhereClause(filters: FilterParams): {
     whereClause: string;
-    queryParams: any[];
+    queryParams: unknown[];
     paramIndex: number;
   } {
     const whereClauses: string[] = [];
-    const queryParams: any[] = [];
+    const queryParams: unknown[] = [];
     let paramIndex = 1;
 
     // ステータスフィルター（文字列比較で安全に）
