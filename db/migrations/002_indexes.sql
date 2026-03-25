@@ -6,7 +6,7 @@ CREATE INDEX IF NOT EXISTS idx_evaluation_statuses_evaluation_no
   ON backend_evaluation_statuses ("evaluationNo");
 
 CREATE INDEX IF NOT EXISTS idx_evaluation_statuses_work_status
-  ON backend_evaluation_statuses (work_status);
+  ON backend_evaluation_statuses ("workStatus");
 
 -- Evaluation assignees lookup
 CREATE INDEX IF NOT EXISTS idx_evaluation_assignees_evaluation_no
