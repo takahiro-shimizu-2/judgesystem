@@ -20,7 +20,9 @@ export class ContactController {
       if (!res.headersSent) {
         res.status(500).json({
           error: "Internal Server Error",
-          message: error instanceof Error ? error.message : String(error),
+          message: process.env.NODE_ENV === "production"
+            ? "An unexpected error occurred"
+            : error instanceof Error ? error.message : String(error),
         });
       }
     }
@@ -44,7 +46,9 @@ export class ContactController {
       if (!res.headersSent) {
         res.status(500).json({
           error: "Internal Server Error",
-          message: error instanceof Error ? error.message : String(error),
+          message: process.env.NODE_ENV === "production"
+            ? "An unexpected error occurred"
+            : error instanceof Error ? error.message : String(error),
         });
       }
     }
@@ -71,7 +75,9 @@ export class ContactController {
       if (!res.headersSent) {
         res.status(500).json({
           error: "Internal Server Error",
-          message: error instanceof Error ? error.message : String(error),
+          message: process.env.NODE_ENV === "production"
+            ? "An unexpected error occurred"
+            : error instanceof Error ? error.message : String(error),
         });
       }
     }
@@ -95,7 +101,9 @@ export class ContactController {
       if (!res.headersSent) {
         res.status(500).json({
           error: "Internal Server Error",
-          message: error instanceof Error ? error.message : String(error),
+          message: process.env.NODE_ENV === "production"
+            ? "An unexpected error occurred"
+            : error instanceof Error ? error.message : String(error),
         });
       }
     }
@@ -125,7 +133,9 @@ export class ContactController {
       if (!res.headersSent) {
         res.status(500).json({
           error: "Internal Server Error",
-          message: error instanceof Error ? error.message : String(error),
+          message: process.env.NODE_ENV === "production"
+            ? "An unexpected error occurred"
+            : error instanceof Error ? error.message : String(error),
         });
       }
     }
