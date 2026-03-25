@@ -74,6 +74,106 @@ type OrdererItemRow = {
   grade: string | null;
 };
 
+// ── Domain return types ──────────────────────────────────────────────
+
+/** Category attached to a partner */
+export interface PartnerCategory {
+  group: string | null;
+  name: string;
+}
+
+/** Minimal partner row returned by findWithFilters (list view) */
+export interface PartnerListSummary {
+  id: string;
+  no: number;
+  name: string;
+  address: string;
+  phone: string;
+  surveyCount: number | null;
+  rating: number | null;
+  resultCount: number | null;
+  hasPrimeQualification: boolean;
+  categories: PartnerCategory[];
+}
+
+/** A past project record for a partner */
+export interface PartnerPastProject {
+  evaluationId: string;
+  announcementId: string;
+  announcementNo: number | null;
+  announcementTitle: string;
+  branchName: string;
+  workStatus: string;
+  evaluationStatus: string;
+  priority: number | null;
+  bidType: string;
+  category: string;
+  prefecture: string;
+  publishDate: string;
+  deadline: string;
+  evaluatedAt: string;
+  organization: string;
+}
+
+/** Branch office for a partner */
+export interface PartnerBranch {
+  name: string;
+  address: string;
+}
+
+/** Unified qualification entry */
+export interface PartnerUnifiedQualification {
+  mainCategory: string;
+  category: string;
+  region: string;
+  value: string;
+  grade: string;
+}
+
+/** Single orderer qualification item */
+export interface PartnerOrdererItem {
+  category: string;
+  region: string;
+  value: string;
+  grade: string;
+}
+
+/** Orderer qualification with items */
+export interface PartnerOrdererQualification {
+  ordererName: string;
+  items: PartnerOrdererItem[];
+}
+
+/** Qualifications block */
+export interface PartnerQualifications {
+  unified: PartnerUnifiedQualification[];
+  orderers: PartnerOrdererQualification[];
+}
+
+/** Full partner detail returned by findById / findAll */
+export interface PartnerDetail {
+  id: string;
+  no: number;
+  name: string;
+  postalCode: string;
+  address: string;
+  phone: string;
+  fax: string;
+  email: string;
+  url: string;
+  surveyCount: number | null;
+  rating: number | null;
+  resultCount: number | null;
+  representative: string;
+  established: string;
+  capital: number | null;
+  employeeCount: number | null;
+  categories: PartnerCategory[];
+  pastProjects: PartnerPastProject[];
+  branches: PartnerBranch[];
+  qualifications: PartnerQualifications;
+}
+
 export interface PartnerFilterParams {
   page?: number;
   pageSize?: number;
@@ -109,7 +209,7 @@ export class PartnerRepository {
    */
   async findWithFilters(
     filters: PartnerFilterParams
-  ): Promise<{ data: any[]; total: number }> {
+  ): Promise<{ data: PartnerListSummary[]; total: number }> {
     const page = filters.page || 0;
     const pageSize = filters.pageSize || 25;
     const offset = page * pageSize;
@@ -241,7 +341,9 @@ export class PartnerRepository {
       }
 
       // Fetch categories only for paginated partner IDs
-      const partnerIds = masterResult.rows.map((r: any) => r.id);
+      const partnerIds = masterResult.rows.map(
+        (r: { id: string }) => r.id
+      );
       const categoryResult = await client.query<CategoryRow>(
         `SELECT partner_id, category_group, categories
          FROM ${schemaPrefix}${TABLES.partnerCategories}
@@ -260,9 +362,9 @@ export class PartnerRepository {
         categoryMap.set(row.partner_id, list);
       });
 
-      const data = masterResult.rows.map(
+      const data: PartnerListSummary[] = masterResult.rows.map(
         ({ total_count, ...row }: any) => ({
-          id: row.id,
+          id: row.id as string,
           no: this.toNumberOrDefault(row.no, 0),
           name: this.normalizeString(row.name),
           address: this.normalizeString(row.address),
@@ -284,14 +386,14 @@ export class PartnerRepository {
   /**
    * Get all partners (full detail)
    */
-  async findAll(): Promise<any[]> {
+  async findAll(): Promise<PartnerDetail[]> {
     return this.fetchPartners();
   }
 
   /**
    * Find single partner by ID
    */
-  async findById(id: string): Promise<any | null> {
+  async findById(id: string): Promise<PartnerDetail | null> {
     const partners = await this.fetchPartners(id);
     return partners.length === 0 ? null : partners[0];
   }
@@ -332,7 +434,7 @@ export class PartnerRepository {
     return String(value);
   }
 
-  private async fetchPartners(partnerId?: string): Promise<any[]> {
+  private async fetchPartners(partnerId?: string): Promise<PartnerDetail[]> {
     const { clause, params } = this.getFilter(partnerId);
     const masterWhereClause = partnerId
       ? `WHERE COALESCE(is_active, true) AND partner_id = $1`
@@ -435,7 +537,7 @@ export class PartnerRepository {
         `,
         params
       );
-      const partnerMap = new Map<string, any>();
+      const partnerMap = new Map<string, PartnerDetail>();
 
       masterResult.rows.forEach((row) => {
         partnerMap.set(row.id, {
@@ -455,12 +557,12 @@ export class PartnerRepository {
           established: this.normalizeString(row.established),
           capital: this.toNumber(row.capital),
           employeeCount: this.toNumber(row.employeeCount),
-          categories: [] as { group: string | null; name: string }[],
-          pastProjects: [] as any[],
-          branches: [] as any[],
+          categories: [] as PartnerCategory[],
+          pastProjects: [] as PartnerPastProject[],
+          branches: [] as PartnerBranch[],
           qualifications: {
-            unified: [] as any[],
-            orderers: [] as any[],
+            unified: [] as PartnerUnifiedQualification[],
+            orderers: [] as PartnerOrdererQualification[],
           },
         });
       });
@@ -545,12 +647,12 @@ export class PartnerRepository {
         ordererNameMap.set(row.partner_id, set);
       });
 
-      const ordererItemsMap = new Map<string, Map<string, any[]>>();
+      const ordererItemsMap = new Map<string, Map<string, PartnerOrdererItem[]>>();
       ordererItemsResult.rows.forEach((row) => {
         if (!row.partner_id || !row.ordererName) {
           return;
         }
-        const partnerOrderers = ordererItemsMap.get(row.partner_id) ?? new Map<string, any[]>();
+        const partnerOrderers = ordererItemsMap.get(row.partner_id) ?? new Map<string, PartnerOrdererItem[]>();
         const items = partnerOrderers.get(row.ordererName) ?? [];
         items.push({
           category: this.normalizeString(row.category),
@@ -584,7 +686,7 @@ export class PartnerRepository {
   /**
    * Create a new partner with categories and branches
    */
-  async create(input: PartnerInput): Promise<any> {
+  async create(input: PartnerInput): Promise<PartnerDetail> {
     const client: PoolClient = await pool.connect();
     try {
       await client.query("BEGIN");
@@ -652,7 +754,7 @@ export class PartnerRepository {
   /**
    * Update an existing partner
    */
-  async update(id: string, input: Partial<PartnerInput>): Promise<any | null> {
+  async update(id: string, input: Partial<PartnerInput>): Promise<PartnerDetail | null> {
     const client: PoolClient = await pool.connect();
     try {
       await client.query("BEGIN");

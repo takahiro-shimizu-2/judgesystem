@@ -19,11 +19,194 @@ type QualifiedTables = {
   evaluationAssignees: string;
 };
 
+// ── Domain return types ──────────────────────────────────────────────
+
+/** Announcement summary nested in an evaluation list item */
+export interface EvaluationAnnouncementSummary {
+  title: string;
+  organization: string;
+  category: string;
+  bidType: string;
+  deadline: string;
+  workLocation: string;
+  estimatedAmountMin: number | null;
+  estimatedAmountMax: number | null;
+}
+
+/** Company summary nested in an evaluation list/detail item */
+export interface EvaluationCompanySummary {
+  name: string;
+  priority: number;
+}
+
+/** Branch summary nested in an evaluation list/detail item */
+export interface EvaluationBranchSummary {
+  id: string;
+  name: string;
+  address: string;
+  phone: string;
+  email: string;
+  fax: string;
+  postalCode: string;
+}
+
+/** Evaluation status values */
+export type EvaluationStatus = "all_met" | "other_only_unmet" | "unmet";
+
+/** Work status values */
+export type WorkStatusValue = "not_started" | "in_progress" | "completed";
+
+/** Current step values */
+export type CurrentStepValue = string;
+
+/** Minimal evaluation row returned by findWithFilters (list view) */
+export interface EvaluationListItem {
+  id: string;
+  evaluationNo: string;
+  announcement: EvaluationAnnouncementSummary;
+  company: EvaluationCompanySummary;
+  branch: EvaluationBranchSummary;
+  status: EvaluationStatus;
+  workStatus: WorkStatusValue;
+  currentStep: CurrentStepValue;
+  evaluatedAt: string | null;
+}
+
+/** Department nested in announcement detail */
+export interface AnnouncementDepartment {
+  postalCode: string;
+  address: string;
+  name: string;
+  contactPerson: string;
+  phone: string;
+  fax: string;
+  email: string;
+}
+
+/** Document attached to an announcement */
+export interface EvaluationDocument {
+  id: string;
+  type: string;
+  title: string;
+  fileFormat: string;
+  pageCount: number | null;
+  extractedAt: string | null;
+  url: string;
+  content?: string;
+  markdown_path?: string;
+}
+
+/** Competing company in an announcement */
+export interface CompetingCompany {
+  name: string;
+  isWinner: boolean;
+  bidAmounts: number[];
+}
+
+/** Requirement detail */
+export interface EvaluationRequirement {
+  id: string;
+  category: string;
+  name: string;
+  isMet: boolean;
+  reason: string;
+  evidence: string;
+}
+
+/** Step assignee */
+export interface StepAssignee {
+  stepId: string;
+  staffId: string;
+  assignedAt: string | null;
+}
+
+/** Full announcement detail in evaluation detail view */
+export interface EvaluationAnnouncementDetail {
+  id: string;
+  ordererId: string;
+  title: string;
+  category: string;
+  organization: string;
+  workLocation: string;
+  department: AnnouncementDepartment;
+  publishDate: string;
+  explanationStartDate: string;
+  explanationEndDate: string;
+  applicationStartDate: string;
+  applicationEndDate: string;
+  bidStartDate: string;
+  bidEndDate: string;
+  deadline: string;
+  estimatedAmountMin: number | null;
+  estimatedAmountMax: number | null;
+  pdfUrl: string;
+  documents: EvaluationDocument[];
+  competingCompanies: CompetingCompany[];
+  winningCompanyId: string | null;
+  winningCompanyName: string;
+  actualAmount: number | null;
+}
+
+/** Company detail in evaluation detail view */
+export interface EvaluationCompanyDetail {
+  id: string;
+  name: string;
+  address: string;
+  grade: string;
+  priority: number;
+}
+
+/** Full evaluation detail returned by findById */
+export interface EvaluationDetail {
+  id: string;
+  evaluationNo: string;
+  announcement: EvaluationAnnouncementDetail;
+  company: EvaluationCompanyDetail;
+  branch: EvaluationBranchSummary;
+  stepAssignees: StepAssignee[];
+  requirements: EvaluationRequirement[];
+  status: EvaluationStatus;
+  workStatus: WorkStatusValue;
+  currentStep: CurrentStepValue;
+  evaluatedAt: string | null;
+}
+
+/** Result of updateWorkStatus */
+export interface WorkStatusUpdateResult {
+  evaluationNo: string;
+  workStatus: string;
+  currentStep: string;
+  updatedAt: string;
+}
+
+/** Organization stat entry */
+export interface OrganizationStat {
+  organization: string;
+  count: number;
+}
+
+/** Category stat entry */
+export interface CategoryStat {
+  category: string;
+  count: number;
+}
+
+/** Statistics for analytics dashboard */
+export interface EvaluationStats {
+  total: number;
+  allMet: number;
+  otherUnmet: number;
+  unmet: number;
+  topOrganizations: OrganizationStat[] | null;
+  organizationCount: number;
+  topCategories: CategoryStat[] | null;
+}
+
 export class EvaluationRepository {
   /**
    * Get paginated evaluations list with filters
    */
-  async findWithFilters(filters: FilterParams): Promise<{ data: any[]; total: number }> {
+  async findWithFilters(filters: FilterParams): Promise<{ data: EvaluationListItem[]; total: number }> {
     const client = await pool.connect();
     try {
       const tables = this.getQualifiedTables();
@@ -99,7 +282,9 @@ export class EvaluationRepository {
         : 0;
 
       // Remove total_count from each row
-      const data = dataResult.rows.map(({ total_count, ...row }) => row);
+      const data: EvaluationListItem[] = dataResult.rows.map(
+        ({ total_count, ...row }: any) => row as EvaluationListItem
+      );
 
       return {
         data,
@@ -113,7 +298,7 @@ export class EvaluationRepository {
   /**
    * Find single evaluation by ID
    */
-  async findById(id: string): Promise<any | null> {
+  async findById(id: string): Promise<EvaluationDetail | null> {
     const client = await pool.connect();
     try {
       const tables = this.getQualifiedTables();
@@ -306,7 +491,7 @@ export class EvaluationRepository {
         return null;
       }
 
-      const evaluation = result.rows[0];
+      const evaluation = result.rows[0] as EvaluationDetail;
 
       if (
         evaluation?.announcement?.documents &&
@@ -330,7 +515,7 @@ export class EvaluationRepository {
     evaluationNo: string,
     workStatus: string,
     currentStep?: string
-  ): Promise<any | null> {
+  ): Promise<WorkStatusUpdateResult | null> {
     const client = await pool.connect();
     try {
       const qualifiedTableName = `${schemaPrefix}${TABLES.evaluationStatuses}`;
@@ -355,7 +540,7 @@ export class EvaluationRepository {
   /**
    * Get statistics for analytics dashboard
    */
-  async getStats(): Promise<any> {
+  async getStats(): Promise<EvaluationStats> {
     const client = await pool.connect();
     try {
       const tables = this.getQualifiedTables();
@@ -461,11 +646,11 @@ export class EvaluationRepository {
     workStatusExpression: string
   ): {
     whereClause: string;
-    queryParams: any[];
+    queryParams: unknown[];
     paramIndex: number;
   } {
     const whereClauses: string[] = [];
-    const queryParams: any[] = [];
+    const queryParams: unknown[] = [];
     let paramIndex = 1;
 
     if (filters.statuses && filters.statuses.length > 0) {
@@ -706,9 +891,9 @@ export class EvaluationRepository {
     return `1`;
   }
 
-  private async attachDocumentContents(documents: any[]): Promise<any[]> {
+  private async attachDocumentContents(documents: EvaluationDocument[]): Promise<EvaluationDocument[]> {
     return Promise.all(
-      documents.map(async (doc: any) => {
+      documents.map(async (doc: EvaluationDocument) => {
         let content = "文字起こしデータがありません";
         if (doc.markdown_path && typeof doc.markdown_path === "string" && doc.markdown_path.startsWith("gs://")) {
           try {

@@ -1,5 +1,11 @@
 import { AnnouncementRepository } from "../repositories";
-import { FilterParams } from "../types";
+import { FilterParams, PaginatedResponse } from "../types";
+import type {
+  AnnouncementListItem,
+  AnnouncementDetail,
+  ProgressingCompany,
+  SimilarCase,
+} from "../repositories/announcementRepository";
 
 export class AnnouncementService {
   private repository: AnnouncementRepository;
@@ -11,7 +17,7 @@ export class AnnouncementService {
   /**
    * Get paginated announcements list with filters
    */
-  async getList(filters: FilterParams) {
+  async getList(filters: FilterParams): Promise<PaginatedResponse<AnnouncementListItem>> {
     const { data, total } = await this.repository.findWithFilters(filters);
 
     const page = filters.page || 0;
@@ -28,28 +34,28 @@ export class AnnouncementService {
   /**
    * Get single announcement by announcement_no
    */
-  async getByNo(announcementNo: number) {
+  async getByNo(announcementNo: number): Promise<AnnouncementDetail | null> {
     return await this.repository.findByNo(announcementNo);
   }
 
   /**
    * Get progressing companies for an announcement
    */
-  async getProgressingCompanies(announcementNo: number) {
+  async getProgressingCompanies(announcementNo: number): Promise<ProgressingCompany[]> {
     return await this.repository.findProgressingCompanies(announcementNo);
   }
 
   /**
    * Get binary of a document attached to an announcement
    */
-  async getDocumentFile(announcementNo: number, documentId: string) {
+  async getDocumentFile(announcementNo: number, documentId: string): Promise<{ data: Buffer; fileFormat: string; title: string } | null> {
     return await this.repository.getDocumentFile(announcementNo, documentId);
   }
 
   /**
    * Get similar cases linked to an announcement
    */
-  async getSimilarCases(announcementNo: number) {
+  async getSimilarCases(announcementNo: number): Promise<SimilarCase[]> {
     return await this.repository.findSimilarCases(announcementNo);
   }
 }
