@@ -37,4 +37,4 @@ CREATE INDEX IF NOT EXISTS idx_workflow_contacts_name
 
 -- Partner search
 CREATE INDEX IF NOT EXISTS idx_partners_master_company_name
-  ON partners_master (company_name);
+  ON partners_master (name);
