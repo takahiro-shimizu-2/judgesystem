@@ -1259,20 +1259,55 @@ export default function PartnerDetailPage() {
                         <Typography sx={{ fontSize: fontSizes.base, fontWeight: 600, color: colors.primary.main }}>カテゴリ ({safePartner.categories.length})</Typography>
                       </AccordionSummary>
                       <AccordionDetails sx={{ pt: 2, pb: 2, px: 2.5 }}>
-                        <Box sx={{ display: 'flex', gap: 0.75, flexWrap: 'wrap' }}>
-                          {safePartner.categories.map((category: string) => (
-                            <Chip
-                              key={category}
-                              label={category}
-                              size="small"
-                              sx={{
-                                ...chipStyles.small,
-                                backgroundColor: colors.status.info.bg,
-                                color: colors.accent.blue,
-                              }}
-                            />
-                          ))}
+                        {/* Flat categories (no group) */}
+                        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                          {safePartner.categories
+                            .filter((c: { group: string | null; name: string }) => !c.group)
+                            .map((c: { group: string | null; name: string }) => (
+                              <Chip
+                                key={c.name}
+                                label={c.name}
+                                size="small"
+                                sx={{
+                                  ...chipStyles.small,
+                                  backgroundColor: colors.status.info.bg,
+                                  color: colors.accent.blue,
+                                }}
+                              />
+                            ))}
                         </Box>
+
+                        {/* Grouped categories */}
+                        {Object.entries(
+                          safePartner.categories
+                            .filter((c: { group: string | null; name: string }) => c.group)
+                            .reduce((acc: Record<string, string[]>, c: { group: string | null; name: string }) => {
+                              const g = c.group!;
+                              if (!acc[g]) acc[g] = [];
+                              acc[g].push(c.name);
+                              return acc;
+                            }, {})
+                        ).map(([groupName, items]) => (
+                          <Box key={groupName} sx={{ mt: 1 }}>
+                            <Typography sx={{ fontSize: '0.8rem', fontWeight: 600, color: '#666', mb: 0.5 }}>
+                              {groupName}
+                            </Typography>
+                            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                              {(items as string[]).map((item: string) => (
+                                <Chip
+                                  key={item}
+                                  label={item}
+                                  size="small"
+                                  sx={{
+                                    ...chipStyles.small,
+                                    backgroundColor: colors.status.info.bg,
+                                    color: colors.accent.blue,
+                                  }}
+                                />
+                              ))}
+                            </Box>
+                          </Box>
+                        ))}
                       </AccordionDetails>
                     </Accordion>
 

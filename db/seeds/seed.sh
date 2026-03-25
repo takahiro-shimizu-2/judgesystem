@@ -98,7 +98,7 @@ load_data "$MASTER_DIR/partners_master.csv" \
   'partners_master(partner_id, name, "postalCode", address, phone, email, fax, url, "surveyCount", rating, "resultCount", representative, establishment_date, capital, "employeeCount", detail_url, region)'
 
 load_data "$MASTER_DIR/partners_categories.csv" \
-  'partners_categories(partner_id, categories)'
+  'partners_categories(partner_id, category_group, categories)'
 
 load_data "$MASTER_DIR/partners_branches.txt" \
   'partners_branches(partner_id, name, address)'

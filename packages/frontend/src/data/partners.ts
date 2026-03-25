@@ -26,7 +26,7 @@ export async function createPartnerRecord(
     established: string;
     capital: string;
     employeeCount: string;
-    categories: string[];
+    categories: { group: string | null; name: string }[];
     branches: { name: string; address: string }[];
   }
 ): Promise<PartnerListItem | null> {

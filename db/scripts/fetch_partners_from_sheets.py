@@ -28,6 +28,7 @@ import csv
 import os
 import sys
 import time
+import re
 import uuid
 
 import gspread
@@ -55,17 +56,17 @@ MASTER_COLUMN_MAP = {
 
 # カテゴリ系カラム（カンマ区切りを分割して partners_categories に投入）
 CATEGORY_COLUMNS = [
-    "カテゴリ1",
-    "カテゴリ2",
-    "カテゴリ3",
     "業種",
     "取り扱い",
     "営業種目",
     "建設工事",
     "設備工事",
     "不動産",
-    "リフォーム",
+    "カテゴリ1",
+    "カテゴリ2",
+    "カテゴリ3",
     "カテゴリ",
+    "リフォーム",
 ]
 
 # seed.sh が期待する partners_master.csv のカラム順
@@ -200,14 +201,75 @@ def read_all_sheets(client: gspread.Client, spreadsheet_ids: list[str], delay: f
     print(f"\n  合計シート数: {total_sheets}")
 
 
-def split_categories(value: str) -> list[str]:
-    """カンマ区切りのカテゴリ文字列を分割する。"""
-    items = []
-    for item in value.split(","):
+# Prefixes to strip from category values
+_STRIP_PREFIXES = [
+    "サービス:",
+    "その他:",
+    "施設・設備:",
+    "料金・費用:",
+    "アクセス・利便性:",
+    "対応エリア:",
+    "公的機関の認定:",
+]
+
+
+def _is_junk(value: str) -> bool:
+    """Filter out junk entries (URLs, promotional text)."""
+    if "http" in value:
+        return True
+    if "。" in value:
+        return True
+    return False
+
+
+def split_categories(value: str) -> list[tuple[str | None, str]]:
+    """Parse category string into (group, item) tuples.
+
+    Handles:
+    - Plain comma-separated: "A, B, C" -> [(None, "A"), (None, "B"), (None, "C")]
+    - Prefixed: "サービス: A、B" -> [(None, "A"), (None, "B")]
+    - Bracketed groups: "［水回り］ A, B ［外装］ C" -> [("水回り", "A"), ("水回り", "B"), ("外装", "C")]
+    - Full-width brackets: "【水回り】A;B;C" -> [("水回り", "A"), ("水回り", "B"), ("水回り", "C")]
+    """
+    if _is_junk(value):
+        return []
+
+    # Strip known prefixes
+    for prefix in _STRIP_PREFIXES:
+        if value.startswith(prefix):
+            value = value[len(prefix):].strip()
+            break
+
+    # Check for ［...］ or 【...】 group patterns
+    group_pattern = re.compile(r'[［【]([^］】]+)[］】]')
+    if group_pattern.search(value):
+        results = []
+        # Split by group markers
+        parts = group_pattern.split(value)
+        # parts alternates: [before_first_group, group1_name, group1_content, group2_name, group2_content, ...]
+        current_group = None
+        for i, part in enumerate(parts):
+            if i % 2 == 1:
+                # This is a group name
+                current_group = part.strip()
+                continue
+            # This is content (before first group or after a group name)
+            if not part.strip():
+                continue
+            for item in re.split(r'[,;、]', part):
+                item = item.strip()
+                if item and item != "0" and item.lower() != "nan" and item.lower() != "unknown" and not _is_junk(item):
+                    group = current_group if i > 0 else None
+                    results.append((group, item))
+        return results
+
+    # No group pattern - split by comma, Japanese comma, semicolon
+    results = []
+    for item in re.split(r'[,;、]', value):
         item = item.strip()
-        if item and item != "0" and item.lower() != "nan" and item.lower() != "unknown":
-            items.append(item)
-    return items
+        if item and item != "0" and item.lower() != "nan" and item.lower() != "unknown" and not _is_junk(item):
+            results.append((None, item))
+    return results
 
 
 def transform_row(row: dict, sheet_name: str):
@@ -239,17 +301,18 @@ def transform_row(row: dict, sheet_name: str):
         "region": sheet_name,
     }
 
-    # カテゴリ収集: 各カラムのカンマ区切り値を分割して統合
+    # カテゴリ収集: 各カラムの値をパースして (group, item) ペアで統合
     seen = set()
-    categories = []
+    categories = []  # list of (group, item) tuples
     for col in CATEGORY_COLUMNS:
         val = str(row.get(col, "")).strip()
         if not val:
             continue
-        for item in split_categories(val):
-            if item not in seen:
-                seen.add(item)
-                categories.append(item)
+        for group, item in split_categories(val):
+            key = (group, item)
+            if key not in seen:
+                seen.add(key)
+                categories.append(key)
 
     return master, categories
 
@@ -272,10 +335,10 @@ def write_csv_files(masters: dict, categories_map: dict, output_dir: str):
     cat_count = 0
     with open(cat_path, "w", newline="", encoding="utf-8") as f:
         writer = csv.writer(f)
-        writer.writerow(["partner_id", "categories"])
+        writer.writerow(["partner_id", "category_group", "categories"])
         for pid, cats in categories_map.items():
-            for cat in cats:
-                writer.writerow([pid, cat])
+            for group, item in cats:
+                writer.writerow([pid, group or "", item])
                 cat_count += 1
     print(f"  {cat_path} ({cat_count} rows)")
 
@@ -332,7 +395,8 @@ def main(argv=None):
         if pid in masters:
             duplicate_count += 1
             existing = set(categories_map.get(pid, []))
-            existing.update(cats)
+            for cat in cats:
+                existing.add(cat)
             categories_map[pid] = list(existing)
         else:
             masters[pid] = master

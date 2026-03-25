@@ -35,7 +35,7 @@ interface RowData {
   rating: number | null;
   resultCount: number | null;
   hasPrimeQualification: boolean;
-  categories: string[];
+  categories: { group: string | null; name: string }[];
   prefecture: string;
 }
 
@@ -189,10 +189,10 @@ function PartnerCard({ row, onClick }: { row: RowData; onClick: () => void }) {
 
         {/* 4行目: カテゴリ */}
         <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
-          {row.categories.map((category, index) => (
+          {row.categories.map((cat, index) => (
             <Chip
               key={index}
-              label={category}
+              label={cat.name}
               size="small"
               sx={{
                 ...chipStyles.small,
@@ -327,7 +327,7 @@ export default function PartnerListPage() {
         if (!japaneseIncludes(partner.name, q) &&
             !japaneseIncludes(partner.address, q) &&
             !japaneseIncludes(partner.phone, q) &&
-            !partner.categories.some(c => japaneseIncludes(c, q))) {
+            !partner.categories.some(c => japaneseIncludes(c.name, q))) {
           return false;
         }
       }
@@ -344,7 +344,7 @@ export default function PartnerListPage() {
         if (filters.hasPrimeQualification === 'no' && hasQualification) return false;
       }
       // 種別フィルター
-      if (filters.categories.length > 0 && !filters.categories.some(c => partner.categories.includes(c))) {
+      if (filters.categories.length > 0 && !filters.categories.some(c => partner.categories.some(cat => cat.name === c))) {
         return false;
       }
       // 現地調査実績フィルター

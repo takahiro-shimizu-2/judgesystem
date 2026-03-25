@@ -22,6 +22,7 @@ type PartnerBaseRow = {
 
 type CategoryRow = {
   partner_id: string;
+  category_group: string | null;
   categories: string | null;
 };
 
@@ -85,7 +86,7 @@ export interface PartnerInput {
   established: string;
   capital: string;
   employeeCount: string;
-  categories: string[];
+  categories: { group: string | null; name: string }[];
   branches: { name: string; address: string }[];
 }
 
@@ -176,7 +177,7 @@ export class PartnerRepository {
       );
 
       const categoryResult = await client.query<CategoryRow>(
-        `SELECT partner_id, categories FROM ${schemaPrefix}${TABLES.partnerCategories} ${clause}`,
+        `SELECT partner_id, category_group, categories FROM ${schemaPrefix}${TABLES.partnerCategories} ${clause}`,
         params
       );
 
@@ -264,7 +265,7 @@ export class PartnerRepository {
           established: this.normalizeString(row.established),
           capital: this.toNumber(row.capital),
           employeeCount: this.toNumber(row.employeeCount),
-          categories: [] as string[],
+          categories: [] as { group: string | null; name: string }[],
           pastProjects: [] as any[],
           branches: [] as any[],
           qualifications: {
@@ -279,7 +280,7 @@ export class PartnerRepository {
         }
         const partner = partnerMap.get(row.partner_id);
         if (partner) {
-          partner.categories.push(row.categories);
+          partner.categories.push({ group: row.category_group || null, name: row.categories });
         }
       });
 
@@ -431,8 +432,8 @@ export class PartnerRepository {
 
       for (const category of input.categories) {
         await client.query(
-          `INSERT INTO ${schemaPrefix}${TABLES.partnerCategories} (partner_id, categories) VALUES ($1, $2)`,
-          [partnerId, category]
+          `INSERT INTO ${schemaPrefix}${TABLES.partnerCategories} (partner_id, category_group, categories) VALUES ($1, $2, $3)`,
+          [partnerId, category.group, category.name]
         );
       }
 
@@ -517,8 +518,8 @@ export class PartnerRepository {
         );
         for (const category of input.categories) {
           await client.query(
-            `INSERT INTO ${schemaPrefix}${TABLES.partnerCategories} (partner_id, categories) VALUES ($1, $2)`,
-            [id, category]
+            `INSERT INTO ${schemaPrefix}${TABLES.partnerCategories} (partner_id, category_group, categories) VALUES ($1, $2, $3)`,
+            [id, category.group, category.name]
           );
         }
       }
