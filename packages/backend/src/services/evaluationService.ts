@@ -4,6 +4,12 @@ import {
   EvaluationOrdererWorkflowRepository,
 } from "../repositories";
 import { FilterParams, PaginatedResponse } from "../types";
+import type {
+  EvaluationListItem,
+  EvaluationDetail,
+  EvaluationWorkStatusResult,
+  EvaluationStats,
+} from "../types/evaluation";
 import type { OrdererWorkflowState } from "../repositories/evaluationOrdererWorkflowRepository";
 
 export class EvaluationService {
@@ -20,7 +26,7 @@ export class EvaluationService {
   /**
    * Get paginated list of evaluations with filters
    */
-  async getList(filters: FilterParams): Promise<PaginatedResponse<any>> {
+  async getList(filters: FilterParams): Promise<PaginatedResponse<EvaluationListItem>> {
     const { data, total } = await this.repository.findWithFilters(filters);
 
     const page = filters.page || 0;
@@ -37,7 +43,7 @@ export class EvaluationService {
   /**
    * Get single evaluation by ID
    */
-  async getById(id: string): Promise<any | null> {
+  async getById(id: string): Promise<EvaluationDetail | null> {
     return await this.repository.findById(id);
   }
 
@@ -48,7 +54,7 @@ export class EvaluationService {
     evaluationNo: string,
     workStatus: string,
     currentStep?: string
-  ): Promise<any | null> {
+  ): Promise<EvaluationWorkStatusResult | null> {
     // Validate workStatus
     const validStatuses = ["not_started", "in_progress", "completed"];
     if (!validStatuses.includes(workStatus)) {
@@ -61,7 +67,7 @@ export class EvaluationService {
   /**
    * Get statistics for analytics dashboard
    */
-  async getStats(): Promise<any> {
+  async getStats(): Promise<EvaluationStats> {
     return await this.repository.getStats();
   }
 

@@ -1,5 +1,16 @@
 import { PoolClient } from "pg";
 import { pool, TABLES, schemaPrefix } from "../config/database";
+import type {
+  PartnerListSummary,
+  PartnerDetail,
+  PartnerCategory,
+  PartnerPastProject,
+  PartnerBranch,
+  UnifiedQualification,
+  OrdererQualificationItem,
+  OrdererQualification,
+  PartnerQualifications,
+} from "../types/partner";
 
 type PartnerBaseRow = {
   id: string;
@@ -109,7 +120,7 @@ export class PartnerRepository {
    */
   async findWithFilters(
     filters: PartnerFilterParams
-  ): Promise<{ data: any[]; total: number }> {
+  ): Promise<{ data: PartnerListSummary[]; total: number }> {
     const page = filters.page || 0;
     const pageSize = filters.pageSize || 25;
     const offset = page * pageSize;
@@ -249,10 +260,7 @@ export class PartnerRepository {
         [partnerIds]
       );
 
-      const categoryMap = new Map<
-        string,
-        { group: string | null; name: string }[]
-      >();
+      const categoryMap = new Map<string, PartnerCategory[]>();
       categoryResult.rows.forEach((row) => {
         if (!row.partner_id || !row.categories) return;
         const list = categoryMap.get(row.partner_id) || [];
@@ -260,9 +268,9 @@ export class PartnerRepository {
         categoryMap.set(row.partner_id, list);
       });
 
-      const data = masterResult.rows.map(
+      const data: PartnerListSummary[] = masterResult.rows.map(
         ({ total_count, ...row }: any) => ({
-          id: row.id,
+          id: row.id as string,
           no: this.toNumberOrDefault(row.no, 0),
           name: this.normalizeString(row.name),
           address: this.normalizeString(row.address),
@@ -284,14 +292,14 @@ export class PartnerRepository {
   /**
    * Get all partners (full detail)
    */
-  async findAll(): Promise<any[]> {
+  async findAll(): Promise<PartnerDetail[]> {
     return this.fetchPartners();
   }
 
   /**
    * Find single partner by ID
    */
-  async findById(id: string): Promise<any | null> {
+  async findById(id: string): Promise<PartnerDetail | null> {
     const partners = await this.fetchPartners(id);
     return partners.length === 0 ? null : partners[0];
   }
@@ -332,7 +340,7 @@ export class PartnerRepository {
     return String(value);
   }
 
-  private async fetchPartners(partnerId?: string): Promise<any[]> {
+  private async fetchPartners(partnerId?: string): Promise<PartnerDetail[]> {
     const { clause, params } = this.getFilter(partnerId);
     const masterWhereClause = partnerId
       ? `WHERE COALESCE(is_active, true) AND partner_id = $1`
@@ -435,7 +443,7 @@ export class PartnerRepository {
         `,
         params
       );
-      const partnerMap = new Map<string, any>();
+      const partnerMap = new Map<string, PartnerDetail>();
 
       masterResult.rows.forEach((row) => {
         partnerMap.set(row.id, {
@@ -455,13 +463,13 @@ export class PartnerRepository {
           established: this.normalizeString(row.established),
           capital: this.toNumber(row.capital),
           employeeCount: this.toNumber(row.employeeCount),
-          categories: [] as { group: string | null; name: string }[],
-          pastProjects: [] as any[],
-          branches: [] as any[],
+          categories: [] as PartnerCategory[],
+          pastProjects: [] as PartnerPastProject[],
+          branches: [] as PartnerBranch[],
           qualifications: {
-            unified: [] as any[],
-            orderers: [] as any[],
-          },
+            unified: [] as UnifiedQualification[],
+            orderers: [] as OrdererQualification[],
+          } as PartnerQualifications,
         });
       });
       categoryResult.rows.forEach((row) => {
@@ -545,12 +553,12 @@ export class PartnerRepository {
         ordererNameMap.set(row.partner_id, set);
       });
 
-      const ordererItemsMap = new Map<string, Map<string, any[]>>();
+      const ordererItemsMap = new Map<string, Map<string, OrdererQualificationItem[]>>();
       ordererItemsResult.rows.forEach((row) => {
         if (!row.partner_id || !row.ordererName) {
           return;
         }
-        const partnerOrderers = ordererItemsMap.get(row.partner_id) ?? new Map<string, any[]>();
+        const partnerOrderers = ordererItemsMap.get(row.partner_id) ?? new Map<string, OrdererQualificationItem[]>();
         const items = partnerOrderers.get(row.ordererName) ?? [];
         items.push({
           category: this.normalizeString(row.category),
@@ -584,7 +592,7 @@ export class PartnerRepository {
   /**
    * Create a new partner with categories and branches
    */
-  async create(input: PartnerInput): Promise<any> {
+  async create(input: PartnerInput): Promise<PartnerDetail> {
     const client: PoolClient = await pool.connect();
     try {
       await client.query("BEGIN");
@@ -652,7 +660,7 @@ export class PartnerRepository {
   /**
    * Update an existing partner
    */
-  async update(id: string, input: Partial<PartnerInput>): Promise<any | null> {
+  async update(id: string, input: Partial<PartnerInput>): Promise<PartnerDetail | null> {
     const client: PoolClient = await pool.connect();
     try {
       await client.query("BEGIN");
