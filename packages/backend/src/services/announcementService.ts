@@ -1,5 +1,5 @@
 import { AnnouncementRepository } from "../repositories";
-import { FilterParams } from "../types";
+import { AnnouncementFilterParams } from "../types";
 
 export class AnnouncementService {
   private repository: AnnouncementRepository;
@@ -11,7 +11,7 @@ export class AnnouncementService {
   /**
    * Get paginated announcements list with filters
    */
-  async getList(filters: FilterParams) {
+  async getList(filters: AnnouncementFilterParams) {
     const { data, total } = await this.repository.findWithFilters(filters);
 
     const page = filters.page || 0;
