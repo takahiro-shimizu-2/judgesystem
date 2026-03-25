@@ -38,7 +38,7 @@ import {
   awardEmailTemplates,
   replacePlaceholders,
 } from '../../../constants/emailTemplates';
-import { findCompanyById } from '../../../data/companies';
+import { fetchCompanyList, type CompanyWithDetails } from '../../../data/companies';
 import { PersonIcon } from '../../../constants/icons';
 import { useStaffDirectory } from '../../../contexts/StaffContext';
 import type {
@@ -124,8 +124,18 @@ export function AwardSection({ evaluation, partners = [], workflowAssigneeId }: 
   // 案件情報
   const projectName = evaluation?.announcement?.title || '';
   const requesterCompany = evaluation?.company;
-  // 依頼元企業の詳細情報を取得
-  const requesterCompanyDetails = requesterCompany ? findCompanyById(requesterCompany.id) : undefined;
+  // 依頼元企業の詳細情報を取得（非同期）
+  const [requesterCompanyDetails, setRequesterCompanyDetails] = useState<CompanyWithDetails | undefined>(undefined);
+
+  useEffect(() => {
+    if (!requesterCompany) return;
+    let isMounted = true;
+    fetchCompanyList().then((list) => {
+      if (isMounted) setRequesterCompanyDetails(list.find(c => c.id === requesterCompany.id));
+    });
+    return () => { isMounted = false; };
+  }, [requesterCompany?.id]);
+
   // 自社情報（実際はログイン企業情報から取得）
   const myCompanyName = '株式会社サンプル建設';
   const myName = '田中一郎';
