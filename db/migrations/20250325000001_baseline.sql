@@ -1,10 +1,4 @@
--- ============================================================
--- Local Development Schema
--- ============================================================
--- Auto-executed by PostgreSQL on first container start.
--- Tables match packages/engine/repository/postgres.py DDL
--- and packages/backend/src/repositories/ query expectations.
--- ============================================================
+-- migrate:up
 
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
@@ -412,3 +406,35 @@ CREATE TABLE IF NOT EXISTS evaluation_orderer_workflow_states (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+-- migrate:down
+
+DROP TABLE IF EXISTS evaluation_assignees;
+DROP TABLE IF EXISTS evaluation_orderer_workflow_states;
+DROP TABLE IF EXISTS backend_evaluation_statuses;
+DROP TABLE IF EXISTS workflow_contacts;
+DROP TABLE IF EXISTS insufficient_requirements;
+DROP TABLE IF EXISTS sufficient_requirements;
+DROP TABLE IF EXISTS company_bid_judgement;
+DROP TABLE IF EXISTS announcements_competing_company_bids_master;
+DROP TABLE IF EXISTS announcements_competing_companies_master;
+DROP TABLE IF EXISTS announcements_estimated_amounts;
+DROP TABLE IF EXISTS announcements_documents_master;
+DROP TABLE IF EXISTS bid_requirements;
+DROP TABLE IF EXISTS bid_orderers;
+DROP TABLE IF EXISTS bid_announcements;
+DROP TABLE IF EXISTS office_registration_authorization_master;
+DROP TABLE IF EXISTS technician_qualification_master;
+DROP TABLE IF EXISTS construction_master;
+DROP TABLE IF EXISTS agency_master;
+DROP TABLE IF EXISTS partners_qualifications_orderer_items;
+DROP TABLE IF EXISTS partners_qualifications_orderers;
+DROP TABLE IF EXISTS partners_qualifications_unified;
+DROP TABLE IF EXISTS partners_branches;
+DROP TABLE IF EXISTS partners_past_projects;
+DROP TABLE IF EXISTS partners_categories;
+DROP TABLE IF EXISTS partners_master;
+DROP TABLE IF EXISTS office_work_achivements_master;
+DROP TABLE IF EXISTS office_master;
+DROP TABLE IF EXISTS company_master;
+DROP EXTENSION IF EXISTS "pgcrypto";
