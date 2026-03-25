@@ -1,3 +1,4 @@
+import { escapeLikePattern } from "./sql";
 export class QueryBuilder {
   private conditions: string[] = [];
   private params: unknown[] = [];
@@ -23,7 +24,7 @@ export class QueryBuilder {
   whereLike(column: string, value: string | undefined): this {
     if (!value) return this;
     this.conditions.push(`${column} ILIKE $${this.paramIndex}`);
-    this.params.push(`%${value}%`);
+    this.params.push(`%${escapeLikePattern(value)}%`);
     this.paramIndex++;
     return this;
   }

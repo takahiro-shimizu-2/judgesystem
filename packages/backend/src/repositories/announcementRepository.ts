@@ -3,6 +3,7 @@ import { pool, TABLES, schemaPrefix } from "../config/database";
 import { FilterParams, SortOption } from "../types";
 import { downloadFileFromGCS, readMarkdownFromGCS } from "../utils/gcs";
 import { logger } from "../utils/logger";
+import { escapeLikePattern } from "../utils/sql";
 
 export class AnnouncementRepository {
   private getStatusExpression(): string {
@@ -439,7 +440,7 @@ export class AnnouncementRepository {
         .map((_, i) => `"workPlace" ILIKE $${paramIndex + i}`)
         .join(' OR ');
       whereClauses.push(`(${prefLikes})`);
-      filters.prefectures.forEach(p => queryParams.push(`%${p}%`));
+      filters.prefectures.forEach(p => queryParams.push(`%${escapeLikePattern(p)}%`));
       paramIndex += filters.prefectures.length;
     }
 
@@ -449,7 +450,7 @@ export class AnnouncementRepository {
         `"topAgencyName" ILIKE $${paramIndex} OR ` +
         `category ILIKE $${paramIndex})`
       );
-      queryParams.push(`%${filters.searchQuery}%`);
+      queryParams.push(`%${escapeLikePattern(filters.searchQuery)}%`);
       paramIndex++;
     }
 
