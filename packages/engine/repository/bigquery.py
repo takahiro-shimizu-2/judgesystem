@@ -199,6 +199,115 @@ class DBOperatorGCPVM(DBOperator):
         """
         self.client.query(sql).result()
 
+    def ensure_source_pages_table(self):
+        sql = fr"""
+        CREATE TABLE IF NOT EXISTS `{self.project_id}.{self.dataset_name}.source_pages` (
+            id STRING,
+            agency_id STRING,
+            agency_name STRING,
+            top_agency_name STRING,
+            sub_agency_name STRING,
+            page_code STRING,
+            page_name STRING,
+            source_url STRING,
+            submitted_source_url STRING,
+            extractor_name STRING,
+            page_behavior_json STRING,
+            matrix_header_keywords STRING,
+            force_matrix BOOL,
+            is_active BOOL,
+            created_at STRING,
+            updated_at STRING
+        )
+        """
+        self.client.query(sql).result()
+
+    def fetch_source_page(self, page_code=None, top_agency=None, sub_agency=None, source_url=None):
+        self.ensure_source_pages_table()
+        normalized_page_code = (page_code or "").strip()
+        if normalized_page_code:
+            sql = fr"""
+            SELECT *
+            FROM `{self.project_id}.{self.dataset_name}.source_pages`
+            WHERE page_code = @page_code
+            LIMIT 1
+            """
+            job_config = bigquery.QueryJobConfig(
+                query_parameters=[bigquery.ScalarQueryParameter("page_code", "STRING", normalized_page_code)]
+            )
+            df = self.client.query(sql, job_config=job_config).result().to_dataframe()
+            if not df.empty:
+                return df.iloc[0].to_dict()
+
+        normalized_source = (source_url or "").strip().rstrip("/")
+        if normalized_source:
+            sql = fr"""
+            SELECT *
+            FROM `{self.project_id}.{self.dataset_name}.source_pages`
+            WHERE TRIM(COALESCE(source_url, '')) = @src
+               OR TRIM(COALESCE(submitted_source_url, '')) = @src
+            LIMIT 1
+            """
+            job_config = bigquery.QueryJobConfig(
+                query_parameters=[bigquery.ScalarQueryParameter("src", "STRING", normalized_source)]
+            )
+            df = self.client.query(sql, job_config=job_config).result().to_dataframe()
+            if not df.empty:
+                return df.iloc[0].to_dict()
+
+        conditions = []
+        query_parameters = []
+
+        normalized_top = (top_agency or "").strip()
+        if normalized_top:
+            conditions.append("top_agency_name = @top_agency")
+            query_parameters.append(bigquery.ScalarQueryParameter("top_agency", "STRING", normalized_top))
+
+        normalized_sub = (sub_agency or "").strip()
+        if normalized_sub:
+            conditions.append("sub_agency_name = @sub_agency")
+            query_parameters.append(bigquery.ScalarQueryParameter("sub_agency", "STRING", normalized_sub))
+
+        if not conditions:
+            return None
+
+        where_clause = " AND ".join(conditions)
+        sql = fr"""
+        SELECT *
+        FROM `{self.project_id}.{self.dataset_name}.source_pages`
+        WHERE (is_active IS NULL OR is_active = TRUE)
+          AND {where_clause}
+        ORDER BY updated_at DESC, created_at DESC
+        LIMIT 1
+        """
+        job_config = bigquery.QueryJobConfig(query_parameters=query_parameters)
+        df = self.client.query(sql, job_config=job_config).result().to_dataframe()
+        if df.empty:
+            return None
+        return df.iloc[0].to_dict()
+
+    def sync_source_pages(self, rows):
+        if not rows:
+            return
+        self.ensure_source_pages_table()
+        delete_sql = fr"DELETE FROM `{self.project_id}.{self.dataset_name}.source_pages` WHERE TRUE"
+        self.client.query(delete_sql).result()
+        df = pd.DataFrame(rows)
+        if df.empty:
+            return
+        if "force_matrix" not in df:
+            df["force_matrix"] = False
+        df["force_matrix"] = df["force_matrix"].fillna(False).astype(bool)
+        if "is_active" not in df:
+            df["is_active"] = True
+        df["is_active"] = df["is_active"].fillna(True).astype(bool)
+        to_gbq(
+            dataframe=df,
+            destination_table=f"{self.dataset_name}.source_pages",
+            project_id=self.project_id,
+            if_exists="append",
+        )
+
 
     def createBidRequirements(self, bid_requirements_tablename):
         sql = fr"""

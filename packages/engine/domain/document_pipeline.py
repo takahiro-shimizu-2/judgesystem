@@ -5,6 +5,7 @@ step0 関連メソッドを提供する Mixin。
 HTML取得、リンク抽出、フォーマット処理、DB保存を担当する。
 """
 
+import json
 import os
 import re
 import csv
@@ -19,6 +20,11 @@ import requests
 from tqdm import tqdm
 from bs4 import BeautifulSoup, Comment
 from ftfy.badness import badness
+
+from packages.engine.domain.structured_page import (
+    extract_announcements_from_specs,
+    infer_table_specs,
+)
 
 
 class DocumentPreparationMixin:
@@ -152,6 +158,8 @@ class DocumentPreparationMixin:
             if not Path(input_list2_path).exists():
                 raise FileNotFoundError(f"Required file not found: {input_list2_path}")
             input_list2_path = str(input_list2_path)
+
+        self._html_metadata_lookup = self._build_html_metadata_lookup(input_list2_path, topAgencyName)
 
         # 2. リンク抽出処理
         if do_extract_links:
@@ -348,6 +356,9 @@ class DocumentPreparationMixin:
             output_path = output_dir_html / output_file
 
             if output_path.exists():
+                meta_path = output_path.with_suffix(".meta.json")
+                if not meta_path.exists() and isinstance(target_url, str):
+                    self._write_html_metadata(output_path, target_url, topAgencyName, subAgencyName)
                 skip_count += 1
                 continue
 
@@ -366,6 +377,7 @@ class DocumentPreparationMixin:
                 if html_content:
                     with open(output_path, "w", encoding="utf-8") as f:
                         f.write(html_content)
+                    self._write_html_metadata(output_path, target_url, topAgencyName, subAgencyName)
                     fetch_count += 1
             except Exception as e:
                 tqdm.write(f"Error fetching index={target_index}: {e}")
@@ -443,6 +455,90 @@ class DocumentPreparationMixin:
         return html
 
 
+    def _write_html_metadata(self, html_path, target_url, top_agency, sub_agency):
+        """
+        保存済みHTMLごとのメタデータをJSONとして出力する。
+        """
+        from packages.engine.sources import find_source_spec, find_source_spec_from_db
+
+        meta_path = html_path.with_suffix(".meta.json")
+        metadata = {
+            "source_url": target_url,
+            "top_agency_name": top_agency,
+            "sub_agency_name": sub_agency,
+            "page_code": None,
+            "created_at": datetime.now().isoformat(),
+        }
+
+        db_operator = getattr(self, "db_operator", None)
+        spec = None
+        if db_operator:
+            try:
+                spec = find_source_spec_from_db(
+                    db_operator,
+                    source_url=target_url,
+                    top_agency=top_agency,
+                    sub_agency=sub_agency,
+                )
+            except Exception as exc:
+                print(f"[WARN] Failed to resolve SourceSpec from DB for {target_url}: {exc}")
+        if spec is None:
+            spec = find_source_spec(
+                top_agency=top_agency,
+                sub_agency=sub_agency,
+                source_url=target_url,
+            )
+        if spec and spec.page_code:
+            metadata["page_code"] = spec.page_code
+
+        try:
+            meta_path.write_text(json.dumps(metadata, ensure_ascii=False, indent=2), encoding="utf-8")
+        except Exception as exc:
+            print(f"[WARN] Failed to write metadata for {html_path}: {exc}")
+
+
+    def _build_html_metadata_lookup(self, input_list2_path, top_agency_name):
+        lookup = {}
+        if not input_list2_path or not Path(input_list2_path).exists():
+            return lookup
+        try:
+            df = pd.read_csv(input_list2_path, sep="\t")
+        except Exception as exc:
+            print(f"[WARN] Failed to load {input_list2_path}: {exc}")
+            return lookup
+        target_column = "入札公告（現在募集中）2" if "入札公告（現在募集中）2" in df.columns else "入札公告（現在募集中）"
+        for _, row in df.iterrows():
+            try:
+                index_value = int(row["index"])
+            except Exception:
+                continue
+            sub_agency = row.get("Unnamed: 0", "unknown")
+            url = row.get(target_column)
+            if not isinstance(url, str) or not url.startswith("http"):
+                continue
+            filename = f"{index_value:05d}_{top_agency_name}_{sub_agency}.html"
+            lookup[filename] = {
+                "source_url": url,
+                "top_agency_name": top_agency_name,
+                "sub_agency_name": sub_agency,
+            }
+        return lookup
+
+
+    def _ensure_html_metadata(self, html_file, info):
+        meta_path = html_file.with_suffix(".meta.json")
+        if meta_path.exists():
+            return
+        if not info:
+            return
+        self._write_html_metadata(
+            html_file,
+            info.get("source_url"),
+            info.get("top_agency_name", "unknown"),
+            info.get("sub_agency_name", "unknown"),
+        )
+
+
     def _step0_extract_links(self, input_dir_html, output_dir_links):
         """
         HTMLファイルから公告ドキュメントのリンクを抽出
@@ -456,6 +552,8 @@ class DocumentPreparationMixin:
 
         print(f"Found {len(html_files)} HTML files")
 
+        metadata_lookup = getattr(self, "_html_metadata_lookup", {})
+
         with open(output_file, 'w', encoding='utf-8') as out_f:
             out_f.write("target_link\tpre_announcement_id\tannouncement_name\tlink_text\tpdf_link\n")
 
@@ -464,7 +562,10 @@ class DocumentPreparationMixin:
 
             for html_file in tqdm(html_files, desc="Extracting links"):
                 try:
-                    announcements = self._extract_links_from_html(html_file)
+                    if metadata_lookup:
+                        self._ensure_html_metadata(html_file, metadata_lookup.get(html_file.name))
+                    source_spec = self._get_source_spec_for_file(html_file)
+                    announcements = self._extract_links_from_html(html_file, source_spec=source_spec)
 
                     file_links = 0
                     for announcement_id, announcement_name, row_links in announcements:
@@ -485,46 +586,378 @@ class DocumentPreparationMixin:
         return str(output_file)
 
 
-    def _extract_links_from_html(self, html_file_path):
+    def _extract_links_from_html(self, html_file_path, source_spec=None):
         """
         単一のHTMLファイルから公告リンクを抽出
+
+        マトリックス形式(日付×カテゴリ)と通常形式を自動判定し、
+        適切に公告を分離する。
+
+        マトリックス形式の例:
+        | 公告日    | 工事       | 業務    |
+        |-----------|-----------|---------|
+        | R7.3.20   | [A][B]    | [C]     |
+        → 3つの公告に分離: 工事(A,B), 業務(C)
+
+        通常形式の例:
+        | 件名 | 期限 | 資料 |
+        |------|------|------|
+        | 工事A | 3/20 | [pdf] |
+        → 1つの公告: 工事A
         """
         with open(html_file_path, 'r', encoding='utf-8') as f:
             html_content = f.read()
 
-        html_content = re.sub(r'<([^>]+)\n', lambda m: '<' + m.group(1).replace('\n', ' '), html_content)
-
-        tr_pattern = r'<tr[^>]*>(.*?)</tr>'
-        rows = re.findall(tr_pattern, html_content, re.DOTALL | re.IGNORECASE)
+        soup = BeautifulSoup(html_content, "lxml")
 
         announcements = []
         announcement_id = 1
 
-        for row_content in rows:
-            a_pattern = r'<a[^>]*href=["\']([^"\']+)["\'][^>]*>(.*?)</a>'
-            links = re.findall(a_pattern, row_content, re.DOTALL | re.IGNORECASE)
+        table_specs = infer_table_specs(soup, helper=self, source_spec=source_spec)
+        table_announcements = extract_announcements_from_specs(
+            table_specs,
+            helper=self,
+            source_spec=source_spec,
+        )
 
+        for ann_name, links in table_announcements:
+            announcements.append((announcement_id, ann_name, links))
+            announcement_id += 1
+
+        return announcements
+
+
+    def _get_direct_rows(self, table):
+        """
+        テーブルの直接の子要素である<tr>を取得（入れ子テーブルの<tr>を除外）
+
+        <table>
+          <tr>...</tr>  ← これを取得
+          <thead><tr>...</tr></thead>  ← これも取得
+          <tbody>
+            <tr>...</tr>  ← これも取得
+            <tr><td><table><tr>...</tr></table></td></tr>  ← 内側の<tr>は除外
+          </tbody>
+        </table>
+
+        Args:
+            table: BeautifulSoupのTableタグ
+
+        Returns:
+            list: 直接の子要素である<tr>タグのリスト
+        """
+        rows = []
+        # table直下の<tr>を取得
+        for tr in table.find_all('tr'):
+            # この<tr>の親<table>が引数のtableと同じか確認
+            parent_table = tr.find_parent('table')
+            if parent_table == table:
+                rows.append(tr)
+        return rows
+
+
+    def _get_links_in_same_table(self, table, element):
+        """
+        指定要素配下のリンクを取得する。
+        入れ子tableは親table処理時にまとめるのでそのまま取得する。
+        """
+        links = []
+        for link in element.find_all('a', href=True):
+            parent_table = link.find_parent('table')
+            if parent_table == table:
+                links.append(link)
+        return links
+
+
+    def _get_source_spec_for_file(self, html_file_path):
+        from packages.engine.sources import find_source_spec, find_source_spec_from_db
+
+        stem = Path(html_file_path).stem
+        parts = stem.split("_", 2)
+        top_agency = None
+        sub_agency = None
+        if len(parts) >= 3:
+            top_agency = parts[1]
+            sub_agency = parts[2]
+
+        page_code = None
+        source_url = None
+        meta_path = Path(html_file_path).with_suffix(".meta.json")
+        if meta_path.exists():
+            try:
+                metadata = json.loads(meta_path.read_text(encoding="utf-8"))
+                page_code = metadata.get("page_code") or page_code
+                source_url = metadata.get("source_url")
+                top_agency = metadata.get("top_agency_name") or top_agency
+                sub_agency = metadata.get("sub_agency_name") or sub_agency
+            except Exception as exc:
+                print(f"[WARN] Failed to read metadata for {html_file_path}: {exc}")
+
+        prefer_db = bool(int(os.environ.get("SOURCE_SPEC_PREFER_DB", "1") or "1"))
+        db_operator = getattr(self, "db_operator", None)
+
+        if prefer_db and db_operator:
+            try:
+                db_operator.ensure_source_pages_table()
+                spec = find_source_spec_from_db(
+                    db_operator,
+                    page_code=page_code,
+                    top_agency=top_agency,
+                    sub_agency=sub_agency,
+                    source_url=source_url,
+                )
+                if spec:
+                    return spec
+            except Exception as exc:
+                print(f"[WARN] Failed to load SourceSpec from DB: {exc}")
+
+        spec = find_source_spec(
+            top_agency=top_agency,
+            sub_agency=sub_agency,
+            page_code=page_code,
+            source_url=source_url,
+        )
+        if spec:
+            return spec
+        return None
+
+
+    def _find_matrix_header_row(self, rows, source_spec=None):
+        header_keywords = tuple(source_spec.matrix_header_keywords) if source_spec else ()
+        for idx, row in enumerate(rows):
+            headers = row.find_all(['th', 'td'], recursive=False)
+            if len(headers) < 3:
+                continue
+            label = headers[0].get_text(strip=True)
+            normalized = label.replace(' ', '').replace('　', '')
+            if header_keywords:
+                if any(keyword in normalized for keyword in header_keywords):
+                    return idx
+            elif self._looks_like_date_label(label):
+                return idx
+        if source_spec and source_spec.force_matrix and rows:
+            return 0
+        return None
+
+
+    def _is_matrix_table(self, table, source_spec=None):
+        """
+        日付×カテゴリのマトリックス形式かどうかを判定
+
+        判定基準:
+        1. ヘッダー行が存在
+        2. 1列目が日付ラベル(「公告日」「掲載日」など)
+        3. データ行の1列目が日付値
+        4. 2列目以降の複数セルにリンクがある
+
+        Args:
+            table: BeautifulSoupのTableタグ
+
+        Returns:
+            bool: マトリックス形式ならTrue
+        """
+        rows = self._get_direct_rows(table)
+        if len(rows) < 2:
+            return False
+
+        header_row_index = self._find_matrix_header_row(rows, source_spec=source_spec)
+        if header_row_index is None:
+            return False
+        headers = rows[header_row_index].find_all(['th', 'td'], recursive=False)
+        if len(headers) < 3:
+            return False
+
+        data_rows = rows[header_row_index + 1:]
+        if not data_rows:
+            return False
+
+        sample_rows = data_rows if (source_spec and source_spec.force_matrix) else data_rows[: min(20, len(data_rows))]
+
+        date_value_count = 0
+        multi_cell_link_rows = 0
+        multi_link_cells = 0
+
+        for row in sample_rows:
+            cells = row.find_all(['th', 'td'], recursive=False)
+            if len(cells) < 2:
+                continue
+
+            # 1列目が日付値か
+            first_cell_text = cells[0].get_text(strip=True)
+            if self._looks_like_date_value(first_cell_text):
+                date_value_count += 1
+
+            # 2列目以降で、2つ以上のセルにリンクがあるか
+            later_cells = cells[1:]
+            cells_with_links = sum(1 for cell in later_cells if cell.find('a', href=True))
+            if cells_with_links >= 2:
+                multi_cell_link_rows += 1
+            if any(len(cell.find_all('a', href=True)) >= 2 for cell in later_cells):
+                multi_link_cells += 1
+
+        if source_spec and source_spec.force_matrix:
+            return date_value_count >= 1
+
+        if date_value_count >= 1 and (multi_cell_link_rows >= 1 or multi_link_cells >= 1):
+            return True
+        return False
+
+
+    def _looks_like_date_label(self, text):
+        """
+        日付フィールドのラベルっぽいか
+
+        Args:
+            text: セルのテキスト
+
+        Returns:
+            bool: 日付ラベルならTrue
+        """
+        date_labels = ['公告日', '公示日', '掲載日', '発注日', '日付', '年月日', '掲載年月日']
+        normalized = text.replace(' ', '').replace('　', '')
+        return any(label in normalized for label in date_labels)
+
+
+    def _looks_like_date_value(self, text):
+        """
+        日付の値っぽいか
+
+        Args:
+            text: セルのテキスト
+
+        Returns:
+            bool: 日付値ならTrue
+        """
+        if not text or len(text) > 30:
+            return False
+        # 和暦・西暦のパターン
+        date_patterns = [
+            r'令和\d+年',
+            r'平成\d+年',
+            r'R\d+[./-]\d+[./-]\d+',
+            r'H\d+[./-]\d+[./-]\d+',
+            r'\d{4}[./-]\d{1,2}[./-]\d{1,2}',
+            r'\d{1,2}月\d{1,2}日',
+            r'\d{1,2}\.\d{1,2}\.\d{1,2}',  # 7.4.22 などの簡略形式
+            r'\d{1,2}/\d{1,2}/\d{1,2}',    # 7/4/22 などの簡略形式
+        ]
+        return any(re.search(pattern, text) for pattern in date_patterns)
+
+
+    def _extract_matrix_announcements(self, table, source_spec=None):
+        """
+        マトリックス形式テーブルからセル単位で公告を抽出
+
+        構造例:
+        | 公告日    | 工事       | 業務    | 物品    |
+        |-----------|-----------|---------|---------|
+        | R7.3.20   | [A][B]    | [C]     | -       |
+        | R7.3.21   | [D]       | [E][F]  | [G]     |
+
+        抽出結果:
+        - 工事A, 工事B (R7.3.20)
+        - 業務C (R7.3.20)
+        - 工事D (R7.3.21)
+        - 業務E, 業務F (R7.3.21)
+        - 物品G (R7.3.21)
+
+        Args:
+            table: BeautifulSoupのTableタグ
+
+        Returns:
+            list[tuple[str, list[tuple[str, str]]]]: [(announcement_name, [(link_text, href), ...]), ...]
+        """
+        rows = self._get_direct_rows(table)
+        if not rows:
+            return []
+
+        header_row_index = self._find_matrix_header_row(rows, source_spec=source_spec)
+        if header_row_index is None:
+            header_row_index = 0
+
+        headers = rows[header_row_index].find_all(['th', 'td'], recursive=False)
+        header_texts = [h.get_text(strip=True) for h in headers]
+
+        announcements = []
+
+        # データ行を処理
+        for row in rows[header_row_index + 1:]:
+            cells = row.find_all(['th', 'td'], recursive=False)
+            if len(cells) < 2:
+                continue
+
+            # 1列目 = 日付
+            date_text = cells[0].get_text(strip=True)
+
+            # 2列目以降 = 各カテゴリの公告
+            for idx, cell in enumerate(cells[1:], start=1):
+                # セル内のリンクを抽出（親tableと同じ階層のみ）
+                links = self._get_links_in_same_table(table, cell)
+                if not links:
+                    continue
+
+                doc_links = []
+                for link in links:
+                    href = link.get('href', '').strip()
+                    if not href:
+                        continue
+                    # PDF等のファイルのみ対象
+                    if re.search(r'\.(pdf|xlsx?|zip|docx?|txt)$', href, re.IGNORECASE):
+                        link_text = link.get_text(strip=True)
+                        link_text = re.sub(r'\s+', ' ', link_text).strip()
+                        doc_links.append((link_text, href))
+
+                if not doc_links:
+                    continue
+
+                # 公告名を生成
+                category_name = header_texts[idx] if idx < len(header_texts) else "不明"
+
+                # セル内の全リンクテキストを結合して公告名とする
+                all_link_texts = ' '.join([text for text, _ in doc_links])
+                announcement_name = all_link_texts if all_link_texts else doc_links[0][0]
+
+                announcements.append((announcement_name, doc_links))
+
+        return announcements
+
+
+    def _extract_row_announcements(self, table, source_spec=None):
+        """
+        通常形式テーブルから1行=1公告で抽出
+
+        既存ロジックと同じ挙動を維持
+
+        Args:
+            table: BeautifulSoupのTableタグ
+
+        Returns:
+            list[tuple[str, list[tuple[str, str]]]]: [(announcement_name, [(link_text, href), ...]), ...]
+        """
+        announcements = []
+
+        for row in self._get_direct_rows(table):
+            # 行内のリンクを抽出（親tableと同じ階層のみ）
+            links = self._get_links_in_same_table(table, row)
             if not links:
                 continue
 
             doc_links = []
-            for href, link_text in links:
+            for link in links:
+                href = link.get('href', '').strip()
+                if not href:
+                    continue
                 if re.search(r'\.(pdf|xlsx?|zip|docx?|txt)$', href, re.IGNORECASE):
-                    clean_text = re.sub(r'<[^>]+>', '', link_text)
-                    clean_text = re.sub(r'\s+', ' ', clean_text).strip()
-                    doc_links.append((href, clean_text))
+                    link_text = link.get_text(strip=True)
+                    link_text = re.sub(r'\s+', ' ', link_text).strip()
+                    doc_links.append((link_text, href))
 
             if not doc_links:
                 continue
 
-            announcement_name = doc_links[0][1]
-
-            row_links = []
-            for href, link_text in doc_links:
-                row_links.append((link_text, href))
-
-            announcements.append((announcement_id, announcement_name, row_links))
-            announcement_id += 1
+            # 最初のリンクテキストを公告名とする
+            announcement_name = doc_links[0][0]
+            announcements.append((announcement_name, doc_links))
 
         return announcements
 

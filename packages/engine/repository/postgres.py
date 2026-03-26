@@ -240,6 +240,161 @@ class DBOperatorPOSTGRES(DBOperator):
         """
         self.cur.execute(sql)
 
+    def ensure_source_pages_table(self):
+        sql = """
+        CREATE TABLE IF NOT EXISTS source_pages (
+            id TEXT PRIMARY KEY,
+            agency_id TEXT,
+            agency_name TEXT,
+            top_agency_name TEXT,
+            sub_agency_name TEXT,
+            page_code TEXT UNIQUE,
+            page_name TEXT,
+            source_url TEXT,
+            submitted_source_url TEXT,
+            extractor_name TEXT,
+            page_behavior_json TEXT,
+            matrix_header_keywords TEXT,
+            force_matrix BOOLEAN,
+            is_active BOOLEAN,
+            created_at TEXT,
+            updated_at TEXT
+        )
+        """
+        self.cur.execute(sql)
+        self.cur.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_source_pages_code ON source_pages(page_code)")
+
+    def fetch_source_page(self, page_code=None, top_agency=None, sub_agency=None, source_url=None):
+        self.ensure_source_pages_table()
+        normalized_page_code = (page_code or "").strip()
+        if normalized_page_code:
+            sql_query = """
+            SELECT *
+            FROM source_pages
+            WHERE page_code = %s
+            LIMIT 1
+            """
+            self.cur.execute(sql_query, [normalized_page_code])
+            row = self.cur.fetchone()
+            if row:
+                columns = [desc[0] for desc in self.cur.description]
+                return dict(zip(columns, row))
+
+        normalized_source = (source_url or "").strip().rstrip("/")
+        if normalized_source:
+            sql_query = """
+            SELECT *
+            FROM source_pages
+            WHERE TRIM(COALESCE(source_url, '')) = %s
+               OR TRIM(COALESCE(submitted_source_url, '')) = %s
+            LIMIT 1
+            """
+            self.cur.execute(sql_query, [normalized_source, normalized_source])
+            row = self.cur.fetchone()
+            if row:
+                columns = [desc[0] for desc in self.cur.description]
+                return dict(zip(columns, row))
+
+        conditions = []
+        params = []
+
+        normalized_top = (top_agency or "").strip()
+        if normalized_top:
+            conditions.append("top_agency_name = %s")
+            params.append(normalized_top)
+
+        normalized_sub = (sub_agency or "").strip()
+        if normalized_sub:
+            conditions.append("sub_agency_name = %s")
+            params.append(normalized_sub)
+
+        if not conditions:
+            return None
+
+        where_clause = " AND ".join(conditions)
+        sql_query = f"""
+        SELECT *
+        FROM source_pages
+        WHERE (is_active IS NULL OR is_active = TRUE)
+          AND {where_clause}
+        ORDER BY updated_at DESC NULLS LAST, created_at DESC NULLS LAST
+        LIMIT 1
+        """
+        self.cur.execute(sql_query, params)
+        row = self.cur.fetchone()
+        if not row:
+            return None
+        columns = [desc[0] for desc in self.cur.description]
+        return dict(zip(columns, row))
+
+    def sync_source_pages(self, rows):
+        if not rows:
+            return
+        self.ensure_source_pages_table()
+        insert_columns = [
+            "id",
+            "agency_id",
+            "agency_name",
+            "top_agency_name",
+            "sub_agency_name",
+            "page_code",
+            "page_name",
+            "source_url",
+            "submitted_source_url",
+            "extractor_name",
+            "page_behavior_json",
+            "matrix_header_keywords",
+            "force_matrix",
+            "is_active",
+            "created_at",
+            "updated_at",
+        ]
+        values = []
+        for row in rows:
+            values.append(
+                [
+                    row.get("id"),
+                    row.get("agency_id"),
+                    row.get("agency_name"),
+                    row.get("top_agency_name"),
+                    row.get("sub_agency_name"),
+                    row.get("page_code"),
+                    row.get("page_name"),
+                    row.get("source_url"),
+                    row.get("submitted_source_url"),
+                    row.get("extractor_name"),
+                    row.get("page_behavior_json"),
+                    row.get("matrix_header_keywords"),
+                    bool(row.get("force_matrix")),
+                    True if row.get("is_active", True) else False,
+                    row.get("created_at"),
+                    row.get("updated_at"),
+                ]
+            )
+        insert_sql = sql.SQL("""
+            INSERT INTO source_pages (
+                {columns}
+            ) VALUES %s
+            ON CONFLICT (page_code) DO UPDATE SET
+                agency_id = EXCLUDED.agency_id,
+                agency_name = EXCLUDED.agency_name,
+                top_agency_name = EXCLUDED.top_agency_name,
+                sub_agency_name = EXCLUDED.sub_agency_name,
+                page_name = EXCLUDED.page_name,
+                source_url = EXCLUDED.source_url,
+                submitted_source_url = EXCLUDED.submitted_source_url,
+                extractor_name = EXCLUDED.extractor_name,
+                page_behavior_json = EXCLUDED.page_behavior_json,
+                matrix_header_keywords = EXCLUDED.matrix_header_keywords,
+                force_matrix = EXCLUDED.force_matrix,
+                is_active = EXCLUDED.is_active,
+                created_at = EXCLUDED.created_at,
+                updated_at = EXCLUDED.updated_at
+        """).format(
+            columns=sql.SQL(", ").join(sql.Identifier(col) for col in insert_columns)
+        )
+        execute_values(self.cur, insert_sql, values)
+
 
     def createBidRequirements(self, bid_requirements_tablename):
         sql = fr"""

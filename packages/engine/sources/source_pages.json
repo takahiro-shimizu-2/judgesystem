@@ -1,0 +1,36 @@
+[
+  {
+    "name": "mod_internal_procurement",
+    "top_agency": "防衛省",
+    "sub_agency": "内部部局",
+    "page_code": "mod_internal_procurement",
+    "matrix_header_keywords": ["公告日"],
+    "force_matrix": true
+  },
+  {
+    "name": "mod_gsj",
+    "top_agency": "防衛省",
+    "sub_agency": "陸上自衛隊",
+    "page_code": "mod_gsj",
+    "matrix_header_keywords": ["公告日"],
+    "force_matrix": false
+  },
+  {
+    "name": "mod_local_defense_bureau",
+    "top_agency": "防衛省",
+    "sub_agency": "地方防衛局",
+    "page_code": "mod_local_defense_bureau",
+    "matrix_header_keywords": ["公告日", "情報"],
+    "force_matrix": true
+  },
+  {
+    "name": "hokkaido-defense-koukoku06-obihiro",
+    "top_agency": "防衛省",
+    "sub_agency": "地方防衛局",
+    "page_code": "hokkaido-defense-koukoku06-obihiro",
+    "source_url": "https://www.mod.go.jp/rdb/hokkaido/keiyaku/koukoku06_obihiro/index.html",
+    "submitted_source_url": "https://tinyurl.com/2ywyn5a4",
+    "matrix_header_keywords": ["公告日"],
+    "force_matrix": true
+  }
+]

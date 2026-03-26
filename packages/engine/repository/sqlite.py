@@ -1,7 +1,5 @@
 #coding: utf-8
 
-import sqlite3
-
 import pandas as pd
 
 from packages.engine.repository.base import DBOperator, TablenamesConfig
@@ -102,6 +100,152 @@ class DBOperatorSQLITE3(DBOperator):
         )
         """
         self.cur.execute(sql)
+
+    def ensure_source_pages_table(self):
+        sql = """
+        CREATE TABLE IF NOT EXISTS source_pages (
+            id TEXT PRIMARY KEY,
+            agency_id TEXT,
+            agency_name TEXT,
+            top_agency_name TEXT,
+            sub_agency_name TEXT,
+            page_code TEXT UNIQUE,
+            page_name TEXT,
+            source_url TEXT,
+            submitted_source_url TEXT,
+            extractor_name TEXT,
+            page_behavior_json TEXT,
+            matrix_header_keywords TEXT,
+            force_matrix BOOLEAN,
+            is_active BOOLEAN,
+            created_at TEXT,
+            updated_at TEXT
+        )
+        """
+        self.cur.execute(sql)
+        self.cur.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_source_pages_code ON source_pages(page_code)")
+
+    def fetch_source_page(self, page_code=None, top_agency=None, sub_agency=None, source_url=None):
+        self.ensure_source_pages_table()
+        normalized_page_code = (page_code or "").strip()
+        if normalized_page_code:
+            sql = """
+            SELECT *
+            FROM source_pages
+            WHERE page_code = ?
+            LIMIT 1
+            """
+            df = pd.read_sql_query(sql, self.conn, params=[normalized_page_code])
+            if not df.empty:
+                return df.iloc[0].to_dict()
+
+        normalized_source = (source_url or "").strip().rstrip("/")
+        if normalized_source:
+            sql = """
+            SELECT *
+            FROM source_pages
+            WHERE TRIM(COALESCE(source_url, '')) = ?
+               OR TRIM(COALESCE(submitted_source_url, '')) = ?
+            LIMIT 1
+            """
+            df = pd.read_sql_query(sql, self.conn, params=[normalized_source, normalized_source])
+            if not df.empty:
+                return df.iloc[0].to_dict()
+
+        conditions = []
+        params = []
+        normalized_top = (top_agency or "").strip()
+        if normalized_top:
+            conditions.append("top_agency_name = ?")
+            params.append(normalized_top)
+
+        normalized_sub = (sub_agency or "").strip()
+        if normalized_sub:
+            conditions.append("sub_agency_name = ?")
+            params.append(normalized_sub)
+
+        if not conditions:
+            return None
+
+        where_clause = " AND ".join(conditions)
+        sql = f"""
+        SELECT *
+        FROM source_pages
+        WHERE (is_active IS NULL OR is_active = 1)
+          AND {where_clause}
+        ORDER BY updated_at DESC, created_at DESC
+        LIMIT 1
+        """
+        df = pd.read_sql_query(sql, self.conn, params=params)
+        if df.empty:
+            return None
+        return df.iloc[0].to_dict()
+
+    def sync_source_pages(self, rows):
+        if not rows:
+            return
+        self.ensure_source_pages_table()
+        sql = """
+        INSERT INTO source_pages (
+            id,
+            agency_id,
+            agency_name,
+            top_agency_name,
+            sub_agency_name,
+            page_code,
+            page_name,
+            source_url,
+            submitted_source_url,
+            extractor_name,
+            page_behavior_json,
+            matrix_header_keywords,
+            force_matrix,
+            is_active,
+            created_at,
+            updated_at
+        ) VALUES (
+            ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?
+        )
+        ON CONFLICT(page_code) DO UPDATE SET
+            agency_id=excluded.agency_id,
+            agency_name=excluded.agency_name,
+            top_agency_name=excluded.top_agency_name,
+            sub_agency_name=excluded.sub_agency_name,
+            page_name=excluded.page_name,
+            source_url=excluded.source_url,
+            submitted_source_url=excluded.submitted_source_url,
+            extractor_name=excluded.extractor_name,
+            page_behavior_json=excluded.page_behavior_json,
+            matrix_header_keywords=excluded.matrix_header_keywords,
+            force_matrix=excluded.force_matrix,
+            is_active=excluded.is_active,
+            created_at=excluded.created_at,
+            updated_at=excluded.updated_at
+        """
+        params = []
+        for row in rows:
+            params.append(
+                (
+                    row.get("id"),
+                    row.get("agency_id"),
+                    row.get("agency_name"),
+                    row.get("top_agency_name"),
+                    row.get("sub_agency_name"),
+                    row.get("page_code"),
+                    row.get("page_name"),
+                    row.get("source_url"),
+                    row.get("submitted_source_url"),
+                    row.get("extractor_name"),
+                    row.get("page_behavior_json"),
+                    row.get("matrix_header_keywords"),
+                    1 if row.get("force_matrix") else 0,
+                    1 if row.get("is_active", True) else 0,
+                    row.get("created_at"),
+                    row.get("updated_at"),
+                )
+            )
+        self.cur.executemany(sql, params)
+        self.conn.commit()
 
     def createBidAnnouncementsV2(self, bid_announcements_tablename):
         sql = fr"""

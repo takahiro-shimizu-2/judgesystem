@@ -26,6 +26,7 @@ class TablenamesConfig:
     insufficient_requirements: str = "insufficient_requirements"
     office_master: str = "office_master"
     bid_announcements_document_table:str = "announcements_documents_master"
+    source_pages: str = "source_pages"
 
 
 class DBOperator(ABC):
@@ -166,6 +167,27 @@ class DBOperator(ABC):
     def ensure_column(self, tablename, column_name, column_type):
         """
         対象テーブルに指定カラムが無い場合は追加する
+        """
+        raise NotImplementedError
+
+    @abstractmethod
+    def ensure_source_pages_table(self):
+        """
+        source_pages テーブルを作成する（存在しない場合）
+        """
+        raise NotImplementedError
+
+    @abstractmethod
+    def fetch_source_page(self, page_code=None, top_agency=None, sub_agency=None, source_url=None):
+        """
+        SourcePage 定義を取得する
+        """
+        raise NotImplementedError
+
+    @abstractmethod
+    def sync_source_pages(self, rows):
+        """
+        source_pages テーブルを指定データで更新する
         """
         raise NotImplementedError
 

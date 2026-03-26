@@ -1,0 +1,25 @@
+[
+  {
+    "id": "hokkaido-defense-koukoku06-obihiro",
+    "agency_id": "hokkaido-defense-bureau",
+    "agency_name": "北海道防衛局",
+    "top_agency_name": "防衛省",
+    "sub_agency_name": "地方防衛局",
+    "page_code": "hokkaido-defense-koukoku06-obihiro",
+    "page_name": "令和6年度入札公告等（帯広防衛支局）",
+    "source_url": "https://www.mod.go.jp/rdb/hokkaido/keiyaku/koukoku06_obihiro/index.html",
+    "submitted_source_url": "https://tinyurl.com/2ywyn5a4",
+    "extractor_name": "structured_page",
+    "page_behavior_json": {
+      "disappearance_policy": "mark_not_listed",
+      "retention_mode": "keep_history",
+      "title_change_policy": "ignore_title_only",
+      "document_replacement_policy": "keep_both_versions"
+    },
+    "matrix_header_keywords": [
+      "公告日"
+    ],
+    "force_matrix": true,
+    "is_active": true
+  }
+]
