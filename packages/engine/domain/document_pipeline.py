@@ -35,6 +35,7 @@ from packages.engine.domain.notice_structures import (
     merge_field_rules,
     normalize_space,
     slugify_identifier,
+    parse_japanese_date,
 )
 
 
@@ -745,19 +746,29 @@ class DocumentPreparationMixin:
         header_row = None
         data_start_index = 0
         for idx, row in enumerate(rows):
-            if row.find_all('th'):
-                header_row = row
-                data_start_index = idx + 1
-                break
+            th_cells = row.find_all('th', recursive=False)
+            if not th_cells:
+                continue
+
+            first_header_text = normalize_space(th_cells[0].get_text(" ", strip=True))
+            row_cells = row.find_all(['th', 'td'], recursive=False)
+            row_has_data_td = any(cell.name == 'td' for cell in row_cells)
+
+            # Some tables (e.g. 公募ページ) use <th> for the day column while
+            # mixing actual data in the same row. Treat those as data rows.
+            if row_has_data_td and self._looks_like_date_value(first_header_text):
+                continue
+
+            header_row = row
+            data_start_index = idx + 1
+            break
+
         if header_row is None:
-            if len(rows) == 1:
-                cells = rows[0].find_all(['th', 'td'], recursive=False)
-                column_count = len(cells) or 1
-                headers = [f"column_{idx + 1}" for idx in range(column_count)]
-                data_rows = [rows[0]] if rows[0].find_all('td') else []
-                return headers, data_rows
-            header_row = rows[0]
-            data_start_index = 1
+            first_row_cells = rows[0].find_all(['th', 'td'], recursive=False)
+            column_count = len(first_row_cells) or 1
+            headers = [f"column_{idx + 1}" for idx in range(column_count)]
+            data_rows = [row for row in rows if row.find_all('td')]
+            return headers, data_rows
         headers = [
             normalize_space(cell.get_text(" ", strip=True))
             for cell in header_row.find_all(['th', 'td'], recursive=False)
@@ -853,6 +864,18 @@ class DocumentPreparationMixin:
         if spec:
             return spec
         return None
+
+
+    def _get_structured_page_override(self, source_spec):
+        if not source_spec:
+            return {}
+        behavior = getattr(source_spec, "page_behavior_json", None)
+        if not isinstance(behavior, dict):
+            return {}
+        override = behavior.get("structured_page_override")
+        if isinstance(override, dict):
+            return override
+        return {}
 
 
     def _find_matrix_header_row(self, rows, source_spec=None):
@@ -963,6 +986,13 @@ class DocumentPreparationMixin:
         """
         if not text or len(text) > 30:
             return False
+
+        normalized = normalize_space(text)
+        if parse_japanese_date(normalized):
+            return True
+
+        text = normalized
+
         # 和暦・西暦のパターン
         date_patterns = [
             r'令和\d+年',
@@ -971,10 +1001,11 @@ class DocumentPreparationMixin:
             r'H\d+[./-]\d+[./-]\d+',
             r'\d{4}[./-]\d{1,2}[./-]\d{1,2}',
             r'\d{1,2}月\d{1,2}日',
+            r'\d{1,2}日',
             r'\d{1,2}\.\d{1,2}\.\d{1,2}',  # 7.4.22 などの簡略形式
             r'\d{1,2}/\d{1,2}/\d{1,2}',    # 7/4/22 などの簡略形式
         ]
-        return any(re.search(pattern, text) for pattern in date_patterns)
+        return any(re.fullmatch(pattern, text) for pattern in date_patterns)
 
 
     def _extract_matrix_announcements(
@@ -1101,6 +1132,9 @@ class DocumentPreparationMixin:
 
         effective_rules = field_rules or DEFAULT_FIELD_RULES
 
+        override_settings = self._get_structured_page_override(source_spec)
+        split_by_list_items = bool(override_settings.get("split_by_list_items"))
+
         for row in data_rows:
             cells = row.find_all(['th', 'td'], recursive=False)
             if not cells:
@@ -1135,6 +1169,27 @@ class DocumentPreparationMixin:
             location = pick_field(fields, effective_rules.get("location_labels", []))
             category = infer_category_from_fields(fields, fallback=heading_text)
             procurement_method = infer_procurement_method(fields, fallback=category)
+            category_code = slugify_identifier(category)
+
+            if split_by_list_items:
+                li_based_notices = self._extract_li_based_announcements(
+                    row=row,
+                    table=table,
+                    fields=fields,
+                    base_url=base_url,
+                    effective_rules=effective_rules,
+                    announced_at=announced_at,
+                    deadline=deadline,
+                    open_at=open_at,
+                    location=location,
+                    category=category,
+                    category_code=category_code,
+                    procurement_method=procurement_method,
+                )
+                if li_based_notices:
+                    announcements.extend(li_based_notices)
+                    continue
+
             title = infer_notice_title(fields, effective_rules, documents) or documents[0].label
             normalized_title = normalize_space(title)
 
@@ -1143,7 +1198,7 @@ class DocumentPreparationMixin:
                     title=title,
                     normalized_title=normalized_title,
                     category_name=category,
-                    category_code=slugify_identifier(category),
+                    category_code=category_code,
                     procurement_method=procurement_method,
                     announced_at=announced_at,
                     deadline=deadline,
@@ -1156,6 +1211,71 @@ class DocumentPreparationMixin:
             )
 
         return announcements
+
+
+    def _extract_li_based_announcements(
+        self,
+        *,
+        row,
+        table,
+        fields,
+        base_url,
+        effective_rules,
+        announced_at,
+        deadline,
+        open_at,
+        location,
+        category,
+        category_code,
+        procurement_method,
+    ):
+        li_elements = row.find_all('li')
+        if not li_elements:
+            return []
+
+        li_entries = []
+        for li in li_elements:
+            docs = self._build_notice_documents(
+                table,
+                li,
+                base_url=base_url,
+                source_label=None,
+            )
+            if docs:
+                li_entries.append((li, docs))
+
+        # 分割対象は同一セル内に複数公告があるケースのみ
+        if len(li_entries) < 2:
+            return []
+
+        notices: list[StructuredNotice] = []
+        for li, docs in li_entries:
+            li_text = normalize_space(li.get_text(" ", strip=True))
+            entry_fields = dict(fields)
+            if li_text:
+                entry_fields["list_entry"] = li_text
+
+            title = infer_notice_title(entry_fields, effective_rules, docs) or li_text or docs[0].label
+            normalized_title = normalize_space(title)
+
+            notices.append(
+                StructuredNotice(
+                    title=title,
+                    normalized_title=normalized_title,
+                    category_name=category,
+                    category_code=category_code,
+                    procurement_method=procurement_method,
+                    announced_at=announced_at,
+                    deadline=deadline,
+                    open_at=open_at,
+                    location=location,
+                    fields=entry_fields,
+                    documents=docs,
+                    raw_html=str(li),
+                )
+            )
+
+        return notices
 
 
     def _step0_format_documents(

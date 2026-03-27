@@ -101,3 +101,43 @@ def test_extract_row_announcements_single_row_without_headers(tmp_path):
     assert len(announcements) == 1
     assert announcements[0].title == "単独資料"
     assert [doc.label for doc in announcements[0].documents] == ["単独資料"]
+
+
+def test_extract_row_announcements_split_by_list_items(tmp_path):
+    html = """
+    <html>
+      <body>
+        <table>
+          <tr>
+            <th>18日</th>
+            <td>
+              <ul>
+                <li><a href="2025/0205a.pdf">発注者支援データベースシステム等の提供業務</a></li>
+                <li><a href="2025/0205b.pdf">公共建築設計者情報システムの提供業務</a></li>
+              </ul>
+            </td>
+          </tr>
+        </table>
+      </body>
+    </html>
+    """
+    html_path = _write_html(tmp_path, "koubo.html", html)
+    mixin = DummyDocumentPreparation()
+    spec = SourceSpec(
+        name="mod_naikyoku_koubo",
+        page_behavior_json={
+            "structured_page_override": {
+                "split_by_list_items": True,
+            }
+        },
+    )
+
+    notices = mixin._extract_links_from_html(html_path, source_spec=spec)
+    assert len(notices) == 2
+    titles = sorted(notice.title for notice in notices)
+    assert titles == [
+        "公共建築設計者情報システムの提供業務",
+        "発注者支援データベースシステム等の提供業務",
+    ]
+    pdfs = sorted(doc.href for notice in notices for doc in notice.documents)
+    assert pdfs == ["2025/0205a.pdf", "2025/0205b.pdf"]

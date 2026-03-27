@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
+from datetime import date
 from typing import Dict, List, Optional
 
 DEFAULT_FIELD_RULES = {
@@ -60,6 +61,7 @@ PROCUREMENT_FIELD_KEYWORDS = (
     "オープンカウンター",
 )
 TITLE_HINT_TOKENS = ("件名", "内容")
+ZENKAKU_TRANSLATION = str.maketrans("０１２３４５６７８９／．－", "0123456789/.-")
 
 
 @dataclass(slots=True)
@@ -194,4 +196,56 @@ def infer_notice_title(fields: Dict[str, str], field_rules: Dict[str, List[str]]
                 return cleaned
     if docs:
         return docs[0].label
+    return None
+
+
+def parse_japanese_date(text: Optional[str]) -> Optional[date]:
+    """Parse Japanese-style dates (和暦や略記) used in MOD pages."""
+    if not text:
+        return None
+
+    value = normalize_space(text)
+    value = value.translate(ZENKAKU_TRANSLATION)
+    value = value.replace("／", "/").replace("．", ".").replace("－", "-")
+    value = value.replace("元年", "1年")
+
+    patterns = [
+        (r"^(\d{4})[./-](\d{1,2})[./-](\d{1,2})$", None),
+        (r"^(\d{4})年(\d{1,2})月(\d{1,2})日$", None),
+        (r"^(?:令和|R|Ｒ)\s*(\d{1,2})\s*[./年]\s*(\d{1,2})\s*[./月]\s*(\d{1,2})日?$", "reiwa"),
+        (r"^(?:平成|H|Ｈ)\s*(\d{1,2})\s*[./年]\s*(\d{1,2})\s*[./月]\s*(\d{1,2})日?$", "heisei"),
+    ]
+    for pattern, era_kind in patterns:
+        match = re.search(pattern, value)
+        if not match:
+            continue
+        year = int(match.group(1))
+        month = int(match.group(2))
+        day = int(match.group(3))
+        if era_kind == "reiwa":
+            year += 2018
+        elif era_kind == "heisei":
+            year += 1988
+        try:
+            return date(year, month, day)
+        except ValueError:
+            return None
+
+    compact = re.search(r"^(?:令和|R|Ｒ)\s*(\d{1,2})\.(\d{1,2})\.(\d{1,2})$", value)
+    if compact:
+        try:
+            return date(int(compact.group(1)) + 2018, int(compact.group(2)), int(compact.group(3)))
+        except ValueError:
+            return None
+
+    shorthand = re.search(r"^(\d{1,2})[./](\d{1,2})[./](\d{1,2})$", value)
+    if shorthand:
+        try:
+            year = int(shorthand.group(1))
+            month = int(shorthand.group(2))
+            day = int(shorthand.group(3))
+            if 1 <= year <= 31:
+                return date(year + 2018, month, day)
+        except ValueError:
+            return None
     return None
