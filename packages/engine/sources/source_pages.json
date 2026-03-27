@@ -32,5 +32,26 @@
     "submitted_source_url": "https://tinyurl.com/2ywyn5a4",
     "matrix_header_keywords": ["公告日"],
     "force_matrix": true
+  },
+  {
+    "name": "mod_naikyoku_mitsumori",
+    "top_agency": "防衛省",
+    "sub_agency": "内部部局",
+    "page_code": "mod_naikyoku_mitsumori",
+    "source_url": "https://www.mod.go.jp/j/budget/chotatsu/naikyoku/mitsumori/index.html",
+    "matrix_header_keywords": ["公告日", "工事", "役務", "物品", "オープンカウンター"],
+    "force_matrix": false,
+    "page_behavior_json": {
+      "structured_page_override": {
+        "field_rules": {
+          "title_labels": ["件名", "業務名", "工事名", "案件名"],
+          "announced_at_labels": ["公告日", "掲載日"],
+          "deadline_labels": ["提出期限", "申請期限", "参加表明書提出期限"],
+          "open_at_labels": ["開札日", "見積書提出日"],
+          "location_labels": ["場所", "履行場所", "納入場所"],
+          "noise_selectors": [".pdfsize", ".file-size"]
+        }
+      }
+    }
   }
 ]

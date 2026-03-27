@@ -10,6 +10,7 @@ import os
 import re
 import csv
 import time
+import shutil
 from datetime import datetime
 from pathlib import Path, PurePosixPath
 from urllib.parse import urlparse, urljoin
@@ -21,10 +22,23 @@ from tqdm import tqdm
 from bs4 import BeautifulSoup, Comment
 from ftfy.badness import badness
 
-from packages.engine.domain.structured_page import (
-    extract_announcements_from_specs,
-    infer_table_specs,
+from packages.engine.domain.structured_page import infer_table_specs
+from packages.engine.domain.notice_structures import (
+    StructuredNotice,
+    NoticeDocument,
+    DEFAULT_FIELD_RULES,
+    clean_document_label,
+    infer_category_from_fields,
+    infer_notice_title,
+    infer_procurement_method,
+    pick_field,
+    merge_field_rules,
+    normalize_space,
+    slugify_identifier,
 )
+
+
+FILE_LINK_PATTERN = re.compile(r'\.(pdf|xlsx?|csv|zip|docx?|txt)$', re.IGNORECASE)
 
 
 class DocumentPreparationMixin:
@@ -143,7 +157,20 @@ class DocumentPreparationMixin:
 
         # 1. HTML取得処理
         input_list2_file = output_dir_html_list / "input_list_converted.txt"
-        if do_fetch_html:
+        provided_input_list = Path(input_list_file)
+        provided_is_converted = provided_input_list.name == "input_list_converted.txt"
+
+        if provided_is_converted:
+            if not provided_input_list.exists():
+                raise FileNotFoundError(f"Provided converted file not found: {provided_input_list}")
+            if provided_input_list.resolve() != input_list2_file.resolve():
+                shutil.copy2(provided_input_list, input_list2_file)
+                source_html = provided_input_list.with_suffix(".html")
+                if source_html.exists():
+                    shutil.copy2(source_html, input_list2_file.with_suffix(".html"))
+            print(f"\n[Info] Using pre-converted input list: {provided_input_list}")
+            input_list2_path = str(input_list2_file)
+        elif do_fetch_html:
             if input_list2_file.exists():
                 print(f"\n[Skipped] Fetching HTML pages (do_fetch_html=True but reuse existing {input_list2_file})")
                 input_list2_path = str(input_list2_file)
@@ -370,7 +397,7 @@ class DocumentPreparationMixin:
                 skip_count += 1
                 continue
 
-            time.sleep(1)
+            time.sleep(0.15)
 
             try:
                 html_content = self._fetch_html_content(target_url)
@@ -554,23 +581,66 @@ class DocumentPreparationMixin:
 
         metadata_lookup = getattr(self, "_html_metadata_lookup", {})
 
+        def _sanitize(value):
+            if value is None:
+                return ""
+            if isinstance(value, str):
+                return value.replace("\t", " ").replace("\r", " ").replace("\n", " ").strip()
+            return str(value)
+
         with open(output_file, 'w', encoding='utf-8') as out_f:
-            out_f.write("target_link\tpre_announcement_id\tannouncement_name\tlink_text\tpdf_link\n")
+            out_f.write(
+                "target_link\tpre_announcement_id\tannouncement_name\tlink_text\tpdf_link\t"
+                "notice_category_name\tnotice_category_code\tnotice_procurement_method\t"
+                "notice_announced_at\tnotice_deadline\tnotice_open_at\tnotice_location\t"
+                "notice_normalized_title\tnotice_fields_json\n"
+            )
 
             total_announcements = 0
             total_links = 0
 
             for html_file in tqdm(html_files, desc="Extracting links"):
                 try:
+                    file_metadata = metadata_lookup.get(html_file.name, {})
                     if metadata_lookup:
-                        self._ensure_html_metadata(html_file, metadata_lookup.get(html_file.name))
+                        self._ensure_html_metadata(html_file, file_metadata)
                     source_spec = self._get_source_spec_for_file(html_file)
-                    announcements = self._extract_links_from_html(html_file, source_spec=source_spec)
+                    announcements = self._extract_links_from_html(
+                        html_file,
+                        source_spec=source_spec,
+                        base_url=file_metadata.get("source_url"),
+                    )
 
                     file_links = 0
-                    for announcement_id, announcement_name, row_links in announcements:
-                        for link_text, pdf_link in row_links:
-                            out_f.write(f"{html_file.name}\t{announcement_id}\t{announcement_name}\t{link_text}\t{pdf_link}\n")
+                    for announcement_id, notice in enumerate(announcements, start=1):
+                        if not notice.documents:
+                            continue
+                        fields_json = json.dumps(
+                            notice.fields or {},
+                            ensure_ascii=False,
+                            sort_keys=True,
+                        )
+                        base_values = [
+                            html_file.name,
+                            announcement_id,
+                            notice.title or "",
+                            None,
+                            None,
+                            notice.category_name or "",
+                            notice.category_code or "",
+                            notice.procurement_method or "",
+                            notice.announced_at or "",
+                            notice.deadline or "",
+                            notice.open_at or "",
+                            notice.location or "",
+                            notice.normalized_title or "",
+                            fields_json,
+                        ]
+                        for doc in notice.documents:
+                            row_values = base_values.copy()
+                            row_values[3] = doc.label
+                            row_values[4] = doc.href
+                            out_f.write("\t".join(_sanitize(value) for value in row_values) + "\n")
                             file_links += 1
 
                     total_announcements += len(announcements)
@@ -586,7 +656,7 @@ class DocumentPreparationMixin:
         return str(output_file)
 
 
-    def _extract_links_from_html(self, html_file_path, source_spec=None):
+    def _extract_links_from_html(self, html_file_path, source_spec=None, base_url=None):
         """
         単一のHTMLファイルから公告リンクを抽出
 
@@ -610,21 +680,33 @@ class DocumentPreparationMixin:
 
         soup = BeautifulSoup(html_content, "lxml")
 
-        announcements = []
-        announcement_id = 1
-
-        table_specs = infer_table_specs(soup, helper=self, source_spec=source_spec)
-        table_announcements = extract_announcements_from_specs(
-            table_specs,
-            helper=self,
-            source_spec=source_spec,
+        notices: list[StructuredNotice] = []
+        field_rules = merge_field_rules(
+            DEFAULT_FIELD_RULES,
+            getattr(source_spec, "field_rules", None),
         )
 
-        for ann_name, links in table_announcements:
-            announcements.append((announcement_id, ann_name, links))
-            announcement_id += 1
+        table_specs = infer_table_specs(soup, helper=self, source_spec=source_spec)
+        for spec in table_specs:
+            if spec.pattern == "matrix":
+                table_notices = self._extract_matrix_announcements(
+                    spec.table,
+                    source_spec=source_spec,
+                    base_url=base_url,
+                    heading_text=spec.heading_text,
+                    field_rules=field_rules,
+                )
+            else:
+                table_notices = self._extract_row_announcements(
+                    spec.table,
+                    source_spec=source_spec,
+                    base_url=base_url,
+                    heading_text=spec.heading_text,
+                    field_rules=field_rules,
+                )
+            notices.extend(table_notices)
 
-        return announcements
+        return notices
 
 
     def _get_direct_rows(self, table):
@@ -656,6 +738,37 @@ class DocumentPreparationMixin:
         return rows
 
 
+    def _resolve_row_table_structure(self, table):
+        rows = self._get_direct_rows(table)
+        if not rows:
+            return [], []
+        header_row = None
+        data_start_index = 0
+        for idx, row in enumerate(rows):
+            if row.find_all('th'):
+                header_row = row
+                data_start_index = idx + 1
+                break
+        if header_row is None:
+            if len(rows) == 1:
+                cells = rows[0].find_all(['th', 'td'], recursive=False)
+                column_count = len(cells) or 1
+                headers = [f"column_{idx + 1}" for idx in range(column_count)]
+                data_rows = [rows[0]] if rows[0].find_all('td') else []
+                return headers, data_rows
+            header_row = rows[0]
+            data_start_index = 1
+        headers = [
+            normalize_space(cell.get_text(" ", strip=True))
+            for cell in header_row.find_all(['th', 'td'], recursive=False)
+        ]
+        data_rows = [
+            row for row in rows[data_start_index:]
+            if row.find_all('td')
+        ]
+        return headers, data_rows
+
+
     def _get_links_in_same_table(self, table, element):
         """
         指定要素配下のリンクを取得する。
@@ -667,6 +780,26 @@ class DocumentPreparationMixin:
             if parent_table == table:
                 links.append(link)
         return links
+
+
+    def _build_notice_documents(self, table, element, *, base_url=None, source_label=None):
+        docs: list[NoticeDocument] = []
+        for link in self._get_links_in_same_table(table, element):
+            href = link.get('href', '').strip()
+            if not href or not FILE_LINK_PATTERN.search(href):
+                continue
+            label = clean_document_label(link.get_text(" ", strip=True))
+            if not label:
+                label = clean_document_label(element.get_text(" ", strip=True))
+            full_url = urljoin(base_url, href) if base_url else href
+            docs.append(
+                NoticeDocument(
+                    label=label or href,
+                    href=full_url,
+                    source_label=source_label,
+                )
+            )
+        return docs
 
 
     def _get_source_spec_for_file(self, html_file_path):
@@ -844,7 +977,15 @@ class DocumentPreparationMixin:
         return any(re.search(pattern, text) for pattern in date_patterns)
 
 
-    def _extract_matrix_announcements(self, table, source_spec=None):
+    def _extract_matrix_announcements(
+        self,
+        table,
+        *,
+        source_spec=None,
+        base_url=None,
+        heading_text=None,
+        field_rules=None,
+    ):
         """
         マトリックス形式テーブルからセル単位で公告を抽出
 
@@ -878,51 +1019,70 @@ class DocumentPreparationMixin:
         headers = rows[header_row_index].find_all(['th', 'td'], recursive=False)
         header_texts = [h.get_text(strip=True) for h in headers]
 
-        announcements = []
+        announcements: list[StructuredNotice] = []
+        effective_rules = field_rules or DEFAULT_FIELD_RULES
 
-        # データ行を処理
         for row in rows[header_row_index + 1:]:
             cells = row.find_all(['th', 'td'], recursive=False)
             if len(cells) < 2:
                 continue
 
-            # 1列目 = 日付
-            date_text = cells[0].get_text(strip=True)
+            date_text = normalize_space(cells[0].get_text(" ", strip=True))
 
-            # 2列目以降 = 各カテゴリの公告
             for idx, cell in enumerate(cells[1:], start=1):
-                # セル内のリンクを抽出（親tableと同じ階層のみ）
-                links = self._get_links_in_same_table(table, cell)
-                if not links:
+                docs = self._build_notice_documents(
+                    table,
+                    cell,
+                    base_url=base_url,
+                    source_label=header_texts[idx] if idx < len(header_texts) else heading_text,
+                )
+                if not docs:
                     continue
 
-                doc_links = []
-                for link in links:
-                    href = link.get('href', '').strip()
-                    if not href:
-                        continue
-                    # PDF等のファイルのみ対象
-                    if re.search(r'\.(pdf|xlsx?|zip|docx?|txt)$', href, re.IGNORECASE):
-                        link_text = link.get_text(strip=True)
-                        link_text = re.sub(r'\s+', ' ', link_text).strip()
-                        doc_links.append((link_text, href))
+                category_name = header_texts[idx] if idx < len(header_texts) else heading_text or "不明"
+                category_name = normalize_space(category_name)
+                fields = {
+                    "category": category_name,
+                    "announced_at": date_text,
+                }
+                inferred_category = infer_category_from_fields(fields, fallback=category_name or heading_text)
+                procurement_method = infer_procurement_method(fields, fallback=category_name)
+                inferred_title = infer_notice_title(fields, effective_rules, docs)
+                combined_doc_labels = " ".join(doc.label for doc in docs if doc.label)
+                if len(docs) > 1 and (not inferred_title or inferred_title == docs[0].label):
+                    inferred_title = combined_doc_labels or inferred_title
+                title = inferred_title or combined_doc_labels or category_name or docs[0].label
+                normalized_title = normalize_space(title)
 
-                if not doc_links:
-                    continue
-
-                # 公告名を生成
-                category_name = header_texts[idx] if idx < len(header_texts) else "不明"
-
-                # セル内の全リンクテキストを結合して公告名とする
-                all_link_texts = ' '.join([text for text, _ in doc_links])
-                announcement_name = all_link_texts if all_link_texts else doc_links[0][0]
-
-                announcements.append((announcement_name, doc_links))
+                announcements.append(
+                    StructuredNotice(
+                        title=title,
+                        normalized_title=normalized_title,
+                        category_name=inferred_category,
+                        category_code=slugify_identifier(inferred_category),
+                        procurement_method=procurement_method,
+                        announced_at=date_text or None,
+                        deadline=None,
+                        open_at=None,
+                        location=None,
+                        fields=fields,
+                        documents=docs,
+                        raw_html=str(cell),
+                    )
+                )
 
         return announcements
 
 
-    def _extract_row_announcements(self, table, source_spec=None):
+    def _extract_row_announcements(
+        self,
+        table,
+        *,
+        source_spec=None,
+        base_url=None,
+        heading_text=None,
+        field_rules=None,
+    ):
         """
         通常形式テーブルから1行=1公告で抽出
 
@@ -934,30 +1094,66 @@ class DocumentPreparationMixin:
         Returns:
             list[tuple[str, list[tuple[str, str]]]]: [(announcement_name, [(link_text, href), ...]), ...]
         """
-        announcements = []
+        announcements: list[StructuredNotice] = []
+        headers, data_rows = self._resolve_row_table_structure(table)
+        if not headers or not data_rows:
+            return announcements
 
-        for row in self._get_direct_rows(table):
-            # 行内のリンクを抽出（親tableと同じ階層のみ）
-            links = self._get_links_in_same_table(table, row)
-            if not links:
+        effective_rules = field_rules or DEFAULT_FIELD_RULES
+
+        for row in data_rows:
+            cells = row.find_all(['th', 'td'], recursive=False)
+            if not cells:
                 continue
 
-            doc_links = []
-            for link in links:
-                href = link.get('href', '').strip()
-                if not href:
-                    continue
-                if re.search(r'\.(pdf|xlsx?|zip|docx?|txt)$', href, re.IGNORECASE):
-                    link_text = link.get_text(strip=True)
-                    link_text = re.sub(r'\s+', ' ', link_text).strip()
-                    doc_links.append((link_text, href))
+            normalized_cells = cells[:len(headers)]
+            fields: dict[str, str] = {}
+            for idx, (header, cell) in enumerate(zip(headers, normalized_cells)):
+                header_label = header or f"column_{idx+1}"
+                value = normalize_space(cell.get_text(" ", strip=True))
+                if value:
+                    fields[header_label] = value
+            if heading_text:
+                fields.setdefault("section_heading", normalize_space(heading_text))
 
-            if not doc_links:
+            documents: list[NoticeDocument] = []
+            for header, cell in zip(headers, normalized_cells):
+                documents.extend(
+                    self._build_notice_documents(
+                        table,
+                        cell,
+                        base_url=base_url,
+                        source_label=header,
+                    )
+                )
+            if not documents:
                 continue
 
-            # 最初のリンクテキストを公告名とする
-            announcement_name = doc_links[0][0]
-            announcements.append((announcement_name, doc_links))
+            announced_at = pick_field(fields, effective_rules.get("announced_at_labels", []))
+            deadline = pick_field(fields, effective_rules.get("deadline_labels", []))
+            open_at = pick_field(fields, effective_rules.get("open_at_labels", []))
+            location = pick_field(fields, effective_rules.get("location_labels", []))
+            category = infer_category_from_fields(fields, fallback=heading_text)
+            procurement_method = infer_procurement_method(fields, fallback=category)
+            title = infer_notice_title(fields, effective_rules, documents) or documents[0].label
+            normalized_title = normalize_space(title)
+
+            announcements.append(
+                StructuredNotice(
+                    title=title,
+                    normalized_title=normalized_title,
+                    category_name=category,
+                    category_code=slugify_identifier(category),
+                    procurement_method=procurement_method,
+                    announced_at=announced_at,
+                    deadline=deadline,
+                    open_at=open_at,
+                    location=location,
+                    fields=fields,
+                    documents=documents,
+                    raw_html=str(row),
+                )
+            )
 
         return announcements
 
@@ -982,6 +1178,20 @@ class DocumentPreparationMixin:
         print(f"[DEBUG] Loaded {len(df1)} rows from input_list_converted.txt")
         print(f"[DEBUG] df1 columns: {df1.columns.tolist()}")
         print(f"[DEBUG] Loaded {len(df2)} rows from announcements_links.txt")
+        metadata_columns = [
+            "notice_category_name",
+            "notice_category_code",
+            "notice_procurement_method",
+            "notice_announced_at",
+            "notice_deadline",
+            "notice_open_at",
+            "notice_location",
+            "notice_normalized_title",
+            "notice_fields_json",
+        ]
+        for column in metadata_columns:
+            if column not in df2.columns:
+                df2[column] = None
 
         df2["announcement_name"] = df2["announcement_name"].str.replace('"', '', regex=False)
         df2["link_text"] = df2["link_text"].str.replace('"', '', regex=False)
@@ -1085,6 +1295,11 @@ class DocumentPreparationMixin:
             "done": [False] * df_merged.shape[0],
             "is_ocr_failed": [False] * df_merged.shape[0]
         })
+        for column in metadata_columns:
+            if column in df_merged.columns:
+                df_new[column] = df_merged[column]
+            else:
+                df_new[column] = None
 
         df_new["_sort_fileformat"] = df_new["fileFormat"].apply(lambda x: 0 if x == "pdf" else 1)
         df_new.sort_values(["announcement_id", "_sort_fileformat", "document_id"], inplace=True)
@@ -1218,6 +1433,18 @@ class DocumentPreparationMixin:
         else:
             self.db_operator.ensure_column(tablename, "ocr_json_path", text_column_type)
             self.db_operator.ensure_column(tablename, "file_404_flag", bool_column_type)
+            for column in [
+                "notice_category_name",
+                "notice_category_code",
+                "notice_procurement_method",
+                "notice_announced_at",
+                "notice_deadline",
+                "notice_open_at",
+                "notice_location",
+                "notice_normalized_title",
+                "notice_fields_json",
+            ]:
+                self.db_operator.ensure_column(tablename, column, text_column_type)
             print(f"Merging {len(df)} records into existing table: {tablename}")
             tmp_table = f"tmp_{tablename}_final"
             self.db_operator.uploadDataToTable(df, tmp_table, chunksize=5000)

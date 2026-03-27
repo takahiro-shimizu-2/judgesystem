@@ -42,9 +42,12 @@ def test_extract_matrix_announcements(tmp_path):
 
     announcements = mixin._extract_links_from_html(html_path, source_spec=spec)
     assert len(announcements) == 2
-    titles = sorted(title for title, _ in announcements)
+    titles = sorted(notice.title for notice in announcements)
     assert titles == ["工事A 工事B", "役務A"]
-    doc_sets = [sorted(doc[0] for doc in links) for _, links in announcements]
+    doc_sets = [
+        sorted(doc.label for doc in notice.documents)
+        for notice in announcements
+    ]
     assert sorted(doc_sets) == [["工事A", "工事B"], ["役務A"]]
 
 
@@ -75,5 +78,26 @@ def test_extract_row_announcements_with_nested_tables(tmp_path):
     mixin = DummyDocumentPreparation()
 
     announcements = mixin._extract_links_from_html(html_path, source_spec=None)
-    titles = [title for title, _ in announcements]
+    titles = [notice.title for notice in announcements]
     assert titles == ["内側資料", "外側公告"]
+
+
+def test_extract_row_announcements_single_row_without_headers(tmp_path):
+    html = """
+    <html>
+      <body>
+        <table>
+          <tr>
+            <td><a href="single.pdf">単独資料</a></td>
+          </tr>
+        </table>
+      </body>
+    </html>
+    """
+    html_path = _write_html(tmp_path, "single_row.html", html)
+    mixin = DummyDocumentPreparation()
+
+    announcements = mixin._extract_links_from_html(html_path, source_spec=None)
+    assert len(announcements) == 1
+    assert announcements[0].title == "単独資料"
+    assert [doc.label for doc in announcements[0].documents] == ["単独資料"]

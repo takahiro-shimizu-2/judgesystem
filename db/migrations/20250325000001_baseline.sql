@@ -77,7 +77,16 @@ CREATE TABLE IF NOT EXISTS announcements_documents_master (
   "pageCount" INTEGER,
   "extractedAt" TEXT,
   document_url TEXT,
-  ocr_text TEXT
+  ocr_text TEXT,
+  notice_category_name TEXT,
+  notice_category_code TEXT,
+  notice_procurement_method TEXT,
+  notice_announced_at TEXT,
+  notice_deadline TEXT,
+  notice_open_at TEXT,
+  notice_location TEXT,
+  notice_normalized_title TEXT,
+  notice_fields_json TEXT
 );
 
 -- announcements_estimated_amounts

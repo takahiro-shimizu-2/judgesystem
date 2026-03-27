@@ -1,5 +1,5 @@
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from functools import lru_cache
 from pathlib import Path
 from typing import Optional, Sequence
@@ -15,6 +15,8 @@ class SourceSpec:
     force_matrix: bool = False
     source_url: Optional[str] = None
     submitted_source_url: Optional[str] = None
+    page_behavior_json: dict = field(default_factory=dict)
+    field_rules: dict = field(default_factory=dict)
 
 
 BUILTIN_SOURCE_SPECS: tuple[SourceSpec, ...] = (
@@ -38,6 +40,33 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 SOURCE_SPEC_GENERATED_FILE = REPO_ROOT / "config" / "source_pages.generated.json"
 
 
+def _parse_page_behavior(value):
+    if isinstance(value, dict):
+        return value
+    if isinstance(value, str) and value.strip():
+        try:
+            return json.loads(value)
+        except Exception:
+            return {}
+    return {}
+
+
+def _extract_field_rules_from_behavior(behavior):
+    if not behavior:
+        return {}
+    override = behavior.get("structured_page_override") or {}
+    field_rules = override.get("field_rules")
+    if not isinstance(field_rules, dict):
+        return {}
+    result = {}
+    for key, values in field_rules.items():
+        if not isinstance(values, list):
+            continue
+        cleaned = [str(value) for value in values if str(value).strip()]
+        result[key] = cleaned
+    return result
+
+
 def _load_source_specs_from_file(path: Path):
     if not path.exists():
         return []
@@ -49,6 +78,7 @@ def _load_source_specs_from_file(path: Path):
     for index, row in enumerate(payload, start=1):
         if not isinstance(row, dict):
             continue
+        behavior = _parse_page_behavior(row.get("page_behavior_json"))
         specs.append(
             SourceSpec(
                 name=str(row.get("name") or f"source_{index}"),
@@ -59,6 +89,8 @@ def _load_source_specs_from_file(path: Path):
                 force_matrix=bool(row.get("force_matrix")),
                 source_url=row.get("source_url"),
                 submitted_source_url=row.get("submitted_source_url"),
+                page_behavior_json=behavior,
+                field_rules=_extract_field_rules_from_behavior(behavior),
             )
         )
     return specs
@@ -148,6 +180,7 @@ def _parse_matrix_keywords(raw_value: Optional[str]):
 
 
 def _spec_from_record(record: dict) -> SourceSpec:
+    behavior_json = _parse_page_behavior(record.get("page_behavior_json"))
     return SourceSpec(
         name=str(record.get("page_code") or record.get("page_name") or record.get("id") or "source_page"),
         top_agency=record.get("top_agency_name") or record.get("agency_name"),
@@ -157,6 +190,8 @@ def _spec_from_record(record: dict) -> SourceSpec:
         force_matrix=bool(record.get("force_matrix")),
         source_url=record.get("source_url"),
         submitted_source_url=record.get("submitted_source_url"),
+        page_behavior_json=behavior_json,
+        field_rules=_extract_field_rules_from_behavior(behavior_json),
     )
 
 
