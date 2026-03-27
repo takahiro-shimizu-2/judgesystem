@@ -5,10 +5,12 @@ step0 関連メソッドを提供する Mixin。
 HTML取得、リンク抽出、フォーマット処理、DB保存を担当する。
 """
 
+import json
 import os
 import re
 import csv
 import time
+import shutil
 from datetime import datetime
 from pathlib import Path, PurePosixPath
 from urllib.parse import urlparse, urljoin
@@ -19,6 +21,25 @@ import requests
 from tqdm import tqdm
 from bs4 import BeautifulSoup, Comment
 from ftfy.badness import badness
+
+from packages.engine.domain.structured_page import infer_table_specs
+from packages.engine.domain.notice_structures import (
+    StructuredNotice,
+    NoticeDocument,
+    DEFAULT_FIELD_RULES,
+    clean_document_label,
+    infer_category_from_fields,
+    infer_notice_title,
+    infer_procurement_method,
+    pick_field,
+    merge_field_rules,
+    normalize_space,
+    slugify_identifier,
+    parse_japanese_date,
+)
+
+
+FILE_LINK_PATTERN = re.compile(r'\.(pdf|xlsx?|csv|zip|docx?|txt)$', re.IGNORECASE)
 
 
 class DocumentPreparationMixin:
@@ -137,7 +158,20 @@ class DocumentPreparationMixin:
 
         # 1. HTML取得処理
         input_list2_file = output_dir_html_list / "input_list_converted.txt"
-        if do_fetch_html:
+        provided_input_list = Path(input_list_file)
+        provided_is_converted = provided_input_list.name == "input_list_converted.txt"
+
+        if provided_is_converted:
+            if not provided_input_list.exists():
+                raise FileNotFoundError(f"Provided converted file not found: {provided_input_list}")
+            if provided_input_list.resolve() != input_list2_file.resolve():
+                shutil.copy2(provided_input_list, input_list2_file)
+                source_html = provided_input_list.with_suffix(".html")
+                if source_html.exists():
+                    shutil.copy2(source_html, input_list2_file.with_suffix(".html"))
+            print(f"\n[Info] Using pre-converted input list: {provided_input_list}")
+            input_list2_path = str(input_list2_file)
+        elif do_fetch_html:
             if input_list2_file.exists():
                 print(f"\n[Skipped] Fetching HTML pages (do_fetch_html=True but reuse existing {input_list2_file})")
                 input_list2_path = str(input_list2_file)
@@ -152,6 +186,8 @@ class DocumentPreparationMixin:
             if not Path(input_list2_path).exists():
                 raise FileNotFoundError(f"Required file not found: {input_list2_path}")
             input_list2_path = str(input_list2_path)
+
+        self._html_metadata_lookup = self._build_html_metadata_lookup(input_list2_path, topAgencyName)
 
         # 2. リンク抽出処理
         if do_extract_links:
@@ -348,6 +384,9 @@ class DocumentPreparationMixin:
             output_path = output_dir_html / output_file
 
             if output_path.exists():
+                meta_path = output_path.with_suffix(".meta.json")
+                if not meta_path.exists() and isinstance(target_url, str):
+                    self._write_html_metadata(output_path, target_url, topAgencyName, subAgencyName)
                 skip_count += 1
                 continue
 
@@ -359,13 +398,14 @@ class DocumentPreparationMixin:
                 skip_count += 1
                 continue
 
-            time.sleep(1)
+            time.sleep(0.15)
 
             try:
                 html_content = self._fetch_html_content(target_url)
                 if html_content:
                     with open(output_path, "w", encoding="utf-8") as f:
                         f.write(html_content)
+                    self._write_html_metadata(output_path, target_url, topAgencyName, subAgencyName)
                     fetch_count += 1
             except Exception as e:
                 tqdm.write(f"Error fetching index={target_index}: {e}")
@@ -443,6 +483,90 @@ class DocumentPreparationMixin:
         return html
 
 
+    def _write_html_metadata(self, html_path, target_url, top_agency, sub_agency):
+        """
+        保存済みHTMLごとのメタデータをJSONとして出力する。
+        """
+        from packages.engine.sources import find_source_spec, find_source_spec_from_db
+
+        meta_path = html_path.with_suffix(".meta.json")
+        metadata = {
+            "source_url": target_url,
+            "top_agency_name": top_agency,
+            "sub_agency_name": sub_agency,
+            "page_code": None,
+            "created_at": datetime.now().isoformat(),
+        }
+
+        db_operator = getattr(self, "db_operator", None)
+        spec = None
+        if db_operator:
+            try:
+                spec = find_source_spec_from_db(
+                    db_operator,
+                    source_url=target_url,
+                    top_agency=top_agency,
+                    sub_agency=sub_agency,
+                )
+            except Exception as exc:
+                print(f"[WARN] Failed to resolve SourceSpec from DB for {target_url}: {exc}")
+        if spec is None:
+            spec = find_source_spec(
+                top_agency=top_agency,
+                sub_agency=sub_agency,
+                source_url=target_url,
+            )
+        if spec and spec.page_code:
+            metadata["page_code"] = spec.page_code
+
+        try:
+            meta_path.write_text(json.dumps(metadata, ensure_ascii=False, indent=2), encoding="utf-8")
+        except Exception as exc:
+            print(f"[WARN] Failed to write metadata for {html_path}: {exc}")
+
+
+    def _build_html_metadata_lookup(self, input_list2_path, top_agency_name):
+        lookup = {}
+        if not input_list2_path or not Path(input_list2_path).exists():
+            return lookup
+        try:
+            df = pd.read_csv(input_list2_path, sep="\t")
+        except Exception as exc:
+            print(f"[WARN] Failed to load {input_list2_path}: {exc}")
+            return lookup
+        target_column = "入札公告（現在募集中）2" if "入札公告（現在募集中）2" in df.columns else "入札公告（現在募集中）"
+        for _, row in df.iterrows():
+            try:
+                index_value = int(row["index"])
+            except Exception:
+                continue
+            sub_agency = row.get("Unnamed: 0", "unknown")
+            url = row.get(target_column)
+            if not isinstance(url, str) or not url.startswith("http"):
+                continue
+            filename = f"{index_value:05d}_{top_agency_name}_{sub_agency}.html"
+            lookup[filename] = {
+                "source_url": url,
+                "top_agency_name": top_agency_name,
+                "sub_agency_name": sub_agency,
+            }
+        return lookup
+
+
+    def _ensure_html_metadata(self, html_file, info):
+        meta_path = html_file.with_suffix(".meta.json")
+        if meta_path.exists():
+            return
+        if not info:
+            return
+        self._write_html_metadata(
+            html_file,
+            info.get("source_url"),
+            info.get("top_agency_name", "unknown"),
+            info.get("sub_agency_name", "unknown"),
+        )
+
+
     def _step0_extract_links(self, input_dir_html, output_dir_links):
         """
         HTMLファイルから公告ドキュメントのリンクを抽出
@@ -456,20 +580,68 @@ class DocumentPreparationMixin:
 
         print(f"Found {len(html_files)} HTML files")
 
+        metadata_lookup = getattr(self, "_html_metadata_lookup", {})
+
+        def _sanitize(value):
+            if value is None:
+                return ""
+            if isinstance(value, str):
+                return value.replace("\t", " ").replace("\r", " ").replace("\n", " ").strip()
+            return str(value)
+
         with open(output_file, 'w', encoding='utf-8') as out_f:
-            out_f.write("target_link\tpre_announcement_id\tannouncement_name\tlink_text\tpdf_link\n")
+            out_f.write(
+                "target_link\tpre_announcement_id\tannouncement_name\tlink_text\tpdf_link\t"
+                "notice_category_name\tnotice_category_code\tnotice_procurement_method\t"
+                "notice_announced_at\tnotice_deadline\tnotice_open_at\tnotice_location\t"
+                "notice_normalized_title\tnotice_fields_json\n"
+            )
 
             total_announcements = 0
             total_links = 0
 
             for html_file in tqdm(html_files, desc="Extracting links"):
                 try:
-                    announcements = self._extract_links_from_html(html_file)
+                    file_metadata = metadata_lookup.get(html_file.name, {})
+                    if metadata_lookup:
+                        self._ensure_html_metadata(html_file, file_metadata)
+                    source_spec = self._get_source_spec_for_file(html_file)
+                    announcements = self._extract_links_from_html(
+                        html_file,
+                        source_spec=source_spec,
+                        base_url=file_metadata.get("source_url"),
+                    )
 
                     file_links = 0
-                    for announcement_id, announcement_name, row_links in announcements:
-                        for link_text, pdf_link in row_links:
-                            out_f.write(f"{html_file.name}\t{announcement_id}\t{announcement_name}\t{link_text}\t{pdf_link}\n")
+                    for announcement_id, notice in enumerate(announcements, start=1):
+                        if not notice.documents:
+                            continue
+                        fields_json = json.dumps(
+                            notice.fields or {},
+                            ensure_ascii=False,
+                            sort_keys=True,
+                        )
+                        base_values = [
+                            html_file.name,
+                            announcement_id,
+                            notice.title or "",
+                            None,
+                            None,
+                            notice.category_name or "",
+                            notice.category_code or "",
+                            notice.procurement_method or "",
+                            notice.announced_at or "",
+                            notice.deadline or "",
+                            notice.open_at or "",
+                            notice.location or "",
+                            notice.normalized_title or "",
+                            fields_json,
+                        ]
+                        for doc in notice.documents:
+                            row_values = base_values.copy()
+                            row_values[3] = doc.label
+                            row_values[4] = doc.href
+                            out_f.write("\t".join(_sanitize(value) for value in row_values) + "\n")
                             file_links += 1
 
                     total_announcements += len(announcements)
@@ -485,48 +657,625 @@ class DocumentPreparationMixin:
         return str(output_file)
 
 
-    def _extract_links_from_html(self, html_file_path):
+    def _extract_links_from_html(self, html_file_path, source_spec=None, base_url=None):
         """
         単一のHTMLファイルから公告リンクを抽出
+
+        マトリックス形式(日付×カテゴリ)と通常形式を自動判定し、
+        適切に公告を分離する。
+
+        マトリックス形式の例:
+        | 公告日    | 工事       | 業務    |
+        |-----------|-----------|---------|
+        | R7.3.20   | [A][B]    | [C]     |
+        → 3つの公告に分離: 工事(A,B), 業務(C)
+
+        通常形式の例:
+        | 件名 | 期限 | 資料 |
+        |------|------|------|
+        | 工事A | 3/20 | [pdf] |
+        → 1つの公告: 工事A
         """
         with open(html_file_path, 'r', encoding='utf-8') as f:
             html_content = f.read()
 
-        html_content = re.sub(r'<([^>]+)\n', lambda m: '<' + m.group(1).replace('\n', ' '), html_content)
+        soup = BeautifulSoup(html_content, "lxml")
 
-        tr_pattern = r'<tr[^>]*>(.*?)</tr>'
-        rows = re.findall(tr_pattern, html_content, re.DOTALL | re.IGNORECASE)
+        notices: list[StructuredNotice] = []
+        field_rules = merge_field_rules(
+            DEFAULT_FIELD_RULES,
+            getattr(source_spec, "field_rules", None),
+        )
 
-        announcements = []
-        announcement_id = 1
+        table_specs = infer_table_specs(soup, helper=self, source_spec=source_spec)
+        for spec in table_specs:
+            if spec.pattern == "matrix":
+                table_notices = self._extract_matrix_announcements(
+                    spec.table,
+                    source_spec=source_spec,
+                    base_url=base_url,
+                    heading_text=spec.heading_text,
+                    field_rules=field_rules,
+                )
+            else:
+                table_notices = self._extract_row_announcements(
+                    spec.table,
+                    source_spec=source_spec,
+                    base_url=base_url,
+                    heading_text=spec.heading_text,
+                    field_rules=field_rules,
+                )
+            notices.extend(table_notices)
 
-        for row_content in rows:
-            a_pattern = r'<a[^>]*href=["\']([^"\']+)["\'][^>]*>(.*?)</a>'
-            links = re.findall(a_pattern, row_content, re.DOTALL | re.IGNORECASE)
+        return notices
 
-            if not links:
+
+    def _get_direct_rows(self, table):
+        """
+        テーブルの直接の子要素である<tr>を取得（入れ子テーブルの<tr>を除外）
+
+        <table>
+          <tr>...</tr>  ← これを取得
+          <thead><tr>...</tr></thead>  ← これも取得
+          <tbody>
+            <tr>...</tr>  ← これも取得
+            <tr><td><table><tr>...</tr></table></td></tr>  ← 内側の<tr>は除外
+          </tbody>
+        </table>
+
+        Args:
+            table: BeautifulSoupのTableタグ
+
+        Returns:
+            list: 直接の子要素である<tr>タグのリスト
+        """
+        rows = []
+        # table直下の<tr>を取得
+        for tr in table.find_all('tr'):
+            # この<tr>の親<table>が引数のtableと同じか確認
+            parent_table = tr.find_parent('table')
+            if parent_table == table:
+                rows.append(tr)
+        return rows
+
+
+    def _resolve_row_table_structure(self, table):
+        rows = self._get_direct_rows(table)
+        if not rows:
+            return [], []
+        header_row = None
+        data_start_index = 0
+        for idx, row in enumerate(rows):
+            th_cells = row.find_all('th', recursive=False)
+            if not th_cells:
                 continue
 
-            doc_links = []
-            for href, link_text in links:
-                if re.search(r'\.(pdf|xlsx?|zip|docx?|txt)$', href, re.IGNORECASE):
-                    clean_text = re.sub(r'<[^>]+>', '', link_text)
-                    clean_text = re.sub(r'\s+', ' ', clean_text).strip()
-                    doc_links.append((href, clean_text))
+            first_header_text = normalize_space(th_cells[0].get_text(" ", strip=True))
+            row_cells = row.find_all(['th', 'td'], recursive=False)
+            row_has_data_td = any(cell.name == 'td' for cell in row_cells)
 
-            if not doc_links:
+            # Some tables (e.g. 公募ページ) use <th> for the day column while
+            # mixing actual data in the same row. Treat those as data rows.
+            if row_has_data_td and self._looks_like_date_value(first_header_text):
                 continue
 
-            announcement_name = doc_links[0][1]
+            header_row = row
+            data_start_index = idx + 1
+            break
 
-            row_links = []
-            for href, link_text in doc_links:
-                row_links.append((link_text, href))
+        if header_row is None:
+            first_row_cells = rows[0].find_all(['th', 'td'], recursive=False)
+            column_count = len(first_row_cells) or 1
+            headers = [f"column_{idx + 1}" for idx in range(column_count)]
+            data_rows = [row for row in rows if row.find_all('td')]
+            return headers, data_rows
+        headers = [
+            normalize_space(cell.get_text(" ", strip=True))
+            for cell in header_row.find_all(['th', 'td'], recursive=False)
+        ]
+        data_rows = [
+            row for row in rows[data_start_index:]
+            if row.find_all('td')
+        ]
+        return headers, data_rows
 
-            announcements.append((announcement_id, announcement_name, row_links))
-            announcement_id += 1
+
+    def _get_links_in_same_table(self, table, element):
+        """
+        指定要素配下のリンクを取得する。
+        入れ子tableは親table処理時にまとめるのでそのまま取得する。
+        """
+        links = []
+        for link in element.find_all('a', href=True):
+            parent_table = link.find_parent('table')
+            if parent_table == table:
+                links.append(link)
+        return links
+
+
+    def _build_notice_documents(self, table, element, *, base_url=None, source_label=None):
+        docs: list[NoticeDocument] = []
+        for link in self._get_links_in_same_table(table, element):
+            href = link.get('href', '').strip()
+            if not href or not FILE_LINK_PATTERN.search(href):
+                continue
+            label = clean_document_label(link.get_text(" ", strip=True))
+            if not label:
+                label = clean_document_label(element.get_text(" ", strip=True))
+            full_url = urljoin(base_url, href) if base_url else href
+            docs.append(
+                NoticeDocument(
+                    label=label or href,
+                    href=full_url,
+                    source_label=source_label,
+                )
+            )
+        return docs
+
+
+    def _get_source_spec_for_file(self, html_file_path):
+        from packages.engine.sources import find_source_spec, find_source_spec_from_db
+
+        stem = Path(html_file_path).stem
+        parts = stem.split("_", 2)
+        top_agency = None
+        sub_agency = None
+        if len(parts) >= 3:
+            top_agency = parts[1]
+            sub_agency = parts[2]
+
+        page_code = None
+        source_url = None
+        meta_path = Path(html_file_path).with_suffix(".meta.json")
+        if meta_path.exists():
+            try:
+                metadata = json.loads(meta_path.read_text(encoding="utf-8"))
+                page_code = metadata.get("page_code") or page_code
+                source_url = metadata.get("source_url")
+                top_agency = metadata.get("top_agency_name") or top_agency
+                sub_agency = metadata.get("sub_agency_name") or sub_agency
+            except Exception as exc:
+                print(f"[WARN] Failed to read metadata for {html_file_path}: {exc}")
+
+        prefer_db = bool(int(os.environ.get("SOURCE_SPEC_PREFER_DB", "1") or "1"))
+        db_operator = getattr(self, "db_operator", None)
+
+        if prefer_db and db_operator:
+            try:
+                db_operator.ensure_source_pages_table()
+                spec = find_source_spec_from_db(
+                    db_operator,
+                    page_code=page_code,
+                    top_agency=top_agency,
+                    sub_agency=sub_agency,
+                    source_url=source_url,
+                )
+                if spec:
+                    return spec
+            except Exception as exc:
+                print(f"[WARN] Failed to load SourceSpec from DB: {exc}")
+
+        spec = find_source_spec(
+            top_agency=top_agency,
+            sub_agency=sub_agency,
+            page_code=page_code,
+            source_url=source_url,
+        )
+        if spec:
+            return spec
+        return None
+
+
+    def _get_structured_page_override(self, source_spec):
+        if not source_spec:
+            return {}
+        behavior = getattr(source_spec, "page_behavior_json", None)
+        if not isinstance(behavior, dict):
+            return {}
+        override = behavior.get("structured_page_override")
+        if isinstance(override, dict):
+            return override
+        return {}
+
+
+    def _find_matrix_header_row(self, rows, source_spec=None):
+        header_keywords = tuple(source_spec.matrix_header_keywords) if source_spec else ()
+        for idx, row in enumerate(rows):
+            headers = row.find_all(['th', 'td'], recursive=False)
+            if len(headers) < 3:
+                continue
+            label = headers[0].get_text(strip=True)
+            normalized = label.replace(' ', '').replace('　', '')
+            if header_keywords:
+                if any(keyword in normalized for keyword in header_keywords):
+                    return idx
+            elif self._looks_like_date_label(label):
+                return idx
+        if source_spec and source_spec.force_matrix and rows:
+            return 0
+        return None
+
+
+    def _is_matrix_table(self, table, source_spec=None):
+        """
+        日付×カテゴリのマトリックス形式かどうかを判定
+
+        判定基準:
+        1. ヘッダー行が存在
+        2. 1列目が日付ラベル(「公告日」「掲載日」など)
+        3. データ行の1列目が日付値
+        4. 2列目以降の複数セルにリンクがある
+
+        Args:
+            table: BeautifulSoupのTableタグ
+
+        Returns:
+            bool: マトリックス形式ならTrue
+        """
+        rows = self._get_direct_rows(table)
+        if len(rows) < 2:
+            return False
+
+        header_row_index = self._find_matrix_header_row(rows, source_spec=source_spec)
+        if header_row_index is None:
+            return False
+        headers = rows[header_row_index].find_all(['th', 'td'], recursive=False)
+        if len(headers) < 3:
+            return False
+
+        data_rows = rows[header_row_index + 1:]
+        if not data_rows:
+            return False
+
+        sample_rows = data_rows if (source_spec and source_spec.force_matrix) else data_rows[: min(20, len(data_rows))]
+
+        date_value_count = 0
+        multi_cell_link_rows = 0
+        multi_link_cells = 0
+
+        for row in sample_rows:
+            cells = row.find_all(['th', 'td'], recursive=False)
+            if len(cells) < 2:
+                continue
+
+            # 1列目が日付値か
+            first_cell_text = cells[0].get_text(strip=True)
+            if self._looks_like_date_value(first_cell_text):
+                date_value_count += 1
+
+            # 2列目以降で、2つ以上のセルにリンクがあるか
+            later_cells = cells[1:]
+            cells_with_links = sum(1 for cell in later_cells if cell.find('a', href=True))
+            if cells_with_links >= 2:
+                multi_cell_link_rows += 1
+            if any(len(cell.find_all('a', href=True)) >= 2 for cell in later_cells):
+                multi_link_cells += 1
+
+        if source_spec and source_spec.force_matrix:
+            return date_value_count >= 1
+
+        if date_value_count >= 1 and (multi_cell_link_rows >= 1 or multi_link_cells >= 1):
+            return True
+        return False
+
+
+    def _looks_like_date_label(self, text):
+        """
+        日付フィールドのラベルっぽいか
+
+        Args:
+            text: セルのテキスト
+
+        Returns:
+            bool: 日付ラベルならTrue
+        """
+        date_labels = ['公告日', '公示日', '掲載日', '発注日', '日付', '年月日', '掲載年月日']
+        normalized = text.replace(' ', '').replace('　', '')
+        return any(label in normalized for label in date_labels)
+
+
+    def _looks_like_date_value(self, text):
+        """
+        日付の値っぽいか
+
+        Args:
+            text: セルのテキスト
+
+        Returns:
+            bool: 日付値ならTrue
+        """
+        if not text or len(text) > 30:
+            return False
+
+        normalized = normalize_space(text)
+        if parse_japanese_date(normalized):
+            return True
+
+        text = normalized
+
+        # 和暦・西暦のパターン
+        date_patterns = [
+            r'令和\d+年',
+            r'平成\d+年',
+            r'R\d+[./-]\d+[./-]\d+',
+            r'H\d+[./-]\d+[./-]\d+',
+            r'\d{4}[./-]\d{1,2}[./-]\d{1,2}',
+            r'\d{1,2}月\d{1,2}日',
+            r'\d{1,2}日',
+            r'\d{1,2}\.\d{1,2}\.\d{1,2}',  # 7.4.22 などの簡略形式
+            r'\d{1,2}/\d{1,2}/\d{1,2}',    # 7/4/22 などの簡略形式
+        ]
+        return any(re.fullmatch(pattern, text) for pattern in date_patterns)
+
+
+    def _extract_matrix_announcements(
+        self,
+        table,
+        *,
+        source_spec=None,
+        base_url=None,
+        heading_text=None,
+        field_rules=None,
+    ):
+        """
+        マトリックス形式テーブルからセル単位で公告を抽出
+
+        構造例:
+        | 公告日    | 工事       | 業務    | 物品    |
+        |-----------|-----------|---------|---------|
+        | R7.3.20   | [A][B]    | [C]     | -       |
+        | R7.3.21   | [D]       | [E][F]  | [G]     |
+
+        抽出結果:
+        - 工事A, 工事B (R7.3.20)
+        - 業務C (R7.3.20)
+        - 工事D (R7.3.21)
+        - 業務E, 業務F (R7.3.21)
+        - 物品G (R7.3.21)
+
+        Args:
+            table: BeautifulSoupのTableタグ
+
+        Returns:
+            list[tuple[str, list[tuple[str, str]]]]: [(announcement_name, [(link_text, href), ...]), ...]
+        """
+        rows = self._get_direct_rows(table)
+        if not rows:
+            return []
+
+        header_row_index = self._find_matrix_header_row(rows, source_spec=source_spec)
+        if header_row_index is None:
+            header_row_index = 0
+
+        headers = rows[header_row_index].find_all(['th', 'td'], recursive=False)
+        header_texts = [h.get_text(strip=True) for h in headers]
+
+        announcements: list[StructuredNotice] = []
+        effective_rules = field_rules or DEFAULT_FIELD_RULES
+
+        for row in rows[header_row_index + 1:]:
+            cells = row.find_all(['th', 'td'], recursive=False)
+            if len(cells) < 2:
+                continue
+
+            date_text = normalize_space(cells[0].get_text(" ", strip=True))
+
+            for idx, cell in enumerate(cells[1:], start=1):
+                docs = self._build_notice_documents(
+                    table,
+                    cell,
+                    base_url=base_url,
+                    source_label=header_texts[idx] if idx < len(header_texts) else heading_text,
+                )
+                if not docs:
+                    continue
+
+                category_name = header_texts[idx] if idx < len(header_texts) else heading_text or "不明"
+                category_name = normalize_space(category_name)
+                fields = {
+                    "category": category_name,
+                    "announced_at": date_text,
+                }
+                inferred_category = infer_category_from_fields(fields, fallback=category_name or heading_text)
+                procurement_method = infer_procurement_method(fields, fallback=category_name)
+                inferred_title = infer_notice_title(fields, effective_rules, docs)
+                combined_doc_labels = " ".join(doc.label for doc in docs if doc.label)
+                if len(docs) > 1 and (not inferred_title or inferred_title == docs[0].label):
+                    inferred_title = combined_doc_labels or inferred_title
+                title = inferred_title or combined_doc_labels or category_name or docs[0].label
+                normalized_title = normalize_space(title)
+
+                announcements.append(
+                    StructuredNotice(
+                        title=title,
+                        normalized_title=normalized_title,
+                        category_name=inferred_category,
+                        category_code=slugify_identifier(inferred_category),
+                        procurement_method=procurement_method,
+                        announced_at=date_text or None,
+                        deadline=None,
+                        open_at=None,
+                        location=None,
+                        fields=fields,
+                        documents=docs,
+                        raw_html=str(cell),
+                    )
+                )
 
         return announcements
+
+
+    def _extract_row_announcements(
+        self,
+        table,
+        *,
+        source_spec=None,
+        base_url=None,
+        heading_text=None,
+        field_rules=None,
+    ):
+        """
+        通常形式テーブルから1行=1公告で抽出
+
+        既存ロジックと同じ挙動を維持
+
+        Args:
+            table: BeautifulSoupのTableタグ
+
+        Returns:
+            list[tuple[str, list[tuple[str, str]]]]: [(announcement_name, [(link_text, href), ...]), ...]
+        """
+        announcements: list[StructuredNotice] = []
+        headers, data_rows = self._resolve_row_table_structure(table)
+        if not headers or not data_rows:
+            return announcements
+
+        effective_rules = field_rules or DEFAULT_FIELD_RULES
+
+        override_settings = self._get_structured_page_override(source_spec)
+        split_by_list_items = bool(override_settings.get("split_by_list_items"))
+
+        for row in data_rows:
+            cells = row.find_all(['th', 'td'], recursive=False)
+            if not cells:
+                continue
+
+            normalized_cells = cells[:len(headers)]
+            fields: dict[str, str] = {}
+            for idx, (header, cell) in enumerate(zip(headers, normalized_cells)):
+                header_label = header or f"column_{idx+1}"
+                value = normalize_space(cell.get_text(" ", strip=True))
+                if value:
+                    fields[header_label] = value
+            if heading_text:
+                fields.setdefault("section_heading", normalize_space(heading_text))
+
+            documents: list[NoticeDocument] = []
+            for header, cell in zip(headers, normalized_cells):
+                documents.extend(
+                    self._build_notice_documents(
+                        table,
+                        cell,
+                        base_url=base_url,
+                        source_label=header,
+                    )
+                )
+            if not documents:
+                continue
+
+            announced_at = pick_field(fields, effective_rules.get("announced_at_labels", []))
+            deadline = pick_field(fields, effective_rules.get("deadline_labels", []))
+            open_at = pick_field(fields, effective_rules.get("open_at_labels", []))
+            location = pick_field(fields, effective_rules.get("location_labels", []))
+            category = infer_category_from_fields(fields, fallback=heading_text)
+            procurement_method = infer_procurement_method(fields, fallback=category)
+            category_code = slugify_identifier(category)
+
+            if split_by_list_items:
+                li_based_notices = self._extract_li_based_announcements(
+                    row=row,
+                    table=table,
+                    fields=fields,
+                    base_url=base_url,
+                    effective_rules=effective_rules,
+                    announced_at=announced_at,
+                    deadline=deadline,
+                    open_at=open_at,
+                    location=location,
+                    category=category,
+                    category_code=category_code,
+                    procurement_method=procurement_method,
+                )
+                if li_based_notices:
+                    announcements.extend(li_based_notices)
+                    continue
+
+            title = infer_notice_title(fields, effective_rules, documents) or documents[0].label
+            normalized_title = normalize_space(title)
+
+            announcements.append(
+                StructuredNotice(
+                    title=title,
+                    normalized_title=normalized_title,
+                    category_name=category,
+                    category_code=category_code,
+                    procurement_method=procurement_method,
+                    announced_at=announced_at,
+                    deadline=deadline,
+                    open_at=open_at,
+                    location=location,
+                    fields=fields,
+                    documents=documents,
+                    raw_html=str(row),
+                )
+            )
+
+        return announcements
+
+
+    def _extract_li_based_announcements(
+        self,
+        *,
+        row,
+        table,
+        fields,
+        base_url,
+        effective_rules,
+        announced_at,
+        deadline,
+        open_at,
+        location,
+        category,
+        category_code,
+        procurement_method,
+    ):
+        li_elements = row.find_all('li')
+        if not li_elements:
+            return []
+
+        li_entries = []
+        for li in li_elements:
+            docs = self._build_notice_documents(
+                table,
+                li,
+                base_url=base_url,
+                source_label=None,
+            )
+            if docs:
+                li_entries.append((li, docs))
+
+        # 分割対象は同一セル内に複数公告があるケースのみ
+        if len(li_entries) < 2:
+            return []
+
+        notices: list[StructuredNotice] = []
+        for li, docs in li_entries:
+            li_text = normalize_space(li.get_text(" ", strip=True))
+            entry_fields = dict(fields)
+            if li_text:
+                entry_fields["list_entry"] = li_text
+
+            title = infer_notice_title(entry_fields, effective_rules, docs) or li_text or docs[0].label
+            normalized_title = normalize_space(title)
+
+            notices.append(
+                StructuredNotice(
+                    title=title,
+                    normalized_title=normalized_title,
+                    category_name=category,
+                    category_code=category_code,
+                    procurement_method=procurement_method,
+                    announced_at=announced_at,
+                    deadline=deadline,
+                    open_at=open_at,
+                    location=location,
+                    fields=entry_fields,
+                    documents=docs,
+                    raw_html=str(li),
+                )
+            )
+
+        return notices
 
 
     def _step0_format_documents(
@@ -549,6 +1298,20 @@ class DocumentPreparationMixin:
         print(f"[DEBUG] Loaded {len(df1)} rows from input_list_converted.txt")
         print(f"[DEBUG] df1 columns: {df1.columns.tolist()}")
         print(f"[DEBUG] Loaded {len(df2)} rows from announcements_links.txt")
+        metadata_columns = [
+            "notice_category_name",
+            "notice_category_code",
+            "notice_procurement_method",
+            "notice_announced_at",
+            "notice_deadline",
+            "notice_open_at",
+            "notice_location",
+            "notice_normalized_title",
+            "notice_fields_json",
+        ]
+        for column in metadata_columns:
+            if column not in df2.columns:
+                df2[column] = None
 
         df2["announcement_name"] = df2["announcement_name"].str.replace('"', '', regex=False)
         df2["link_text"] = df2["link_text"].str.replace('"', '', regex=False)
@@ -652,6 +1415,11 @@ class DocumentPreparationMixin:
             "done": [False] * df_merged.shape[0],
             "is_ocr_failed": [False] * df_merged.shape[0]
         })
+        for column in metadata_columns:
+            if column in df_merged.columns:
+                df_new[column] = df_merged[column]
+            else:
+                df_new[column] = None
 
         df_new["_sort_fileformat"] = df_new["fileFormat"].apply(lambda x: 0 if x == "pdf" else 1)
         df_new.sort_values(["announcement_id", "_sort_fileformat", "document_id"], inplace=True)
@@ -785,6 +1553,18 @@ class DocumentPreparationMixin:
         else:
             self.db_operator.ensure_column(tablename, "ocr_json_path", text_column_type)
             self.db_operator.ensure_column(tablename, "file_404_flag", bool_column_type)
+            for column in [
+                "notice_category_name",
+                "notice_category_code",
+                "notice_procurement_method",
+                "notice_announced_at",
+                "notice_deadline",
+                "notice_open_at",
+                "notice_location",
+                "notice_normalized_title",
+                "notice_fields_json",
+            ]:
+                self.db_operator.ensure_column(tablename, column, text_column_type)
             print(f"Merging {len(df)} records into existing table: {tablename}")
             tmp_table = f"tmp_{tablename}_final"
             self.db_operator.uploadDataToTable(df, tmp_table, chunksize=5000)
