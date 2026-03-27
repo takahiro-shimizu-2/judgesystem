@@ -21,6 +21,7 @@ pg_port=""
 pg_sslmode=""
 pg_schema=""
 enable_contact_delete="false"
+service_name=""  # Cloud Run service name
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -128,6 +129,14 @@ while [[ $# -gt 0 ]]; do
       enable_contact_delete="$2"
       shift 2
       ;;
+    --service_name)
+      if [[ $# -lt 2 ]]; then
+        echo "Error: --service_name requires a value"
+        exit 1
+      fi
+      service_name="$2"
+      shift 2
+      ;;
     --help)
       cat <<'EOF'
 Usage: backend_gcloud_command_sample_postgres.sh [options]
@@ -144,6 +153,7 @@ Usage: backend_gcloud_command_sample_postgres.sh [options]
   --pg_sslmode <disable|require|...>
   --pg_schema <schema>
   --enable_contact_delete <true|false> (default: false)
+  --service_name <service-name> (default: bidapp-backend-postgres-dev)
 
 Connection types:
   proxy: Cloud SQL Proxy (Unix socket, no VPC needed)
@@ -176,10 +186,15 @@ PROJECT_ID=$(gcloud config get-value project)
 LOCATION=asia-northeast1
 # プロジェクト設定
 gcloud config set project $PROJECT_ID
-# リポジトリ名
-REPO_NAME=bidapp-backend-postgres-dev
-# イメージ名
-IMAGE_NAME=bidapp-backend-postgres-dev
+
+# サービス名（デフォルト値設定）
+if [[ -z "$service_name" ]]; then
+  service_name="bidapp-backend-postgres-dev"
+fi
+
+# リポジトリ名とイメージ名を service_name から設定
+REPO_NAME="$service_name"
+IMAGE_NAME="$service_name"
 # タグ名
 TAG_NAME=v1
 
