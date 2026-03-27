@@ -14,6 +14,8 @@ fi
 
 
 URL=""
+service_name=""  # Cloud Run service name
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --url)
@@ -24,8 +26,18 @@ while [[ $# -gt 0 ]]; do
       URL="$2"
       shift 2
       ;;
+    --service_name)
+      if [[ $# -lt 2 ]]; then
+        echo "Error: --service_name requires a value"
+        exit 1
+      fi
+      service_name="$2"
+      shift 2
+      ;;
     --help)
-      echo "Usage: $0 --url <URL>"
+      echo "Usage: $0 --url <URL> [--service_name <service-name>]"
+      echo "  --url <URL>                     Backend API URL (required)"
+      echo "  --service_name <service-name>   Cloud Run service name (default: bidapp-frontend-postgres-dev)"
       exit 0
       ;;
     *)
@@ -49,10 +61,15 @@ PROJECT_ID=$(gcloud config get-value project)
 LOCATION=asia-northeast1
 # プロジェクト設定
 gcloud config set project $PROJECT_ID
-# リポジトリ名
-REPO_NAME=bidapp-frontend-postgres-dev
-# イメージ名
-IMAGE_NAME=bidapp-frontend-postgres-dev
+
+# サービス名（デフォルト値設定）
+if [[ -z "$service_name" ]]; then
+  service_name="bidapp-frontend-postgres-dev"
+fi
+
+# リポジトリ名とイメージ名を service_name から設定
+REPO_NAME="$service_name"
+IMAGE_NAME="$service_name"
 # タグ名
 TAG_NAME=v1
 
