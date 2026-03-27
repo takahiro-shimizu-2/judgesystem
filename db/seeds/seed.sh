@@ -44,7 +44,6 @@ TRUNCATE
   partners_qualifications_orderers,
   partners_qualifications_orderer_items,
   partners_past_projects,
-  announcements_documents_master,
   announcements_competing_companies_master,
   announcements_competing_company_bids_master,
   agency_master,
@@ -114,9 +113,6 @@ load_data "$MASTER_DIR/partners_qualifications_orderer_items.txt" \
 
 load_data "$MASTER_DIR/partners_past_projects.txt" \
   'partners_past_projects(partner_id, "evaluationId", "announcementId", "announcementNo", "announcementTitle", "branchName", "workStatus", "evaluationStatus", priority, "bidType", category, prefecture, "publishDate", deadline, "evaluatedAt", organization)'
-
-load_data "$MASTER_DIR/announcements_documents_master.txt" \
-  'announcements_documents_master(announcement_no, document_id, type, document_name, "fileFormat", "pageCount", "extractedAt", document_url, ocr_text)'
 
 load_data "$MASTER_DIR/announcements_competing_companies_master.txt" \
   'announcements_competing_companies_master(announcement_id, company_name, "isWinner")'

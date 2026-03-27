@@ -230,10 +230,6 @@ class Master:
     def getAnnouncementsEstimatedAmounts(self):
         return pd.read_csv(self.announcements_estimated_amounts, sep="\t")
 
-    def getAnnouncementsDocumentsMaster(self):
-        raise NotImplementedError
-        return pd.read_csv(self.announcements_documents_master, sep="\t")
-
     def getSimilarCasesMaster(self):
         return pd.read_csv(self.similar_cases_master, sep="\t")
 
