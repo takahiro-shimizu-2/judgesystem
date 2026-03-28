@@ -129,7 +129,11 @@ export function useAnnouncementListState() {
   // カスタムフィルター
   const [filters, setFilters] = useState<AnnouncementFilterState>(() => {
     const saved = loadFromStorage<Partial<AnnouncementFilterState>>(STORAGE_KEYS.FILTERS, {});
-    return { ...DEFAULT_FILTERS, ...saved };
+    const merged: AnnouncementFilterState = { ...DEFAULT_FILTERS, ...saved };
+    if ((!merged.categoryDetails || merged.categoryDetails.length === 0) && merged.categories.length > 0) {
+      merged.categoryDetails = [...merged.categories];
+    }
+    return merged;
   });
 
   // DataGridの列フィルター

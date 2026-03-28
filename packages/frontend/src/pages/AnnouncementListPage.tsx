@@ -22,6 +22,8 @@ import { useSidebar } from '../contexts/SidebarContext';
 import { useAnnouncementListState } from '../hooks';
 import { categories as defaultCategoryDetails } from '../constants/categories';
 
+const DEFAULT_CATEGORY_SEGMENTS = ['工事', '役務の提供等', '物品の製造', '物品の販売', '物品の買受け'];
+
 // 都道府県を抽出するヘルパー関数
 function extractPrefecture(workLocation: string | undefined): string {
   if (!workLocation) return '';
@@ -348,13 +350,16 @@ export default function AnnouncementListPage() {
   }, []);
 
   // アクティブなフィルター数
+  const categoryDetailCount = filters.categoryDetails.length > 0 ? filters.categoryDetails.length : filters.categories.length;
   const totalFilterCount =
     filters.statuses.length +
     filters.bidTypes.length +
     filters.categorySegments.length +
-    filters.categoryDetails.length +
+    categoryDetailCount +
     filters.prefectures.length +
     filters.organizations.length;
+
+  const visibleCategoryDetails = filters.categoryDetails.length > 0 ? filters.categoryDetails : filters.categories;
 
   // 行データに変換（サーバーから取得したデータをそのまま使用）
 const displayRows: RowData[] = rows.map((a) => ({
@@ -376,7 +381,7 @@ const displayRows: RowData[] = rows.map((a) => ({
 }));
 
 const categorySegmentOptions = useMemo(() => {
-  const set = new Set<string>();
+  const set = new Set<string>(DEFAULT_CATEGORY_SEGMENTS);
   rows.forEach((row: any) => {
     if (row.categorySegment) {
       set.add(row.categorySegment);
@@ -386,15 +391,12 @@ const categorySegmentOptions = useMemo(() => {
 }, [rows]);
 
 const categoryDetailOptions = useMemo(() => {
-  const set = new Set<string>();
+  const set = new Set<string>(defaultCategoryDetails);
   rows.forEach((row: any) => {
     if (row.categoryDetail) {
       set.add(row.categoryDetail);
     }
   });
-  if (set.size === 0) {
-    defaultCategoryDetails.forEach(cat => set.add(cat));
-  }
   return Array.from(set).sort();
 }, [rows]);
 
@@ -535,18 +537,26 @@ const categoryDetailOptions = useMemo(() => {
                   />
                 ))}
 
-                {filters.categoryDetails.map((detail) => (
+                {visibleCategoryDetails.map((detail) => (
                   <Chip
                     key={detail}
                     label={`詳細: ${detail}`}
                     size="small"
                     onDelete={() => {
-                      const nextDetails = filters.categoryDetails.filter((x) => x !== detail);
-                      applyFilters({
-                        ...filters,
-                        categoryDetails: nextDetails,
-                        categories: nextDetails,
-                      });
+                      if (filters.categoryDetails.length > 0) {
+                        const nextDetails = filters.categoryDetails.filter((x) => x !== detail);
+                        applyFilters({
+                          ...filters,
+                          categoryDetails: nextDetails,
+                          categories: nextDetails,
+                        });
+                      } else {
+                        const nextCategories = filters.categories.filter((x) => x !== detail);
+                        applyFilters({
+                          ...filters,
+                          categories: nextCategories,
+                        });
+                      }
                     }}
                     sx={listFilterChipStyles}
                   />

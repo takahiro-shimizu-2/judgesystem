@@ -1,7 +1,7 @@
 /**
  * 入札案件一覧用フィルターモーダル
  */
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import {
   Close as CloseIcon,
   FilterAlt as FilterIcon,
@@ -72,9 +72,18 @@ export function AnnouncementFilterModal({
   onGridFilterApply,
   onClose,
 }: AnnouncementFilterModalProps) {
+  const normalizedFilters = useMemo<AnnouncementFilterState>(() => ({
+    ...filters,
+    categoryDetails: filters.categoryDetails.length > 0 ? filters.categoryDetails : filters.categories,
+  }), [filters]);
+
   const [activeTab, setActiveTab] = useState<'preset' | 'column'>('preset');
-  const [localFilters, setLocalFilters] = useState<AnnouncementFilterState>(filters);
+  const [localFilters, setLocalFilters] = useState<AnnouncementFilterState>(normalizedFilters);
   const [columnFilters, setColumnFilters] = useState<Record<string, ColumnFilterItem>>({ ...DEFAULT_COLUMN_FILTERS });
+
+  useEffect(() => {
+    setLocalFilters(normalizedFilters);
+  }, [normalizedFilters]);
 
   useEffect(() => {
     const newColumnFilters = { ...DEFAULT_COLUMN_FILTERS };
