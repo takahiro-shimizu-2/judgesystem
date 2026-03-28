@@ -982,7 +982,12 @@ class DBOperatorPOSTGRES(DBOperator):
         )
         SELECT
             announcement_no, document_id, submission_document_name,
-            date_value, date_raw, date_meaning, timepoint_type,
+            CASE
+                WHEN date_value ~ '^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$'
+                    THEN date_value::DATE
+                ELSE NULL
+            END AS date_value,
+            date_raw, date_meaning, timepoint_type,
             "createdDate", "updatedDate"
         FROM {source_tablename}
         """
