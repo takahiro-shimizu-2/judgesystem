@@ -86,26 +86,76 @@ for raw_value, detail_value in _CONSTRUCTION_CATEGORY_BASE.items():
     CONSTRUCTION_CATEGORY_MAP[raw_value] = detail_value
     CONSTRUCTION_CATEGORY_MAP[detail_value] = detail_value
 
-BID_TYPE_KEYWORDS = {
-    "open_competitive": ["一般競争", "一般競争入札", "general competitive", "general competition"],
-    "planning_competition": ["企画競争", "プロポーザル", "公募型プロポーザル", "proposal"],
-    "designated_competitive": ["指名競争", "指名入札", "designated competitive"],
-    "document_request": ["資料提供招請", "document request"],
-    "opinion_request": ["意見招請", "opinion request"],
-    "negotiated_contract": ["随意契約", "negotiated contract"],
-    "open_counter": [
-        "オープンカウンター",
-        "open counter",
-        "見積合せ",
-        "見積合わせ",
-        "見積り合わせ",
-        "見積合わせ方式",
-        "見積合せ方式",
-        "見積もり合わせ",
-    ],
-    "preferred_designation": ["希望制指名", "preferred designation"],
-    "other": ["その他"],
-}
+BID_TYPE_RULES = [
+    {
+        "canonical": "open_counter",
+        "keywords": [
+            "オープンカウンター",
+            "open counter",
+            "見積合せ",
+            "見積合わせ",
+            "見積り合わせ",
+            "見積合わせ方式",
+            "見積合せ方式",
+            "見積もり合わせ",
+        ],
+    },
+    {
+        "canonical": "open_competitive",
+        "keywords": ["一般競争", "一般競争入札", "general competitive", "general competition"],
+    },
+    {
+        "canonical": "planning_competition",
+        "keywords": ["企画競争", "プロポーザル", "公募型プロポーザル", "proposal"],
+    },
+    {
+        "canonical": "designated_competitive",
+        "keywords": ["指名競争", "指名入札", "designated competitive"],
+    },
+    {
+        "canonical": "document_request",
+        "keywords": ["資料提供招請", "document request"],
+    },
+    {
+        "canonical": "opinion_request",
+        "keywords": ["意見招請", "opinion request"],
+    },
+    {
+        "canonical": "preferred_designation",
+        "keywords": ["希望制指名", "preferred designation"],
+    },
+    {
+        "canonical": "negotiated_contract",
+        "keywords": ["随意契約", "negotiated contract"],
+    },
+    {
+        "canonical": "other",
+        "keywords": ["その他"],
+    },
+]
+
+BID_TYPE_PRIORITY = {rule["canonical"]: index for index, rule in enumerate(BID_TYPE_RULES)}
+
+NEGATION_SUFFIXES = [
+    "によらない",
+    "によらず",
+    "以外",
+    "以外の",
+    "以外の方法",
+    "を除く",
+    "ではない",
+    "でない",
+    "に該当しない",
+]
+
+NEGATION_PREFIXES = ["非", "不"]
+
+NEGATION_EN_PATTERNS = [
+    "not ",
+    "no ",
+    "other than ",
+    "without ",
+]
 
 
 class OcrProcessingMixin:
@@ -751,26 +801,96 @@ class OcrProcessingMixin:
         text = unicodedata.normalize("NFKC", str(raw_value)).strip()
         if not text:
             return None
-        cleaned = re.sub(r"[\\[\\]［］【】「」『』（）()〈〉《》｛｝{}<>〔〕]", "", text)
+        cleaned = re.sub(r"[\[\]［］【】「」『』（）()〈〉《》｛｝{}<>〔〕]", "", text)
         lowered = cleaned.lower()
         normalized = re.sub(r"\s+", "", lowered)
 
-        for canonical, keywords in BID_TYPE_KEYWORDS.items():
-            if lowered == canonical or normalized == canonical.replace(" ", ""):
+        matches = []
+        for rule in BID_TYPE_RULES:
+            canonical = rule["canonical"]
+            canonical_compact = canonical.replace(" ", "")
+            if lowered == canonical or normalized == canonical_compact:
                 return canonical
-            for keyword in keywords:
+
+            for keyword in rule["keywords"]:
                 keyword_norm = unicodedata.normalize("NFKC", keyword).strip().lower()
                 if not keyword_norm:
                     continue
                 keyword_compact = re.sub(r"\s+", "", keyword_norm)
-                # 「その他」など汎用語は完全一致のみ許可する
+
                 if keyword_compact in {"その他"}:
                     if normalized == keyword_compact:
-                        return canonical
+                        matches.append((BID_TYPE_PRIORITY.get(canonical, 99), canonical))
                     continue
-                if keyword_norm in lowered or keyword_compact and keyword_compact in normalized:
-                    return canonical
-        return None
+
+                if not self._keyword_matches(lowered, normalized, keyword_norm, keyword_compact):
+                    continue
+
+                if self._is_negated_keyword(lowered, normalized, keyword_norm, keyword_compact):
+                    continue
+
+                matches.append((BID_TYPE_PRIORITY.get(canonical, 99), canonical))
+
+        if not matches:
+            return None
+
+        matches.sort(key=lambda item: (item[0], BID_TYPE_PRIORITY.get(item[1], 99)))
+        return matches[0][1]
+
+    def _keyword_matches(self, lowered, normalized, keyword_norm, keyword_compact):
+        if keyword_norm in lowered:
+            return True
+        if keyword_compact and keyword_compact in normalized:
+            return True
+        return False
+
+    def _is_negated_keyword(self, lowered, normalized, keyword_norm, keyword_compact):
+        for suffix in NEGATION_SUFFIXES:
+            suffix_norm = unicodedata.normalize("NFKC", suffix).strip().lower()
+            if not suffix_norm:
+                continue
+            suffix_compact = re.sub(r"\s+", "", suffix_norm)
+            if keyword_norm + suffix_norm in lowered:
+                return True
+            if keyword_compact and suffix_compact and keyword_compact + suffix_compact in normalized:
+                return True
+
+        for prefix in NEGATION_PREFIXES:
+            prefix_norm = unicodedata.normalize("NFKC", prefix).strip().lower()
+            if not prefix_norm:
+                continue
+            if prefix_norm + keyword_norm in lowered:
+                return True
+            if keyword_compact and prefix_norm + keyword_compact in normalized:
+                return True
+
+        for pattern in NEGATION_EN_PATTERNS:
+            pattern_norm_raw = unicodedata.normalize("NFKC", pattern).lower()
+            pattern_norm = pattern_norm_raw.strip()
+            if not pattern_norm:
+                continue
+            if pattern_norm_raw and (pattern_norm_raw + keyword_norm in lowered):
+                return True
+            if pattern_norm_raw and (keyword_norm + pattern_norm_raw in lowered):
+                return True
+            if pattern_norm + " " + keyword_norm in lowered:
+                return True
+            if keyword_norm + " " + pattern_norm in lowered:
+                return True
+
+        return False
+
+    def _select_preferred_bid_type(self, *candidates):
+        ranked = []
+        for index, candidate in enumerate(candidates):
+            if not candidate:
+                continue
+            priority = BID_TYPE_PRIORITY.get(candidate, len(BID_TYPE_PRIORITY) + 1)
+            ranked.append((priority, index, candidate))
+        if not ranked:
+            return None
+        ranked.sort()
+        return ranked[0][2]
 
     def regenerate_ocr_json_from_database(
         self,
@@ -1341,10 +1461,8 @@ class OcrProcessingMixin:
                         category_detail = notice_category_code
 
                     bidType_normalized = self._normalize_bid_type_value(bidType_ocr)
-                    if (not bidType_normalized) or (bidType_normalized in {"other", "unknown"}):
-                        notice_bid_type = self._normalize_bid_type_value(notice_procurement_method)
-                        if notice_bid_type:
-                            bidType_normalized = notice_bid_type
+                    notice_bid_type = self._normalize_bid_type_value(notice_procurement_method)
+                    bidType_effective = self._select_preferred_bid_type(bidType_normalized, notice_bid_type)
                     aggregated = {
                         "announcement_no": announcement_id,
                         "workName": workName,
@@ -1359,7 +1477,7 @@ class OcrProcessingMixin:
                         "fax": self._select_best_value([d["fax"] for d in docs_data]),
                         "mail": self._select_best_value([d["mail"] for d in docs_data]),
                         "publishDate": self._select_best_value([d["publishdate"] for d in docs_data]),
-                        "bidType": bidType_normalized or "unknown",
+                        "bidType": bidType_effective or "unknown",
                         "category": category_ocr,
                         "category_segment": category_segment,
                         "category_detail": category_detail,

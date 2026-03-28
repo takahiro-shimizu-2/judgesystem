@@ -27,6 +27,8 @@ const DEFAULT_FILTERS: FilterState = {
   workStatuses: [],
   priorities: [],
   categories: [],
+  categorySegments: [],
+  categoryDetails: [],
   bidTypes: [],
   organizations: [],
   prefectures: [],
@@ -57,6 +59,8 @@ interface EvaluationListApiItem {
     title?: string;
     organization?: string;
     category?: string;
+    categorySegment?: string | null;
+    categoryDetail?: string | null;
     bidType?: BidType | null;
     deadline?: string;
     workLocation?: string;
@@ -74,6 +78,8 @@ interface BidListRow {
   branch: string;
   organization: string;
   category: string;
+  categorySegment?: string;
+  categoryDetail?: string;
   bidType?: BidType;
   deadline: string;
   evaluatedAt: string;
@@ -128,6 +134,7 @@ function appendFilterParams(
   options?: { includeStatuses?: boolean }
 ) {
   const includeStatuses = options?.includeStatuses ?? true;
+  const hasCategoryDetails = filters.categoryDetails.length > 0;
 
   if (includeStatuses && filters.statuses.length > 0) {
     filters.statuses.forEach(s => queryParams.append('statuses', s));
@@ -138,8 +145,14 @@ function appendFilterParams(
   if (filters.priorities.length > 0) {
     filters.priorities.forEach(s => queryParams.append('priorities', s.toString()));
   }
-  if (filters.categories.length > 0) {
+  if (filters.categorySegments.length > 0) {
+    filters.categorySegments.forEach(s => queryParams.append('categorySegments', s));
+  }
+  if (!hasCategoryDetails && filters.categories.length > 0) {
     filters.categories.forEach(s => queryParams.append('categories', s));
+  }
+  if (hasCategoryDetails) {
+    filters.categoryDetails.forEach(s => queryParams.append('categoryDetails', s));
   }
   if (filters.bidTypes.length > 0) {
     filters.bidTypes.forEach(s => queryParams.append('bidTypes', s));
@@ -352,6 +365,8 @@ export function useBidListState() {
             branch: item.branch?.name ?? '',
             organization: item.announcement?.organization ?? '',
             category: item.announcement?.category ?? '',
+            categorySegment: item.announcement?.categorySegment ?? '',
+            categoryDetail: item.announcement?.categoryDetail ?? '',
             bidType: item.announcement?.bidType ? item.announcement.bidType as BidType : undefined,
             deadline: item.announcement?.deadline ?? '',
             evaluatedAt: item.evaluatedAt ? item.evaluatedAt.substring(0, 10) : '',
@@ -406,11 +421,16 @@ export function useBidListState() {
   }, [filters, searchQuery]);
 
   // フィルター件数
+  const categoryDetailCount = filters.categoryDetails.length > 0
+    ? filters.categoryDetails.length
+    : filters.categories.length;
+
   const activeFilterCount =
     filters.statuses.length +
     filters.workStatuses.length +
     filters.priorities.length +
-    filters.categories.length +
+    filters.categorySegments.length +
+    categoryDetailCount +
     filters.bidTypes.length +
     filters.organizations.length +
     filters.prefectures.length;

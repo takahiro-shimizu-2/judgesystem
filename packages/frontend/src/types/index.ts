@@ -155,6 +155,8 @@ export interface FilterState {
   workStatuses: WorkStatus[];
   priorities: CompanyPriority[];
   categories: string[];
+  categorySegments: string[];
+  categoryDetails: string[];
   bidTypes: string[];
   organizations: string[];
   prefectures: string[];

@@ -35,6 +35,27 @@ export function BidListHeader({
   totalFilterCount,
   onOpenFilterModal,
 }: BidListHeaderProps) {
+  const visibleCategoryDetails = filters.categoryDetails.length > 0
+    ? filters.categoryDetails
+    : filters.categories;
+
+  const handleRemoveCategoryDetail = (detail: string) => {
+    if (filters.categoryDetails.length > 0) {
+      const nextDetails = filters.categoryDetails.filter((x) => x !== detail);
+      onFilterChange({
+        ...filters,
+        categoryDetails: nextDetails,
+        categories: nextDetails,
+      });
+    } else {
+      const nextCategories = filters.categories.filter((x) => x !== detail);
+      onFilterChange({
+        ...filters,
+        categories: nextCategories,
+      });
+    }
+  };
+
   return (
     <Box
       sx={{
@@ -184,18 +205,30 @@ export function BidListHeader({
             />
           ))}
 
-          {/* カテゴリフィルター */}
-          {filters.categories.map((c) => (
+          {/* カテゴリ区分フィルター */}
+          {filters.categorySegments.map((segment) => (
             <Chip
-              key={c}
-              label={c}
+              key={`segment-${segment}`}
+              label={`区分: ${segment}`}
               size="small"
               onDelete={() =>
                 onFilterChange({
                   ...filters,
-                  categories: filters.categories.filter((x) => x !== c),
+                  categorySegments: filters.categorySegments.filter((x) => x !== segment),
                 })
               }
+              deleteIcon={<CloseIcon />}
+              sx={premiumChipSx}
+            />
+          ))}
+
+          {/* カテゴリ詳細フィルター */}
+          {visibleCategoryDetails.map((detail) => (
+            <Chip
+              key={`detail-${detail}`}
+              label={`詳細: ${detail}`}
+              size="small"
+              onDelete={() => handleRemoveCategoryDetail(detail)}
               deleteIcon={<CloseIcon />}
               sx={premiumChipSx}
             />

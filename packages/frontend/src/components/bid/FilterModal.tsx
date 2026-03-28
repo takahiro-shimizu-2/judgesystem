@@ -10,7 +10,6 @@ import {
   Gavel as BidTypeIcon,
 } from '@mui/icons-material';
 import type { GridFilterModel } from '@mui/x-data-grid';
-import { categories } from '../../constants/categories';
 import { organizationGroups, organizationGroupsByRegion } from '../../constants/organizations';
 import { evaluationStatusConfig } from '../../constants/status';
 import { workStatusConfig } from '../../constants/workStatus';
@@ -38,6 +37,9 @@ interface FilterModalProps {
   onGridFilterApply: (model: GridFilterModel) => void;
   onClose: () => void;
   statusCounts?: Record<EvaluationStatus, number>;
+  categorySegmentOptions: string[];
+  categoryDetailOptions: string[];
+  categoryHierarchy: Record<string, readonly string[]>;
 }
 
 export function FilterModal({
@@ -47,6 +49,9 @@ export function FilterModal({
   onGridFilterApply,
   onClose,
   statusCounts,
+  categorySegmentOptions,
+  categoryDetailOptions,
+  categoryHierarchy,
 }: FilterModalProps) {
   const [activeTab, setActiveTab] = useState<'preset' | 'column'>('preset');
   const [localFilters, setLocalFilters] = useState<FilterState>(filters);
@@ -85,7 +90,17 @@ export function FilterModal({
   };
 
   const handleReset = () => {
-    setLocalFilters({ statuses: [], workStatuses: [], priorities: [], categories: [], bidTypes: [], organizations: [], prefectures: [] });
+    setLocalFilters({
+      statuses: [],
+      workStatuses: [],
+      priorities: [],
+      categories: [],
+      categorySegments: [],
+      categoryDetails: [],
+      bidTypes: [],
+      organizations: [],
+      prefectures: [],
+    });
     setColumnFilters({ ...DEFAULT_COLUMN_FILTERS });
   };
 
@@ -139,19 +154,55 @@ export function FilterModal({
     return 'partial';
   };
 
-  // カテゴリ
-  const toggleCategory = (category: string) => {
+  // カテゴリ区分
+  const toggleCategorySegment = (segment: string) => {
     setLocalFilters(prev => ({
       ...prev,
-      categories: prev.categories.includes(category) ? prev.categories.filter(c => c !== category) : [...prev.categories, category],
+      categorySegments: prev.categorySegments.includes(segment)
+        ? prev.categorySegments.filter(s => s !== segment)
+        : [...prev.categorySegments, segment],
     }));
   };
-  const toggleAllCategories = () => {
-    setLocalFilters(prev => ({ ...prev, categories: prev.categories.length === categories.length ? [] : [...categories] }));
+  const toggleAllCategorySegments = () => {
+    setLocalFilters(prev => ({
+      ...prev,
+      categorySegments: prev.categorySegments.length === categorySegmentOptions.length ? [] : [...categorySegmentOptions],
+    }));
   };
-  const categorySelectionState = (): 'all' | 'partial' | 'none' => {
-    if (localFilters.categories.length === 0) return 'none';
-    if (localFilters.categories.length === categories.length) return 'all';
+  const categorySegmentSelectionState = (): 'all' | 'partial' | 'none' => {
+    if (localFilters.categorySegments.length === 0) return 'none';
+    if (localFilters.categorySegments.length === categorySegmentOptions.length) return 'all';
+    return 'partial';
+  };
+
+  // カテゴリ詳細
+  const toggleCategoryDetail = (detail: string) => {
+    setLocalFilters(prev => {
+      const exists = prev.categoryDetails.includes(detail);
+      const nextDetails = exists
+        ? prev.categoryDetails.filter(d => d !== detail)
+        : [...prev.categoryDetails, detail];
+      return {
+        ...prev,
+        categories: nextDetails,
+        categoryDetails: nextDetails,
+      };
+    });
+  };
+  const toggleAllCategoryDetails = () => {
+    setLocalFilters(prev => {
+      const isAllSelected = prev.categoryDetails.length === categoryDetailOptions.length;
+      const nextDetails = isAllSelected ? [] : [...categoryDetailOptions];
+      return {
+        ...prev,
+        categories: nextDetails,
+        categoryDetails: nextDetails,
+      };
+    });
+  };
+  const categoryDetailSelectionState = (): 'all' | 'partial' | 'none' => {
+    if (localFilters.categoryDetails.length === 0) return 'none';
+    if (localFilters.categoryDetails.length === categoryDetailOptions.length) return 'all';
     return 'partial';
   };
 
@@ -206,7 +257,18 @@ export function FilterModal({
     return 'partial';
   };
 
-  const activeFilterCount = localFilters.statuses.length + localFilters.priorities.length + localFilters.categories.length + localFilters.organizations.length;
+  const categoryDetailCount = localFilters.categoryDetails.length > 0
+    ? localFilters.categoryDetails.length
+    : localFilters.categories.length;
+
+  const activeFilterCount =
+    localFilters.statuses.length +
+    localFilters.workStatuses.length +
+    localFilters.priorities.length +
+    localFilters.categorySegments.length +
+    categoryDetailCount +
+    localFilters.bidTypes.length +
+    localFilters.organizations.length;
   const columnFilterCount = Object.values(columnFilters).filter(f => f.value || f.operator === 'isEmpty' || f.operator === 'isNotEmpty').length;
   const totalFilterCount = activeFilterCount + columnFilterCount;
 
@@ -370,20 +432,86 @@ export function FilterModal({
                 </div>
               </div>
 
-              {/* 工事カテゴリ */}
+              {/* カテゴリ区分 */}
               <div style={{ marginBottom: '24px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <DescriptionIcon style={{ ...iconStyles.medium, color: colors.text.muted }} />
-                    <span style={{ fontWeight: 600, fontSize: fontSizes.md, color: colors.text.secondary }}>工事カテゴリ</span>
+                    <span style={{ fontWeight: 600, fontSize: fontSizes.md, color: colors.text.secondary }}>カテゴリ区分</span>
                   </div>
-                  <SelectAllButton state={categorySelectionState()} count={localFilters.categories.length} total={categories.length} onClick={toggleAllCategories} />
+                  <SelectAllButton
+                    state={categorySegmentSelectionState()}
+                    count={localFilters.categorySegments.length}
+                    total={categorySegmentOptions.length}
+                    onClick={toggleAllCategorySegments}
+                  />
                 </div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-                  {categories.map((cat) => (
-                    <FilterOptionButton key={cat} label={cat} selected={localFilters.categories.includes(cat)} onClick={() => toggleCategory(cat)} />
-                  ))}
+                {categorySegmentOptions.length === 0 ? (
+                  <div style={{ fontSize: fontSizes.xs, color: colors.text.muted }}>利用可能なカテゴリ区分がありません</div>
+                ) : (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                    {categorySegmentOptions.map((segment) => (
+                      <FilterOptionButton
+                        key={segment}
+                        label={segment}
+                        selected={localFilters.categorySegments.includes(segment)}
+                        onClick={() => toggleCategorySegment(segment)}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* カテゴリ詳細 */}
+              <div style={{ marginBottom: '24px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <DescriptionIcon style={{ ...iconStyles.medium, color: colors.text.muted }} />
+                    <span style={{ fontWeight: 600, fontSize: fontSizes.md, color: colors.text.secondary }}>カテゴリ詳細</span>
+                  </div>
+                  <SelectAllButton
+                    state={categoryDetailSelectionState()}
+                    count={localFilters.categoryDetails.length}
+                    total={categoryDetailOptions.length}
+                    onClick={toggleAllCategoryDetails}
+                  />
                 </div>
+                {categoryDetailOptions.length === 0 || categorySegmentOptions.length === 0 ? (
+                  <div style={{ fontSize: fontSizes.xs, color: colors.text.muted }}>利用可能なカテゴリ詳細がありません</div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                    {categorySegmentOptions.every((segment) => (categoryHierarchy[segment]?.length ?? 0) === 0) && (
+                      <div style={{ fontSize: fontSizes.xs, color: colors.text.muted }}>利用可能なカテゴリ詳細がありません</div>
+                    )}
+                    {categorySegmentOptions.map((segment) => {
+                      const details = categoryHierarchy[segment] || [];
+                      if (!details.length) {
+                        return null;
+                      }
+                      const selectedCount = details.filter((detail) => localFilters.categoryDetails.includes(detail)).length;
+                      return (
+                        <div key={segment}>
+                          <div style={{ fontWeight: 600, fontSize: fontSizes.sm, color: colors.text.secondary, marginBottom: '8px' }}>
+                            {segment}
+                            <span style={{ marginLeft: '8px', fontSize: fontSizes.xs, color: colors.text.muted }}>
+                              ({selectedCount}/{details.length})
+                            </span>
+                          </div>
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                            {details.map((detail) => (
+                              <FilterOptionButton
+                                key={`${segment}-${detail}`}
+                                label={detail}
+                                selected={localFilters.categoryDetails.includes(detail)}
+                                onClick={() => toggleCategoryDetail(detail)}
+                              />
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
 
               {/* 発注機関 */}

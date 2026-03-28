@@ -326,6 +326,8 @@ export class EvaluationController {
       workStatuses: this.parseArrayParam(req.query.workStatuses),
       priorities: this.parseArrayParam(req.query.priorities),
       categories: this.parseArrayParam(req.query.categories),
+      categorySegments: this.parseArrayParam(req.query.categorySegments),
+      categoryDetails: this.parseArrayParam(req.query.categoryDetails),
       bidTypes: this.parseArrayParam(req.query.bidTypes),
       organizations: this.parseArrayParam(req.query.organizations),
       prefectures: this.parseArrayParam(req.query.prefectures),

@@ -70,6 +70,8 @@ export class EvaluationRepository {
             'title', COALESCE(ba."workName", ''),
             'organization', COALESCE(ba."topAgencyName", ''),
             'category', COALESCE(ba.category, ''),
+            'categorySegment', COALESCE(ba.category_segment, ''),
+            'categoryDetail', COALESCE(ba.category_detail, ''),
             'bidType', COALESCE(ba."bidType", ''),
             'deadline', COALESCE(ba."bidEndDate", ''),
             'workLocation', COALESCE(ba."workPlace", ''),
@@ -247,6 +249,8 @@ export class EvaluationRepository {
             'ordererId', COALESCE(ba.orderer_id::text, ''),
             'title', COALESCE(ba."workName", ''),
             'category', COALESCE(ba.category, ''),
+            'categorySegment', COALESCE(ba.category_segment, ''),
+            'categoryDetail', COALESCE(ba.category_detail, ''),
             'organization', COALESCE(ba."topAgencyName", ''),
             'workLocation', COALESCE(ba."workPlace", ''),
             'department', jsonb_build_object(
@@ -498,7 +502,19 @@ export class EvaluationRepository {
       }
     }
 
-    if (filters.categories && filters.categories.length > 0) {
+    const hasCategoryDetails = !!(filters.categoryDetails && filters.categoryDetails.length > 0);
+
+    if (filters.categorySegments && filters.categorySegments.length > 0) {
+      whereClauses.push(`ba.category_segment = ANY($${paramIndex})`);
+      queryParams.push(filters.categorySegments);
+      paramIndex++;
+    }
+
+    if (hasCategoryDetails) {
+      whereClauses.push(`(ba.category_detail = ANY($${paramIndex}) OR ba.category = ANY($${paramIndex}))`);
+      queryParams.push(filters.categoryDetails);
+      paramIndex++;
+    } else if (filters.categories && filters.categories.length > 0) {
       whereClauses.push(`(ba.category_detail = ANY($${paramIndex}) OR ba.category = ANY($${paramIndex}))`);
       queryParams.push(filters.categories);
       paramIndex++;

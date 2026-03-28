@@ -53,6 +53,8 @@ export interface EvaluationFilterParams extends BaseFilterParams {
   workStatuses?: string[];
   priorities?: string[];
   categories?: string[];
+  categorySegments?: string[];
+  categoryDetails?: string[];
   bidTypes?: string[];
   organizations?: string[];
   prefectures?: string[];
