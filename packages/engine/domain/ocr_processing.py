@@ -34,6 +34,57 @@ from packages.engine.domain.master import (
     get_pages,
 )
 
+# UI が期待するカテゴリ体系に合わせるための定数
+GOODS_SERVICE_SEGMENTS = {
+    "物品の製造",
+    "物品の販売",
+    "役務の提供等",
+    "物品の買受け",
+}
+
+_CONSTRUCTION_CATEGORY_BASE = {
+    "土木": "土木一式工事",
+    "建築": "建築一式工事",
+    "大工": "大工工事",
+    "左官": "左官工事",
+    "とび・土工・コンクリート": "とび・土工・コンクリート工事",
+    "石": "石工事",
+    "屋根": "屋根工事",
+    "電気": "電気工事",
+    "管": "管工事",
+    "タイル・れんが・ブロック": "タイル・れんが・ブロック工事",
+    "鋼構造物": "鋼構造物工事",
+    "鉄筋": "鉄筋工事",
+    "舗装": "舗装工事",
+    "しゅんせつ": "しゅんせつ工事",
+    "板金": "板金工事",
+    "ガラス": "ガラス工事",
+    "塗装": "塗装工事",
+    "防水": "防水工事",
+    "内装仕上": "内装仕上工事",
+    "機械装置": "機械器具設置工事",
+    "熱絶縁": "熱絶縁工事",
+    "電気通信": "電気通信工事",
+    "造園": "造園工事",
+    "さく井": "さく井工事",
+    "建具": "建具工事",
+    "水道施設": "水道施設工事",
+    "消防施設": "消防施設工事",
+    "清掃施設": "清掃施設工事",
+    "解体": "解体工事",
+    "その他": "その他",
+    "グラウト": "グラウト",
+    "維持": "維持",
+    "自然環境共生": "自然環境共生",
+    "水環境処理": "水環境処理",
+}
+
+# Gemini からの値/HTML 由来の値の双方を正規化できるよう、シノニムを用意
+CONSTRUCTION_CATEGORY_MAP = {}
+for raw_value, detail_value in _CONSTRUCTION_CATEGORY_BASE.items():
+    CONSTRUCTION_CATEGORY_MAP[raw_value] = detail_value
+    CONSTRUCTION_CATEGORY_MAP[detail_value] = detail_value
+
 
 class OcrProcessingMixin:
     """OCR/Markdown/Gemini関連メソッドを提供するMixin"""
@@ -801,6 +852,56 @@ class OcrProcessingMixin:
         return most_common
 
 
+    def _normalize_category_fields(self, category_raw, notice_category_name, notice_category_code):
+        """
+        UI が期待する category_segment/category_detail に合わせて正規化する
+        """
+        def _clean(value):
+            if isinstance(value, str):
+                stripped = value.strip()
+                return stripped or None
+            return None
+
+        segment = None
+        detail = None
+
+        raw = _clean(category_raw)
+        if raw:
+            normalized_raw = raw.replace("／", "/")
+            parts = [p.strip() for p in normalized_raw.split("/") if p.strip()]
+            if len(parts) >= 2 and parts[0] in GOODS_SERVICE_SEGMENTS:
+                segment = parts[0]
+                detail = parts[1]
+            elif raw in GOODS_SERVICE_SEGMENTS:
+                segment = raw
+            else:
+                mapped_detail = CONSTRUCTION_CATEGORY_MAP.get(raw)
+                if mapped_detail:
+                    segment = "工事"
+                    detail = mapped_detail
+
+        notice_name = _clean(notice_category_name)
+        if not segment and notice_name:
+            mapped_detail = CONSTRUCTION_CATEGORY_MAP.get(notice_name)
+            if mapped_detail:
+                segment = "工事"
+                detail = detail or mapped_detail
+            else:
+                segment = notice_name
+
+        notice_code = _clean(notice_category_code)
+        if notice_code and not detail:
+            mapped_detail = CONSTRUCTION_CATEGORY_MAP.get(notice_code)
+            if mapped_detail:
+                detail = mapped_detail
+                if not segment:
+                    segment = "工事"
+            elif notice_code != segment:
+                detail = notice_code
+
+        return segment, detail
+
+
     def _step0_ocr_with_gemini(
         self,
         df_main,
@@ -1115,14 +1216,11 @@ class OcrProcessingMixin:
 
                     has_ocr_failure = any(d.get("ocr_failed", False) for d in docs_data)
 
-                    category_segment = None
-                    category_detail = None
-                    if isinstance(category_ocr, str) and category_ocr.strip():
-                        parts = [p.strip() for p in category_ocr.split("/") if p.strip()]
-                        if parts:
-                            category_segment = parts[0]
-                        if len(parts) >= 2:
-                            category_detail = parts[1]
+                    category_segment, category_detail = self._normalize_category_fields(
+                        category_ocr,
+                        notice_category_name,
+                        notice_category_code,
+                    )
                     if not category_segment:
                         category_segment = notice_category_name
                     if (not category_detail) and notice_category_code and notice_category_code != category_segment:
