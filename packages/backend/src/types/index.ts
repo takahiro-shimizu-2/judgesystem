@@ -20,6 +20,7 @@ export type {
   AnnouncementListItem,
   AnnouncementDetail,
   AnnouncementDocument,
+  SubmissionDocument,
   ProgressingCompany,
   SimilarCase,
   DocumentFile,

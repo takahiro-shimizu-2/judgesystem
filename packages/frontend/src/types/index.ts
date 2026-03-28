@@ -80,6 +80,15 @@ export interface DocumentOcr {
   url?: string;                       // 資料URL
 }
 
+export interface SubmissionDocument {
+  documentId: string | null;
+  name: string;
+  dateValue: string | null;
+  dateRaw: string;
+  dateMeaning: string;
+  timepointType: string;
+}
+
 // 公告情報
 export interface Announcement {
   id: string;
@@ -107,6 +116,7 @@ export interface Announcement {
   estimatedAmountMax?: number;        // 見積予想金額上限（円）
   pdfUrl?: string;
   documents?: DocumentOcr[];          // 資料文字起こし
+  submissionDocuments?: SubmissionDocument[];
   actualAmount?: number;              // 実際の落札金額
   winningCompanyId?: string;          // 落札企業ID
   winningCompanyName?: string;        // 落札企業名

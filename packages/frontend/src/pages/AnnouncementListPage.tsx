@@ -230,7 +230,7 @@ function AnnouncementCard({ row, onClick }: { row: RowData; onClick: () => void 
               sx={{
                 fontSize: fontSizes.sm,
                 fontWeight: 600,
-                color: colors.text.dark,
+                color: colors.text.primary,
               }}
             >
               {formatCategoryLabel(row.categorySegment, row.categoryDetail, row.category)}

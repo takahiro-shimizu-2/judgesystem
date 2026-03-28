@@ -160,6 +160,24 @@ export class AnnouncementRepository {
           FROM ${schemaPrefix}announcements_competing_companies_master cc
           WHERE cc.announcement_id = $1
           GROUP BY cc.announcement_id
+        ),
+        submission_docs AS (
+          SELECT
+            announcement_no,
+            jsonb_agg(
+              jsonb_build_object(
+                'documentId', document_id,
+                'name', COALESCE(submission_document_name, ''),
+                'dateValue', CASE WHEN date_value IS NOT NULL THEN TO_CHAR(date_value, 'YYYY-MM-DD') ELSE NULL END,
+                'dateRaw', COALESCE(date_raw, ''),
+                'dateMeaning', COALESCE(date_meaning, ''),
+                'timepointType', COALESCE(timepoint_type, '')
+              )
+              ORDER BY date_value IS NULL, date_value, submission_document_name
+            ) AS submission_documents
+          FROM ${schemaPrefix}bid_announcements_dates
+          WHERE announcement_no = $1
+          GROUP BY announcement_no
         )
         SELECT
           CONCAT('ann-', a.announcement_no) AS id,
@@ -217,11 +235,13 @@ export class AnnouncementRepository {
 
           -- documents と competing_companies
           COALESCE(d.documents, '[]'::jsonb) AS documents,
-          COALESCE(cc.competing_companies, '[]'::jsonb) AS "competingCompanies"
+          COALESCE(cc.competing_companies, '[]'::jsonb) AS "competingCompanies",
+          COALESCE(sd.submission_documents, '[]'::jsonb) AS "submissionDocuments"
 
         FROM ${schemaPrefix}bid_announcements a
         LEFT JOIN documents_agg d ON d.announcement_id = a.announcement_no
         LEFT JOIN competing_companies_agg cc ON cc.announcement_id = a.announcement_no
+        LEFT JOIN submission_docs sd ON sd.announcement_no = a.announcement_no
         WHERE a.announcement_no = $1
         `,
         [announcementNo]

@@ -46,6 +46,15 @@ export interface AnnouncementDocument {
   content: string;
 }
 
+export interface SubmissionDocument {
+  documentId: string | null;
+  name: string;
+  dateValue: string | null;
+  dateRaw: string;
+  dateMeaning: string;
+  timepointType: string;
+}
+
 /** Row returned by `AnnouncementRepository.findByNo`. */
 export interface AnnouncementDetail {
   id: string;
@@ -78,6 +87,7 @@ export interface AnnouncementDetail {
   winningCompanyId: string | null;
   winningCompanyName: string | null;
   documents: AnnouncementDocument[];
+  submissionDocuments: SubmissionDocument[];
   competingCompanies: JsonValue;
 }
 

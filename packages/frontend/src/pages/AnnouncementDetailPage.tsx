@@ -1,6 +1,6 @@
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
-import { Box, Typography, Button, Paper, Tabs, Tab, Accordion, AccordionSummary, AccordionDetails, TextField, InputAdornment, IconButton, CircularProgress } from '@mui/material';
+import { Box, Typography, Button, Paper, Tabs, Tab, Accordion, AccordionSummary, AccordionDetails, TextField, InputAdornment, IconButton, CircularProgress, Chip } from '@mui/material';
 import {
   AccountBalance as OrdererIcon,
   LocationOn as LocationIcon,
@@ -67,6 +67,14 @@ const formatCategoryLabel = (segment?: string, detail?: string, fallback?: strin
   if (segment) return segment;
   if (detail) return detail;
   return fallback || '未分類';
+};
+
+const formatSubmissionDate = (doc: NonNullable<AnnouncementType['submissionDocuments']>[number]): { value: string; meaning?: string } => {
+  const value = doc.dateValue || doc.dateRaw || '日付情報なし';
+  return {
+    value,
+    meaning: doc.dateMeaning || undefined,
+  };
 };
 
 // 関連案件用ソートオプション
@@ -2064,6 +2072,52 @@ export default function AnnouncementDetailPage() {
                             </Typography>
                           </Box>
                         ))}
+                        {announcement.submissionDocuments && announcement.submissionDocuments.length > 0 && (
+                          <Box sx={{ borderTop: `1px solid ${colors.border.light}`, mt: 1 }}>
+                            <Typography sx={{ fontSize: fontSizes.base, fontWeight: 600, color: colors.primary.main, px: 2.5, pt: 1.5, pb: 1 }}>
+                              提出書類と期日
+                            </Typography>
+                            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, px: 2.5, pb: 2 }}>
+                              {announcement.submissionDocuments.map((doc, idx) => {
+                                const { value, meaning } = formatSubmissionDate(doc);
+                                return (
+                                  <Box
+                                    key={`${doc.documentId || 'doc'}-${idx}`}
+                                    sx={{
+                                      display: 'flex',
+                                      flexDirection: 'column',
+                                      gap: 0.5,
+                                      p: 1.25,
+                                      border: `1px solid ${colors.border.light}`,
+                                      borderRadius: borderRadius.xs,
+                                      backgroundColor: colors.background.card,
+                                    }}
+                                  >
+                                    <Typography sx={{ fontSize: fontSizes.sm, fontWeight: 600, color: colors.text.primary }}>
+                                      {doc.name || '提出書類'}
+                                    </Typography>
+                                    <Typography sx={{ fontSize: fontSizes.sm, color: colors.text.secondary }}>
+                                      期日: {value}
+                                    </Typography>
+                                    {meaning && (
+                                      <Typography sx={{ fontSize: fontSizes.xs, color: colors.text.light }}>
+                                        {meaning}
+                                      </Typography>
+                                    )}
+                                    <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+                                      {doc.timepointType && (
+                                        <Chip size="small" label={doc.timepointType} sx={{ height: 20, fontSize: fontSizes.xs }} />
+                                      )}
+                                      {doc.documentId && (
+                                        <Chip size="small" label={`ID: ${doc.documentId}`} sx={{ height: 20, fontSize: fontSizes.xs, color: colors.text.light }} />
+                                      )}
+                                    </Box>
+                                  </Box>
+                                );
+                              })}
+                            </Box>
+                          </Box>
+                        )}
                       </AccordionDetails>
                     </Accordion>
                   </Box>
