@@ -13,6 +13,7 @@ import time
 import uuid
 import asyncio
 import random
+import unicodedata
 from datetime import datetime
 from pathlib import Path
 from collections import Counter
@@ -84,6 +85,27 @@ CONSTRUCTION_CATEGORY_MAP = {}
 for raw_value, detail_value in _CONSTRUCTION_CATEGORY_BASE.items():
     CONSTRUCTION_CATEGORY_MAP[raw_value] = detail_value
     CONSTRUCTION_CATEGORY_MAP[detail_value] = detail_value
+
+BID_TYPE_KEYWORDS = {
+    "open_competitive": ["一般競争", "一般競争入札", "general competitive", "general competition"],
+    "planning_competition": ["企画競争", "プロポーザル", "公募型プロポーザル", "proposal"],
+    "designated_competitive": ["指名競争", "指名入札", "designated competitive"],
+    "document_request": ["資料提供招請", "document request"],
+    "opinion_request": ["意見招請", "opinion request"],
+    "negotiated_contract": ["随意契約", "negotiated contract"],
+    "open_counter": [
+        "オープンカウンター",
+        "open counter",
+        "見積合せ",
+        "見積合わせ",
+        "見積り合わせ",
+        "見積合わせ方式",
+        "見積合せ方式",
+        "見積もり合わせ",
+    ],
+    "preferred_designation": ["希望制指名", "preferred designation"],
+    "other": ["その他"],
+}
 
 
 class OcrProcessingMixin:
@@ -723,6 +745,33 @@ class OcrProcessingMixin:
         updated = self.db_operator.updateMarkdownPaths(tablename, df_updates)
         print(f"Backfilled markdown_path for {updated} documents (found {len(updates)} files in storage).")
 
+    def _normalize_bid_type_value(self, raw_value):
+        if raw_value is None:
+            return None
+        text = unicodedata.normalize("NFKC", str(raw_value)).strip()
+        if not text:
+            return None
+        cleaned = re.sub(r"[\\[\\]［］【】「」『』（）()〈〉《》｛｝{}<>〔〕]", "", text)
+        lowered = cleaned.lower()
+        normalized = re.sub(r"\s+", "", lowered)
+
+        for canonical, keywords in BID_TYPE_KEYWORDS.items():
+            if lowered == canonical or normalized == canonical.replace(" ", ""):
+                return canonical
+            for keyword in keywords:
+                keyword_norm = unicodedata.normalize("NFKC", keyword).strip().lower()
+                if not keyword_norm:
+                    continue
+                keyword_compact = re.sub(r"\s+", "", keyword_norm)
+                # 「その他」など汎用語は完全一致のみ許可する
+                if keyword_compact in {"その他"}:
+                    if normalized == keyword_compact:
+                        return canonical
+                    continue
+                if keyword_norm in lowered or keyword_compact and keyword_compact in normalized:
+                    return canonical
+        return None
+
     def regenerate_ocr_json_from_database(
         self,
         use_gcs=False,
@@ -1291,6 +1340,11 @@ class OcrProcessingMixin:
                     if (not category_detail) and notice_category_code and notice_category_code != category_segment:
                         category_detail = notice_category_code
 
+                    bidType_normalized = self._normalize_bid_type_value(bidType_ocr)
+                    if (not bidType_normalized) or (bidType_normalized in {"other", "unknown"}):
+                        notice_bid_type = self._normalize_bid_type_value(notice_procurement_method)
+                        if notice_bid_type:
+                            bidType_normalized = notice_bid_type
                     aggregated = {
                         "announcement_no": announcement_id,
                         "workName": workName,
@@ -1305,7 +1359,7 @@ class OcrProcessingMixin:
                         "fax": self._select_best_value([d["fax"] for d in docs_data]),
                         "mail": self._select_best_value([d["mail"] for d in docs_data]),
                         "publishDate": self._select_best_value([d["publishdate"] for d in docs_data]),
-                        "bidType": bidType_ocr,
+                        "bidType": bidType_normalized or "unknown",
                         "category": category_ocr,
                         "category_segment": category_segment,
                         "category_detail": category_detail,
@@ -1704,7 +1758,11 @@ class OcrProcessingMixin:
         else:
             new_json["publishdate"] = None
 
-        new_json["bidType"] = json_value.get("入札方式", None)
+        raw_bid_type = json_value.get("入札方式", None)
+        normalized_bid_type = self._normalize_bid_type_value(raw_bid_type)
+        new_json["bidTypeRaw"] = raw_bid_type
+        new_json["bidTypeNormalized"] = normalized_bid_type
+        new_json["bidType"] = raw_bid_type
         new_json["type"] = json_value.get("資料種類", None)
         new_json["category"] = normalize_category(json_value.get("category", None))
         new_json["pageCount"] = json_value.get("pageCount", None)
