@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import {
   Close as CloseIcon,
   FilterAlt as FilterIcon,
@@ -50,10 +50,8 @@ export function FilterModal({
 }: FilterModalProps) {
   const [activeTab, setActiveTab] = useState<'preset' | 'column'>('preset');
   const [localFilters, setLocalFilters] = useState<FilterState>(filters);
-  const [columnFilters, setColumnFilters] = useState<Record<string, ColumnFilterItem>>({ ...DEFAULT_COLUMN_FILTERS });
 
-  // 初期化時にgridFilterModelから値を復元
-  useEffect(() => {
+  const initialColumnFilters = useMemo(() => {
     const newColumnFilters = { ...DEFAULT_COLUMN_FILTERS };
     gridFilterModel.items.forEach(item => {
       if (item.field in newColumnFilters) {
@@ -63,8 +61,10 @@ export function FilterModal({
         };
       }
     });
-    setColumnFilters(newColumnFilters);
+    return newColumnFilters;
   }, [gridFilterModel]);
+
+  const [columnFilters, setColumnFilters] = useState<Record<string, ColumnFilterItem>>(initialColumnFilters);
 
   useEffect(() => {
     document.body.style.overflow = 'hidden';

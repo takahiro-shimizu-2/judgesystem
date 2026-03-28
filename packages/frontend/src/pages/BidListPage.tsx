@@ -3,7 +3,7 @@
  * 入札可否判定結果の一覧表示（カード形式）
  * サーバーサイドページネーション対応
  */
-import { useCallback, useState, useRef, useEffect } from 'react';
+import { useCallback, useState, useRef, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Box, Typography, Paper, CircularProgress, Alert } from '@mui/material';
 import { AccountBalance as OrdererIcon } from '@mui/icons-material';
@@ -383,6 +383,11 @@ export default function BidListPage() {
     clearAllFilters,
   } = useBidListState();
 
+  const filterModalKey = useMemo(
+    () => JSON.stringify(gridFilterModel.items ?? []),
+    [gridFilterModel.items]
+  );
+
   // ページ変更時にスクロール位置をリセット
   useEffect(() => {
     if (listContainerRef.current) {
@@ -508,6 +513,7 @@ export default function BidListPage() {
       </RightSidePanel>
       {showFilterModal && (
         <FilterModal
+          key={filterModalKey}
           filters={filters}
           gridFilterModel={gridFilterModel}
           onApply={setFilters}

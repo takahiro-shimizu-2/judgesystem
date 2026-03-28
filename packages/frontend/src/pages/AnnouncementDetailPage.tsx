@@ -146,6 +146,19 @@ interface CompanyFilterState {
   priorities: (1 | 2 | 3 | 4 | 5)[];
 }
 
+interface RelatedAnnouncement {
+  id: string;
+  no?: number | string;
+  title: string;
+  category: string;
+  workLocation: string;
+  publishDate: string;
+  deadline: string;
+  status: AnnouncementStatus | string;
+  bidType?: string;
+  organization: string;
+}
+
 type ProgressingCompany = {
   companyId: string;
   companyName: string;
@@ -155,6 +168,17 @@ type ProgressingCompany = {
   workStatus: Extract<WorkStatus, 'in_progress' | 'completed'>;
   evaluationId: string;
   evaluationStatus: EvaluationStatus;
+};
+
+type ProgressingCompanyApiRow = {
+  companyId?: string | number | null;
+  companyName?: string | null;
+  branchId?: string | number | null;
+  branchName?: string | null;
+  priority?: number | null;
+  workStatus?: string | null;
+  evaluationId?: string | number | null;
+  evaluationStatus?: string | null;
 };
 
 // 参加可否オプション
@@ -195,6 +219,13 @@ const normalizePriority = (value: number): CompanyPriority => {
 
 const normalizeWorkStatus = (value: string): Extract<WorkStatus, 'in_progress' | 'completed'> => {
   return value === 'completed' ? 'completed' : 'in_progress';
+};
+
+const normalizeEvaluationStatus = (value: string): EvaluationStatus => {
+  if (value === 'all_met' || value === 'other_only_unmet' || value === 'unmet') {
+    return value;
+  }
+  return 'unmet';
 };
 
 // フィルターボタン
@@ -1337,6 +1368,7 @@ export default function AnnouncementDetailPage() {
   const [announcement, setAnnouncement] = useState<AnnouncementDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const announcementNo = announcement?.announcementNo;
   const [documentPreviewState, setDocumentPreviewState] = useState<Record<string, PreviewState>>({});
   const previewUrlRef = useRef<Record<string, string>>({});
   const documentPreviewStateRef = useRef<Record<string, PreviewState>>({});
@@ -1491,7 +1523,7 @@ export default function AnnouncementDetailPage() {
   }, [announcement?.documents, loadPdfPreview]);
 
   useEffect(() => {
-    if (!announcement || !announcement.announcementNo) {
+    if (!announcementNo) {
       setProgressingCompanies([]);
       return;
     }
@@ -1502,7 +1534,7 @@ export default function AnnouncementDetailPage() {
       setIsProgressingLoading(true);
       try {
         const response = await fetch(
-          getApiUrl(`/api/announcements/${announcement.announcementNo}/progressing-companies`)
+          getApiUrl(`/api/announcements/${announcementNo}/progressing-companies`)
         );
         if (!response.ok) {
           throw new Error(`Failed to fetch progressing companies: ${response.status}`);
@@ -1510,7 +1542,7 @@ export default function AnnouncementDetailPage() {
         const data = await response.json();
         if (isCancelled) return;
         const mapped = Array.isArray(data)
-          ? data.map((row: any) => ({
+          ? data.map((row: ProgressingCompanyApiRow) => ({
               companyId: String(row.companyId ?? ''),
               companyName: row.companyName ?? '',
               branchId: String(row.branchId ?? ''),
@@ -1518,7 +1550,7 @@ export default function AnnouncementDetailPage() {
               priority: normalizePriority(Number(row.priority ?? 1)),
               workStatus: normalizeWorkStatus(row.workStatus ?? ''),
               evaluationId: String(row.evaluationId ?? ''),
-              evaluationStatus: (row.evaluationStatus ?? 'unmet') as EvaluationStatus,
+              evaluationStatus: normalizeEvaluationStatus(row.evaluationStatus ?? ''),
             }))
           : [];
         setProgressingCompanies(mapped);
@@ -1539,7 +1571,7 @@ export default function AnnouncementDetailPage() {
     return () => {
       isCancelled = true;
     };
-  }, [announcement?.announcementNo]);
+  }, [announcementNo]);
 
   // サイドパネル制御
   const handleOpenWithTab = useCallback((tab: 'sort' | 'filter') => {
@@ -1563,12 +1595,12 @@ export default function AnnouncementDetailPage() {
 
   // 関連案件のベースデータ（メモ化）
   // TODO: 関連案件APIを実装後に復活
-  const baseRelatedAnnouncements = useMemo((): any[] => {
+  const baseRelatedAnnouncements = useMemo<RelatedAnnouncement[]>(() => {
     return [];
-  }, [announcement]);
+  }, []);
 
   // フィルタリング・ソート済み関連案件
-  const filteredRelatedAnnouncements = useMemo(() => {
+  const filteredRelatedAnnouncements = useMemo<RelatedAnnouncement[]>(() => {
     let filtered = baseRelatedAnnouncements;
 
     // 検索フィルター

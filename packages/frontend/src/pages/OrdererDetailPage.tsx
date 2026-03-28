@@ -37,7 +37,7 @@ import { categories } from '../constants/categories';
 import { bidTypes } from '../constants/bidType';
 import { prefecturesByRegion } from '../constants/prefectures';
 import type { BidType } from '../types/announcement';
-import type { AnnouncementWithStatus } from '../types';
+import type { AnnouncementStatus } from '../types';
 import { colors, pageStyles, fontSizes, chipStyles, iconStyles, borderRadius, rightPanelColors } from '../constants/styles';
 import { useListPageState } from '../hooks';
 import { useSidebar } from '../contexts/SidebarContext';
@@ -46,18 +46,33 @@ import { CustomPagination } from '../components/bid';
 import { RightSidePanel } from '../components/layout';
 import { getApiUrl } from '../config/api';
 
-const formatCategoryLabel = (segment?: string, detail?: string, fallback?: string): string => {
+const formatCategoryLabel = (segment?: string | null, detail?: string | null, fallback?: string): string => {
   if (segment && detail) return `${segment}／${detail}`;
   if (segment) return segment;
   if (detail) return detail;
   return fallback || '未分類';
 };
 
+interface OrdererAnnouncementRow {
+  id: string;
+  no: number;
+  title: string;
+  organization: string;
+  category: string;
+  categorySegment?: string | null;
+  categoryDetail?: string | null;
+  workLocation: string;
+  publishDate: string;
+  deadline: string;
+  status: StatusFilter;
+  bidType?: BidType;
+}
+
 
 /**
  * 案件カード（コンパクトグリッド形式）
  */
-function AnnouncementCard({ announcement, onClick }: { announcement: AnnouncementWithStatus; onClick: () => void }) {
+function AnnouncementCard({ announcement, onClick }: { announcement: OrdererAnnouncementRow; onClick: () => void }) {
   const statusConfig = announcementStatusConfig[announcement.status];
   const bidType = announcement.bidType ? bidTypeConfig[announcement.bidType] : null;
 
@@ -176,7 +191,7 @@ const FILTER_TABS = [
 ] as const;
 
 // ステータスフィルターオプション
-type StatusFilter = AnnouncementWithStatus['status'];
+type StatusFilter = AnnouncementStatus;
 const STATUS_FILTERS: StatusFilter[] = ['upcoming', 'ongoing', 'awaiting_result', 'closed'];
 
 // フィルター状態の型
@@ -751,6 +766,13 @@ const STATUS_ORDER: Record<StatusFilter, number> = {
   closed: 3,
 };
 
+const normalizeStatusFilter = (value: string | null | undefined): StatusFilter => {
+  if (value && STATUS_FILTERS.includes(value as StatusFilter)) {
+    return value as StatusFilter;
+  }
+  return 'ongoing';
+};
+
 // ナビゲーション追跡用
 const NAV_TRACKING_KEY = 'lastVisitedPath';
 
@@ -802,7 +824,7 @@ export default function OrdererDetailPage() {
   }, [id]);
 
   // この発注者の案件をAPIから取得
-  const [ordererAnnouncements, setOrdererAnnouncements] = useState<any[]>([]);
+  const [ordererAnnouncements, setOrdererAnnouncements] = useState<OrdererAnnouncementRow[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -815,7 +837,23 @@ export default function OrdererDetailPage() {
           throw new Error(`Failed to fetch announcements: ${response.status}`);
         }
         const result = await response.json();
-        setOrdererAnnouncements(result.data || []);
+        const mapped: OrdererAnnouncementRow[] = Array.isArray(result.data)
+          ? result.data.map((row: Partial<OrdererAnnouncementRow> & { announcementNo?: number; status?: string }) => ({
+              id: String(row.id ?? row.announcementNo ?? ''),
+              no: Number(row.announcementNo ?? row?.no ?? 0),
+              title: row.title ?? '',
+              organization: row.organization ?? '',
+              category: row.category ?? '',
+              categorySegment: row.categorySegment,
+              categoryDetail: row.categoryDetail,
+              workLocation: row.workLocation ?? '',
+              publishDate: row.publishDate ?? '',
+              deadline: row.deadline ?? '',
+              status: normalizeStatusFilter(row.status),
+              bidType: row.bidType as BidType | undefined,
+            }))
+          : [];
+        setOrdererAnnouncements(mapped);
       } catch (err) {
         console.error('Error fetching announcements:', err);
         setOrdererAnnouncements([]);
@@ -858,7 +896,7 @@ export default function OrdererDetailPage() {
   // フィルターとソートを適用
   const announcementRows = useMemo(() => {
     // フィルター適用
-    let filtered = baseRows.filter((row) => {
+    const filtered = baseRows.filter((row) => {
       // ステータスフィルター
       if (filters.statuses.length > 0 && !filters.statuses.includes(row.status as StatusFilter)) {
         return false;
@@ -1145,7 +1183,7 @@ export default function OrdererDetailPage() {
                         .map((announcement) => (
                           <AnnouncementCard
                             key={announcement.id}
-                            announcement={announcement as AnnouncementWithStatus}
+                            announcement={announcement}
                             onClick={() => handleAnnouncementClick(announcement.id)}
                           />
                         ))}

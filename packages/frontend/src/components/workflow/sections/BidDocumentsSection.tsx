@@ -76,7 +76,9 @@ const extractAnnouncementNo = (announcementId?: string): string | null => {
 };
 
 export function BidDocumentsSection({ announcement }: BidDocumentsSectionProps) {
-  const documents: DocumentOcr[] = Array.isArray(announcement.documents) ? announcement.documents : [];
+  const documents = useMemo<DocumentOcr[]>(() => (
+    Array.isArray(announcement.documents) ? announcement.documents : []
+  ), [announcement.documents]);
   const announcementNo = useMemo(() => extractAnnouncementNo(announcement.id), [announcement.id]);
   const docIdsKey = useMemo(() => documents.map((doc) => doc.id).join(','), [documents]);
 

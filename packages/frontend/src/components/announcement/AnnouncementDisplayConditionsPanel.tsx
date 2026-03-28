@@ -52,6 +52,7 @@ interface Props {
   onClearAll: () => void;
   categorySegments: string[];
   categoryDetails: string[];
+  categoryHierarchy: Record<string, string[]>;
   activeTab?: 'sort' | 'filter';
   onTabChange?: (tab: 'sort' | 'filter') => void;
 }
@@ -120,6 +121,7 @@ export function AnnouncementDisplayConditionsPanel({
   onClearAll,
   categorySegments,
   categoryDetails,
+  categoryHierarchy,
   activeTab,
   onTabChange,
 }: Props) {
@@ -305,21 +307,47 @@ export function AnnouncementDisplayConditionsPanel({
               <Typography sx={{ fontSize: fontSizes.sm, fontWeight: 600, color: rightPanelColors.text, mb: 1 }}>
                 カテゴリ詳細
               </Typography>
-              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75 }}>
-                {categoryDetails.length === 0 && (
-                  <Typography sx={{ fontSize: fontSizes.xs, color: rightPanelColors.textMuted }}>
-                    利用可能なカテゴリ詳細がありません
-                  </Typography>
-                )}
-                {categoryDetails.map((detail) => (
-                  <FilterButton
-                    key={detail}
-                    label={detail}
-                    selected={filters.categoryDetails.includes(detail)}
-                    onClick={() => toggleCategoryDetail(detail)}
-                  />
-                ))}
-              </Box>
+              {!categoryDetails.length && (
+                <Typography sx={{ fontSize: fontSizes.xs, color: rightPanelColors.textMuted }}>
+                  利用可能なカテゴリ詳細がありません
+                </Typography>
+              )}
+              {categoryDetails.length > 0 && categorySegments.length > 0 && (
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+                  {categorySegments.every((segment) => (categoryHierarchy[segment]?.length ?? 0) === 0) && (
+                    <Typography sx={{ fontSize: fontSizes.xs, color: rightPanelColors.textMuted }}>
+                      利用可能なカテゴリ詳細がありません
+                    </Typography>
+                  )}
+                  {categorySegments.map((segment) => {
+                    const details = categoryHierarchy[segment] || [];
+                    if (details.length === 0) {
+                      return null;
+                    }
+                    const selectedCount = details.filter((detail) => filters.categoryDetails.includes(detail)).length;
+                    return (
+                      <Box key={segment}>
+                        <Typography sx={{ fontSize: fontSizes.xs, fontWeight: 600, color: rightPanelColors.textMuted, mb: 0.5 }}>
+                          {segment}
+                          <Typography component="span" sx={{ ml: 1, fontSize: fontSizes.xs, color: rightPanelColors.textMuted }}>
+                            ({selectedCount}/{details.length})
+                          </Typography>
+                        </Typography>
+                        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75 }}>
+                          {details.map((detail) => (
+                            <FilterButton
+                              key={`${segment}-${detail}`}
+                              label={detail}
+                              selected={filters.categoryDetails.includes(detail)}
+                              onClick={() => toggleCategoryDetail(detail)}
+                            />
+                          ))}
+                        </Box>
+                      </Box>
+                    );
+                  })}
+                </Box>
+              )}
             </Box>
           </Box>
         );

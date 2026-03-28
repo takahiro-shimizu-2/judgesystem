@@ -56,6 +56,7 @@ interface AnnouncementFilterModalProps {
   gridFilterModel: GridFilterModel;
   categorySegments: string[];
   categoryDetails: string[];
+  categoryHierarchy: Record<string, string[]>;
   prefectures: string[];
   onApply: (filters: AnnouncementFilterState) => void;
   onGridFilterApply: (model: GridFilterModel) => void;
@@ -67,6 +68,7 @@ export function AnnouncementFilterModal({
   gridFilterModel,
   categorySegments,
   categoryDetails,
+  categoryHierarchy,
   prefectures,
   onApply,
   onGridFilterApply,
@@ -400,15 +402,40 @@ export function AnnouncementFilterModal({
                     onClick={toggleAllCategoryDetails}
                   />
                 </div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-                  {categoryDetails.map((detail) => (
-                    <FilterOptionButton
-                      key={detail}
-                      label={detail}
-                      selected={localFilters.categoryDetails.includes(detail)}
-                      onClick={() => toggleCategoryDetail(detail)}
-                    />
-                  ))}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                  {categorySegments.length === 0 && (
+                    <span style={{ fontSize: fontSizes.sm, color: colors.text.muted }}>利用可能なカテゴリ詳細がありません</span>
+                  )}
+                  {categorySegments.length > 0 && categorySegments.every((segment) => (categoryHierarchy[segment]?.length ?? 0) === 0) && (
+                    <span style={{ fontSize: fontSizes.sm, color: colors.text.muted }}>利用可能なカテゴリ詳細がありません</span>
+                  )}
+                  {categorySegments.map((segment) => {
+                    const details = categoryHierarchy[segment] || [];
+                    if (details.length === 0) {
+                      return null;
+                    }
+                    const selectedCount = details.filter((detail) => localFilters.categoryDetails.includes(detail)).length;
+                    return (
+                      <div key={segment}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                          <span style={{ fontWeight: 600, fontSize: fontSizes.sm, color: colors.text.secondary }}>{segment}</span>
+                          <span style={{ fontSize: fontSizes.xs, color: colors.text.muted }}>
+                            {selectedCount}/{details.length}
+                          </span>
+                        </div>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                          {details.map((detail) => (
+                            <FilterOptionButton
+                              key={`${segment}-${detail}`}
+                              label={detail}
+                              selected={localFilters.categoryDetails.includes(detail)}
+                              onClick={() => toggleCategoryDetail(detail)}
+                            />
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
 

@@ -2,7 +2,7 @@
  * 協力会社セクション（候補者リスト）
  * 企業情報、ステータス管理、メモ、文字起こし、トークスクリプトを表示
  */
-import { useState, useMemo, useCallback, useEffect } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import {
   Box,
   Typography,
@@ -52,6 +52,9 @@ import {
 } from '../../../constants/styles';
 import { MEMO_TAGS, type MemoTag, type MemoTagConfig, type RecordMemo } from '../../../constants/memoTags';
 import type { Partner, PartnerStatus, PartnerDocument } from '../../../types';
+
+const TALK_TEMPLATE_IDS = ['talk-intro', 'talk-followup'] as const;
+const EMAIL_TEMPLATE_IDS = ['email-request', 'email-estimate'] as const;
 import { partnerStatusLabels, partnerStatusColors, partnerStatusPriority } from '../../../constants/partnerStatus';
 import { ContactInfo, ContactActions } from '../../common/ContactInfo';
 import { useStaffDirectory } from '../../../contexts/StaffContext';
@@ -369,50 +372,43 @@ function PartnerCard({
   const [editedContent, setEditedContent] = useState<string | null>(null);
 
   // テンプレートごとの担当者
-  const [templateAssignees, setTemplateAssignees] = useState<Record<string, string>>({});
+  const [manualTalkAssignees, setManualTalkAssignees] = useState<Record<string, string>>({});
 
   // 受信資料の担当者
-  const [receivedDocsAssignee, setReceivedDocsAssignee] = useState<string>('');
+  const [manualReceivedDocsAssignee, setManualReceivedDocsAssignee] = useState<string>('');
+  const [hasManualReceivedDocsAssignee, setHasManualReceivedDocsAssignee] = useState(false);
 
   // メールタブ用
   const [selectedEmailTemplateId, setSelectedEmailTemplateId] = useState<string>('email-request');
   const [editedEmailSubject, setEditedEmailSubject] = useState<string | null>(null);
   const [editedEmailContent, setEditedEmailContent] = useState<string | null>(null);
-  const [emailAssignees, setEmailAssignees] = useState<Record<string, string>>({});
+  const [manualEmailAssignees, setManualEmailAssignees] = useState<Record<string, string>>({});
 
-  // テンプレートIDの定数
-  const TALK_TEMPLATE_IDS = ['talk-intro', 'talk-followup'];
-  const EMAIL_TEMPLATE_IDS = ['email-request', 'email-estimate'];
-
-  // ワークフロー担当者が変更されたら、空の担当者欄を自動で埋める
-  useEffect(() => {
-    if (!workflowAssigneeId) return;
-
-    // templateAssignees: 各トークスクリプトテンプレートの空のところを更新
-    setTemplateAssignees((prev) => {
-      const updated = { ...prev };
+  const talkTemplateAssignees = useMemo(() => {
+    const updated = { ...manualTalkAssignees };
+    if (workflowAssigneeId) {
       TALK_TEMPLATE_IDS.forEach((id) => {
-        if (!updated[id]) {
+        if (updated[id] === undefined) {
           updated[id] = workflowAssigneeId;
         }
       });
-      return updated;
-    });
+    }
+    return updated;
+  }, [manualTalkAssignees, workflowAssigneeId]);
 
-    // emailAssignees: 各メールテンプレートの空のところを更新
-    setEmailAssignees((prev) => {
-      const updated = { ...prev };
+  const emailTemplateAssignees = useMemo(() => {
+    const updated = { ...manualEmailAssignees };
+    if (workflowAssigneeId) {
       EMAIL_TEMPLATE_IDS.forEach((id) => {
-        if (!updated[id]) {
+        if (updated[id] === undefined) {
           updated[id] = workflowAssigneeId;
         }
       });
-      return updated;
-    });
+    }
+    return updated;
+  }, [manualEmailAssignees, workflowAssigneeId]);
 
-    // receivedDocsAssignee: 空なら更新
-    setReceivedDocsAssignee((prev) => (prev === '' ? workflowAssigneeId : prev));
-  }, [workflowAssigneeId]);
+  const receivedDocsAssignee = hasManualReceivedDocsAssignee ? manualReceivedDocsAssignee : (workflowAssigneeId || '');
 
   // 架電記録メモ（タグ付き）
   const [callMemos, setCallMemos] = useState<CallMemo[]>([]);
@@ -571,8 +567,8 @@ function PartnerCard({
                   <PersonIcon sx={{ ...iconStyles.small, color: colors.accent.blue }} />
                   <FormControl size="small">
                     <Select
-                      value={templateAssignees[selectedTemplateId] || ''}
-                      onChange={(e) => setTemplateAssignees(prev => ({ ...prev, [selectedTemplateId]: e.target.value }))}
+                      value={talkTemplateAssignees[selectedTemplateId] || ''}
+                      onChange={(e) => setManualTalkAssignees(prev => ({ ...prev, [selectedTemplateId]: e.target.value }))}
                       displayEmpty
                       sx={staffSelectStyles}
                       renderValue={(value) => {
@@ -939,8 +935,8 @@ function PartnerCard({
                   <PersonIcon sx={{ ...iconStyles.small, color: colors.accent.blue }} />
                   <FormControl size="small">
                     <Select
-                      value={emailAssignees[selectedEmailTemplateId] || ''}
-                      onChange={(e) => setEmailAssignees(prev => ({ ...prev, [selectedEmailTemplateId]: e.target.value }))}
+                      value={emailTemplateAssignees[selectedEmailTemplateId] || ''}
+                      onChange={(e) => setManualEmailAssignees(prev => ({ ...prev, [selectedEmailTemplateId]: e.target.value }))}
                       displayEmpty
                       sx={staffSelectStyles}
                       renderValue={(value) => {
@@ -1045,7 +1041,10 @@ function PartnerCard({
                   <FormControl size="small">
                     <Select
                       value={receivedDocsAssignee}
-                      onChange={(e) => setReceivedDocsAssignee(e.target.value)}
+                      onChange={(e) => {
+                        setHasManualReceivedDocsAssignee(true);
+                        setManualReceivedDocsAssignee(e.target.value);
+                      }}
                       displayEmpty
                       sx={staffSelectStyles}
                       renderValue={(value) => {
@@ -1178,13 +1177,9 @@ export function PartnerSection({ evaluation, partners, onPartnersChange, workflo
   ]);
 
   // 送付資料の担当者
-  const [sentDocsAssignee, setSentDocsAssignee] = useState<string>('');
-
-  // ワークフロー担当者が変更されたら、空の担当者欄を自動で埋める
-  useEffect(() => {
-    if (!workflowAssigneeId) return;
-    setSentDocsAssignee((prev) => (prev === '' ? workflowAssigneeId : prev));
-  }, [workflowAssigneeId]);
+  const [manualSentDocsAssignee, setManualSentDocsAssignee] = useState<string>('');
+  const [hasManualSentDocsAssignee, setHasManualSentDocsAssignee] = useState(false);
+  const sentDocsAssignee = hasManualSentDocsAssignee ? manualSentDocsAssignee : (workflowAssigneeId || '');
 
   // フィルター状態
   const [selectedStatuses, setSelectedStatuses] = useState<PartnerStatus[]>([
@@ -1269,7 +1264,10 @@ export function PartnerSection({ evaluation, partners, onPartnersChange, workflo
               <FormControl size="small">
                 <Select
                   value={sentDocsAssignee}
-                  onChange={(e) => setSentDocsAssignee(e.target.value)}
+                  onChange={(e) => {
+                    setHasManualSentDocsAssignee(true);
+                    setManualSentDocsAssignee(e.target.value);
+                  }}
                   displayEmpty
                   sx={staffSelectStyles}
                   renderValue={(value) => {

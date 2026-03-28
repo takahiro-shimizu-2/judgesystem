@@ -40,9 +40,7 @@ const departmentColors: Record<string, string> = {
 };
 
 // 行データの型
-interface RowData extends Staff {
-  // Staff型をそのまま使用
-}
+type RowData = Staff;
 
 /**
  * 担当者カード

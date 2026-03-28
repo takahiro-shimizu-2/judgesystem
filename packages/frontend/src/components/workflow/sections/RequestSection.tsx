@@ -3,7 +3,7 @@
  * 依頼元企業・協力会社への連絡メール機能を提供
  * 入札書確認依頼時に入札書のアップロードが可能
  */
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import {
   Box,
   Typography,
@@ -118,50 +118,45 @@ export function RequestSection({ evaluation, partners = [], workflowAssigneeId }
   const [editedBody, setEditedBody] = useState<string | null>(null);
 
   // 送信先カテゴリ×テンプレートごとの担当者 (key: `${category}-${templateId}`)
-  const [templateAssignees, setTemplateAssignees] = useState<Record<string, string>>({});
+  const [manualTemplateAssignees, setManualTemplateAssignees] = useState<Record<string, string>>({});
   const getAssigneeKey = (category: RecipientCategory, templateId: string) => `${category}-${templateId}`;
   const handleTemplateAssigneeChange = (staffId: string) => {
     const key = getAssigneeKey(recipientCategory, selectedTemplateId);
-    setTemplateAssignees((prev) => ({ ...prev, [key]: staffId }));
+    setManualTemplateAssignees((prev) => ({ ...prev, [key]: staffId }));
   };
-  const currentAssignee = templateAssignees[getAssigneeKey(recipientCategory, selectedTemplateId)] || '';
-
-  // ワークフロー担当者が変更されたら、空の担当者欄を自動で埋める
-  useEffect(() => {
-    if (!workflowAssigneeId) return;
-
-    // すべての送信先カテゴリ×テンプレートの組み合わせの空のところを更新
+  const templateAssignees = useMemo(() => {
     const categories: RecipientCategory[] = ['requester', 'partner'];
     const templateIds = requestEmailTemplates.map(t => t.id);
-
-    setTemplateAssignees((prev) => {
-      const updated = { ...prev };
+    const filled = { ...manualTemplateAssignees };
+    if (workflowAssigneeId) {
       categories.forEach((category) => {
         templateIds.forEach((templateId) => {
           const key = getAssigneeKey(category, templateId);
-          if (!updated[key]) {
-            updated[key] = workflowAssigneeId;
+          if (filled[key] === undefined) {
+            filled[key] = workflowAssigneeId;
           }
         });
       });
-      return updated;
-    });
-  }, [workflowAssigneeId]);
+    }
+    return filled;
+  }, [manualTemplateAssignees, workflowAssigneeId]);
+  const currentAssignee = templateAssignees[getAssigneeKey(recipientCategory, selectedTemplateId)] || '';
 
   // 案件・企業情報
   const projectName = evaluation?.announcement?.title || '';
   const requesterCompany = evaluation?.company;
+  const requesterCompanyId = requesterCompany?.id;
   // 依頼元企業の詳細情報を取得（非同期）
   const [requesterCompanyDetails, setRequesterCompanyDetails] = useState<CompanyWithDetails | undefined>(undefined);
 
   useEffect(() => {
-    if (!requesterCompany) return;
+    if (!requesterCompanyId) return;
     let isMounted = true;
     fetchCompanyList().then((list) => {
-      if (isMounted) setRequesterCompanyDetails(list.find(c => c.id === requesterCompany.id));
+      if (isMounted) setRequesterCompanyDetails(list.find(c => c.id === requesterCompanyId));
     });
     return () => { isMounted = false; };
-  }, [requesterCompany?.id]);
+  }, [requesterCompanyId]);
 
   // 自社情報（実際はログイン企業情報から取得）
   const myCompanyName = '株式会社サンプル建設';

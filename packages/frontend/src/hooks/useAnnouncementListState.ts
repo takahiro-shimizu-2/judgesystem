@@ -5,6 +5,7 @@ import { useState, useCallback, useEffect, useRef } from 'react';
 import type { GridFilterModel, GridSortModel, GridPaginationModel } from '@mui/x-data-grid';
 import type { AnnouncementFilterState } from '../components/announcement';
 import { getApiUrl } from '../config/api';
+import type { AnnouncementStatus, BidType } from '../types';
 
 // ローカルストレージのキー
 const STORAGE_KEYS = {
@@ -28,6 +29,24 @@ const DEFAULT_FILTERS: AnnouncementFilterState = {
 
 const DEFAULT_SORT: GridSortModel = [];
 const DEFAULT_PAGINATION: GridPaginationModel = { pageSize: 25, page: 0 };
+
+interface AnnouncementListApiItem {
+  id: string;
+  announcementNo: number;
+  title: string;
+  organization: string;
+  category: string;
+  categorySegment?: string | null;
+  categoryDetail?: string | null;
+  noticeCategoryName?: string | null;
+  noticeCategoryCode?: string | null;
+  noticeProcurementMethod?: string | null;
+  bidType?: BidType | null;
+  workLocation: string;
+  publishDate: string;
+  deadline: string;
+  status: AnnouncementStatus;
+}
 
 /**
  * localStorage から安全に値を読み込む
@@ -62,7 +81,7 @@ async function fetchAnnouncements(params: {
   filters: AnnouncementFilterState;
   searchQuery: string;
   sortModel: GridSortModel;
-}): Promise<{ data: any[]; total: number }> {
+}): Promise<{ data: AnnouncementListApiItem[]; total: number }> {
   const { page, pageSize, filters, searchQuery, sortModel } = params;
 
   // クエリパラメータを構築
@@ -152,7 +171,7 @@ export function useAnnouncementListState() {
   );
 
   // データ取得状態
-  const [rows, setRows] = useState<any[]>([]);
+  const [rows, setRows] = useState<AnnouncementListApiItem[]>([]);
   const [rowCount, setRowCount] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);

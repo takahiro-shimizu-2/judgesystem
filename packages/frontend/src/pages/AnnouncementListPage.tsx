@@ -20,9 +20,7 @@ import { RightSidePanel } from '../components/layout';
 import { AnnouncementDisplayConditionsPanel } from '../components/announcement';
 import { useSidebar } from '../contexts/SidebarContext';
 import { useAnnouncementListState } from '../hooks';
-import { categories as defaultCategoryDetails } from '../constants/categories';
-
-const DEFAULT_CATEGORY_SEGMENTS = ['工事', '役務の提供等', '物品の製造', '物品の販売', '物品の買受け'];
+import { categoryHierarchy as baseCategoryHierarchy, defaultCategoryDetails, defaultCategorySegments } from '../constants/categories';
 
 // 都道府県を抽出するヘルパー関数
 function extractPrefecture(workLocation: string | undefined): string {
@@ -64,7 +62,7 @@ function getCountdown(deadline: string): {
   return { days, label: `あと${days}日`, textColor: colors.status.success.main };
 }
 
-function formatCategoryLabel(segment?: string, detail?: string, fallback?: string): string {
+function formatCategoryLabel(segment?: string | null, detail?: string | null, fallback?: string): string {
   if (segment && detail) return `${segment}／${detail}`;
   if (segment) return segment;
   if (detail) return detail;
@@ -76,15 +74,15 @@ interface RowData {
   id: string;
   no: string;
   status: AnnouncementStatus;
-  bidType?: BidType;
+  bidType?: BidType | null;
   title: string;
   organization: string;
   category: string;
-  categorySegment?: string;
-  categoryDetail?: string;
-  noticeCategoryName?: string;
-  noticeCategoryCode?: string;
-  noticeProcurementMethod?: string;
+  categorySegment?: string | null;
+  categoryDetail?: string | null;
+  noticeCategoryName?: string | null;
+  noticeCategoryCode?: string | null;
+  noticeProcurementMethod?: string | null;
   publishDate: string;
   deadline: string;
   prefecture: string;
@@ -361,6 +359,37 @@ export default function AnnouncementListPage() {
 
   const visibleCategoryDetails = filters.categoryDetails.length > 0 ? filters.categoryDetails : filters.categories;
 
+  const categoryHierarchyOptions = useMemo(() => {
+    const hierarchyMap = new Map<string, Set<string>>();
+    Object.entries(baseCategoryHierarchy).forEach(([segment, details]) => {
+      hierarchyMap.set(segment, new Set(details));
+    });
+    rows.forEach((row) => {
+      if (!row.categorySegment && !row.categoryDetail) {
+        return;
+      }
+      const segmentKey = row.categorySegment || 'その他';
+      if (!hierarchyMap.has(segmentKey)) {
+        hierarchyMap.set(segmentKey, new Set());
+      }
+      if (row.categoryDetail) {
+        hierarchyMap.get(segmentKey)!.add(row.categoryDetail);
+      }
+    });
+    const result: Record<string, string[]> = {};
+    const appendSegment = (segment: string) => {
+      const detailSet = hierarchyMap.get(segment);
+      if (!detailSet) return;
+      result[segment] = Array.from(detailSet).sort((a, b) => a.localeCompare(b, 'ja'));
+    };
+    defaultCategorySegments.forEach(appendSegment);
+    Array.from(hierarchyMap.keys())
+      .filter((segment) => !defaultCategorySegments.includes(segment))
+      .sort((a, b) => a.localeCompare(b, 'ja'))
+      .forEach(appendSegment);
+    return result;
+  }, [rows]);
+
   // 行データに変換（サーバーから取得したデータをそのまま使用）
 const displayRows: RowData[] = rows.map((a) => ({
   id: String(a.announcementNo), // 公告番号を使用（詳細APIと整合）
@@ -380,25 +409,15 @@ const displayRows: RowData[] = rows.map((a) => ({
   prefecture: extractPrefecture(a.workLocation),
 }));
 
-const categorySegmentOptions = useMemo(() => {
-  const set = new Set<string>(DEFAULT_CATEGORY_SEGMENTS);
-  rows.forEach((row: any) => {
-    if (row.categorySegment) {
-      set.add(row.categorySegment);
-    }
-  });
-  return Array.from(set).sort();
-}, [rows]);
+  const categorySegmentOptions = useMemo(() => Object.keys(categoryHierarchyOptions), [categoryHierarchyOptions]);
 
-const categoryDetailOptions = useMemo(() => {
-  const set = new Set<string>(defaultCategoryDetails);
-  rows.forEach((row: any) => {
-    if (row.categoryDetail) {
-      set.add(row.categoryDetail);
-    }
-  });
-  return Array.from(set).sort();
-}, [rows]);
+  const categoryDetailOptions = useMemo(() => {
+    const set = new Set<string>(defaultCategoryDetails);
+    Object.values(categoryHierarchyOptions).forEach((details) => {
+      details.forEach((detail) => set.add(detail));
+    });
+    return Array.from(set).sort((a, b) => a.localeCompare(b, 'ja'));
+  }, [categoryHierarchyOptions]);
 
   // ページ変更時にスクロール位置をリセット
   useEffect(() => {
@@ -639,6 +658,7 @@ const categoryDetailOptions = useMemo(() => {
           onClearAll={handleClearAll}
           categorySegments={categorySegmentOptions}
           categoryDetails={categoryDetailOptions}
+          categoryHierarchy={categoryHierarchyOptions}
           activeTab={conditionTab}
           onTabChange={setConditionTab}
         />

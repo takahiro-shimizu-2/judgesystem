@@ -5,7 +5,8 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import type { GridFilterModel, GridSortModel, GridPaginationModel } from '@mui/x-data-grid';
 import { extractPrefecture } from '../constants/prefectures';
-import type { EvaluationStatus, FilterState } from '../types';
+import type { EvaluationStatus, FilterState, CompanyPriority, WorkStatus } from '../types';
+import type { BidType } from '../types/announcement';
 import { getApiUrl } from '../config/api';
 
 // ナビゲーション追跡用のsessionStorageキー
@@ -38,6 +39,48 @@ const DEFAULT_STATUS_COUNTS: Record<EvaluationStatus, number> = {
   other_only_unmet: 0,
   unmet: 0,
 };
+
+interface EvaluationListApiItem {
+  id: string;
+  evaluationNo: string;
+  status: EvaluationStatus;
+  workStatus: WorkStatus;
+  evaluatedAt?: string | null;
+  company?: {
+    name?: string;
+    priority?: CompanyPriority;
+  };
+  branch?: {
+    name?: string;
+  };
+  announcement?: {
+    title?: string;
+    organization?: string;
+    category?: string;
+    bidType?: BidType | null;
+    deadline?: string;
+    workLocation?: string;
+  };
+}
+
+interface BidListRow {
+  id: string;
+  evaluationNo: string;
+  status: EvaluationStatus;
+  workStatus: WorkStatus;
+  priority: CompanyPriority;
+  title: string;
+  company: string;
+  branch: string;
+  organization: string;
+  category: string;
+  bidType?: BidType;
+  deadline: string;
+  evaluatedAt: string;
+  prefecture: string;
+}
+
+const DEFAULT_PRIORITY = 3 as CompanyPriority;
 
 /**
  * localStorage から安全に値を読み込む
@@ -115,7 +158,7 @@ async function fetchEvaluations(params: {
   filters: FilterState;
   searchQuery: string;
   sortModel: GridSortModel;
-}): Promise<{ data: any[]; total: number }> {
+}): Promise<{ data: EvaluationListApiItem[]; total: number }> {
   const { page, pageSize, filters, searchQuery, sortModel } = params;
 
   // クエリパラメータを構築
@@ -215,7 +258,7 @@ export function useBidListState() {
   const [showFilterModal, setShowFilterModal] = useState(false);
 
   // API状態
-  const [rows, setRows] = useState<any[]>([]);
+  const [rows, setRows] = useState<BidListRow[]>([]);
   const [totalCount, setTotalCount] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -298,21 +341,21 @@ export function useBidListState() {
             throw new Error('Invalid API response: data is not an array');
           }
 
-          const mapped = result.data.map((e: any) => ({
-            id: e.id,
-            evaluationNo: e.evaluationNo,
-            status: e.status,
-            workStatus: e.workStatus,
-            priority: e.company?.priority || 0,
-            title: e.announcement?.title || '',
-            company: e.company?.name || '',
-            branch: e.branch?.name || '',
-            organization: e.announcement?.organization || '',
-            category: e.announcement?.category || '',
-            bidType: e.announcement?.bidType,
-            deadline: e.announcement?.deadline || '',
-            evaluatedAt: e.evaluatedAt ? e.evaluatedAt.substring(0, 10) : '',
-            prefecture: extractPrefecture(e.announcement?.workLocation || '') ?? '',
+          const mapped: BidListRow[] = result.data.map((item) => ({
+            id: item.id,
+            evaluationNo: item.evaluationNo,
+            status: item.status,
+            workStatus: item.workStatus,
+            priority: item.company?.priority ?? DEFAULT_PRIORITY,
+            title: item.announcement?.title ?? '',
+            company: item.company?.name ?? '',
+            branch: item.branch?.name ?? '',
+            organization: item.announcement?.organization ?? '',
+            category: item.announcement?.category ?? '',
+            bidType: item.announcement?.bidType ? item.announcement.bidType as BidType : undefined,
+            deadline: item.announcement?.deadline ?? '',
+            evaluatedAt: item.evaluatedAt ? item.evaluatedAt.substring(0, 10) : '',
+            prefecture: extractPrefecture(item.announcement?.workLocation || '') ?? '',
           }));
 
           setRows(mapped);

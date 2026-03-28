@@ -1,7 +1,7 @@
 /**
  * 発注者一覧用フィルターモーダル
  */
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import {
   Close as CloseIcon,
   FilterAlt as FilterIcon,
@@ -62,9 +62,7 @@ export function OrdererFilterModal({
 }: OrdererFilterModalProps) {
   const [activeTab, setActiveTab] = useState<'preset' | 'column'>('preset');
   const [localFilters, setLocalFilters] = useState<OrdererFilterState>(filters);
-  const [columnFilters, setColumnFilters] = useState<Record<string, ColumnFilterItem>>({ ...DEFAULT_COLUMN_FILTERS });
-
-  useEffect(() => {
+  const initialColumnFilters = useMemo(() => {
     const newColumnFilters = { ...DEFAULT_COLUMN_FILTERS };
     gridFilterModel.items.forEach(item => {
       if (item.field in newColumnFilters) {
@@ -74,8 +72,9 @@ export function OrdererFilterModal({
         };
       }
     });
-    setColumnFilters(newColumnFilters);
+    return newColumnFilters;
   }, [gridFilterModel]);
+  const [columnFilters, setColumnFilters] = useState<Record<string, ColumnFilterItem>>(initialColumnFilters);
 
   useEffect(() => {
     document.body.style.overflow = 'hidden';
