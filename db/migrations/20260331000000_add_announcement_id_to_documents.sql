@@ -1,6 +1,9 @@
 -- migrate:up
 
 ALTER TABLE announcements_documents_master
+  DROP CONSTRAINT IF EXISTS announcements_documents_master_pkey,
+  ADD COLUMN IF NOT EXISTS id BIGSERIAL,
+  ADD CONSTRAINT announcements_documents_master_pkey PRIMARY KEY (id),
   ADD COLUMN IF NOT EXISTS announcement_id INTEGER,
   ADD COLUMN IF NOT EXISTS document_name TEXT,
   ADD COLUMN IF NOT EXISTS document_url TEXT,
@@ -32,6 +35,7 @@ CREATE INDEX IF NOT EXISTS idx_announcements_documents_master_announcement_id
 
 DROP INDEX IF EXISTS idx_announcements_documents_master_announcement_id;
 ALTER TABLE announcements_documents_master
+  DROP CONSTRAINT IF EXISTS announcements_documents_master_pkey,
   DROP COLUMN IF EXISTS is_ocr_failed,
   DROP COLUMN IF EXISTS done,
   DROP COLUMN IF EXISTS "topAgencyName",
@@ -50,4 +54,5 @@ ALTER TABLE announcements_documents_master
   DROP COLUMN IF EXISTS title,
   DROP COLUMN IF EXISTS document_url,
   DROP COLUMN IF EXISTS document_name,
-  DROP COLUMN IF EXISTS announcement_id;
+  DROP COLUMN IF EXISTS announcement_id,
+  DROP COLUMN IF EXISTS id;
