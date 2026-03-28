@@ -43,7 +43,7 @@ class BidAnnouncementsApplication:
             sys.exit(1)
 
         markdown_document_ids = self._resolve_document_ids(
-            enabled=self.args.run_markdown_from_db,
+            enabled=(self.args.run_markdown_from_db or self.args.fill_markdown_paths_from_storage),
             ids_arg=self.args.markdown_document_ids,
             ids_file=self.args.markdown_document_ids_file,
             arg_name="markdown_document_ids",
@@ -63,6 +63,14 @@ class BidAnnouncementsApplication:
             self.service.mark_missing_pdfs(
                 include_flagged=self.args.file_404_include_flagged,
                 limit=self.args.file_404_check_limit,
+            )
+            sys.exit(0)
+
+        if self.args.fill_markdown_paths_from_storage:
+            self.service.fill_markdown_paths_from_storage(
+                use_gcs=self.use_gcs,
+                document_ids=markdown_document_ids,
+                include_file_404_flagged=self.args.file_404_include_flagged,
             )
             sys.exit(0)
 

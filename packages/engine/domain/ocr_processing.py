@@ -658,6 +658,71 @@ class OcrProcessingMixin:
         updated = self.db_operator.updateMarkdownPaths(tablename, df_updates)
         print(f"Updated markdown_path for {updated} documents.")
 
+    def fill_markdown_paths_from_storage(
+        self,
+        use_gcs=False,
+        document_ids=None,
+        include_file_404_flagged=False
+    ):
+        """
+        ストレージ上の既存 Markdown を確認し、DB の markdown_path を補完する
+        """
+        tablename = self.tablenamesconfig.bid_announcements_document_table
+        if not self.db_operator.ifTableExists(tablename):
+            print(f"Table {tablename} does not exist.")
+            return
+
+        where_clauses = ["(markdown_path IS NULL OR markdown_path = '')"]
+        if not include_file_404_flagged:
+            where_clauses.append("(file_404_flag IS NULL OR file_404_flag = FALSE)")
+
+        if document_ids:
+            sanitized = []
+            for doc_id in document_ids:
+                doc = (doc_id or "").strip()
+                if doc:
+                    sanitized.append("'" + doc.replace("'", "''") + "'")
+            if sanitized:
+                where_clauses.append(f"document_id IN ({', '.join(sanitized)})")
+
+        where_clause = ""
+        if where_clauses:
+            where_clause = "WHERE " + " AND ".join(where_clauses)
+
+        df_main = self.db_operator.selectToTable(tablename, where_clause)
+        if df_main.empty:
+            print("No documents require markdown_path backfill.")
+            return
+
+        print(f"Checking storage for {len(df_main)} documents without markdown_path...")
+        file_cache = {}
+        updates = []
+        for _, row in tqdm(df_main.iterrows(), total=len(df_main), desc="Backfilling Markdown paths"):
+            document_id = str(row.get("document_id", "")).strip()
+            file_format = str(row.get("fileFormat", "")).strip().lower()
+            if not document_id or file_format not in ("pdf", "pdfx", "pdf/a", "pdf/a-1"):
+                continue
+
+            md_path = self._build_markdown_path(
+                document_id=document_id,
+                file_format=file_format or None,
+                use_gcs=use_gcs,
+            )
+            if self._path_exists_with_cache(md_path, file_cache):
+                updates.append({
+                    "document_id": document_id,
+                    "fileFormat": row.get("fileFormat"),
+                    "markdown_path": md_path,
+                })
+
+        if not updates:
+            print("Could not find any Markdown files in storage to backfill.")
+            return
+
+        df_updates = pd.DataFrame(updates)
+        updated = self.db_operator.updateMarkdownPaths(tablename, df_updates)
+        print(f"Backfilled markdown_path for {updated} documents (found {len(updates)} files in storage).")
+
     def regenerate_ocr_json_from_database(
         self,
         use_gcs=False,

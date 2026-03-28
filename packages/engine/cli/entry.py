@@ -41,6 +41,8 @@ def build_parser():
                         help="[--run_markdown_from_db専用] 既にmarkdown_pathがあるドキュメントも対象に含める")
     parser.add_argument("--markdown_overwrite_files", action="store_true",
                         help="[--run_markdown_from_db専用] 既存のMarkdownファイルを上書き生成する")
+    parser.add_argument("--fill_markdown_paths_from_storage", action="store_true",
+                        help="GCS/ローカル上の既存Markdownを確認し markdown_path を補完する")
     parser.add_argument("--run_ocr_json_from_db", action="store_true",
                         help="既存DBデータを使ってOCR JSON生成のみ実行")
     parser.add_argument("--ocr_json_document_ids", default=None,
