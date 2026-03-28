@@ -2090,7 +2090,7 @@ export default function AnnouncementDetailPage() {
                                       p: 1.25,
                                       border: `1px solid ${colors.border.light}`,
                                       borderRadius: borderRadius.xs,
-                                      backgroundColor: colors.background.card,
+                                      backgroundColor: colors.background.paper,
                                     }}
                                   >
                                     <Typography sx={{ fontSize: fontSizes.sm, fontWeight: 600, color: colors.text.primary }}>
