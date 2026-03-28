@@ -46,15 +46,34 @@ JSON Structure:
 "入札書の提出期間": {
 "開始日": "",
 "終了日": ""
-}
+},
+"提出書類一覧": [
+  {
+    "書類名": "",
+    "日付": "",
+    "意味": "",
+    "時点": "開始"
+  }
+]
 }
 ```
 
 Rules:
 1.  **Exact Text:** Use the exact original text from the context for all extracted data.  Do not modify or translate the text.
-1-1. As to the "入札方式" field, please set one from: open_competitive, designated_competitive, negotiated_contract, planning_competition, preferred_designation, open_counter, document_request, opinion_request, unknown, other.
+1-1. As to the "入札方式" field, please set one from: open_competitive, designated_competitive, negotiated_contract, planning_competition, preferred_designation, open_counter, document_request, opinion_request, unknown, other. 参考基準:
+    - open_counter: 「見積」「オープンカウンター」「見積書の提出」など、少額随意・見積合わせを明示する場合。提出物が「見積書」「見積書一式」等なら優先。
+    - open_competitive / designated_competitive: 一般競争入札か指名競争を明示している場合。
+    - planning_competition / document_request / opinion_request: 企画競争、意見募集、公募型プロポーザル等を明示している場合。
+    - negotiated_contract / preferred_designation: 随意契約や特定業者のみと記載されている場合。
+    - 当てはまらない場合は unknown か other を使用する。
 1-2. As to the "資料種類" field, please set one from: "公募", "一般競争入札", "指名停止措置", "入札公告", "変更公告/注意事項公告/訂正公告/再公告", "中止", "企画競争実施の公示", "企画競争に係る手続開始の公示", "競争参加者の資格に関する公示", "見積書", "見積依頼書", "品目等内訳書", "入札書", "入札結果", "公告結果", "仕様書", "情報提案要求書", "業者の選定", "その他".
-1-3. As to the "category" field, please set one from: '土木一式工事', '建築一式工事', '大工工事', '左官工事', 'とび・土工・コンクリート工事', '石工事', '屋根工事', '電気工事', '管工事', 'タイル・れんが・ブロック工事', '鋼構造物工事', '鉄筋工事', '舗装工事', 'しゅんせつ工事', '板金工事', 'ガラス工事', '塗装工事', '防水工事', '内装仕上工事', '機械器具設置工事', '熱絶縁工事', '電気通信工事', '造園工事', 'さく井工事', '建具工事', '水道施設工事', '消防施設工事', '清掃施設工事', '解体工事', 'その他'.
+1-3. As to the "category" field, strictly use the enumerations below. Construction work（各発注機関用） must be one of: '土木', '建築', '大工', '左官', 'とび・土工・コンクリート', '石', '屋根', '電気', '管', 'タイル・れんが・ブロック', '鋼構造物', '鉄筋', '舗装', 'しゅんせつ', '板金', 'ガラス', '塗装', '防水', '内装仕上', '機械装置', '熱絶縁', '電気通信', '造園', 'さく井', '建具', '水道施設', '消防施設', '清掃施設', '解体', 'その他', 'グラウト', '維持', '自然環境共生', '水環境処理'. Goods / services（全省庁統一）は必ず `"{大分類} / {中分類}"` 形式で記載する:
+    - 物品の製造: '衣服・その他繊維製品類', 'ゴム・皮革・プラスチック製品類', '窯業・土石製品類', '非鉄金属・金属製品類', 'フォーム印刷', 'その他印刷類', '図書類', '電子出版物類', '紙・紙加工品類', '車両類', 'その他輸送・搬送機械器具類', '船舶類', '燃料類', '家具・什器類', '一般・産業用機器類', '電気・通信用機器類', '電子計算機類', '精密機器類', '医療用機器類', '事務用機器類', 'その他機器類', '医薬品・医療用品類', '事務用品類', '土木・建設・建築材料', '警察用装備品類', '防衛用装備品類', 'その他'.
+    - 物品の販売: '衣服・その他繊維製品類', 'ゴム・皮革・プラスチック製品類', '窯業・土石製品類', '非鉄金属・金属製品類', 'フォーム印刷', 'その他印刷類', '図書類', '電子出版物類', '紙・紙加工品類', '車両類', 'その他輸送・搬送機械器具類', '船舶類', '燃料類', '家具・什器類', '一般・産業用機器類', '電気・通信用機器類', '電子計算機類', '精密機器類', '医療用機器類', '事務用機器類', 'その他機器類', '医薬品・医療用品類', '事務用品類', '土木・建設・建築材料', '警察用装備品類', '防衛用装備品類', 'その他'.
+    - 役務の提供等: '広告・宣伝', '写真・製図', '調査・研究', '情報処理', '翻訳・通訳・速記', 'ソフトウェア開発', '会場等の借り上げ', '賃貸借', '建物管理等各種保守管理', '運送', '車両整備', '船舶整備', '電子出版', '防衛用装備品類の整備', 'その他'.
+    - 物品の買受け: '立木竹', 'その他'.
+    If nothing matches, use "other".
+1-4. **提出書類一覧:** 文中に記載された提出物・添付書類ごとに、(書類名, 日付, 意味, 時点) の四つ組を列挙する。期間を表すものは必ず開始と終了の2エントリを作り、"時点" に「開始」「終了」を設定する。単日のイベント（公告日や説明会など）は "時点" を「単日」にし1件のままで良い。日付は判読できれば YYYY-MM-DD に変換し、難しい場合は原文のまま残す。意味欄には締切などの説明をそのまま記載する。
 2.  **Completeness:**  Extract all requested fields. If a field is not found in the context, represent it with an empty string (`""`). No omissions are allowed.
 3.  **Limited Output:** Only include the specified fields in the JSON output. Do not add any extra information or labels.
 4.  **Hide Steps:** Do not display the internal steps (T1 or T2). Only the final JSON output (T3) should be shown.

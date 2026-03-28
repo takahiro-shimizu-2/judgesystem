@@ -270,7 +270,7 @@ class DocumentPreparationMixin:
             print(f"\n[{step_num}/{total_steps}] Running Gemini OCR...")
 
             # DataFrame を直接渡して OCR 処理
-            df_merged, df_announcements, df_requirements = self._step0_ocr_with_gemini(
+            df_merged, df_announcements, df_requirements, df_dates = self._step0_ocr_with_gemini(
                 df_main=df_merged,
                 use_gcs=use_gcs,
                 max_concurrency=ocr_max_concurrency,
@@ -282,6 +282,7 @@ class DocumentPreparationMixin:
             print("\n[Skipped] Running Gemini OCR")
             df_announcements = pd.DataFrame()
             df_requirements = pd.DataFrame()
+            df_dates = pd.DataFrame()
 
         # 9. DB に保存（3つのテーブル）
         if skip_db_save:
@@ -297,20 +298,24 @@ class DocumentPreparationMixin:
         print("=" * 60)
 
         # 9-1. announcements_documents_master
-        print("\n[1/3] Saving announcements_documents_master...")
+        print("\n[1/4] Saving announcements_documents_master...")
         self._save_to_announcements_document_table(df_merged)
 
         # 9-2. bid_announcements
-        print("\n[2/3] Saving bid_announcements...")
+        print("\n[2/4] Saving bid_announcements...")
         self._save_to_bid_announcements(df_announcements)
 
         # 9-3. bid_requirements
-        print("\n[3/3] Saving bid_requirements...")
+        print("\n[3/4] Saving bid_requirements...")
         self._save_to_bid_requirements(df_requirements)
+
+        # 9-4. bid_announcements_dates
+        print("\n[4/4] Saving bid_announcements_dates...")
+        self._save_to_bid_announcement_dates(df_dates)
 
         print("\n" + "=" * 60)
         print(f"Step0 completed successfully!")
-        print(f"Saved data to: announcements_documents_master, bid_announcements, bid_requirements")
+        print(f"Saved data to: announcements_documents_master, bid_announcements, bid_requirements, bid_announcements_dates")
         print("=" * 60)
 
 
@@ -1391,6 +1396,20 @@ class DocumentPreparationMixin:
         df_merged["dup"] = tmpdf2
 
         ext = df_merged["pdf_full_url"].str.extract(r'\.([^.]+)$')[0].str.lower()
+        def _infer_notice_doc_type(value):
+            if not isinstance(value, str) or not value.strip():
+                return None
+            try:
+                data = json.loads(value)
+                for key in ["資料種類", "種別", "種類", "type", "資料種別"]:
+                    if key in data:
+                        v = str(data[key]).strip()
+                        if v:
+                            return v
+            except Exception:
+                return None
+            return None
+
         df_new = pd.DataFrame({
             "announcement_id": df_merged["announcement_id"],
             "document_id": df_merged["document_id"],
@@ -1421,6 +1440,7 @@ class DocumentPreparationMixin:
             else:
                 df_new[column] = None
 
+        df_new["type"] = df_merged["notice_fields_json"].apply(_infer_notice_doc_type)
         df_new["_sort_fileformat"] = df_new["fileFormat"].apply(lambda x: 0 if x == "pdf" else 1)
         df_new.sort_values(["announcement_id", "_sort_fileformat", "document_id"], inplace=True)
         df_new = df_new.drop(columns=["_sort_fileformat"])
@@ -1638,3 +1658,48 @@ class DocumentPreparationMixin:
         affected_rows = self.db_operator.mergeRequirements(tablename, tmp_table)
         self.db_operator.dropTable(tmp_table)
         print(f"Merged: {affected_rows} rows inserted")
+
+
+    def _save_to_bid_announcement_dates(self, df):
+        """
+        bid_announcements_dates に日付情報を保存
+        """
+        tablename = self.tablenamesconfig.bid_announcements_dates
+
+        if len(df) == 0:
+            print("No announcement dates to save.")
+            return
+
+        if not self.db_operator.ifTableExists(tablename):
+            print(f"Creating new table: {tablename}")
+            self.db_operator.createBidAnnouncementDates(tablename)
+
+        expected_columns = [
+            "announcement_no",
+            "document_id",
+            "submission_document_name",
+            "date_value",
+            "date_raw",
+            "date_meaning",
+            "timepoint_type",
+            "createdDate",
+            "updatedDate"
+        ]
+        df = df.copy()
+        for column in expected_columns:
+            if column not in df.columns:
+                df[column] = None
+        df = df.sort_values(expected_columns)
+        df = df.drop_duplicates(
+            subset=["announcement_no", "document_id", "submission_document_name", "date_value", "date_meaning", "timepoint_type"],
+            keep="first"
+        )
+        df = df[expected_columns]
+        df['announcement_no'] = pd.to_numeric(df['announcement_no'], errors='coerce').fillna(0).astype('int64')
+
+        print(f"Merging {len(df)} announcement date rows into {tablename}...")
+        tmp_table = f"tmp_{tablename}_ocr"
+        self.db_operator.uploadDataToTable(df, tmp_table, chunksize=5000)
+        affected_rows = self.db_operator.replaceBidAnnouncementDates(tablename, tmp_table)
+        self.db_operator.dropTable(tmp_table)
+        print(f"Merged: {affected_rows} rows updated")

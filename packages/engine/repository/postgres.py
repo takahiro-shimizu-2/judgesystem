@@ -155,7 +155,16 @@ class DBOperatorPOSTGRES(DBOperator):
         "doneOCR" BOOLEAN,
         remarks TEXT,
         "createdDate" TEXT,
-        "updatedDate" TEXT
+        "updatedDate" TEXT,
+        orderer_id TEXT,
+        category TEXT,
+        "bidType" TEXT,
+        is_ocr_failed BOOLEAN,
+        notice_category_name TEXT,
+        notice_category_code TEXT,
+        notice_procurement_method TEXT,
+        category_segment TEXT,
+        category_detail TEXT
         )
         """
         self.cur.execute(sql)
@@ -196,10 +205,32 @@ class DBOperatorPOSTGRES(DBOperator):
         orderer_id TEXT,
         category TEXT,
         "bidType" TEXT,
-        is_ocr_failed BOOLEAN
+        is_ocr_failed BOOLEAN,
+        notice_category_name TEXT,
+        notice_category_code TEXT,
+        notice_procurement_method TEXT,
+        category_segment TEXT,
+        category_detail TEXT
         )
         """
         self.cur.execute(sql)
+
+    def createBidAnnouncementDates(self, tablename):
+        sql = fr"""
+        CREATE TABLE {tablename} (
+        announcement_no INTEGER NOT NULL,
+        document_id TEXT,
+        submission_document_name TEXT,
+        date_value DATE,
+        date_raw TEXT,
+        date_meaning TEXT,
+        timepoint_type TEXT,
+        "createdDate" TEXT,
+        "updatedDate" TEXT
+        )
+        """
+        self.cur.execute(sql)
+        self.cur.execute(fr"CREATE INDEX IF NOT EXISTS idx_{tablename}_announcement_no ON {tablename} (announcement_no)")
 
 
     def createBidOrderersFromAnnouncements(self, bid_orderer_tablename, bid_announcements_tablename):
@@ -911,14 +942,18 @@ class DBOperatorPOSTGRES(DBOperator):
             "workPlace", zipcode, address, department, "assigneeName",
             telephone, fax, mail, "publishDate", "docDistStart", "docDistEnd",
             "submissionStart", "submissionEnd", "bidStartDate", "bidEndDate",
-            "bidType", category, is_ocr_failed, "doneOCR", "createdDate", "updatedDate"
+            "bidType", category, is_ocr_failed, "doneOCR", "createdDate", "updatedDate",
+            notice_category_name, notice_category_code, notice_procurement_method,
+            category_segment, category_detail
         )
         SELECT
             announcement_no, "workName", "topAgencyName", orderer_id,
             "workPlace", zipcode, address, department, "assigneeName",
             telephone, fax, mail, "publishDate", "docDistStart", "docDistEnd",
             "submissionStart", "submissionEnd", "bidStartDate", "bidEndDate",
-            "bidType", category, is_ocr_failed, "doneOCR", "createdDate", "updatedDate"
+            "bidType", category, is_ocr_failed, "doneOCR", "createdDate", "updatedDate",
+            notice_category_name, notice_category_code, notice_procurement_method,
+            category_segment, category_detail
         FROM {source_tablename} AS S
         WHERE NOT EXISTS (
             SELECT 1
@@ -928,6 +963,30 @@ class DBOperatorPOSTGRES(DBOperator):
         """
 
         self.cur.execute(sql)
+        return self.cur.rowcount
+
+    def replaceBidAnnouncementDates(self, target_tablename, source_tablename):
+        delete_sql = f"""
+        DELETE FROM {target_tablename}
+        WHERE announcement_no IN (
+            SELECT DISTINCT announcement_no FROM {source_tablename}
+        )
+        """
+        self.cur.execute(delete_sql)
+
+        insert_sql = f"""
+        INSERT INTO {target_tablename} (
+            announcement_no, document_id, submission_document_name,
+            date_value, date_raw, date_meaning, timepoint_type,
+            "createdDate", "updatedDate"
+        )
+        SELECT
+            announcement_no, document_id, submission_document_name,
+            date_value, date_raw, date_meaning, timepoint_type,
+            "createdDate", "updatedDate"
+        FROM {source_tablename}
+        """
+        self.cur.execute(insert_sql)
         return self.cur.rowcount
 
     def checkRequirementsExist(self, tmp_check_table, requirements_table):

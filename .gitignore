@@ -53,6 +53,7 @@ coverage/
 data/ocr
 data/pdf
 data/sec
+output/
 .gitnexus
 .node_modules_ready
 packages/frontend/.vite/

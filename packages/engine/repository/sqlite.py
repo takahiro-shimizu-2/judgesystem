@@ -96,7 +96,16 @@ class DBOperatorSQLITE3(DBOperator):
         doneOCR bool,
         remarks string,
         createdDate string,
-        updatedDate string
+        updatedDate string,
+        orderer_id string,
+        category string,
+        bidType string,
+        is_ocr_failed bool,
+        notice_category_name string,
+        notice_category_code string,
+        notice_procurement_method string,
+        category_segment string,
+        category_detail string
         )
         """
         self.cur.execute(sql)
@@ -283,10 +292,33 @@ class DBOperatorSQLITE3(DBOperator):
         orderer_id string,
         category string,
         bidType string,
-        is_ocr_failed bool
+        is_ocr_failed bool,
+        notice_category_name string,
+        notice_category_code string,
+        notice_procurement_method string,
+        category_segment string,
+        category_detail string
         )
         """
         self.cur.execute(sql)
+
+    def createBidAnnouncementDates(self, tablename):
+        sql = fr"""
+        create table {tablename} (
+        id integer PRIMARY KEY AUTOINCREMENT,
+        announcement_no integer NOT NULL,
+        document_id text,
+        submission_document_name text,
+        date_value date,
+        date_raw text,
+        date_meaning text,
+        timepoint_type text,
+        createdDate text,
+        updatedDate text
+        )
+        """
+        self.cur.execute(sql)
+        self.cur.execute(fr"CREATE INDEX IF NOT EXISTS idx_{tablename}_announcement_no ON {tablename}(announcement_no)")
 
 
     def createBidOrderersFromAnnouncements(self, bid_orderer_tablename, bid_announcements_tablename):
@@ -822,14 +854,18 @@ class DBOperatorSQLITE3(DBOperator):
             workPlace, zipcode, address, department, assigneeName,
             telephone, fax, mail, publishDate, docDistStart, docDistEnd,
             submissionStart, submissionEnd, bidStartDate, bidEndDate,
-            bidType, category, is_ocr_failed, doneOCR, createdDate, updatedDate
+            bidType, category, is_ocr_failed, doneOCR, createdDate, updatedDate,
+            notice_category_name, notice_category_code, notice_procurement_method,
+            category_segment, category_detail
         )
         SELECT
             announcement_no, workName, topAgencyName, orderer_id,
             workPlace, zipcode, address, department, assigneeName,
             telephone, fax, mail, publishDate, docDistStart, docDistEnd,
             submissionStart, submissionEnd, bidStartDate, bidEndDate,
-            bidType, category, is_ocr_failed, doneOCR, createdDate, updatedDate
+            bidType, category, is_ocr_failed, doneOCR, createdDate, updatedDate,
+            notice_category_name, notice_category_code, notice_procurement_method,
+            category_segment, category_detail
         FROM {source_tablename} AS S
         WHERE NOT EXISTS (
             SELECT 1
@@ -839,6 +875,30 @@ class DBOperatorSQLITE3(DBOperator):
         """
 
         self.cur.execute(sql)
+        return self.cur.rowcount
+
+    def replaceBidAnnouncementDates(self, target_tablename, source_tablename):
+        delete_sql = f"""
+        DELETE FROM {target_tablename}
+        WHERE announcement_no IN (
+            SELECT DISTINCT announcement_no FROM {source_tablename}
+        )
+        """
+        self.cur.execute(delete_sql)
+
+        insert_sql = f"""
+        INSERT INTO {target_tablename} (
+            announcement_no, document_id, submission_document_name,
+            date_value, date_raw, date_meaning, timepoint_type,
+            createdDate, updatedDate
+        )
+        SELECT
+            announcement_no, document_id, submission_document_name,
+            date_value, date_raw, date_meaning, timepoint_type,
+            createdDate, updatedDate
+        FROM {source_tablename}
+        """
+        self.cur.execute(insert_sql)
         return self.cur.rowcount
 
     def checkRequirementsExist(self, tmp_check_table, requirements_table):

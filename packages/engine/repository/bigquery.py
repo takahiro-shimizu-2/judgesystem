@@ -114,7 +114,16 @@ class DBOperatorGCPVM(DBOperator):
         doneOCR bool,
         remarks string,
         createdDate string,
-        updatedDate string
+        updatedDate string,
+        orderer_id string,
+        category string,
+        bidType string,
+        is_ocr_failed bool,
+        notice_category_name string,
+        notice_category_code string,
+        notice_procurement_method string,
+        category_segment string,
+        category_detail string
         )
         """
         self.client.query(sql).result()
@@ -155,7 +164,28 @@ class DBOperatorGCPVM(DBOperator):
         orderer_id string,
         category string,
         bidType string,
-        is_ocr_failed bool
+        is_ocr_failed bool,
+        notice_category_name string,
+        notice_category_code string,
+        notice_procurement_method string,
+        category_segment string,
+        category_detail string
+        )
+        """
+        self.client.query(sql).result()
+
+    def createBidAnnouncementDates(self, tablename):
+        sql = fr"""
+        create table `{self.project_id}.{self.dataset_name}.{tablename}` (
+        announcement_no int64,
+        document_id string,
+        submission_document_name string,
+        date_value DATE,
+        date_raw string,
+        date_meaning string,
+        timepoint_type string,
+        createdDate string,
+        updatedDate string
         )
         """
         self.client.query(sql).result()
@@ -786,15 +816,46 @@ class DBOperatorGCPVM(DBOperator):
                   workPlace, zipcode, address, department, assigneeName,
                   telephone, fax, mail, publishDate, docDistStart, docDistEnd,
                   submissionStart, submissionEnd, bidStartDate, bidEndDate,
-                  bidType, category, is_ocr_failed, doneOCR, createdDate, updatedDate)
+                  bidType, category, is_ocr_failed, doneOCR, createdDate, updatedDate,
+                    notice_category_name, notice_category_code, notice_procurement_method,
+                  category_segment, category_detail)
           VALUES (S.announcement_no, S.workName, S.topAgencyName, S.orderer_id,
                   S.workPlace, S.zipcode, S.address, S.department, S.assigneeName,
                   S.telephone, S.fax, S.mail, S.publishDate, S.docDistStart, S.docDistEnd,
                   S.submissionStart, S.submissionEnd, S.bidStartDate, S.bidEndDate,
-                  S.bidType, S.category, S.is_ocr_failed, S.doneOCR, S.createdDate, S.updatedDate)
+                  S.bidType, S.category, S.is_ocr_failed, S.doneOCR, S.createdDate, S.updatedDate,
+                  S.notice_category_name, S.notice_category_code, S.notice_procurement_method,
+                  S.category_segment, S.category_detail)
         """
 
         query_job = self.client.query(merge_sql)
+        query_job.result()
+        return query_job.num_dml_affected_rows
+
+    def replaceBidAnnouncementDates(self, target_tablename, source_tablename):
+        target = f"`{self.project_id}.{self.dataset_name}.{target_tablename}`"
+        source = f"`{self.project_id}.{self.dataset_name}.{source_tablename}`"
+        delete_sql = f"""
+        DELETE FROM {target}
+        WHERE announcement_no IN (
+            SELECT DISTINCT announcement_no FROM {source}
+        )
+        """
+        self.client.query(delete_sql).result()
+
+        insert_sql = f"""
+        INSERT INTO {target} (
+            announcement_no, document_id, submission_document_name,
+            date_value, date_raw, date_meaning, timepoint_type,
+            createdDate, updatedDate
+        )
+        SELECT
+            announcement_no, document_id, submission_document_name,
+            date_value, date_raw, date_meaning, timepoint_type,
+            createdDate, updatedDate
+        FROM {source}
+        """
+        query_job = self.client.query(insert_sql)
         query_job.result()
         return query_job.num_dml_affected_rows
 

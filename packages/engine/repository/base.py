@@ -21,6 +21,7 @@ class TablenamesConfig:
     bid_announcements_pre: str = "bid_announcements_pre"
     bid_announcements: str = "bid_announcements"
     bid_requirements: str = "bid_requirements"
+    bid_announcements_dates: str = "bid_announcements_dates"
     company_bid_judgement: str = "company_bid_judgement"
     sufficient_requirements: str = "sufficient_requirements"
     insufficient_requirements: str = "insufficient_requirements"
@@ -200,6 +201,10 @@ class DBOperator(ABC):
         raise NotImplementedError
 
     @abstractmethod
+    def createBidAnnouncementDates(self, tablename):
+        raise NotImplementedError
+
+    @abstractmethod
     def createBidOrderersFromAnnouncements(self, bid_orderer_tablename, bid_announcements_tablename):
         raise NotImplementedError
 
@@ -328,6 +333,17 @@ class DBOperator(ABC):
 
         Returns:
             int: 挿入された行数
+        """
+        raise NotImplementedError
+
+    @abstractmethod
+    def replaceBidAnnouncementDates(self, target_tablename, source_tablename):
+        """
+        bid_announcements_dates の対象 announcement_no を入れ替える
+
+        Args:
+            target_tablename: 既存テーブル名
+            source_tablename: 新規データを格納した一時テーブル
         """
         raise NotImplementedError
 

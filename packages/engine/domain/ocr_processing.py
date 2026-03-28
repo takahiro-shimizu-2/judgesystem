@@ -292,6 +292,9 @@ class OcrProcessingMixin:
         client = self._create_gemini_client()
         df_main = df_main.copy()
         df_main["document_id"] = df_main["document_id"].astype(str).str.strip()
+        doc_title_lookup = {}
+        if "document_id" in df_main.columns and "title" in df_main.columns:
+            doc_title_lookup = df_main.set_index("document_id")["title"].to_dict()
 
         def clean_markdown(text):
             if not text:
@@ -816,6 +819,9 @@ class OcrProcessingMixin:
 
         df_main = df_main.copy()
         df_main["document_id"] = df_main["document_id"].astype(str).str.strip()
+        doc_title_lookup = {}
+        if "document_id" in df_main.columns and "title" in df_main.columns:
+            doc_title_lookup = df_main.set_index("document_id")["title"].to_dict()
 
         if "done" in df_main.columns:
             df_main["done"] = (
@@ -971,6 +977,7 @@ class OcrProcessingMixin:
                                     ann_records_by_doc[announcement_id] = []
                                 ann_records_by_doc[announcement_id].append({
                                     "document_id": document_id,
+                                    "document_title": doc_title_lookup.get(document_id),
                                     "workplace": None, "zipcode": None, "address": None,
                                     "department": None, "assigneename": None, "telephone": None,
                                     "fax": None, "mail": None, "publishdate": None,
@@ -979,6 +986,7 @@ class OcrProcessingMixin:
                                     "submissionstart": None, "submissionend": None,
                                     "bidstartdate": None, "bidenddate": None,
                                     "ocr_failed": True,
+                                    "submission_documents": [],
                                 })
 
                             ann_done_updates += 1
@@ -992,7 +1000,8 @@ class OcrProcessingMixin:
                             "document_id": document_id,
                             "pageCount": dict0.get("pageCount"),
                             "done": True,
-                            "is_ocr_failed": False
+                            "is_ocr_failed": False,
+                            "doc_type": dict0.get("type")
                         })
 
                         for announcement_id in announcement_ids:
@@ -1001,6 +1010,7 @@ class OcrProcessingMixin:
 
                             ann_records_by_doc[announcement_id].append({
                                 "document_id": document_id,
+                                "document_title": doc_title_lookup.get(document_id),
                                 "workplace": dict0.get("workplace"),
                                 "zipcode": dict0.get("zipcode"),
                                 "address": dict0.get("address"),
@@ -1020,18 +1030,20 @@ class OcrProcessingMixin:
                                 "bidstartdate": dict0.get("bidstartdate"),
                                 "bidenddate": dict0.get("bidenddate"),
                                 "ocr_failed": False,
+                                "submission_documents": dict0.get("submission_documents", []),
                             })
 
                         ann_done_updates += 1
                     except Exception as e:
                         tqdm.write(f"Error processing {document_id}: {e}")
-                        doc_records.append({"document_id": document_id, "done": True, "is_ocr_failed": True})
+                        doc_records.append({"document_id": document_id, "done": True, "is_ocr_failed": True, "doc_type": None})
 
                         for announcement_id in announcement_ids:
                             if announcement_id not in ann_records_by_doc:
                                 ann_records_by_doc[announcement_id] = []
                             ann_records_by_doc[announcement_id].append({
                                 "document_id": document_id,
+                                "document_title": doc_title_lookup.get(document_id),
                                 "workplace": None, "zipcode": None, "address": None,
                                 "department": None, "assigneename": None, "telephone": None,
                                 "fax": None, "mail": None, "publishdate": None,
@@ -1040,11 +1052,14 @@ class OcrProcessingMixin:
                                 "submissionstart": None, "submissionend": None,
                                 "bidstartdate": None, "bidenddate": None,
                                 "ocr_failed": True,
+                                "submission_documents": [],
                             })
 
                         ann_done_updates += 1
 
                 df_doc_records = pd.DataFrame(doc_records)
+                if "doc_type" in df_doc_records.columns:
+                    df_doc_records.rename(columns={"doc_type": "doc_type_new"}, inplace=True)
                 df_doc_records = df_doc_records.drop_duplicates(subset="document_id", keep="first")
 
                 df_main = df_main.merge(df_doc_records, on="document_id", how="left", suffixes=("", "_new"))
@@ -1054,29 +1069,64 @@ class OcrProcessingMixin:
                     df_main.drop(columns=["done_new"], inplace=True, errors="ignore")
 
                 if "pageCount_new" in df_main.columns:
-                    df_main["pageCount"] = df_main["pageCount_new"].fillna(df_main.get("pageCount"))
+                    existing = df_main.get("pageCount")
+                    new_pc = df_main["pageCount_new"]
+                    df_main["pageCount"] = existing
+                    mask = (existing.isna()) | (existing <= 0)
+                    df_main.loc[mask, "pageCount"] = new_pc.loc[mask]
                     df_main.drop(columns=["pageCount_new"], inplace=True, errors="ignore")
 
                 if "is_ocr_failed_new" in df_main.columns:
                     df_main["is_ocr_failed"] = (df_main["is_ocr_failed"] | df_main["is_ocr_failed_new"].fillna(False)).astype("boolean")
                     df_main.drop(columns=["is_ocr_failed_new"], inplace=True, errors="ignore")
 
+                if "doc_type_new" in df_main.columns:
+                    if "type" not in df_main.columns:
+                        df_main["type"] = None
+                    mask = (
+                        df_main["type"].isna()
+                        | (df_main["type"].astype(str).str.strip().isin(["", "None", "nan", "その他"]))
+                    )
+                    df_main.loc[mask, "type"] = df_main.loc[mask, "doc_type_new"]
+                    df_main.drop(columns=["doc_type_new"], inplace=True, errors="ignore")
+
                 aggregated_announcements = []
+                aggregated_date_records = []
+                timestamp_now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
                 for announcement_id, docs_data in ann_records_by_doc.items():
                     ann_docs = df_main[df_main['announcement_id'] == announcement_id]
                     if len(ann_docs) > 0:
                         workName = self._select_best_value(ann_docs['title'].tolist())
                         topAgencyName = self._select_best_value(ann_docs['topAgencyName'].tolist())
                         orderer_id = self._select_best_value(ann_docs['orderer_id'].tolist())
+                        notice_category_name = self._select_best_value(ann_docs['notice_category_name'].tolist()) if 'notice_category_name' in ann_docs else None
+                        notice_category_code = self._select_best_value(ann_docs['notice_category_code'].tolist()) if 'notice_category_code' in ann_docs else None
+                        notice_procurement_method = self._select_best_value(ann_docs['notice_procurement_method'].tolist()) if 'notice_procurement_method' in ann_docs else None
                     else:
                         workName = None
                         topAgencyName = None
                         orderer_id = None
+                        notice_category_name = None
+                        notice_category_code = None
+                        notice_procurement_method = None
 
                     category_ocr = self._select_best_value([d["category"] for d in docs_data])
                     bidType_ocr = self._select_best_value([d["bidType"] for d in docs_data])
 
                     has_ocr_failure = any(d.get("ocr_failed", False) for d in docs_data)
+
+                    category_segment = None
+                    category_detail = None
+                    if isinstance(category_ocr, str) and category_ocr.strip():
+                        parts = [p.strip() for p in category_ocr.split("/") if p.strip()]
+                        if parts:
+                            category_segment = parts[0]
+                        if len(parts) >= 2:
+                            category_detail = parts[1]
+                    if not category_segment:
+                        category_segment = notice_category_name
+                    if (not category_detail) and notice_category_code and notice_category_code != category_segment:
+                        category_detail = notice_category_code
 
                     aggregated = {
                         "announcement_no": announcement_id,
@@ -1094,6 +1144,8 @@ class OcrProcessingMixin:
                         "publishDate": self._select_best_value([d["publishdate"] for d in docs_data]),
                         "bidType": bidType_ocr,
                         "category": category_ocr,
+                        "category_segment": category_segment,
+                        "category_detail": category_detail,
                         "docDistStart": self._select_best_value([d["docdiststart"] for d in docs_data]),
                         "docDistEnd": self._select_best_value([d["docdistend"] for d in docs_data]),
                         "submissionStart": self._select_best_value([d["submissionstart"] for d in docs_data]),
@@ -1103,16 +1155,48 @@ class OcrProcessingMixin:
                         "is_ocr_failed": has_ocr_failure,
                         "doneOCR": True,
                         "createdDate": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-                        "updatedDate": datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                        "updatedDate": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                        "notice_category_name": notice_category_name,
+                        "notice_category_code": notice_category_code,
+                        "notice_procurement_method": notice_procurement_method,
                     }
                     aggregated_announcements.append(aggregated)
 
+                    for doc_entry in docs_data:
+                        submission_docs = doc_entry.get("submission_documents") or []
+                        doc_id = doc_entry.get("document_id")
+                        for submission in submission_docs:
+                            submission_name = submission.get("submission_document_name")
+                            date_raw = submission.get("date_raw")
+                            date_value = submission.get("date_value")
+                            date_meaning = submission.get("date_meaning")
+                            timepoint_type = submission.get("timepoint_type") or "single"
+                            if not any([submission_name, date_raw, date_value, date_meaning]):
+                                continue
+                            aggregated_date_records.append({
+                                "announcement_no": announcement_id,
+                                "document_id": doc_id,
+                                "submission_document_name": submission_name,
+                                "date_value": date_value,
+                                "date_raw": date_raw,
+                                "date_meaning": date_meaning,
+                                "timepoint_type": timepoint_type,
+                                "createdDate": timestamp_now,
+                                "updatedDate": timestamp_now
+                            })
+
                 df_announcements = pd.DataFrame(aggregated_announcements) if aggregated_announcements else pd.DataFrame()
+                df_dates = pd.DataFrame(aggregated_date_records) if aggregated_date_records else pd.DataFrame()
+                if not df_dates.empty:
+                    subset_cols = ["announcement_no", "document_id", "submission_document_name", "date_value", "date_meaning", "timepoint_type"]
+                    df_dates = df_dates.sort_values(subset_cols + ["date_raw"])
+                    df_dates = df_dates.drop_duplicates(subset=subset_cols, keep="first")
 
                 print(f"Updated {len(doc_records)} documents with pageCount and done status")
                 print(f"Aggregated {len(aggregated_announcements)} announcements from {len(ann_results)} OCR results")
             else:
                 df_announcements = pd.DataFrame()
+                df_dates = pd.DataFrame()
 
             req_results = [r for r in results if r.get("type") == "req"]
             db_req_records = []
@@ -1184,8 +1268,9 @@ class OcrProcessingMixin:
         else:
             df_announcements = pd.DataFrame()
             df_requirements = pd.DataFrame()
+            df_dates = pd.DataFrame()
 
-        return df_main, df_announcements, df_requirements
+        return df_main, df_announcements, df_requirements, df_dates
 
 
     async def _call_parallel(self, client, params, max_concurrency=5):
@@ -1415,6 +1500,28 @@ class OcrProcessingMixin:
             except ValueError:
                 return ""
 
+        def normalize_category(value):
+            if isinstance(value, list):
+                flattened = [str(v).strip() for v in value if isinstance(v, str) and v.strip()]
+                return " / ".join(flattened) if flattened else None
+            if isinstance(value, str):
+                value = value.strip()
+                return value or None
+            return None
+
+        def normalize_timepoint(value, meaning):
+            if isinstance(value, str):
+                t = value.strip().lower()
+                if t in ["開始", "start", "begin", "start_date", "start_time"]:
+                    return "start"
+                if t in ["終了", "完了", "end", "finish", "end_date", "end_time"]:
+                    return "end"
+                if t in ["単日", "single", "single_day"]:
+                    return "single"
+            if meaning and ("公告" in meaning or "説明会" in meaning or "開札" in meaning or "入札日" in meaning):
+                return "single"
+            return "single"
+
         new_json = {}
         new_json["workplace"] = json_value.get("工事場所", None)
 
@@ -1436,7 +1543,7 @@ class OcrProcessingMixin:
 
         new_json["bidType"] = json_value.get("入札方式", None)
         new_json["type"] = json_value.get("資料種類", None)
-        new_json["category"] = json_value.get("category", None)
+        new_json["category"] = normalize_category(json_value.get("category", None))
         new_json["pageCount"] = json_value.get("pageCount", None)
 
         tmp_json = json_value.get("入札説明書の交付期間", None)
@@ -1465,5 +1572,28 @@ class OcrProcessingMixin:
                 handle_same_year=extract_year(new_json.get("bidstartdate")),
                 handle_same_month=extract_same_year_month(new_json.get("bidstartdate"))
             )
+
+        submission_records = []
+        doc_entries = json_value.get("提出書類一覧", None)
+        if isinstance(doc_entries, list):
+            for entry in doc_entries:
+                if not isinstance(entry, dict):
+                    continue
+                document_name = entry.get("書類名") or entry.get("提出書類") or entry.get("document") or entry.get("書類")
+                date_raw = entry.get("日付") or entry.get("date")
+                meaning = entry.get("意味") or entry.get("説明") or entry.get("日付の意味")
+                timepoint = entry.get("時点") or entry.get("timepoint")
+                if not any([document_name, date_raw, meaning]):
+                    continue
+                normalized_date = _modifyDate(datestr=date_raw) if date_raw else None
+                submission_records.append({
+                    "submission_document_name": document_name,
+                    "date_raw": date_raw,
+                    "date_value": normalized_date,
+                    "date_meaning": meaning,
+                    "timepoint_type": normalize_timepoint(timepoint, meaning)
+                })
+
+        new_json["submission_documents"] = submission_records
 
         return new_json
