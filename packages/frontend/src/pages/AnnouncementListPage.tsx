@@ -15,7 +15,6 @@ import { announcementStatusConfig, bidTypeConfig } from '../data';
 import type { AnnouncementStatus, BidType } from '../types';
 import { pageStyles, fontSizes, listFilterChipStyles, colors, borderRadius, iconStyles } from '../constants/styles';
 import { extractPrefecture as extractPref } from '../constants/prefectures';
-import { categories } from '../constants/categories';
 import { CustomPagination } from '../components/bid';
 import { RightSidePanel } from '../components/layout';
 import { AnnouncementDisplayConditionsPanel } from '../components/announcement';
@@ -62,6 +61,13 @@ function getCountdown(deadline: string): {
   return { days, label: `あと${days}日`, textColor: colors.status.success.main };
 }
 
+function formatCategoryLabel(segment?: string, detail?: string, fallback?: string): string {
+  if (segment && detail) return `${segment}／${detail}`;
+  if (segment) return segment;
+  if (detail) return detail;
+  return fallback || '未分類';
+}
+
 // 行データの型
 interface RowData {
   id: string;
@@ -71,6 +77,11 @@ interface RowData {
   title: string;
   organization: string;
   category: string;
+  categorySegment?: string;
+  categoryDetail?: string;
+  noticeCategoryName?: string;
+  noticeCategoryCode?: string;
+  noticeProcurementMethod?: string;
   publishDate: string;
   deadline: string;
   prefecture: string;
@@ -211,19 +222,24 @@ function AnnouncementCard({ row, onClick }: { row: RowData; onClick: () => void 
             </Typography>
           </Box>
 
-          <Typography
-            sx={{
-              fontSize: fontSizes.sm,
-              fontWeight: 500,
-              color: colors.text.muted,
-              px: 1,
-              py: 0.25,
-              border: `1px solid ${colors.border.main}`,
-              borderRadius: '2px',
-            }}
-          >
-            {row.category}
-          </Typography>
+          <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
+            <Typography
+              sx={{
+                fontSize: fontSizes.sm,
+                fontWeight: 600,
+                color: colors.text.dark,
+              }}
+            >
+              {formatCategoryLabel(row.categorySegment, row.categoryDetail, row.category)}
+            </Typography>
+            {row.noticeCategoryName && (
+              <Chip
+                size="small"
+                label={row.noticeCategoryName}
+                sx={{ height: 20, fontSize: fontSizes.xs, color: colors.text.muted }}
+              />
+            )}
+          </Box>
         </Box>
 
         {/* 4行目: 公告日 */}
@@ -236,6 +252,18 @@ function AnnouncementCard({ row, onClick }: { row: RowData; onClick: () => void 
         >
           公告日: {row.publishDate}
         </Typography>
+        {row.noticeProcurementMethod && (
+          <Typography
+            sx={{
+              fontSize: fontSizes.xs,
+              color: colors.text.light,
+              fontWeight: 400,
+              mt: 0.5,
+            }}
+          >
+            調達方式: {row.noticeProcurementMethod}
+          </Typography>
+        )}
       </Box>
 
       {/* 右: 締切情報 */}
@@ -330,6 +358,11 @@ export default function AnnouncementListPage() {
     title: a.title,
     organization: a.organization,
     category: a.category,
+    categorySegment: a.categorySegment,
+    categoryDetail: a.categoryDetail,
+    noticeCategoryName: a.noticeCategoryName,
+    noticeCategoryCode: a.noticeCategoryCode,
+    noticeProcurementMethod: a.noticeProcurementMethod,
     publishDate: a.publishDate,
     deadline: a.deadline,
     prefecture: extractPrefecture(a.workLocation),

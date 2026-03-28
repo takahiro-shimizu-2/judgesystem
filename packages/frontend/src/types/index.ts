@@ -86,6 +86,11 @@ export interface Announcement {
   ordererId?: string;                 // 発注者ID（マスター参照用）
   title: string;                      // 工事名
   category: string;                   // 工事カテゴリ
+  categorySegment?: string;           // カテゴリ区分（役務/工事など）
+  categoryDetail?: string;            // カテゴリ詳細
+  noticeCategoryName?: string;        // HTML由来のカテゴリ名
+  noticeCategoryCode?: string;        // HTML由来のカテゴリコード
+  noticeProcurementMethod?: string;   // 調達方式
   bidType?: BidType;                  // 入札形式
   organization: string;               // 発注機関
   workLocation: string;               // 工事場所

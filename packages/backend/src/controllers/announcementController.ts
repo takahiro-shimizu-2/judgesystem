@@ -48,6 +48,8 @@ export class AnnouncementController {
         statuses: req.query.statuses ? (req.query.statuses as string).split(",") : undefined,
         bidTypes: req.query.bidTypes ? (req.query.bidTypes as string).split(",") : undefined,
         categories: req.query.categories ? (req.query.categories as string).split(",") : undefined,
+        categorySegments: req.query.categorySegments ? (req.query.categorySegments as string).split(",") : undefined,
+        categoryDetails: req.query.categoryDetails ? (req.query.categoryDetails as string).split(",") : undefined,
         organizations: req.query.organizations ? (req.query.organizations as string).split(",") : undefined,
         prefectures: req.query.prefectures ? (req.query.prefectures as string).split(",") : undefined,
         searchQuery: req.query.searchQuery as string | undefined,

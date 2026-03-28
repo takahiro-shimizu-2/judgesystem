@@ -72,6 +72,8 @@ export interface AnnouncementFilterParams extends BaseFilterParams {
   statuses?: string[];
   bidTypes?: string[];
   categories?: string[];
+  categorySegments?: string[];
+  categoryDetails?: string[];
   organizations?: string[];
   prefectures?: string[];
   ordererId?: string;

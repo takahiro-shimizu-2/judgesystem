@@ -12,6 +12,13 @@ export interface BidInfoSectionProps {
   announcement: Announcement;
 }
 
+const formatCategoryLabel = (segment?: string, detail?: string, fallback?: string): string => {
+  if (segment && detail) return `${segment}／${detail}`;
+  if (segment) return segment;
+  if (detail) return detail;
+  return fallback || '未分類';
+};
+
 export function BidInfoSection({ announcement }: BidInfoSectionProps) {
   const scheduleItems = [
     { label: '申請書提出日', value: announcement.deadline },
@@ -34,7 +41,7 @@ export function BidInfoSection({ announcement }: BidInfoSectionProps) {
             label="カテゴリ"
             value={
               <Chip
-                label={announcement.category}
+                label={formatCategoryLabel(announcement.categorySegment, announcement.categoryDetail, announcement.category)}
                 size="small"
                 sx={{
                   ...chipStyles.small,

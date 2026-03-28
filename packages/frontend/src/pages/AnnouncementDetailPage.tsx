@@ -60,6 +60,13 @@ const resolveBidType = (bidType?: string | null): BidType => {
   }
   return 'unknown';
 };
+
+const formatCategoryLabel = (segment?: string, detail?: string, fallback?: string): string => {
+  if (segment && detail) return `${segment}／${detail}`;
+  if (segment) return segment;
+  if (detail) return detail;
+  return fallback || '未分類';
+};
 import { getApiUrl } from '../config/api';
 
 // 関連案件用ソートオプション
@@ -1776,7 +1783,7 @@ export default function AnnouncementDetailPage() {
 
               {/* カテゴリ */}
               <Typography sx={{ fontSize: fontSizes.base, fontWeight: 700, color: colors.primary.dark }}>
-                {announcement.category}
+                {formatCategoryLabel(announcement.categorySegment, announcement.categoryDetail, announcement.category)}
               </Typography>
 
               <Typography sx={{ color: colors.border.dark }}>|</Typography>
@@ -1855,7 +1862,29 @@ export default function AnnouncementDetailPage() {
                       </AccordionSummary>
                       <AccordionDetails sx={{ pt: 2, pb: 2, px: 2.5 }}>
                         <InfoRow label="発注機関" value={announcement.organization} icon={<OrdererIcon sx={{ ...iconStyles.small, color: colors.text.light }} />} />
-                        <InfoRow label="工種" value={announcement.category} icon={<CategoryIcon sx={{ ...iconStyles.small, color: colors.text.light }} />} />
+                        <InfoRow
+                          label="工種"
+                          value={formatCategoryLabel(announcement.categorySegment, announcement.categoryDetail, announcement.category)}
+                          icon={<CategoryIcon sx={{ ...iconStyles.small, color: colors.text.light }} />}
+                        />
+                        {announcement.noticeCategoryName && (
+                          <InfoRow
+                            label="公告種別"
+                            value={
+                              announcement.noticeCategoryCode
+                                ? `${announcement.noticeCategoryName} (${announcement.noticeCategoryCode})`
+                                : announcement.noticeCategoryName
+                            }
+                            icon={<CategoryIcon sx={{ ...iconStyles.small, color: colors.text.light }} />}
+                          />
+                        )}
+                        {announcement.noticeProcurementMethod && (
+                          <InfoRow
+                            label="調達方式"
+                            value={announcement.noticeProcurementMethod}
+                            icon={<CategoryIcon sx={{ ...iconStyles.small, color: colors.text.light }} />}
+                          />
+                        )}
                         <InfoRow label="入札形式" value={bidTypeConfig[resolveBidType(announcement.bidType)].label} icon={<BidTypeIcon sx={{ ...iconStyles.small, color: colors.text.light }} />} />
                         <InfoRow label="履行場所" value={announcement.workLocation} icon={<LocationIcon sx={{ ...iconStyles.small, color: colors.text.light }} />} />
                         <InfoRow label="予想金額" value={formatAmountInManYen(announcement.estimatedAmountMin, announcement.estimatedAmountMax)} icon={<CurrencyYenIcon sx={{ ...iconStyles.small, color: colors.text.light }} />} />

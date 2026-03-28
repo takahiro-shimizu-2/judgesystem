@@ -38,6 +38,13 @@ import { bidTypes } from '../constants/bidType';
 import { prefecturesByRegion } from '../constants/prefectures';
 import type { BidType } from '../types/announcement';
 import { colors, pageStyles, fontSizes, chipStyles, iconStyles, borderRadius, rightPanelColors } from '../constants/styles';
+
+const formatCategoryLabel = (segment?: string, detail?: string, fallback?: string): string => {
+  if (segment && detail) return `${segment}／${detail}`;
+  if (segment) return segment;
+  if (detail) return detail;
+  return fallback || '未分類';
+};
 import type { AnnouncementWithStatus } from '../types';
 import { useListPageState } from '../hooks';
 import { useSidebar } from '../contexts/SidebarContext';
@@ -137,7 +144,8 @@ function AnnouncementCard({ announcement, onClick }: { announcement: Announcemen
 
       {/* 3行目: 都道府県・カテゴリ */}
       <Typography sx={{ fontSize: fontSizes.xs, color: colors.text.light, mb: 0.75 }}>
-        {prefecture && `${prefecture}・`}{announcement.category}
+        {prefecture && `${prefecture}・`}
+        {formatCategoryLabel(announcement.categorySegment, announcement.categoryDetail, announcement.category)}
       </Typography>
 
       {/* 4行目: 公告日・締切日 */}

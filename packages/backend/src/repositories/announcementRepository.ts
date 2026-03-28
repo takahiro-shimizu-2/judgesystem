@@ -66,6 +66,11 @@ export class AnnouncementRepository {
           COALESCE("workName", '') AS title,
           COALESCE("topAgencyName", '') AS organization,
           COALESCE(category, '') AS category,
+          COALESCE(category_segment, '') AS "categorySegment",
+          COALESCE(category_detail, '') AS "categoryDetail",
+          COALESCE(notice_category_name, '') AS "noticeCategoryName",
+          COALESCE(notice_category_code, '') AS "noticeCategoryCode",
+          COALESCE(notice_procurement_method, '') AS "noticeProcurementMethod",
           COALESCE("bidType", 'unknown') AS "bidType",
           COALESCE("workPlace", '') AS "workLocation",
           COALESCE("publishDate", '') AS "publishDate",
@@ -164,6 +169,8 @@ export class AnnouncementRepository {
           COALESCE(a."workName", '') AS title,
           COALESCE(a."topAgencyName", '') AS organization,
           COALESCE(a.category, '') AS category,
+          COALESCE(a.category_segment, '') AS "categorySegment",
+          COALESCE(a.category_detail, '') AS "categoryDetail",
           COALESCE(a."bidType", 'unknown') AS "bidType",
           COALESCE(a."workPlace", '') AS "workLocation",
 
@@ -186,6 +193,9 @@ export class AnnouncementRepository {
           COALESCE(a."bidStartDate", '') AS "bidStartDate",
           COALESCE(a."bidEndDate", '') AS "bidEndDate",
           COALESCE(a."bidEndDate", '') AS deadline,
+          COALESCE(a.notice_category_name, '') AS "noticeCategoryName",
+          COALESCE(a.notice_category_code, '') AS "noticeCategoryCode",
+          COALESCE(a.notice_procurement_method, '') AS "noticeProcurementMethod",
 
           -- ステータスを締切日から動的に計算（文字列比較で安全に）
           CASE
@@ -436,6 +446,18 @@ export class AnnouncementRepository {
       paramIndex++;
     }
 
+    if (filters.categorySegments && filters.categorySegments.length > 0) {
+      whereClauses.push(`category_segment = ANY($${paramIndex})`);
+      queryParams.push(filters.categorySegments);
+      paramIndex++;
+    }
+
+    if (filters.categoryDetails && filters.categoryDetails.length > 0) {
+      whereClauses.push(`category_detail = ANY($${paramIndex})`);
+      queryParams.push(filters.categoryDetails);
+      paramIndex++;
+    }
+
     if (filters.organizations && filters.organizations.length > 0) {
       whereClauses.push(`"topAgencyName" = ANY($${paramIndex})`);
       queryParams.push(filters.organizations);
@@ -455,7 +477,9 @@ export class AnnouncementRepository {
       whereClauses.push(
         `("workName" ILIKE $${paramIndex} OR ` +
         `"topAgencyName" ILIKE $${paramIndex} OR ` +
-        `category ILIKE $${paramIndex})`
+        `category ILIKE $${paramIndex} OR ` +
+        `category_segment ILIKE $${paramIndex} OR ` +
+        `category_detail ILIKE $${paramIndex})`
       );
       queryParams.push(`%${escapeLikePattern(filters.searchQuery)}%`);
       paramIndex++;
