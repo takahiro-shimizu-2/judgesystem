@@ -2,7 +2,7 @@
  * 入札情報セクション（サイドバー）
  * 概要・スケジュール情報を表示
  */
-import { Box, Chip } from '@mui/material';
+import { Box, Chip, Typography } from '@mui/material';
 import { CollapsibleSection, InfoRow } from '../../common';
 import { colors, chipStyles } from '../../../constants/styles';
 import { bidTypeConfig } from '../../../constants/bidType';
@@ -76,6 +76,37 @@ export function BidInfoSection({ announcement }: BidInfoSectionProps) {
           {scheduleItems.map((item) => (
             <InfoRow key={item.label} label={item.label} value={item.value} />
           ))}
+          {announcement.submissionDocuments && announcement.submissionDocuments.length > 0 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+              <Typography sx={{ fontWeight: 600, color: colors.primary.main }}>提出書類と期日</Typography>
+              {announcement.submissionDocuments.map((doc, idx) => (
+                <Box
+                  key={`${doc.documentId || 'doc'}-${idx}`}
+                  sx={{
+                    border: `1px solid ${colors.border.light}`,
+                    borderRadius: 1,
+                    p: 1,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 0.5,
+                    backgroundColor: colors.background.paper,
+                  }}
+                >
+                  <Typography sx={{ fontWeight: 600, color: colors.text.primary }}>
+                    {doc.name || '提出書類'}
+                  </Typography>
+                  <Typography sx={{ color: colors.text.secondary }}>
+                    期日: {doc.dateValue || doc.dateRaw || '日付情報なし'}
+                  </Typography>
+                  {doc.dateMeaning && (
+                    <Typography sx={{ fontSize: '0.8rem', color: colors.text.light }}>
+                      {doc.dateMeaning}
+                    </Typography>
+                  )}
+                </Box>
+              ))}
+            </Box>
+          )}
         </Box>
       </CollapsibleSection>
     </Box>

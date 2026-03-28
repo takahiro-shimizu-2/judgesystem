@@ -499,7 +499,7 @@ export class EvaluationRepository {
     }
 
     if (filters.categories && filters.categories.length > 0) {
-      whereClauses.push(`ba.category = ANY($${paramIndex})`);
+      whereClauses.push(`(ba.category_detail = ANY($${paramIndex}) OR ba.category = ANY($${paramIndex}))`);
       queryParams.push(filters.categories);
       paramIndex++;
     }

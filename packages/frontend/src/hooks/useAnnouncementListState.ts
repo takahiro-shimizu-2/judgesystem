@@ -96,13 +96,14 @@ async function fetchAnnouncements(params: {
   if (filters.bidTypes.length > 0) {
     queryParams.append('bidTypes', filters.bidTypes.join(','));
   }
-  if (filters.categories.length > 0) {
+  const hasCategoryDetails = filters.categoryDetails.length > 0;
+  if (!hasCategoryDetails && filters.categories.length > 0) {
     queryParams.append('categories', filters.categories.join(','));
   }
   if (filters.categorySegments.length > 0) {
     queryParams.append('categorySegments', filters.categorySegments.join(','));
   }
-  if (filters.categoryDetails.length > 0) {
+  if (hasCategoryDetails) {
     queryParams.append('categoryDetails', filters.categoryDetails.join(','));
   }
   if (filters.organizations.length > 0) {
@@ -148,11 +149,7 @@ export function useAnnouncementListState() {
   // カスタムフィルター
   const [filters, setFilters] = useState<AnnouncementFilterState>(() => {
     const saved = loadFromStorage<Partial<AnnouncementFilterState>>(STORAGE_KEYS.FILTERS, {});
-    const merged: AnnouncementFilterState = { ...DEFAULT_FILTERS, ...saved };
-    if ((!merged.categoryDetails || merged.categoryDetails.length === 0) && merged.categories.length > 0) {
-      merged.categoryDetails = [...merged.categories];
-    }
-    return merged;
+    return { ...DEFAULT_FILTERS, ...saved };
   });
 
   // DataGridの列フィルター
