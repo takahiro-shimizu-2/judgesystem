@@ -37,6 +37,7 @@ import { NotFoundView, FloatingBackButton, ScrollToTopButton } from '../componen
 import { CustomPagination } from '../components/bid';
 import { RightSidePanel } from '../components/layout';
 import { useSidebar } from '../contexts/SidebarContext';
+import { getApiUrl } from '../config/api';
 import { formatAmountInManYen } from '../utils';
 import type { BidType, AnnouncementStatus } from '../types/announcement';
 import type { EvaluationStatus, WorkStatus, CompanyPriority, Announcement as AnnouncementType, DocumentOcr } from '../types';
@@ -67,7 +68,6 @@ const formatCategoryLabel = (segment?: string, detail?: string, fallback?: strin
   if (detail) return detail;
   return fallback || '未分類';
 };
-import { getApiUrl } from '../config/api';
 
 // 関連案件用ソートオプション
 type SortOption = 'deadline_asc' | 'deadline_desc' | 'publish_asc' | 'publish_desc' | 'status_asc' | 'status_desc' | 'prefecture_asc' | 'prefecture_desc';

@@ -1,7 +1,7 @@
 /**
  * 入札案件一覧ページ（カード形式 + 右パネル）
  */
-import { useCallback, useState, useRef, useEffect } from 'react';
+import { useCallback, useState, useRef, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Box,
@@ -20,6 +20,7 @@ import { RightSidePanel } from '../components/layout';
 import { AnnouncementDisplayConditionsPanel } from '../components/announcement';
 import { useSidebar } from '../contexts/SidebarContext';
 import { useAnnouncementListState } from '../hooks';
+import { categories as defaultCategoryDetails } from '../constants/categories';
 
 // 都道府県を抽出するヘルパー関数
 function extractPrefecture(workLocation: string | undefined): string {
@@ -347,26 +348,55 @@ export default function AnnouncementListPage() {
   }, []);
 
   // アクティブなフィルター数
-  const totalFilterCount = filters.statuses.length + filters.bidTypes.length + filters.categories.length + filters.prefectures.length + filters.organizations.length;
+  const totalFilterCount =
+    filters.statuses.length +
+    filters.bidTypes.length +
+    filters.categorySegments.length +
+    filters.categoryDetails.length +
+    filters.prefectures.length +
+    filters.organizations.length;
 
   // 行データに変換（サーバーから取得したデータをそのまま使用）
-  const displayRows: RowData[] = rows.map((a) => ({
-    id: String(a.announcementNo), // 公告番号を使用（詳細APIと整合）
-    no: String(a.announcementNo).padStart(8, '0'),
-    status: a.status,
-    bidType: a.bidType,
-    title: a.title,
-    organization: a.organization,
-    category: a.category,
-    categorySegment: a.categorySegment,
-    categoryDetail: a.categoryDetail,
-    noticeCategoryName: a.noticeCategoryName,
-    noticeCategoryCode: a.noticeCategoryCode,
-    noticeProcurementMethod: a.noticeProcurementMethod,
-    publishDate: a.publishDate,
-    deadline: a.deadline,
-    prefecture: extractPrefecture(a.workLocation),
-  }));
+const displayRows: RowData[] = rows.map((a) => ({
+  id: String(a.announcementNo), // 公告番号を使用（詳細APIと整合）
+  no: String(a.announcementNo).padStart(8, '0'),
+  status: a.status,
+  bidType: a.bidType,
+  title: a.title,
+  organization: a.organization,
+  category: a.category,
+  categorySegment: a.categorySegment,
+  categoryDetail: a.categoryDetail,
+  noticeCategoryName: a.noticeCategoryName,
+  noticeCategoryCode: a.noticeCategoryCode,
+  noticeProcurementMethod: a.noticeProcurementMethod,
+  publishDate: a.publishDate,
+  deadline: a.deadline,
+  prefecture: extractPrefecture(a.workLocation),
+}));
+
+const categorySegmentOptions = useMemo(() => {
+  const set = new Set<string>();
+  rows.forEach((row: any) => {
+    if (row.categorySegment) {
+      set.add(row.categorySegment);
+    }
+  });
+  return Array.from(set).sort();
+}, [rows]);
+
+const categoryDetailOptions = useMemo(() => {
+  const set = new Set<string>();
+  rows.forEach((row: any) => {
+    if (row.categoryDetail) {
+      set.add(row.categoryDetail);
+    }
+  });
+  if (set.size === 0) {
+    defaultCategoryDetails.forEach(cat => set.add(cat));
+  }
+  return Array.from(set).sort();
+}, [rows]);
 
   // ページ変更時にスクロール位置をリセット
   useEffect(() => {
@@ -382,7 +412,15 @@ export default function AnnouncementListPage() {
   const handleClearAll = useCallback(() => {
     updateSearchQuery('');
     updateSortModel([]);
-    applyFilters({ statuses: [], bidTypes: [], categories: [], prefectures: [], organizations: [] });
+    applyFilters({
+      statuses: [],
+      bidTypes: [],
+      categories: [],
+      categorySegments: [],
+      categoryDetails: [],
+      prefectures: [],
+      organizations: [],
+    });
   }, [updateSearchQuery, updateSortModel, applyFilters]);
 
   const handleOpenWithTab = useCallback((tab: 'sort' | 'filter') => {
@@ -446,7 +484,17 @@ export default function AnnouncementListPage() {
                 </Typography>
                 <Typography
                   component="button"
-                  onClick={() => applyFilters({ statuses: [], bidTypes: [], categories: [], prefectures: [], organizations: [] })}
+                  onClick={() =>
+                    applyFilters({
+                      statuses: [],
+                      bidTypes: [],
+                      categories: [],
+                      categorySegments: [],
+                      categoryDetails: [],
+                      prefectures: [],
+                      organizations: [],
+                    })
+                  }
                   sx={{ fontSize: fontSizes.xs, color: colors.accent.red, fontWeight: 600, cursor: 'pointer', background: 'none', border: 'none', p: 0, mr: 0.5, '&:hover': { color: colors.status.error.main } }}
                 >
                   クリア
@@ -472,12 +520,34 @@ export default function AnnouncementListPage() {
                   />
                 ))}
 
-                {filters.categories.map((c) => (
+                {filters.categorySegments.map((segment) => (
                   <Chip
-                    key={c}
-                    label={c}
+                    key={segment}
+                    label={`区分: ${segment}`}
                     size="small"
-                    onDelete={() => applyFilters({ ...filters, categories: filters.categories.filter((x) => x !== c) })}
+                    onDelete={() =>
+                      applyFilters({
+                        ...filters,
+                        categorySegments: filters.categorySegments.filter((x) => x !== segment),
+                      })
+                    }
+                    sx={listFilterChipStyles}
+                  />
+                ))}
+
+                {filters.categoryDetails.map((detail) => (
+                  <Chip
+                    key={detail}
+                    label={`詳細: ${detail}`}
+                    size="small"
+                    onDelete={() => {
+                      const nextDetails = filters.categoryDetails.filter((x) => x !== detail);
+                      applyFilters({
+                        ...filters,
+                        categoryDetails: nextDetails,
+                        categories: nextDetails,
+                      });
+                    }}
                     sx={listFilterChipStyles}
                   />
                 ))}
@@ -557,7 +627,8 @@ export default function AnnouncementListPage() {
           filters={filters}
           onFilterChange={applyFilters}
           onClearAll={handleClearAll}
-          categories={[...categories]}
+          categorySegments={categorySegmentOptions}
+          categoryDetails={categoryDetailOptions}
           activeTab={conditionTab}
           onTabChange={setConditionTab}
         />

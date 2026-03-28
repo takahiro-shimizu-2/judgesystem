@@ -20,6 +20,8 @@ const DEFAULT_FILTERS: AnnouncementFilterState = {
   statuses: [],
   bidTypes: [],
   categories: [],
+  categorySegments: [],
+  categoryDetails: [],
   prefectures: [],
   organizations: [],
 };
@@ -77,6 +79,12 @@ async function fetchAnnouncements(params: {
   }
   if (filters.categories.length > 0) {
     queryParams.append('categories', filters.categories.join(','));
+  }
+  if (filters.categorySegments.length > 0) {
+    queryParams.append('categorySegments', filters.categorySegments.join(','));
+  }
+  if (filters.categoryDetails.length > 0) {
+    queryParams.append('categoryDetails', filters.categoryDetails.join(','));
   }
   if (filters.organizations.length > 0) {
     queryParams.append('organizations', filters.organizations.join(','));

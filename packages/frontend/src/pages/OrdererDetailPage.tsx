@@ -37,7 +37,14 @@ import { categories } from '../constants/categories';
 import { bidTypes } from '../constants/bidType';
 import { prefecturesByRegion } from '../constants/prefectures';
 import type { BidType } from '../types/announcement';
+import type { AnnouncementWithStatus } from '../types';
 import { colors, pageStyles, fontSizes, chipStyles, iconStyles, borderRadius, rightPanelColors } from '../constants/styles';
+import { useListPageState } from '../hooks';
+import { useSidebar } from '../contexts/SidebarContext';
+import { NotFoundView, FloatingBackButton, ScrollToTopButton } from '../components/common';
+import { CustomPagination } from '../components/bid';
+import { RightSidePanel } from '../components/layout';
+import { getApiUrl } from '../config/api';
 
 const formatCategoryLabel = (segment?: string, detail?: string, fallback?: string): string => {
   if (segment && detail) return `${segment}／${detail}`;
@@ -45,13 +52,6 @@ const formatCategoryLabel = (segment?: string, detail?: string, fallback?: strin
   if (detail) return detail;
   return fallback || '未分類';
 };
-import type { AnnouncementWithStatus } from '../types';
-import { useListPageState } from '../hooks';
-import { useSidebar } from '../contexts/SidebarContext';
-import { NotFoundView, FloatingBackButton, ScrollToTopButton } from '../components/common';
-import { CustomPagination } from '../components/bid';
-import { RightSidePanel } from '../components/layout';
-import { getApiUrl } from '../config/api';
 
 
 /**
