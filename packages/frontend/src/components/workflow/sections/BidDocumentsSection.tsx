@@ -66,6 +66,18 @@ function DocumentLinkButton({ label, href, disabled = false }: DocumentLinkButto
   );
 }
 
+const getDocumentDisplayLabel = (doc: DocumentOcr, typeLabel?: string) => {
+  const normalizedTitle = doc.title?.trim();
+  if (normalizedTitle) {
+    return normalizedTitle;
+  }
+  const normalizedType = typeLabel?.trim();
+  if (normalizedType) {
+    return normalizedType;
+  }
+  return '資料';
+};
+
 const extractAnnouncementNo = (announcementId?: string): string | null => {
   if (!announcementId) return null;
   if (announcementId.startsWith('ann-')) {
@@ -442,7 +454,7 @@ export function BidDocumentsSection({ announcement }: BidDocumentsSectionProps) 
   const renderDocumentCard = (doc: DocumentOcr) => {
     const typeConfig = getDocumentTypeConfig(doc.type);
     const formatConfig = getFileFormatConfig(doc.fileFormat);
-    const title = doc.title || typeConfig.label;
+    const displayLabel = getDocumentDisplayLabel(doc, typeConfig.label);
 
     return (
       <Box
@@ -459,7 +471,7 @@ export function BidDocumentsSection({ announcement }: BidDocumentsSectionProps) 
       >
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
           <Typography sx={{ fontSize: fontSizes.md, fontWeight: 600, color: colors.text.secondary }}>
-            {title}
+            {displayLabel}
           </Typography>
           <Chip
             label={typeConfig.label}
@@ -486,7 +498,7 @@ export function BidDocumentsSection({ announcement }: BidDocumentsSectionProps) 
               詳細表示
             </Button>
             <DocumentLinkButton
-              label={`${typeConfig.label}（${formatConfig.label}）`}
+              label={`${displayLabel}（${formatConfig.label}）`}
               href={doc.url}
               disabled={!doc.url}
             />

@@ -69,6 +69,18 @@ const formatCategoryLabel = (segment?: string, detail?: string, fallback?: strin
   return fallback || '未分類';
 };
 
+const getDocumentDisplayLabel = (doc: DocumentOcr, typeLabel?: string) => {
+  const normalizedTitle = doc.title?.trim();
+  if (normalizedTitle) {
+    return normalizedTitle;
+  }
+  const normalizedType = typeLabel?.trim();
+  if (normalizedType) {
+    return normalizedType;
+  }
+  return '資料';
+};
+
 const formatSubmissionDate = (doc: NonNullable<AnnouncementType['submissionDocuments']>[number]): { value: string; meaning?: string } => {
   const value = doc.dateValue || doc.dateRaw || '日付情報なし';
   return {
@@ -1957,6 +1969,7 @@ export default function AnnouncementDetailPage() {
                             {announcement.documents.map((doc: DocumentOcr) => {
                               const typeConfig = getDocumentTypeConfig(doc.type || 'other');
                               const formatConfig = getFileFormatConfig(doc.fileFormat);
+                              const displayLabel = getDocumentDisplayLabel(doc, typeConfig.label);
                               return (
                                 <Button
                                   key={doc.id}
@@ -1969,7 +1982,7 @@ export default function AnnouncementDetailPage() {
                                   disabled={!doc.url}
                                   sx={{ borderRadius: borderRadius.xs, borderColor: formatConfig.color, color: doc.url ? formatConfig.color : colors.text.light, fontWeight: 500, fontSize: fontSizes.md, textTransform: 'none', justifyContent: 'space-between' }}
                                 >
-                                  {typeConfig.label}（{formatConfig.label}）
+                                  {displayLabel}（{formatConfig.label}）
                                 </Button>
                               );
                             })}
@@ -2329,6 +2342,7 @@ export default function AnnouncementDetailPage() {
                 {announcement.documents.map((doc: DocumentOcr, index: number) => {
                   const typeConfig = getDocumentTypeConfig(doc.type || 'other');
                   const formatConfig = getFileFormatConfig(doc.fileFormat);
+                  const displayLabel = getDocumentDisplayLabel(doc, typeConfig.label);
                   const isPdfDocument = doc.fileFormat && doc.fileFormat.toLowerCase() === 'pdf';
                   const docId = doc.id;
                   const docKey = String(docId);
@@ -2365,7 +2379,7 @@ export default function AnnouncementDetailPage() {
                         }}
                       >
                         <TextSnippetIcon sx={{ ...iconStyles.medium, color: colors.text.light }} />
-                        <Typography sx={{ fontSize: fontSizes.md, fontWeight: 600, color: colors.text.secondary }}>{doc.title}</Typography>
+                        <Typography sx={{ fontSize: fontSizes.md, fontWeight: 600, color: colors.text.secondary }}>{displayLabel}</Typography>
                         <Typography sx={{ fontSize: fontSizes.md, fontWeight: 600, color: typeConfig.color, backgroundColor: typeConfig.bgColor, px: 1, py: 0.25, borderRadius: '2px' }}>
                           {typeConfig.label}
                         </Typography>
@@ -2435,7 +2449,7 @@ export default function AnnouncementDetailPage() {
                             ) : previewUrl ? (
                               <Box
                                 component="iframe"
-                                title={`${doc.title} プレビュー`}
+                                title={`${displayLabel} プレビュー`}
                                 src={previewUrl}
                                 sx={{
                                   width: '100%',
