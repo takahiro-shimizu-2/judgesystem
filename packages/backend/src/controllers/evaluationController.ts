@@ -3,6 +3,16 @@ import { EvaluationService } from "../services";
 import { FilterParams, SortOption } from "../types";
 import { logger } from "../utils/logger";
 
+const VALID_PARTNER_STATUSES = new Set([
+  "not_called",
+  "waiting_documents",
+  "waiting_response",
+  "estimate_in_progress",
+  "estimate_completed",
+  "estimate_adopted",
+  "unavailable",
+]);
+
 export class EvaluationController {
   private service: EvaluationService;
 
@@ -285,6 +295,197 @@ export class EvaluationController {
     }
   };
 
+  getPartnerCandidates = async (req: Request, res: Response): Promise<void> => {
+    const { evaluationNo } = req.params;
+    logger.info(`GET /api/evaluations/${evaluationNo}/partners`);
+
+    if (!evaluationNo) {
+      res.status(400).json({ error: "Bad Request", message: "evaluationNo is required" });
+      return;
+    }
+
+    try {
+      const partners = await this.service.getPartnerCandidates(evaluationNo);
+      res.status(200).json(partners);
+    } catch (error) {
+      logger.error({ err: error }, `ERROR in GET /api/evaluations/${evaluationNo}/partners`);
+      if (!res.headersSent) {
+        res.status(500).json({
+          error: "Internal Server Error",
+          message: process.env.NODE_ENV === "production"
+            ? "An unexpected error occurred"
+            : error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+  };
+
+  addPartnerCandidate = async (req: Request, res: Response): Promise<void> => {
+    const { evaluationNo } = req.params;
+    logger.info(`POST /api/evaluations/${evaluationNo}/partners`);
+
+    if (!evaluationNo) {
+      res.status(400).json({ error: "Bad Request", message: "evaluationNo is required" });
+      return;
+    }
+
+    const {
+      partnerId,
+      partnerCompanyId,
+      partnerOfficeId,
+      partnerName,
+      contactPerson,
+      phone,
+      email,
+      fax,
+    } = req.body ?? {};
+
+    const resolvedPartnerId =
+      typeof partnerId === "string" && partnerId.trim()
+        ? partnerId.trim()
+        : typeof partnerCompanyId === "string" && partnerCompanyId.trim()
+          ? partnerCompanyId.trim()
+          : typeof partnerOfficeId === "string" && partnerOfficeId.trim()
+            ? partnerOfficeId.trim()
+            : null;
+
+    if (!resolvedPartnerId) {
+      res.status(400).json({ error: "Bad Request", message: "partnerId is required" });
+      return;
+    }
+
+    if (!partnerName || typeof partnerName !== "string" || partnerName.trim().length === 0) {
+      res.status(400).json({ error: "Bad Request", message: "partnerName is required" });
+      return;
+    }
+
+    try {
+      const partner = await this.service.createPartnerCandidate(evaluationNo, {
+        partnerId: resolvedPartnerId,
+        partnerName: partnerName.trim(),
+        contactPerson: contactPerson ?? null,
+        phone: phone ?? null,
+        email: email ?? null,
+        fax: fax ?? null,
+      });
+      res.status(201).json(partner);
+    } catch (error) {
+      if (this.isUniqueViolation(error)) {
+        logger.warn({ err: error }, `Duplicate partner candidate for evaluation ${evaluationNo}`);
+        res.status(409).json({
+          error: "Duplicate partner candidate",
+          message: "この協力会社は既に候補に追加されています。",
+        });
+        return;
+      }
+      logger.error({ err: error }, `ERROR in POST /api/evaluations/${evaluationNo}/partners`);
+      if (!res.headersSent) {
+        res.status(500).json({
+          error: "Internal Server Error",
+          message: process.env.NODE_ENV === "production"
+            ? "An unexpected error occurred"
+            : error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+  };
+
+  updatePartnerCandidate = async (req: Request, res: Response): Promise<void> => {
+    const { evaluationNo, partnerId } = req.params;
+    logger.info(`PATCH /api/evaluations/${evaluationNo}/partners/${partnerId}`);
+
+    if (!evaluationNo || !partnerId) {
+      res.status(400).json({ error: "Bad Request", message: "evaluationNo and partnerId are required" });
+      return;
+    }
+
+    const {
+      partnerName,
+      contactPerson,
+      phone,
+      email,
+      fax,
+      status,
+      surveyApproved,
+    } = req.body ?? {};
+
+    if (
+      partnerName === undefined &&
+      contactPerson === undefined &&
+      phone === undefined &&
+      email === undefined &&
+      fax === undefined &&
+      status === undefined &&
+      surveyApproved === undefined
+    ) {
+      res.status(400).json({ error: "Bad Request", message: "At least one field is required" });
+      return;
+    }
+
+    if (status !== undefined && !VALID_PARTNER_STATUSES.has(status)) {
+      res.status(400).json({ error: "Bad Request", message: "Invalid partner status" });
+      return;
+    }
+
+    try {
+      const updated = await this.service.updatePartnerCandidate(evaluationNo, partnerId, {
+        partnerName,
+        contactPerson,
+        phone,
+        email,
+        fax,
+        status,
+        surveyApproved,
+      });
+
+      if (!updated) {
+        res.status(404).json({ error: "Partner candidate not found" });
+        return;
+      }
+
+      res.status(200).json(updated);
+    } catch (error) {
+      logger.error({ err: error }, `ERROR in PATCH /api/evaluations/${evaluationNo}/partners/${partnerId}`);
+      if (!res.headersSent) {
+        res.status(500).json({
+          error: "Internal Server Error",
+          message: process.env.NODE_ENV === "production"
+            ? "An unexpected error occurred"
+            : error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+  };
+
+  deletePartnerCandidate = async (req: Request, res: Response): Promise<void> => {
+    const { evaluationNo, partnerId } = req.params;
+    logger.info(`DELETE /api/evaluations/${evaluationNo}/partners/${partnerId}`);
+
+    if (!evaluationNo || !partnerId) {
+      res.status(400).json({ error: "Bad Request", message: "evaluationNo and partnerId are required" });
+      return;
+    }
+
+    try {
+      const deleted = await this.service.deletePartnerCandidate(evaluationNo, partnerId);
+      if (!deleted) {
+        res.status(404).json({ error: "Partner candidate not found" });
+        return;
+      }
+      res.status(204).send();
+    } catch (error) {
+      logger.error({ err: error }, `ERROR in DELETE /api/evaluations/${evaluationNo}/partners/${partnerId}`);
+      if (!res.headersSent) {
+        res.status(500).json({
+          error: "Internal Server Error",
+          message: process.env.NODE_ENV === "production"
+            ? "An unexpected error occurred"
+            : error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+  };
+
   getCompanyOptions = async (req: Request, res: Response): Promise<void> => {
     logger.info("GET /api/evaluations/company-options");
     try {
@@ -359,5 +560,14 @@ export class EvaluationController {
       sortOptions,
       ordererId: req.query.ordererId as string | undefined,
     };
+  }
+
+  private isUniqueViolation(error: unknown): error is { code?: string } {
+    return Boolean(
+      error &&
+      typeof error === "object" &&
+      "code" in error &&
+      (error as { code?: string }).code === "23505"
+    );
   }
 }

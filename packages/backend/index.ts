@@ -94,6 +94,10 @@ app.get("/api/evaluations/:evaluationNo/assignees", evaluationController.getAssi
 app.put("/api/evaluations/:evaluationNo/assignees", authorize("admin", "evaluator"), evaluationController.updateAssignee);
 app.get("/api/evaluations/:evaluationNo/orderer-workflow", evaluationController.getOrdererWorkflow);
 app.put("/api/evaluations/:evaluationNo/orderer-workflow", authorize("admin", "evaluator", "orderer"), evaluationController.updateOrdererWorkflow);
+app.get("/api/evaluations/:evaluationNo/partners", evaluationController.getPartnerCandidates);
+app.post("/api/evaluations/:evaluationNo/partners", authorize("admin", "evaluator"), evaluationController.addPartnerCandidate);
+app.patch("/api/evaluations/:evaluationNo/partners/:partnerId", authorize("admin", "evaluator"), evaluationController.updatePartnerCandidate);
+app.delete("/api/evaluations/:evaluationNo/partners/:partnerId", authorize("admin", "evaluator"), evaluationController.deletePartnerCandidate);
 
 // Announcement routes
 app.get("/api/announcements", announcementController.getList);

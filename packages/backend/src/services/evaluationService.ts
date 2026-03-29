@@ -2,6 +2,7 @@ import {
   EvaluationRepository,
   EvaluationAssignmentRepository,
   EvaluationOrdererWorkflowRepository,
+  EvaluationPartnerCandidateRepository,
 } from "../repositories";
 import { FilterParams, PaginatedResponse } from "../types";
 import type {
@@ -11,16 +12,38 @@ import type {
   EvaluationStats,
 } from "../types/evaluation";
 import type { OrdererWorkflowState } from "../repositories/evaluationOrdererWorkflowRepository";
+import type { EvaluationPartnerCandidate } from "../types/evaluationPartnerCandidate";
+
+export interface CreatePartnerCandidateParams {
+  partnerId: string;
+  partnerName: string;
+  contactPerson?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  fax?: string | null;
+}
+
+export interface UpdatePartnerCandidateParams {
+  partnerName?: string;
+  contactPerson?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  fax?: string | null;
+  status?: string;
+  surveyApproved?: boolean;
+}
 
 export class EvaluationService {
   private repository: EvaluationRepository;
   private assignmentRepository: EvaluationAssignmentRepository;
   private ordererWorkflowRepository: EvaluationOrdererWorkflowRepository;
+  private partnerCandidateRepository: EvaluationPartnerCandidateRepository;
 
   constructor() {
     this.repository = new EvaluationRepository();
     this.assignmentRepository = new EvaluationAssignmentRepository();
     this.ordererWorkflowRepository = new EvaluationOrdererWorkflowRepository();
+    this.partnerCandidateRepository = new EvaluationPartnerCandidateRepository();
   }
 
   /**
@@ -108,5 +131,28 @@ export class EvaluationService {
 
   async getCompanyOptions(search?: string) {
     return await this.repository.getCompanyOptions(search);
+  }
+
+  async getPartnerCandidates(evaluationNo: string): Promise<EvaluationPartnerCandidate[]> {
+    return await this.partnerCandidateRepository.findByEvaluation(evaluationNo);
+  }
+
+  async createPartnerCandidate(
+    evaluationNo: string,
+    params: CreatePartnerCandidateParams
+  ): Promise<EvaluationPartnerCandidate> {
+    return await this.partnerCandidateRepository.create(evaluationNo, params);
+  }
+
+  async updatePartnerCandidate(
+    evaluationNo: string,
+    candidateId: string,
+    params: UpdatePartnerCandidateParams
+  ): Promise<EvaluationPartnerCandidate | null> {
+    return await this.partnerCandidateRepository.update(evaluationNo, candidateId, params);
+  }
+
+  async deletePartnerCandidate(evaluationNo: string, candidateId: string): Promise<boolean> {
+    return await this.partnerCandidateRepository.delete(evaluationNo, candidateId);
   }
 }
