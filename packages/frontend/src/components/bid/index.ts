@@ -7,7 +7,6 @@ export { PriorityCell } from './PriorityCell';
 export { StatusCell } from './StatusCell';
 export { WorkStatusCell } from './WorkStatusCell';
 export { RequirementCard } from './RequirementCard';
-export { default as SubmissionDocumentsPanel } from './SubmissionDocumentsPanel';
 
 // Detail Page Components
 export { DetailHeader } from './DetailHeader';

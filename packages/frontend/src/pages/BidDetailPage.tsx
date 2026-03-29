@@ -36,7 +36,6 @@ import {
   StaffAssignmentPanel,
   SimilarCasesPanel,
 } from "../components/workflow";
-import { SubmissionDocumentsPanel } from "../components/bid";
 
 // ============================================================================
 // 定数
@@ -830,8 +829,6 @@ export default function BidDetailPage() {
                   </Typography>
                   <BidInfoSection announcement={announcement} />
                 </Box>
-
-                <SubmissionDocumentsPanel documents={announcement.submissionDocuments} />
               </Box>
             </Box>
           </Box>

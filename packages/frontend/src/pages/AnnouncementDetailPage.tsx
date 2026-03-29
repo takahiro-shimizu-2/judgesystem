@@ -38,7 +38,7 @@ import { CustomPagination } from '../components/bid';
 import { RightSidePanel } from '../components/layout';
 import { useSidebar } from '../contexts/SidebarContext';
 import { getApiUrl } from '../config/api';
-import { formatAmountInManYen, buildScheduleFromSubmissionDocuments, buildFallbackScheduleFromAnnouncement } from '../utils';
+import { formatAmountInManYen, buildScheduleFromSubmissionDocuments, buildFallbackScheduleFromAnnouncement, buildSubmissionDocumentDisplayItems } from '../utils';
 import type { BidType, AnnouncementStatus } from '../types/announcement';
 import type { EvaluationStatus, WorkStatus, CompanyPriority, Announcement as AnnouncementType, DocumentOcr } from '../types';
 
@@ -79,14 +79,6 @@ const getDocumentDisplayLabel = (doc: DocumentOcr, typeLabel?: string) => {
     return normalizedType;
   }
   return '資料';
-};
-
-const formatSubmissionDate = (doc: NonNullable<AnnouncementType['submissionDocuments']>[number]): { value: string; meaning?: string } => {
-  const value = doc.dateValue || doc.dateRaw || '日付情報なし';
-  return {
-    value,
-    meaning: doc.dateMeaning || undefined,
-  };
 };
 
 // 関連案件用ソートオプション
@@ -1771,6 +1763,8 @@ export default function AnnouncementDetailPage() {
   const fallbackSchedule = buildFallbackScheduleFromAnnouncement(announcement);
   const scheduleItems = derivedSchedule.length > 0 ? derivedSchedule : fallbackSchedule;
   const hasScheduleItems = scheduleItems.length > 0;
+  const submissionDocumentItems = buildSubmissionDocumentDisplayItems(announcement.submissionDocuments);
+  const hasSubmissionDocumentItems = submissionDocumentItems.length > 0;
 
   // タブインデックス計算用（資料タブが条件付きのため）
   const hasDocuments = announcement.documents && announcement.documents.length > 0;
@@ -2114,54 +2108,58 @@ export default function AnnouncementDetailPage() {
                             </Typography>
                           </Box>
                         ))}
-                        {announcement.submissionDocuments && announcement.submissionDocuments.length > 0 && (
-                          <Box sx={{ borderTop: `1px solid ${colors.border.light}`, mt: 1 }}>
-                            <Typography sx={{ fontSize: fontSizes.base, fontWeight: 600, color: colors.primary.main, px: 2.5, pt: 1.5, pb: 1 }}>
-                              提出書類と期日
-                            </Typography>
-                            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, px: 2.5, pb: 2 }}>
-                              {announcement.submissionDocuments.map((doc, idx) => {
-                                const { value, meaning } = formatSubmissionDate(doc);
-                                return (
-                                  <Box
-                                    key={`${doc.documentId || 'doc'}-${idx}`}
-                                    sx={{
-                                      display: 'flex',
-                                      flexDirection: 'column',
-                                      gap: 0.5,
-                                      p: 1.25,
-                                      border: `1px solid ${colors.border.light}`,
-                                      borderRadius: borderRadius.xs,
-                                      backgroundColor: colors.background.paper,
-                                    }}
-                                  >
-                                    <Typography sx={{ fontSize: fontSizes.sm, fontWeight: 600, color: colors.text.primary }}>
-                                      {doc.name || '提出書類'}
-                                    </Typography>
-                                    <Typography sx={{ fontSize: fontSizes.sm, color: colors.text.secondary }}>
-                                      期日: {value}
-                                    </Typography>
-                                    {meaning && (
-                                      <Typography sx={{ fontSize: fontSizes.xs, color: colors.text.light }}>
-                                        {meaning}
-                                      </Typography>
-                                    )}
-                                    <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-                                      {doc.timepointType && (
-                                        <Chip size="small" label={doc.timepointType} sx={{ height: 20, fontSize: fontSizes.xs }} />
-                                      )}
-                                      {doc.documentId && (
-                                        <Chip size="small" label={`ID: ${doc.documentId}`} sx={{ height: 20, fontSize: fontSizes.xs, color: colors.text.light }} />
-                                      )}
-                                    </Box>
-                                  </Box>
-                                );
-                              })}
-                            </Box>
-                          </Box>
-                        )}
                       </AccordionDetails>
                     </Accordion>
+                    {hasSubmissionDocumentItems && (
+                      <Accordion
+                        defaultExpanded
+                        sx={{ boxShadow: 'none', border: `1px solid ${colors.border.main}`, borderRadius: `${borderRadius.xs} !important`, '&:before': { display: 'none' }, '&.Mui-expanded': { margin: 0 } }}
+                      >
+                        <AccordionSummary expandIcon={<ExpandMoreIcon />} sx={{ minHeight: 48, borderBottom: `1px solid ${colors.border.main}`, '&.Mui-expanded': { minHeight: 48 } }}>
+                          <Typography sx={{ fontSize: fontSizes.base, fontWeight: 600, color: colors.primary.main }}>提出書類と期日</Typography>
+                        </AccordionSummary>
+                        <AccordionDetails sx={{ pt: 1, pb: 0, px: 0 }}>
+                          {submissionDocumentItems.map((item, index) => (
+                            <Box
+                              key={item.id}
+                              sx={{
+                                display: 'flex',
+                                flexDirection: 'column',
+                                gap: 0.5,
+                                px: 2.5,
+                                py: 1.25,
+                                borderBottom: index < submissionDocumentItems.length - 1 ? `1px solid ${colors.border.light}` : 'none',
+                              }}
+                            >
+                              <Typography sx={{ fontSize: fontSizes.md, fontWeight: 600, color: colors.text.primary }}>
+                                {item.documentName || '提出書類'}
+                              </Typography>
+                              {item.meaning && (
+                                <Typography sx={{ fontSize: fontSizes.xs, color: colors.text.light }}>
+                                  {item.meaning}
+                                </Typography>
+                              )}
+                              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 1 }}>
+                                <Typography sx={{ fontSize: fontSizes.sm, color: colors.text.secondary }}>
+                                  {item.type === 'range' ? '期間' : '期日'}: {item.dateText}
+                                </Typography>
+                                <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
+                                  <Chip size="small" label={item.type === 'range' ? '期間' : '単日'} sx={{ height: 20, fontSize: fontSizes.xs }} />
+                                  {item.documentIds.map((docId) => (
+                                    <Chip
+                                      key={`${item.id}-${docId}`}
+                                      size="small"
+                                      label={`ID: ${docId}`}
+                                      sx={{ height: 20, fontSize: fontSizes.xs, color: colors.text.light }}
+                                    />
+                                  ))}
+                                </Box>
+                              </Box>
+                            </Box>
+                          ))}
+                        </AccordionDetails>
+                      </Accordion>
+                    )}
                   </Box>
                 </Box>
               </Box>

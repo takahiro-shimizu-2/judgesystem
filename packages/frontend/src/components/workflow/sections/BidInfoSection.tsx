@@ -6,7 +6,7 @@ import { Box, Chip, Typography } from '@mui/material';
 import { CollapsibleSection, InfoRow } from '../../common';
 import { colors, chipStyles } from '../../../constants/styles';
 import { bidTypeConfig } from '../../../constants/bidType';
-import { buildScheduleFromSubmissionDocuments, buildFallbackScheduleFromAnnouncement, type SubmissionScheduleItem } from '../../../utils';
+import { buildScheduleFromSubmissionDocuments, buildFallbackScheduleFromAnnouncement, buildSubmissionDocumentDisplayItems, type SubmissionScheduleItem } from '../../../utils';
 import type { Announcement } from '../../../types';
 
 export interface BidInfoSectionProps {
@@ -25,6 +25,8 @@ export function BidInfoSection({ announcement }: BidInfoSectionProps) {
   const fallbackSchedule = buildFallbackScheduleFromAnnouncement(announcement);
   const scheduleItems: SubmissionScheduleItem[] = derivedSchedule.length > 0 ? derivedSchedule : fallbackSchedule;
   const hasSchedule = scheduleItems.length > 0;
+  const submissionDocumentItems = buildSubmissionDocumentDisplayItems(announcement.submissionDocuments);
+  const hasSubmissionDocuments = submissionDocumentItems.length > 0;
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
@@ -108,12 +110,14 @@ export function BidInfoSection({ announcement }: BidInfoSectionProps) {
             ))}
           </Box>
         )}
-        {announcement.submissionDocuments && announcement.submissionDocuments.length > 0 && (
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, mt: 1.5 }}>
-            <Typography sx={{ fontWeight: 600, color: colors.primary.main }}>提出書類と期日</Typography>
-            {announcement.submissionDocuments.map((doc, idx) => (
+      </CollapsibleSection>
+
+      {hasSubmissionDocuments && (
+        <CollapsibleSection title="提出書類と期日">
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+            {submissionDocumentItems.map((item) => (
               <Box
-                key={`${doc.documentId || 'doc'}-${idx}`}
+                key={item.id}
                 sx={{
                   border: `1px solid ${colors.border.light}`,
                   borderRadius: 1,
@@ -125,21 +129,36 @@ export function BidInfoSection({ announcement }: BidInfoSectionProps) {
                 }}
               >
                 <Typography sx={{ fontWeight: 600, color: colors.text.primary }}>
-                  {doc.name || '提出書類'}
+                  {item.documentName || '提出書類'}
                 </Typography>
-                <Typography sx={{ color: colors.text.secondary }}>
-                  期日: {doc.dateValue || doc.dateRaw || '日付情報なし'}
-                </Typography>
-                {doc.dateMeaning && (
+                {item.meaning && (
                   <Typography sx={{ fontSize: '0.8rem', color: colors.text.light }}>
-                    {doc.dateMeaning}
+                    {item.meaning}
                   </Typography>
                 )}
+                <Typography sx={{ color: colors.text.secondary }}>
+                  {item.type === 'range' ? '期間' : '期日'}: {item.dateText}
+                </Typography>
+                <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
+                  <Chip
+                    size="small"
+                    label={item.type === 'range' ? '期間' : '単日'}
+                    sx={{ height: 20, fontSize: '0.75rem' }}
+                  />
+                  {item.documentIds.map((docId) => (
+                    <Chip
+                      key={`${item.id}-${docId}`}
+                      size="small"
+                      label={`ID: ${docId}`}
+                      sx={{ height: 20, fontSize: '0.75rem', color: colors.text.light }}
+                    />
+                  ))}
+                </Box>
               </Box>
             ))}
           </Box>
-        )}
-      </CollapsibleSection>
+        </CollapsibleSection>
+      )}
     </Box>
   );
 }

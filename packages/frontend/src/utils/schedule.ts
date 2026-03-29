@@ -12,11 +12,32 @@ export interface SubmissionScheduleItem {
   isDeadline?: boolean;
 }
 
+export interface SubmissionDocumentDisplayItem {
+  id: string;
+  documentName: string;
+  meaning?: string;
+  dateText: string;
+  type: ScheduleEntryType;
+  isDeadline?: boolean;
+  documentIds: string[];
+  hasValidDate: boolean;
+}
+
 type NormalizedSubmissionDocument = SubmissionDocument & { __index: number };
 
-interface ScheduleItemInternal extends SubmissionScheduleItem {
+interface ScheduleSource {
+  id: string;
+  label: string;
+  meaning?: string;
+  documentName?: string;
+  type: ScheduleEntryType;
+  startDoc?: NormalizedSubmissionDocument;
+  endDoc?: NormalizedSubmissionDocument;
+  singleDoc?: NormalizedSubmissionDocument;
+  isDeadline?: boolean;
   sortValue: number;
   hasValidDate: boolean;
+  documentIds: string[];
 }
 
 const normalizeTimepointType = (value?: string | null): 'start' | 'end' | 'single' => {
@@ -80,7 +101,18 @@ const compareDocuments = (a: SubmissionDocument, b: SubmissionDocument): number 
   return 0;
 };
 
-const createRangeItem = (key: string, startDoc: NormalizedSubmissionDocument, endDoc: NormalizedSubmissionDocument, rangeIndex: number): ScheduleItemInternal => {
+const collectDocumentIds = (...docs: Array<SubmissionDocument | undefined | null>): string[] => {
+  const ids = new Set<string>();
+  docs.forEach((doc) => {
+    const trimmed = (doc?.documentId || '').trim();
+    if (trimmed) {
+      ids.add(trimmed);
+    }
+  });
+  return Array.from(ids);
+};
+
+const createRangeSource = (key: string, startDoc: NormalizedSubmissionDocument, endDoc: NormalizedSubmissionDocument, rangeIndex: number): ScheduleSource => {
   const meaning = startDoc.dateMeaning || endDoc.dateMeaning || undefined;
   const documentName = startDoc.name || endDoc.name || undefined;
   const label = meaning || documentName || 'スケジュール';
@@ -90,15 +122,17 @@ const createRangeItem = (key: string, startDoc: NormalizedSubmissionDocument, en
     label,
     meaning,
     documentName,
-    dateText: `${getDateDisplayValue(startDoc)} ~ ${getDateDisplayValue(endDoc)}`,
     type: 'range',
+    startDoc,
+    endDoc,
     isDeadline: shouldEmphasize(meaning, documentName),
     sortValue: Math.min(toTimestamp(startDoc), toTimestamp(endDoc)),
     hasValidDate,
+    documentIds: collectDocumentIds(startDoc, endDoc),
   };
 };
 
-const createSingleItem = (key: string, doc: NormalizedSubmissionDocument, singleIndex: number): ScheduleItemInternal => {
+const createSingleSource = (key: string, doc: NormalizedSubmissionDocument, singleIndex: number): ScheduleSource => {
   const meaning = doc.dateMeaning || undefined;
   const documentName = doc.name || undefined;
   const label = meaning || documentName || 'スケジュール';
@@ -108,15 +142,16 @@ const createSingleItem = (key: string, doc: NormalizedSubmissionDocument, single
     label,
     meaning,
     documentName,
-    dateText: getDateDisplayValue(doc),
     type: 'single',
+    singleDoc: doc,
     isDeadline: shouldEmphasize(meaning, documentName),
     sortValue: toTimestamp(doc),
     hasValidDate,
+    documentIds: collectDocumentIds(doc),
   };
 };
 
-export const buildScheduleFromSubmissionDocuments = (documents?: SubmissionDocument[]): SubmissionScheduleItem[] => {
+const buildScheduleSources = (documents?: SubmissionDocument[]): ScheduleSource[] => {
   if (!documents || documents.length === 0) return [];
 
   const groups = new Map<string, NormalizedSubmissionDocument[]>();
@@ -128,7 +163,7 @@ export const buildScheduleFromSubmissionDocuments = (documents?: SubmissionDocum
     groups.set(key, list);
   });
 
-  const items: ScheduleItemInternal[] = [];
+  const items: ScheduleSource[] = [];
 
   groups.forEach((groupDocs, key) => {
     const sortedDocs = [...groupDocs].sort((a, b) => {
@@ -143,7 +178,7 @@ export const buildScheduleFromSubmissionDocuments = (documents?: SubmissionDocum
 
     const pairCount = Math.min(startDocs.length, endDocs.length);
     for (let i = 0; i < pairCount; i += 1) {
-      items.push(createRangeItem(key, startDocs[i], endDocs[i], i));
+      items.push(createRangeSource(key, startDocs[i], endDocs[i], i));
     }
 
     const leftoverStarts = startDocs.slice(pairCount);
@@ -151,23 +186,56 @@ export const buildScheduleFromSubmissionDocuments = (documents?: SubmissionDocum
     const remainingSingles = [...leftoverStarts, ...leftoverEnds, ...singleDocs];
 
     remainingSingles.forEach((doc, idx) => {
-      items.push(createSingleItem(key, doc, idx));
+      items.push(createSingleSource(key, doc, idx));
     });
   });
 
-  const validItems = items.filter((item) => item.hasValidDate);
+  return items.sort((a, b) => {
+    const diff = a.sortValue - b.sortValue;
+    if (diff !== 0) return diff;
+    return a.id.localeCompare(b.id);
+  });
+};
 
-  if (validItems.length === 0) {
+const buildDateText = (source: ScheduleSource): string => {
+  if (source.type === 'range') {
+    return `${getDateDisplayValue(source.startDoc)} ~ ${getDateDisplayValue(source.endDoc)}`;
+  }
+  return getDateDisplayValue(source.singleDoc);
+};
+
+export const buildScheduleFromSubmissionDocuments = (documents?: SubmissionDocument[]): SubmissionScheduleItem[] => {
+  const sources = buildScheduleSources(documents);
+  const validSources = sources.filter((item) => item.hasValidDate);
+
+  if (validSources.length === 0) {
     return [];
   }
 
-  return validItems
-    .sort((a, b) => {
-      const diff = a.sortValue - b.sortValue;
-      if (diff !== 0) return diff;
-      return a.id.localeCompare(b.id);
-    })
-    .map(({ sortValue, hasValidDate, ...rest }) => rest);
+  return validSources.map((source) => ({
+    id: source.id,
+    label: source.label,
+    meaning: source.meaning,
+    documentName: source.documentName,
+    dateText: buildDateText(source),
+    type: source.type,
+    isDeadline: source.isDeadline,
+  }));
+};
+
+export const buildSubmissionDocumentDisplayItems = (documents?: SubmissionDocument[]): SubmissionDocumentDisplayItem[] => {
+  const sources = buildScheduleSources(documents);
+
+  return sources.map((source) => ({
+    id: source.id,
+    documentName: source.documentName || source.label,
+    meaning: source.meaning,
+    dateText: buildDateText(source),
+    type: source.type,
+    isDeadline: source.isDeadline,
+    documentIds: source.documentIds,
+    hasValidDate: source.hasValidDate,
+  }));
 };
 
 const legacyTimestamp = (value?: string | null): number => {
