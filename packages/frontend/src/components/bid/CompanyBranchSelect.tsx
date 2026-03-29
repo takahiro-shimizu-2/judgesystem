@@ -8,6 +8,7 @@ export interface CompanyBranchSelectProps {
   value: string | null;
   valueLabel?: string | null;
   onChange: (officeId: string | null, label?: string) => void;
+  onOptionSelected?: (option: CompanyBranchOption | null) => void;
   label?: string;
   placeholder?: string;
   helperText?: string;
@@ -26,6 +27,7 @@ export function CompanyBranchSelect({
   value,
   valueLabel,
   onChange,
+  onOptionSelected,
   label = '企業・拠点で絞り込み',
   placeholder = '企業・拠点を検索',
   helperText,
@@ -141,8 +143,10 @@ export function CompanyBranchSelect({
         onChange={(_, newValue) => {
           if (!newValue) {
             onChange(null);
+            onOptionSelected?.(null);
           } else {
             onChange(newValue.officeId, getOptionLabel(newValue));
+            onOptionSelected?.(newValue);
           }
         }}
         isOptionEqualToValue={(option, val) => option.officeId === val.officeId}

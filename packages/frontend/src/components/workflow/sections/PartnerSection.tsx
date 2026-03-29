@@ -20,6 +20,12 @@ import {
   Collapse,
   Select,
   FormControl,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  CircularProgress,
+  Alert,
 } from '@mui/material';
 import {
   Business as BusinessIcon,
@@ -51,7 +57,7 @@ import {
   staffSelectStyles,
 } from '../../../constants/styles';
 import { MEMO_TAGS, type MemoTag, type MemoTagConfig, type RecordMemo } from '../../../constants/memoTags';
-import type { Partner, PartnerStatus, PartnerDocument } from '../../../types';
+import type { Partner, PartnerStatus, PartnerDocument, CompanyBranchOption, PartnerCandidatePayload } from '../../../types';
 
 const TALK_TEMPLATE_IDS = ['talk-intro', 'talk-followup'] as const;
 const EMAIL_TEMPLATE_IDS = ['email-request', 'email-estimate'] as const;
@@ -59,6 +65,7 @@ import { partnerStatusLabels, partnerStatusColors, partnerStatusPriority } from 
 import { ContactInfo, ContactActions } from '../../common/ContactInfo';
 import { useStaffDirectory } from '../../../contexts/StaffContext';
 import { PersonIcon } from '../../../constants/icons';
+import { CompanyBranchSelect } from '../../bid/CompanyBranchSelect';
 
 // RecordMemoをCallMemoとして使用
 type CallMemo = RecordMemo;
@@ -278,13 +285,13 @@ function StatusChip({
 }
 
 // 現地調査OKボタン
-function SurveyApprovedButton({ approved, onToggle }: { approved: boolean; onToggle: () => void }) {
+function SurveyApprovedButton({ approved, onToggle }: { approved: boolean; onToggle: (nextValue: boolean) => void }) {
   return (
     <Chip
       icon={approved ? <CheckCircleIcon sx={iconStyles.small} /> : <UncheckedIcon sx={iconStyles.small} />}
       label="現地調査OK"
       size="small"
-      onClick={(e) => { e.stopPropagation(); onToggle(); }}
+      onClick={(e) => { e.stopPropagation(); onToggle(!approved); }}
       sx={{
         ...chipStyles.medium,
         backgroundColor: approved ? 'rgba(16, 185, 129, 0.1)' : 'transparent',
@@ -355,16 +362,18 @@ function PartnerCard({
   companyName,
   myName,
   workflowAssigneeId,
+  onDelete,
 }: {
   partner: Partner;
   isExpanded: boolean;
   onToggleExpand: () => void;
   onStatusChange: (status: PartnerStatus) => void;
-  onToggleSurvey: () => void;
+  onToggleSurvey: (nextValue: boolean) => void;
   projectName: string;
   companyName: string;
   myName: string;
   workflowAssigneeId?: string;
+  onDelete?: () => void;
 }) {
   const { staff, findById } = useStaffDirectory();
   const [activeTab, setActiveTab] = useState(0);
@@ -492,9 +501,28 @@ function PartnerCard({
           <StatusChip status={partner.status} onStatusChange={onStatusChange} />
           <SurveyApprovedButton approved={partner.surveyApproved} onToggle={onToggleSurvey} />
         </Box>
-        <IconButton size="small">
-          {isExpanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
-        </IconButton>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+          {onDelete && (
+            <IconButton
+              size="small"
+              onClick={(event) => {
+                event.stopPropagation();
+                onDelete();
+              }}
+            >
+              <DeleteIcon sx={{ ...iconStyles.small, color: colors.text.light, '&:hover': { color: colors.status.error.main } }} />
+            </IconButton>
+          )}
+          <IconButton
+            size="small"
+            onClick={(event) => {
+              event.stopPropagation();
+              onToggleExpand();
+            }}
+          >
+            {isExpanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+          </IconButton>
+        </Box>
       </Box>
 
       {/* 電話・メールボタン */}
@@ -1151,16 +1179,29 @@ function PartnerCard({
 interface PartnerSectionProps {
   evaluation?: import('../../../types').BidEvaluation;
   partners: Partner[];
-  onPartnersChange: (partners: Partner[]) => void;
   /** ワークフロー（協力会社タブ）の担当者ID */
   workflowAssigneeId?: string;
+  onAddPartner?: (input: PartnerCandidatePayload) => Promise<void>;
+  onRemovePartner?: (partnerId: string) => Promise<void>;
+  onPartnerStatusChange?: (partnerId: string, status: PartnerStatus) => Promise<void>;
+  onPartnerSurveyToggle?: (partnerId: string, nextValue: boolean) => Promise<void>;
+  isLoading?: boolean;
 }
 
 // ============================================================================
 // メインコンポーネント
 // ============================================================================
 
-export function PartnerSection({ evaluation, partners, onPartnersChange, workflowAssigneeId }: PartnerSectionProps) {
+export function PartnerSection({
+  evaluation,
+  partners,
+  workflowAssigneeId,
+  onAddPartner,
+  onRemovePartner,
+  onPartnerStatusChange,
+  onPartnerSurveyToggle,
+  isLoading = false,
+}: PartnerSectionProps) {
   const { staff, findById } = useStaffDirectory();
   // 案件・自社情報をevaluationから取得
   const projectName = evaluation?.announcement?.title || '（案件名）';
@@ -1175,6 +1216,22 @@ export function PartnerSection({ evaluation, partners, onPartnersChange, workflo
   const [documents] = useState<PartnerDocument[]>([
     { id: '1', name: '見積依頼書', type: 'sent', date: '2024/01/15' },
   ]);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
+  const [selectedBranchOption, setSelectedBranchOption] = useState<CompanyBranchOption | null>(null);
+  const [selectedOfficeId, setSelectedOfficeId] = useState<string | null>(null);
+  const [selectedBranchLabel, setSelectedBranchLabel] = useState<string | null>(null);
+  const [addContactPerson, setAddContactPerson] = useState('');
+  const [addPhone, setAddPhone] = useState('');
+  const [addEmail, setAddEmail] = useState('');
+  const [addFax, setAddFax] = useState('');
+  const [addError, setAddError] = useState<string | null>(null);
+  const [isSubmittingAdd, setIsSubmittingAdd] = useState(false);
+
+  const formatBranchLabel = useCallback((option: CompanyBranchOption | null) => {
+    if (!option) return '';
+    return option.branchName ? `${option.companyName}／${option.branchName}` : option.companyName;
+  }, []);
 
   // 送付資料の担当者
   const [manualSentDocsAssignee, setManualSentDocsAssignee] = useState<string>('');
@@ -1189,12 +1246,86 @@ export function PartnerSection({ evaluation, partners, onPartnersChange, workflo
 
   // コールバック
   const changeStatus = useCallback((id: string, newStatus: PartnerStatus) => {
-    onPartnersChange(partners.map((p) => p.id === id ? { ...p, status: newStatus } : p));
-  }, [partners, onPartnersChange]);
+    if (!onPartnerStatusChange) return;
+    onPartnerStatusChange(id, newStatus)
+      .then(() => setActionError(null))
+      .catch((error) => {
+        console.error("Failed to update partner status:", error);
+        setActionError(error instanceof Error ? error.message : "協力会社のステータス更新に失敗しました。");
+      });
+  }, [onPartnerStatusChange]);
 
-  const toggleSurvey = useCallback((id: string) => {
-    onPartnersChange(partners.map((p) => p.id === id ? { ...p, surveyApproved: !p.surveyApproved } : p));
-  }, [partners, onPartnersChange]);
+  const toggleSurvey = useCallback((id: string, nextValue: boolean) => {
+    if (!onPartnerSurveyToggle) return;
+    onPartnerSurveyToggle(id, nextValue)
+      .then(() => setActionError(null))
+      .catch((error) => {
+        console.error("Failed to update survey approval:", error);
+        setActionError(error instanceof Error ? error.message : "現地調査状況の更新に失敗しました。");
+      });
+  }, [onPartnerSurveyToggle]);
+
+  const handleRemovePartner = useCallback((partner: Partner) => {
+    if (!onRemovePartner) return;
+    const confirmed = window.confirm(`${partner.name} を候補から削除しますか？`);
+    if (!confirmed) return;
+    onRemovePartner(partner.id)
+      .then(() => setActionError(null))
+      .catch((error) => {
+        console.error("Failed to delete partner candidate:", error);
+        setActionError(error instanceof Error ? error.message : "候補の削除に失敗しました。");
+      });
+  }, [onRemovePartner]);
+
+  const resetAddForm = () => {
+    setSelectedBranchOption(null);
+    setSelectedOfficeId(null);
+    setSelectedBranchLabel(null);
+    setAddContactPerson('');
+    setAddPhone('');
+    setAddEmail('');
+    setAddFax('');
+    setAddError(null);
+  };
+
+  const handleCloseAddDialog = () => {
+    if (isSubmittingAdd) return;
+    setIsAddDialogOpen(false);
+    resetAddForm();
+  };
+
+  const handleAddSubmit = async () => {
+    if (!onAddPartner) {
+      setAddError('この環境では協力会社を追加できません。');
+      return;
+    }
+    if (!selectedBranchOption) {
+      setAddError('協力会社を選択してください。');
+      return;
+    }
+    setIsSubmittingAdd(true);
+    try {
+      await onAddPartner({
+        partnerCompanyId: selectedBranchOption.companyId,
+        partnerOfficeId: selectedBranchOption.officeId,
+        partnerName: formatBranchLabel(selectedBranchOption),
+        companyName: selectedBranchOption.companyName,
+        branchName: selectedBranchOption.branchName,
+        contactPerson: addContactPerson || undefined,
+        phone: addPhone || undefined,
+        email: addEmail || undefined,
+        fax: addFax || undefined,
+      });
+      setActionError(null);
+      setIsAddDialogOpen(false);
+      resetAddForm();
+    } catch (error) {
+      console.error("Failed to add partner candidate:", error);
+      setAddError(error instanceof Error ? error.message : "協力会社の追加に失敗しました。");
+    } finally {
+      setIsSubmittingAdd(false);
+    }
+  };
 
   // フィルター + ソート
   const filteredAndSortedPartners = useMemo(() => {
@@ -1219,10 +1350,22 @@ export function PartnerSection({ evaluation, partners, onPartnersChange, workflo
             <BusinessIcon sx={{ ...iconStyles.medium, color: colors.text.muted }} />
             候補者リスト ({filteredAndSortedPartners.length}社)
           </Typography>
-          <Button size="small" startIcon={<AddIcon />} sx={{ ...buttonStyles.small, color: colors.accent.blue }}>
+          <Button
+            size="small"
+            startIcon={<AddIcon />}
+            sx={{ ...buttonStyles.small, color: colors.accent.blue }}
+            onClick={() => { setIsAddDialogOpen(true); setAddError(null); }}
+            disabled={!onAddPartner}
+          >
             追加
           </Button>
         </Box>
+
+        {actionError && (
+          <Alert severity="error" sx={{ mb: 1 }}>
+            {actionError}
+          </Alert>
+        )}
 
         {/* フィルター */}
         <FilterChips
@@ -1233,22 +1376,33 @@ export function PartnerSection({ evaluation, partners, onPartnersChange, workflo
         />
 
         {/* リスト */}
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-        {filteredAndSortedPartners.map((partner) => (
-          <PartnerCard
-            key={partner.id}
-            partner={partner}
-            isExpanded={expandedPartnerId === partner.id}
-            onToggleExpand={() => setExpandedPartnerId(expandedPartnerId === partner.id ? null : partner.id)}
-            onStatusChange={(s) => changeStatus(partner.id, s)}
-            onToggleSurvey={() => toggleSurvey(partner.id)}
-            projectName={projectName}
-            companyName={companyName}
-            myName={myName}
-            workflowAssigneeId={workflowAssigneeId}
-          />
-        ))}
-        </Box>
+        {isLoading ? (
+          <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+            <CircularProgress size={24} sx={{ color: colors.accent.blue }} />
+          </Box>
+        ) : filteredAndSortedPartners.length === 0 ? (
+          <Typography sx={{ fontSize: fontSizes.sm, color: colors.text.light }}>
+            候補が登録されていません。
+          </Typography>
+        ) : (
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+            {filteredAndSortedPartners.map((partner) => (
+              <PartnerCard
+                key={partner.id}
+                partner={partner}
+                isExpanded={expandedPartnerId === partner.id}
+                onToggleExpand={() => setExpandedPartnerId(expandedPartnerId === partner.id ? null : partner.id)}
+                onStatusChange={(s) => changeStatus(partner.id, s)}
+                onToggleSurvey={(nextValue) => toggleSurvey(partner.id, nextValue)}
+                projectName={projectName}
+                companyName={companyName}
+                myName={myName}
+                workflowAssigneeId={workflowAssigneeId}
+                onDelete={onRemovePartner ? () => handleRemovePartner(partner) : undefined}
+              />
+            ))}
+          </Box>
+        )}
       </Box>
 
       {/* 送付資料セクション */}
@@ -1350,6 +1504,76 @@ export function PartnerSection({ evaluation, partners, onPartnersChange, workflo
           );
         })()}
       </Box>
+
+      <Dialog open={isAddDialogOpen} onClose={handleCloseAddDialog} fullWidth maxWidth="sm">
+        <DialogTitle>協力会社を追加</DialogTitle>
+        <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
+          {addError && (
+            <Alert severity="error">
+              {addError}
+            </Alert>
+          )}
+          <CompanyBranchSelect
+            value={selectedOfficeId}
+            valueLabel={selectedBranchLabel ?? undefined}
+            onChange={(officeId, label) => {
+              setSelectedOfficeId(officeId);
+              if (!officeId) {
+                setSelectedBranchOption(null);
+                setSelectedBranchLabel(null);
+              }
+              if (label) {
+                setSelectedBranchLabel(label);
+              }
+            }}
+            onOptionSelected={(option) => {
+              setSelectedBranchOption(option);
+              setSelectedBranchLabel(option ? formatBranchLabel(option) : null);
+            }}
+            label="協力会社"
+            placeholder="企業・拠点名で検索"
+            helperText="協力してもらいたい企業や支店を検索して選択してください"
+          />
+          <TextField
+            label="担当者名"
+            value={addContactPerson}
+            onChange={(e) => setAddContactPerson(e.target.value)}
+            size="small"
+          />
+          <TextField
+            label="電話番号"
+            value={addPhone}
+            onChange={(e) => setAddPhone(e.target.value)}
+            size="small"
+          />
+          <TextField
+            label="メールアドレス"
+            value={addEmail}
+            onChange={(e) => setAddEmail(e.target.value)}
+            size="small"
+            type="email"
+          />
+          <TextField
+            label="FAX"
+            value={addFax}
+            onChange={(e) => setAddFax(e.target.value)}
+            size="small"
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseAddDialog} disabled={isSubmittingAdd}>
+            キャンセル
+          </Button>
+          <Button
+            variant="contained"
+            onClick={handleAddSubmit}
+            disabled={isSubmittingAdd}
+            sx={{ backgroundColor: colors.accent.blue, '&:hover': { backgroundColor: colors.accent.blueHover } }}
+          >
+            {isSubmittingAdd ? '追加中...' : '追加'}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }

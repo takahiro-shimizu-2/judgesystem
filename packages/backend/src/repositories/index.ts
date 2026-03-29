@@ -5,3 +5,4 @@ export { ContactRepository } from "./contactRepository";
 export { CompanyRepository } from "./companyRepository";
 export { EvaluationAssignmentRepository } from "./evaluationAssignmentRepository";
 export { EvaluationOrdererWorkflowRepository } from "./evaluationOrdererWorkflowRepository";
+export { EvaluationPartnerCandidateRepository } from "./evaluationPartnerCandidateRepository";

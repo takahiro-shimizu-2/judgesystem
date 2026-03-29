@@ -10,11 +10,27 @@ import {
   ArrowForward as ArrowForwardIcon,
   CheckCircle as CheckCircleIcon,
 } from "@mui/icons-material";
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { getApiUrl } from "../config/api";
 
-import { bidTypeConfig, updateWorkStatus, updateEvaluationAssignee } from "../data";
-import type { BidEvaluation, Partner, SimilarCase, StepAssignee, WorkStatus } from "../types";
+import {
+  bidTypeConfig,
+  updateWorkStatus,
+  updateEvaluationAssignee,
+  fetchPartnerCandidates,
+  createPartnerCandidate,
+  deletePartnerCandidate,
+  updatePartnerCandidate,
+} from "../data";
+import type {
+  BidEvaluation,
+  Partner,
+  PartnerStatus,
+  PartnerCandidatePayload,
+  SimilarCase,
+  StepAssignee,
+  WorkStatus,
+} from "../types";
 import { priorityLabels, priorityColors } from "../constants/priority";
 import { WORKFLOW_STEP_CONFIG, WORKFLOW_STEP_IDS } from "../constants/workflow";
 import { pageStyles, colors, fontSizes, iconStyles, borderRadius } from "../constants/styles";
@@ -185,6 +201,9 @@ export default function BidDetailPage() {
   const [isSimilarCasesLoading, setIsSimilarCasesLoading] = useState(false);
   const [similarCasesError, setSimilarCasesError] = useState<string | null>(null);
   const [targetAnnouncementNo, setTargetAnnouncementNo] = useState<string | null>(null);
+  const [partners, setPartners] = useState<Partner[]>([]);
+  const [partnersLoading, setPartnersLoading] = useState(false);
+  const partnersRequestIdRef = useRef(0);
 
   // 評価データ取得
   useEffect(() => {
@@ -237,6 +256,36 @@ export default function BidDetailPage() {
       setStepAssignees(evaluation.stepAssignees || []);
     }
   }, [evaluation]);
+
+  const loadPartners = useCallback(async (targetEvaluationNo: string) => {
+    const requestId = ++partnersRequestIdRef.current;
+    setPartnersLoading(true);
+    try {
+      const list = await fetchPartnerCandidates(targetEvaluationNo);
+      if (partnersRequestIdRef.current === requestId) {
+        setPartners(list);
+      }
+    } catch (error) {
+      console.error("Failed to fetch partner candidates:", error);
+      if (partnersRequestIdRef.current === requestId) {
+        setPartners([]);
+      }
+    } finally {
+      if (partnersRequestIdRef.current === requestId) {
+        setPartnersLoading(false);
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!evaluation?.evaluationNo) {
+      partnersRequestIdRef.current += 1;
+      setPartners([]);
+      setPartnersLoading(false);
+      return;
+    }
+    void loadPartners(evaluation.evaluationNo);
+  }, [evaluation?.evaluationNo, loadPartners]);
 
   const fetchSimilarCases = useCallback(async (announcementNo: string) => {
     if (!announcementNo) return;
@@ -304,70 +353,52 @@ export default function BidDetailPage() {
     });
   }, [evaluation]);
 
-  // 協力会社データ（全タブで共有）
-  const [partners, setPartners] = useState<Partner[]>([
-    {
-      id: '1',
-      name: '山田建設株式会社',
-      contactPerson: '山田太郎',
-      phone: '03-1234-5678',
-      email: 'yamada@yamada-kensetsu.co.jp',
-      fax: '03-1234-5679',
-      status: 'estimate_adopted',
-      memos: [{ id: 'memo-1', content: '見積依頼中。来週回答予定。', createdAt: '2024/01/15 10:00' }],
-      transcriptions: [{ id: 'trans-1', content: '「来週中にはお見積りをお送りできると思います」', date: '2024/01/15 10:30' }],
-      talkScript: '',
-      surveyApproved: true,
-      receivedDocuments: [
-        { id: 'rd-1', name: '見積書_山田建設.pdf', date: '2024/01/18' },
-      ],
-    },
-    {
-      id: '2',
-      name: '佐藤土木株式会社',
-      contactPerson: '佐藤花子',
-      phone: '03-5555-1234',
-      email: 'sato@sato-doboku.co.jp',
-      fax: '03-5555-1235',
-      status: 'estimate_completed',
-      memos: [{ id: 'memo-2', content: '見積書受領済み。金額確認中。', createdAt: '2024/01/18 14:00' }],
-      transcriptions: [],
-      talkScript: '',
-      surveyApproved: true,
-      receivedDocuments: [
-        { id: 'rd-2', name: '見積書_佐藤土木.pdf', date: '2024/01/17' },
-        { id: 'rd-3', name: '技術者名簿', date: '2024/01/18' },
-      ],
-    },
-    {
-      id: '3',
-      name: '鈴木工業株式会社',
-      contactPerson: '鈴木一郎',
-      phone: '03-9876-5432',
-      email: 'suzuki@suzuki-kogyo.co.jp',
-      fax: '03-9876-5433',
-      status: 'waiting_response',
-      memos: [],
-      transcriptions: [],
-      talkScript: '',
-      surveyApproved: false,
-      receivedDocuments: [],
-    },
-    {
-      id: '4',
-      name: '田中組',
-      contactPerson: '田中次郎',
-      phone: '03-7777-8888',
-      email: 'tanaka@tanaka-gumi.co.jp',
-      fax: '03-7777-8889',
-      status: 'unavailable',
-      memos: [{ id: 'memo-3', content: '工期が合わず対応不可', createdAt: '2024/01/16 11:00' }],
-      transcriptions: [],
-      talkScript: '',
-      surveyApproved: false,
-      receivedDocuments: [],
-    },
-  ]);
+  const handlePartnerAdd = useCallback(async (payload: PartnerCandidatePayload) => {
+    if (!evaluation) {
+      throw new Error("判定結果を読み込み中です。再度お試しください。");
+    }
+    const created = await createPartnerCandidate(evaluation.evaluationNo, payload);
+    if (!created) {
+      throw new Error("協力会社の追加に失敗しました。");
+    }
+    setPartners((prev) => [...prev, created]);
+  }, [evaluation]);
+
+  const handlePartnerRemove = useCallback(async (partnerId: string) => {
+    if (!evaluation) {
+      throw new Error("判定結果を読み込み中です。");
+    }
+    const success = await deletePartnerCandidate(evaluation.evaluationNo, partnerId);
+    if (!success) {
+      throw new Error("候補の削除に失敗しました。");
+    }
+    setPartners((prev) => prev.filter((p) => p.id !== partnerId));
+  }, [evaluation]);
+
+  const handlePartnerStatusChange = useCallback(async (partnerId: string, status: PartnerStatus) => {
+    if (!evaluation) {
+      throw new Error("判定結果を読み込み中です。");
+    }
+    setPartners((prev) => prev.map((p) => (p.id === partnerId ? { ...p, status } : p)));
+    const updated = await updatePartnerCandidate(evaluation.evaluationNo, partnerId, { status });
+    if (!updated) {
+      await loadPartners(evaluation.evaluationNo);
+      throw new Error("ステータスの更新に失敗しました。");
+    }
+  }, [evaluation, loadPartners]);
+
+  const handlePartnerSurveyToggle = useCallback(async (partnerId: string, nextValue: boolean) => {
+    if (!evaluation) {
+      throw new Error("判定結果を読み込み中です。");
+    }
+    setPartners((prev) => prev.map((p) => (p.id === partnerId ? { ...p, surveyApproved: nextValue } : p)));
+    const updated = await updatePartnerCandidate(evaluation.evaluationNo, partnerId, { surveyApproved: nextValue });
+    if (!updated) {
+      await loadPartners(evaluation.evaluationNo);
+      throw new Error("現地調査ステータスの更新に失敗しました。");
+    }
+  }, [evaluation, loadPartners]);
+
   const [mainViewTab, setMainViewTab] = useState<MainViewTab>("workflow");
 
   const handleBack = useCallback(() => navigate("/"), [navigate]);
@@ -478,7 +509,18 @@ export default function BidDetailPage() {
       }
       case WORKFLOW_STEP_IDS.PARTNER: {
         const partnerAssignee = stepAssignees.find((a) => a.stepId === WORKFLOW_STEP_IDS.PARTNER);
-        return <PartnerSection evaluation={evaluation} partners={partners} onPartnersChange={setPartners} workflowAssigneeId={partnerAssignee?.staffId} />;
+        return (
+          <PartnerSection
+            evaluation={evaluation}
+            partners={partners}
+            workflowAssigneeId={partnerAssignee?.staffId}
+            onAddPartner={handlePartnerAdd}
+            onRemovePartner={handlePartnerRemove}
+            onPartnerStatusChange={handlePartnerStatusChange}
+            onPartnerSurveyToggle={handlePartnerSurveyToggle}
+            isLoading={partnersLoading}
+          />
+        );
       }
       case WORKFLOW_STEP_IDS.REQUEST: {
         const requestAssignee = stepAssignees.find((a) => a.stepId === WORKFLOW_STEP_IDS.REQUEST);

@@ -10,6 +10,9 @@ import type {
   WorkStatus,
   SimilarCase,
   OrdererWorkflowState,
+  Partner,
+  PartnerStatus,
+  PartnerCandidatePayload,
 } from '../types';
 import { getApiUrl } from '../config/api';
 
@@ -129,6 +132,156 @@ export const updateOrdererWorkflowState = async (
   } catch (error) {
     console.error('Error updating orderer workflow:', error);
     return null;
+  }
+};
+
+const PARTNER_STATUS_VALUES: PartnerStatus[] = [
+  'not_called',
+  'waiting_documents',
+  'waiting_response',
+  'estimate_in_progress',
+  'estimate_completed',
+  'estimate_adopted',
+  'unavailable',
+];
+
+interface PartnerCandidateResponse {
+  id: string;
+  evaluationNo: string;
+  partnerCompanyId?: string | null;
+  partnerOfficeId?: string | null;
+  partnerName: string;
+  contactPerson?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  fax?: string | null;
+  status: string;
+  surveyApproved: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+const mapPartnerFromApi = (candidate: PartnerCandidateResponse): Partner => {
+  const normalizedStatus = PARTNER_STATUS_VALUES.includes(candidate.status as PartnerStatus)
+    ? (candidate.status as PartnerStatus)
+    : 'not_called';
+  return {
+    id: String(candidate.id),
+    name: candidate.partnerName,
+    contactPerson: candidate.contactPerson ?? '',
+    phone: candidate.phone ?? '',
+    email: candidate.email ?? '',
+    fax: candidate.fax ?? '',
+    status: normalizedStatus,
+    memos: [],
+    transcriptions: [],
+    talkScript: '',
+    surveyApproved: Boolean(candidate.surveyApproved),
+    receivedDocuments: [],
+  };
+};
+
+export const fetchPartnerCandidates = async (evaluationNo: string): Promise<Partner[]> => {
+  try {
+    const response = await fetch(getApiUrl(`/api/evaluations/${evaluationNo}/partners`));
+    if (!response.ok) {
+      throw new Error(`Failed to fetch partners: ${response.status}`);
+    }
+    const data: PartnerCandidateResponse[] = await response.json();
+    if (!Array.isArray(data)) {
+      return [];
+    }
+    return data.map(mapPartnerFromApi);
+  } catch (error) {
+    console.error('Error fetching partner candidates:', error);
+    return [];
+  }
+};
+
+export const createPartnerCandidate = async (
+  evaluationNo: string,
+  payload: PartnerCandidatePayload
+): Promise<Partner | null> => {
+  try {
+    const response = await fetch(getApiUrl(`/api/evaluations/${evaluationNo}/partners`), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!response.ok) {
+      throw new Error(`Failed to create partner candidate: ${response.status}`);
+    }
+    const data: PartnerCandidateResponse = await response.json();
+    return mapPartnerFromApi(data);
+  } catch (error) {
+    console.error('Error creating partner candidate:', error);
+    return null;
+  }
+};
+
+interface PartnerCandidateUpdatePayload {
+  partnerName?: string;
+  contactPerson?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  fax?: string | null;
+  status?: PartnerStatus;
+  surveyApproved?: boolean;
+}
+
+export const updatePartnerCandidate = async (
+  evaluationNo: string,
+  partnerId: string,
+  updates: PartnerCandidateUpdatePayload
+): Promise<Partner | null> => {
+  const body: any = { ...updates };
+  if (updates.partnerName !== undefined) {
+    body.partnerName = updates.partnerName;
+  }
+  if (updates.status !== undefined) {
+    body.status = updates.status;
+  }
+  if (updates.surveyApproved !== undefined) {
+    body.surveyApproved = updates.surveyApproved;
+  }
+  try {
+    const response = await fetch(
+      getApiUrl(`/api/evaluations/${evaluationNo}/partners/${partnerId}`),
+      {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      }
+    );
+    if (!response.ok) {
+      throw new Error(`Failed to update partner candidate: ${response.status}`);
+    }
+    const data: PartnerCandidateResponse = await response.json();
+    return mapPartnerFromApi(data);
+  } catch (error) {
+    console.error('Error updating partner candidate:', error);
+    return null;
+  }
+};
+
+export const deletePartnerCandidate = async (
+  evaluationNo: string,
+  partnerId: string
+): Promise<boolean> => {
+  try {
+    const response = await fetch(getApiUrl(`/api/evaluations/${evaluationNo}/partners/${partnerId}`), {
+      method: 'DELETE',
+    });
+    if (response.status === 204) {
+      return true;
+    }
+    if (!response.ok) {
+      throw new Error(`Failed to delete partner candidate: ${response.status}`);
+    }
+    return true;
+  } catch (error) {
+    console.error('Error deleting partner candidate:', error);
+    return false;
   }
 };
 

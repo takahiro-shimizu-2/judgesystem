@@ -16,6 +16,7 @@ export type {
   EvaluationWorkStatusResult,
   EvaluationStats,
 } from "./evaluation";
+export type { EvaluationPartnerCandidate } from "./evaluationPartnerCandidate";
 export type {
   AnnouncementListItem,
   AnnouncementDetail,

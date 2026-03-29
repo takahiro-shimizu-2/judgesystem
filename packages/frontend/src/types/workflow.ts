@@ -142,6 +142,19 @@ export interface Partner {
   assignedStaffId?: string;  // 担当者ID
 }
 
+/** 協力会社候補追加時の入力 */
+export interface PartnerCandidatePayload {
+  partnerCompanyId: string;
+  partnerOfficeId: string;
+  partnerName: string;
+  companyName: string;
+  branchName?: string;
+  contactPerson?: string;
+  phone?: string;
+  email?: string;
+  fax?: string;
+}
+
 // ============================================================================
 // 発注者ワークフロー関連
 // ============================================================================

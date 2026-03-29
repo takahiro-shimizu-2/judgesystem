@@ -47,6 +47,7 @@ export const TABLES = {
   evaluationStatuses: "backend_evaluation_statuses",
   evaluationAssignees: "evaluation_assignees",
   evaluationOrdererWorkflowStates: "evaluation_orderer_workflow_states",
+  evaluationPartnerCandidates: "evaluation_partner_candidates",
   companyMaster: "company_master",
   officeMaster: "office_master",
 } as const;
