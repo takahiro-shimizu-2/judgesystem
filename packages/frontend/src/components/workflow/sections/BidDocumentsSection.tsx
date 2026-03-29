@@ -253,14 +253,12 @@ export function BidDocumentsSection({ announcement }: BidDocumentsSectionProps) 
     if (!selectedDoc) return;
     const docFormat = (selectedDoc.fileFormat || '').toLowerCase();
     if (docFormat === 'pdf') {
-      if (previewTab !== 'pdf') {
-        setPreviewTab('pdf');
-      }
+      setPreviewTab((prev) => (prev === 'pdf' ? prev : 'pdf'));
       loadPdfPreview(selectedDoc.id);
-    } else if (previewTab === 'pdf') {
+    } else {
       setPreviewTab('transcription');
     }
-  }, [selectedDoc, loadPdfPreview, previewTab]);
+  }, [selectedDoc, loadPdfPreview]);
 
   const renderPreviewPanel = () => {
     if (!selectedDoc) {
