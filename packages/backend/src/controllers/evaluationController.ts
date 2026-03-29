@@ -295,6 +295,54 @@ export class EvaluationController {
     }
   };
 
+  /**
+   * GET /api/evaluations/:evaluationNo/partner-workflow - Get saved partner workflow state
+   */
+  getPartnerWorkflow = async (req: Request, res: Response): Promise<void> => {
+    const { evaluationNo } = req.params;
+    logger.info(`GET /api/evaluations/${evaluationNo}/partner-workflow`);
+
+    try {
+      const state = await this.service.getPartnerWorkflow(evaluationNo);
+      res.setHeader("Content-Type", "application/json");
+      res.status(200).json(state);
+    } catch (error) {
+      logger.error({ err: error }, `ERROR in GET /api/evaluations/${evaluationNo}/partner-workflow`);
+      if (!res.headersSent) {
+        res.status(500).json({
+          error: "Internal Server Error",
+          message: process.env.NODE_ENV === "production"
+            ? "An unexpected error occurred"
+            : error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+  };
+
+  /**
+   * PUT /api/evaluations/:evaluationNo/partner-workflow - Save partner workflow state
+   */
+  updatePartnerWorkflow = async (req: Request, res: Response): Promise<void> => {
+    const { evaluationNo } = req.params;
+    logger.info(`PUT /api/evaluations/${evaluationNo}/partner-workflow`);
+
+    try {
+      const state = await this.service.updatePartnerWorkflow(evaluationNo, req.body ?? {});
+      res.setHeader("Content-Type", "application/json");
+      res.status(200).json(state);
+    } catch (error) {
+      logger.error({ err: error }, `ERROR in PUT /api/evaluations/${evaluationNo}/partner-workflow`);
+      if (!res.headersSent) {
+        res.status(500).json({
+          error: "Internal Server Error",
+          message: process.env.NODE_ENV === "production"
+            ? "An unexpected error occurred"
+            : error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+  };
+
   getPartnerCandidates = async (req: Request, res: Response): Promise<void> => {
     const { evaluationNo } = req.params;
     logger.info(`GET /api/evaluations/${evaluationNo}/partners`);

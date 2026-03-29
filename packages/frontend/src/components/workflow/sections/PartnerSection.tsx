@@ -2,7 +2,7 @@
  * 協力会社セクション（候補者リスト）
  * 企業情報、ステータス管理、メモ、文字起こし、トークスクリプトを表示
  */
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import {
   Box,
   Typography,
@@ -56,8 +56,20 @@ import {
   chipStyles,
   staffSelectStyles,
 } from '../../../constants/styles';
-import { MEMO_TAGS, type MemoTag, type MemoTagConfig, type RecordMemo } from '../../../constants/memoTags';
-import type { Partner, PartnerStatus, PartnerDocument, PartnerCandidatePayload } from '../../../types';
+import { MEMO_TAGS, type MemoTag, type MemoTagConfig } from '../../../constants/memoTags';
+import type {
+  Partner,
+  PartnerStatus,
+  PartnerDocument,
+  PartnerCandidatePayload,
+  PartnerWorkflowState,
+  PartnerWorkflowEntry,
+} from '../../../types';
+import {
+  createEmptyPartnerWorkflowState,
+  fetchPartnerWorkflowState,
+  updatePartnerWorkflowState,
+} from '../../../data/evaluations';
 
 const TALK_TEMPLATE_IDS = ['talk-intro', 'talk-followup'] as const;
 const EMAIL_TEMPLATE_IDS = ['email-request', 'email-estimate'] as const;
@@ -66,9 +78,6 @@ import { ContactInfo, ContactActions } from '../../common/ContactInfo';
 import { useStaffDirectory } from '../../../contexts/StaffContext';
 import { PersonIcon } from '../../../constants/icons';
 import { PartnerSearchSelect, type PartnerSearchOption } from '../../partner';
-
-// RecordMemoをCallMemoとして使用
-type CallMemo = RecordMemo;
 
 // ============================================================================
 // テンプレート定義
@@ -196,6 +205,26 @@ const replacePlaceholders = (
     .replace(/\{\{自社名\}\}/g, companyName)
     .replace(/\{\{自社担当者\}\}/g, staffName);
 };
+
+const createId = (prefix: string): string =>
+  `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
+
+const formatTimestamp = (date: Date = new Date()): string =>
+  `${date.getFullYear()}/${String(date.getMonth() + 1).padStart(2, '0')}/${String(date.getDate()).padStart(2, '0')} ${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+
+const readFileAsDataUrl = (file: File): Promise<string> =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(typeof reader.result === 'string' ? reader.result : '');
+    reader.onerror = () => reject(reader.error ?? new Error('Failed to read file'));
+    reader.readAsDataURL(file);
+  });
+
+const createEmptyPartnerWorkflowEntry = (): PartnerWorkflowEntry => ({
+  callMemos: [],
+  receivedDocuments: [],
+  transcriptions: [],
+});
 
 // ============================================================================
 // スタイル定数
@@ -362,6 +391,9 @@ function PartnerCard({
   defaultCompanyName,
   defaultStaffName,
   workflowAssigneeId,
+  workflowEntry,
+  onWorkflowEntryUpdate,
+  onWorkflowError,
   onDelete,
 }: {
   partner: Partner;
@@ -373,6 +405,9 @@ function PartnerCard({
   defaultCompanyName: string;
   defaultStaffName: string;
   workflowAssigneeId?: string;
+  workflowEntry: PartnerWorkflowEntry;
+  onWorkflowEntryUpdate: (updater: (prev: PartnerWorkflowEntry) => PartnerWorkflowEntry) => Promise<boolean>;
+  onWorkflowError: (message: string | null) => void;
   onDelete?: () => void;
 }) {
   const { staff, findById } = useStaffDirectory();
@@ -386,6 +421,8 @@ function PartnerCard({
   // 受信資料の担当者
   const [manualReceivedDocsAssignee, setManualReceivedDocsAssignee] = useState<string>('');
   const [hasManualReceivedDocsAssignee, setHasManualReceivedDocsAssignee] = useState(false);
+  const receivedDocsInputRef = useRef<HTMLInputElement>(null);
+  const [isUploadingReceivedDoc, setIsUploadingReceivedDoc] = useState(false);
 
   // メールタブ用
   const [selectedEmailTemplateId, setSelectedEmailTemplateId] = useState<string>('email-request');
@@ -430,8 +467,11 @@ function PartnerCard({
 
   const receivedDocsAssignee = hasManualReceivedDocsAssignee ? manualReceivedDocsAssignee : (workflowAssigneeId || '');
 
+  const callMemos = workflowEntry.callMemos;
+  const receivedDocuments = workflowEntry.receivedDocuments;
+  const workflowTranscriptions = workflowEntry.transcriptions;
+
   // 架電記録メモ（タグ付き）
-  const [callMemos, setCallMemos] = useState<CallMemo[]>([]);
   const [newCallMemo, setNewCallMemo] = useState('');
   const [newMemoTag, setNewMemoTag] = useState<MemoTag>('memo');
   const [showCallMemoInput, setShowCallMemoInput] = useState(false);
@@ -440,44 +480,108 @@ function PartnerCard({
   const [answerTargetId, setAnswerTargetId] = useState<string | null>(null);
   const [answerText, setAnswerText] = useState('');
 
-  const getDateStr = () => {
-    const now = new Date();
-    return `${now.getFullYear()}/${String(now.getMonth() + 1).padStart(2, '0')}/${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-  };
+  const getDateStr = () => formatTimestamp();
 
   // 架電記録メモ操作
-  const addCallMemo = () => {
-    if (!newCallMemo.trim()) return;
-    setCallMemos((prev) => [
-      { id: Date.now().toString(), createdAt: getDateStr(), content: newCallMemo, tag: newMemoTag },
-      ...prev,
-    ]);
-    setNewCallMemo('');
-    setNewMemoTag('memo');
-    setShowCallMemoInput(false);
+  const addCallMemo = async () => {
+    const content = newCallMemo.trim();
+    if (!content) return;
+    const success = await onWorkflowEntryUpdate((entry) => ({
+      ...entry,
+      callMemos: [
+        { id: createId('memo'), createdAt: getDateStr(), content, tag: newMemoTag },
+        ...entry.callMemos,
+      ],
+    }));
+    if (success) {
+      setNewCallMemo('');
+      setNewMemoTag('memo');
+      setShowCallMemoInput(false);
+    }
   };
 
-  const addAnswer = (parentId: string) => {
-    if (!answerText.trim()) return;
-    setCallMemos((prev) => [
-      { id: Date.now().toString(), createdAt: getDateStr(), content: answerText, tag: 'answer', parentId },
-      ...prev,
-    ]);
-    setAnswerText('');
-    setAnswerTargetId(null);
+  const addAnswer = async (parentId: string) => {
+    const content = answerText.trim();
+    if (!content) return;
+    const success = await onWorkflowEntryUpdate((entry) => ({
+      ...entry,
+      callMemos: [
+        { id: createId('memo'), createdAt: getDateStr(), content, tag: 'answer', parentId },
+        ...entry.callMemos,
+      ],
+    }));
+    if (success) {
+      setAnswerText('');
+      setAnswerTargetId(null);
+    }
   };
 
-  const saveCallMemo = (id: string) => {
-    if (!editCallMemoText.trim()) return;
-    setCallMemos((prev) =>
-      prev.map((m) => (m.id === id ? { ...m, content: editCallMemoText, updatedAt: getDateStr() } : m))
-    );
-    setEditingCallMemoId(null);
-    setEditCallMemoText('');
+  const saveCallMemo = async (id: string) => {
+    const content = editCallMemoText.trim();
+    if (!content) return;
+    const success = await onWorkflowEntryUpdate((entry) => ({
+      ...entry,
+      callMemos: entry.callMemos.map((m) =>
+        m.id === id ? { ...m, content, updatedAt: getDateStr() } : m
+      ),
+    }));
+    if (success) {
+      setEditingCallMemoId(null);
+      setEditCallMemoText('');
+    }
   };
 
-  const deleteCallMemo = (id: string) => {
-    setCallMemos((prev) => prev.filter((m) => m.id !== id && m.parentId !== id));
+  const deleteCallMemo = async (id: string) => {
+    const success = await onWorkflowEntryUpdate((entry) => ({
+      ...entry,
+      callMemos: entry.callMemos.filter((m) => m.id !== id && m.parentId !== id),
+    }));
+    if (success && editingCallMemoId === id) {
+      setEditingCallMemoId(null);
+      setEditCallMemoText('');
+    }
+  };
+
+  const handleAddReceivedDocument = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) {
+      return;
+    }
+    setIsUploadingReceivedDoc(true);
+    try {
+      const dataUrl = await readFileAsDataUrl(file);
+      const uploadedAt = formatTimestamp();
+      await onWorkflowEntryUpdate((entry) => ({
+        ...entry,
+        receivedDocuments: [
+          {
+            id: createId('partner-received-doc'),
+            name: file.name,
+            type: 'received',
+            uploadedAt,
+            date: uploadedAt,
+            fileName: file.name,
+            contentType: file.type || 'application/octet-stream',
+            dataUrl,
+            size: file.size,
+          },
+          ...entry.receivedDocuments,
+        ],
+      }));
+    } catch (error) {
+      console.error('Failed to read received document file:', error);
+      onWorkflowError('ファイルの読み込みに失敗しました。');
+    } finally {
+      setIsUploadingReceivedDoc(false);
+      event.target.value = '';
+    }
+  };
+
+  const handleDeleteReceivedDocument = async (docId: string) => {
+    await onWorkflowEntryUpdate((entry) => ({
+      ...entry,
+      receivedDocuments: entry.receivedDocuments.filter((doc) => doc.id !== docId),
+    }));
   };
 
   // 選択中のテンプレート（スクリプトタブ用）
@@ -1111,19 +1215,30 @@ function PartnerCard({
                     </Select>
                   </FormControl>
                 </Box>
-                <Button
-                  size="small"
-                  startIcon={<AddIcon />}
-                  sx={{ ...buttonStyles.small, color: colors.accent.blue, fontSize: fontSizes.xs }}
-                >
-                  ファイルを追加
-                </Button>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <Button
+                    size="small"
+                    startIcon={<AddIcon />}
+                    sx={{ ...buttonStyles.small, color: colors.accent.blue, fontSize: fontSizes.xs }}
+                    onClick={() => receivedDocsInputRef.current?.click()}
+                    disabled={isUploadingReceivedDoc}
+                  >
+                    ファイルを追加
+                  </Button>
+                  {isUploadingReceivedDoc && <CircularProgress size={14} />}
+                </Box>
               </Box>
-              {partner.receivedDocuments.length === 0 ? (
+              <input
+                ref={receivedDocsInputRef}
+                type="file"
+                style={{ display: 'none' }}
+                onChange={(event) => void handleAddReceivedDocument(event)}
+              />
+              {receivedDocuments.length === 0 ? (
                 <Typography sx={{ fontSize: fontSizes.sm, color: colors.text.muted, textAlign: 'center', py: 2 }}>受信資料がありません</Typography>
               ) : (
                 <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-                  {partner.receivedDocuments.map((doc) => (
+                  {receivedDocuments.map((doc) => (
                     <Box
                       key={doc.id}
                       sx={{
@@ -1152,10 +1267,10 @@ function PartnerCard({
                           {doc.name}
                         </Typography>
                         <Typography sx={{ fontSize: fontSizes.xs, color: colors.text.muted }}>
-                          受信日: {doc.date}
+                          受信日: {doc.uploadedAt || doc.date || '未登録'}
                         </Typography>
                       </Box>
-                      <IconButton size="small">
+                      <IconButton size="small" onClick={() => handleDeleteReceivedDocument(doc.id)}>
                         <DeleteIcon sx={{ ...iconStyles.small, color: colors.text.light, '&:hover': { color: colors.status.error.main } }} />
                       </IconButton>
                     </Box>
@@ -1168,15 +1283,15 @@ function PartnerCard({
           {/* 文字起こしタブ */}
           {activeTab === 3 && (
             <Box>
-              {partner.transcriptions.length === 0 ? (
+              {workflowTranscriptions.length === 0 ? (
                 <Typography sx={{ fontSize: fontSizes.md, color: colors.text.muted, textAlign: 'center', py: 2 }}>文字起こしデータなし</Typography>
               ) : (
                 <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, maxHeight: 200, overflow: 'auto' }}>
-                  {partner.transcriptions.map((trans) => (
+                  {workflowTranscriptions.map((trans) => (
                     <Box key={trans.id} sx={{ p: 1.5, backgroundColor: 'rgba(37, 99, 235, 0.05)', borderRadius: borderRadius.xs, border: '1px solid rgba(37, 99, 235, 0.15)' }}>
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.5 }}>
                         <MicIcon sx={{ ...iconStyles.small, color: colors.accent.blue }} />
-                        <Typography sx={{ fontSize: fontSizes.sm, color: colors.text.muted }}>{trans.date}</Typography>
+                        <Typography sx={{ fontSize: fontSizes.sm, color: colors.text.muted }}>{trans.createdAt}</Typography>
                       </Box>
                       <Typography sx={{ fontSize: fontSizes.md, fontStyle: 'italic', color: colors.text.secondary }}>{trans.content}</Typography>
                     </Box>
@@ -1228,13 +1343,20 @@ export function PartnerSection({
   const defaultCompanyName = defaultStaffMember?.companyName || evaluation?.company?.name || '（自社名）';
   const defaultStaffName = defaultStaffMember?.name || '担当者';
 
+  const evaluationNo = evaluation?.evaluationNo ?? '';
+
   // 展開状態
   const [expandedPartnerId, setExpandedPartnerId] = useState<string | null>(null);
 
-  // 送付資料
-  const [documents] = useState<PartnerDocument[]>([
-    { id: '1', name: '見積依頼書', type: 'sent', date: '2024/01/15' },
-  ]);
+  // 協力会社ワークフロー状態（送付資料のみ管理）
+  const [partnerWorkflowState, setPartnerWorkflowState] = useState<PartnerWorkflowState>(() => createEmptyPartnerWorkflowState());
+  const partnerWorkflowRef = useRef<PartnerWorkflowState>(createEmptyPartnerWorkflowState());
+  const [isDocsLoading, setIsDocsLoading] = useState(false);
+  const [isSentDocsSaving, setIsSentDocsSaving] = useState(false);
+  const [docsError, setDocsError] = useState<string | null>(null);
+  const workflowSaveRequestIdRef = useRef(0);
+  const docsInputRef = useRef<HTMLInputElement>(null);
+
   const [actionError, setActionError] = useState<string | null>(null);
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [selectedPartnerOption, setSelectedPartnerOption] = useState<PartnerSearchOption | null>(null);
@@ -1249,6 +1371,142 @@ export function PartnerSection({
   const [manualSentDocsAssignee, setManualSentDocsAssignee] = useState<string>('');
   const [hasManualSentDocsAssignee, setHasManualSentDocsAssignee] = useState(false);
   const sentDocsAssignee = hasManualSentDocsAssignee ? manualSentDocsAssignee : (workflowAssigneeId || '');
+
+  useEffect(() => {
+    let isCancelled = false;
+
+    const loadWorkflow = async () => {
+      if (!evaluationNo) {
+        const emptyState = createEmptyPartnerWorkflowState();
+        partnerWorkflowRef.current = emptyState;
+        if (!isCancelled) {
+          setPartnerWorkflowState(emptyState);
+          setIsDocsLoading(false);
+          setDocsError(null);
+        }
+        return;
+      }
+
+      setIsDocsLoading(true);
+      setDocsError(null);
+      const state = await fetchPartnerWorkflowState(evaluationNo);
+      if (!isCancelled) {
+        partnerWorkflowRef.current = state;
+        setPartnerWorkflowState(state);
+        setIsDocsLoading(false);
+      }
+    };
+
+    loadWorkflow();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [evaluationNo]);
+
+  const persistPartnerWorkflow = useCallback(async (
+    updater: (prev: PartnerWorkflowState) => PartnerWorkflowState,
+    options?: { onError?: (message: string | null) => void }
+  ): Promise<boolean> => {
+    const previousState = partnerWorkflowRef.current;
+    const nextState = updater(previousState);
+    partnerWorkflowRef.current = nextState;
+    setPartnerWorkflowState(nextState);
+    options?.onError?.(null);
+
+    if (!evaluationNo) {
+      return true;
+    }
+
+    const requestId = ++workflowSaveRequestIdRef.current;
+    const savedState = await updatePartnerWorkflowState(evaluationNo, nextState);
+
+    if (requestId !== workflowSaveRequestIdRef.current) {
+      return savedState !== null;
+    }
+
+    if (!savedState) {
+      partnerWorkflowRef.current = previousState;
+      setPartnerWorkflowState(previousState);
+      options?.onError?.('DB 保存に失敗しました。時間をおいて再度お試しください。');
+      return false;
+    }
+
+    partnerWorkflowRef.current = savedState;
+    setPartnerWorkflowState(savedState);
+    return true;
+  }, [evaluationNo]);
+
+  const handleSentDocUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) {
+      return;
+    }
+
+    try {
+      const dataUrl = await readFileAsDataUrl(file);
+      const uploadedAt = formatTimestamp();
+      setIsSentDocsSaving(true);
+      await persistPartnerWorkflow((prev) => ({
+        ...prev,
+        sentDocuments: [
+          {
+            id: createId('partner-doc'),
+            name: file.name,
+            type: 'sent',
+            uploadedAt,
+            date: uploadedAt,
+            fileName: file.name,
+            contentType: file.type || 'application/octet-stream',
+            dataUrl,
+            size: file.size,
+          },
+          ...prev.sentDocuments,
+        ],
+      }), { onError: setDocsError });
+    } catch (error) {
+      console.error('Failed to read file:', error);
+      setDocsError('ファイルの読み込みに失敗しました。');
+    } finally {
+      setIsSentDocsSaving(false);
+      event.target.value = '';
+    }
+  };
+
+  const handleDeleteSentDocument = async (id: string) => {
+    setIsSentDocsSaving(true);
+    await persistPartnerWorkflow((prev) => ({
+      ...prev,
+      sentDocuments: prev.sentDocuments.filter((doc) => doc.id !== id),
+    }), { onError: setDocsError });
+    setIsSentDocsSaving(false);
+  };
+
+  const triggerSentDocUpload = () => {
+    docsInputRef.current?.click();
+  };
+
+  const updatePartnerEntry = useCallback(async (
+    partnerId: string,
+    updater: (prev: PartnerWorkflowEntry) => PartnerWorkflowEntry
+  ): Promise<boolean> => {
+    const success = await persistPartnerWorkflow((prev) => {
+      const currentEntry = prev.partners[partnerId] ?? createEmptyPartnerWorkflowEntry();
+      return {
+        ...prev,
+        partners: {
+          ...prev.partners,
+          [partnerId]: updater(currentEntry),
+        },
+      };
+    }, { onError: setActionError });
+
+    if (success) {
+      setActionError(null);
+    }
+
+    return success;
+  }, [persistPartnerWorkflow]);
 
   // フィルター状態
   const [selectedStatuses, setSelectedStatuses] = useState<PartnerStatus[]>([
@@ -1393,21 +1651,27 @@ export function PartnerSection({
           </Typography>
         ) : (
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-            {filteredAndSortedPartners.map((partner) => (
-              <PartnerCard
-                key={partner.id}
-                partner={partner}
-                isExpanded={expandedPartnerId === partner.id}
-                onToggleExpand={() => setExpandedPartnerId(expandedPartnerId === partner.id ? null : partner.id)}
-                onStatusChange={(s) => changeStatus(partner.id, s)}
-                onToggleSurvey={(nextValue) => toggleSurvey(partner.id, nextValue)}
-                projectName={projectName}
-                defaultCompanyName={defaultCompanyName}
-                defaultStaffName={defaultStaffName}
-                workflowAssigneeId={workflowAssigneeId}
-                onDelete={onRemovePartner ? () => handleRemovePartner(partner) : undefined}
-              />
-            ))}
+            {filteredAndSortedPartners.map((partner) => {
+              const workflowEntry = partnerWorkflowState.partners[partner.id] ?? createEmptyPartnerWorkflowEntry();
+              return (
+                <PartnerCard
+                  key={partner.id}
+                  partner={partner}
+                  isExpanded={expandedPartnerId === partner.id}
+                  onToggleExpand={() => setExpandedPartnerId(expandedPartnerId === partner.id ? null : partner.id)}
+                  onStatusChange={(s) => changeStatus(partner.id, s)}
+                  onToggleSurvey={(nextValue) => toggleSurvey(partner.id, nextValue)}
+                  projectName={projectName}
+                  defaultCompanyName={defaultCompanyName}
+                  defaultStaffName={defaultStaffName}
+                  workflowAssigneeId={workflowAssigneeId}
+                  workflowEntry={workflowEntry}
+                  onWorkflowEntryUpdate={(updater) => updatePartnerEntry(partner.id, updater)}
+                  onWorkflowError={setActionError}
+                  onDelete={onRemovePartner ? () => handleRemovePartner(partner) : undefined}
+                />
+              );
+            })}
           </Box>
         )}
       </Box>
@@ -1452,64 +1716,67 @@ export function PartnerSection({
               size="small"
               startIcon={<AddIcon />}
               sx={{ ...buttonStyles.small, color: colors.accent.blue, fontSize: fontSizes.xs }}
+              onClick={triggerSentDocUpload}
+              disabled={isDocsLoading}
             >
               ファイルを追加
             </Button>
+            {isSentDocsSaving && <CircularProgress size={16} sx={{ color: colors.text.light }} />}
           </Box>
         </Box>
 
-        {(() => {
-          const sentDocs = documents.filter((d: PartnerDocument) => d.type === 'sent');
-          return (
-            <>
-              {sentDocs.length > 0 ? (
-                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-                  {sentDocs.map((doc: PartnerDocument) => (
-                    <Box
-                      key={doc.id}
-                      sx={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 1,
-                        p: 1,
-                        borderRadius: borderRadius.xs,
-                        backgroundColor: 'rgba(59, 130, 246, 0.05)',
-                        border: '1px solid rgba(59, 130, 246, 0.2)',
-                      }}
-                    >
-                      <input
-                        type="checkbox"
-                        id={`sent-doc-${doc.id}`}
-                        defaultChecked
-                        style={{ cursor: 'pointer' }}
-                      />
-                      <AttachFileIcon sx={{ ...iconStyles.medium, color: colors.accent.blue }} />
-                      <Box sx={{ flex: 1 }}>
-                        <Typography
-                          component="label"
-                          htmlFor={`sent-doc-${doc.id}`}
-                          sx={{ fontSize: fontSizes.sm, color: colors.text.secondary, cursor: 'pointer', display: 'block' }}
-                        >
-                          {doc.name}
-                        </Typography>
-                        <Typography sx={{ fontSize: fontSizes.xs, color: colors.text.muted }}>
-                          送付日: {doc.date}
-                        </Typography>
-                      </Box>
-                      <IconButton size="small">
-                        <DeleteIcon sx={{ ...iconStyles.small, color: colors.text.light, '&:hover': { color: colors.status.error.main } }} />
-                      </IconButton>
-                    </Box>
-                  ))}
+        <input
+          ref={docsInputRef}
+          type="file"
+          style={{ display: 'none' }}
+          onChange={(event) => void handleSentDocUpload(event)}
+        />
+
+        {docsError && (
+          <Alert severity="error" sx={{ mb: 1 }}>
+            {docsError}
+          </Alert>
+        )}
+
+        {isDocsLoading ? (
+          <Box sx={{ display: 'flex', justifyContent: 'center', py: 2 }}>
+            <CircularProgress size={20} />
+          </Box>
+        ) : partnerWorkflowState.sentDocuments.length === 0 ? (
+          <Typography sx={{ fontSize: fontSizes.sm, color: colors.text.light }}>
+            送付資料がありません
+          </Typography>
+        ) : (
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+            {partnerWorkflowState.sentDocuments.map((doc: PartnerDocument) => (
+              <Box
+                key={doc.id}
+                sx={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 1,
+                  p: 1,
+                  borderRadius: borderRadius.xs,
+                  backgroundColor: 'rgba(59, 130, 246, 0.05)',
+                  border: '1px solid rgba(59, 130, 246, 0.2)',
+                }}
+              >
+                <AttachFileIcon sx={{ ...iconStyles.medium, color: colors.accent.blue }} />
+                <Box sx={{ flex: 1 }}>
+                  <Typography sx={{ fontSize: fontSizes.sm, color: colors.text.secondary }}>
+                    {doc.name}
+                  </Typography>
+                  <Typography sx={{ fontSize: fontSizes.xs, color: colors.text.muted }}>
+                    送付日: {doc.uploadedAt || doc.date || '未登録'}
+                  </Typography>
                 </Box>
-              ) : (
-                <Typography sx={{ fontSize: fontSizes.sm, color: colors.text.light }}>
-                  送付資料がありません
-                </Typography>
-              )}
-            </>
-          );
-        })()}
+                <IconButton size="small" onClick={() => handleDeleteSentDocument(doc.id)}>
+                  <DeleteIcon sx={{ ...iconStyles.small, color: colors.text.light, '&:hover': { color: colors.status.error.main } }} />
+                </IconButton>
+              </Box>
+            ))}
+          </Box>
+        )}
       </Box>
 
       <Dialog open={isAddDialogOpen} onClose={handleCloseAddDialog} fullWidth maxWidth="sm">

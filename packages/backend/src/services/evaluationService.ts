@@ -3,6 +3,7 @@ import {
   EvaluationAssignmentRepository,
   EvaluationOrdererWorkflowRepository,
   EvaluationPartnerCandidateRepository,
+  EvaluationPartnerWorkflowRepository,
 } from "../repositories";
 import { FilterParams, PaginatedResponse } from "../types";
 import type {
@@ -12,6 +13,7 @@ import type {
   EvaluationStats,
 } from "../types/evaluation";
 import type { OrdererWorkflowState } from "../repositories/evaluationOrdererWorkflowRepository";
+import type { PartnerWorkflowState } from "../repositories/evaluationPartnerWorkflowRepository";
 import type { EvaluationPartnerCandidate } from "../types/evaluationPartnerCandidate";
 
 export interface CreatePartnerCandidateParams {
@@ -38,12 +40,14 @@ export class EvaluationService {
   private assignmentRepository: EvaluationAssignmentRepository;
   private ordererWorkflowRepository: EvaluationOrdererWorkflowRepository;
   private partnerCandidateRepository: EvaluationPartnerCandidateRepository;
+  private partnerWorkflowRepository: EvaluationPartnerWorkflowRepository;
 
   constructor() {
     this.repository = new EvaluationRepository();
     this.assignmentRepository = new EvaluationAssignmentRepository();
     this.ordererWorkflowRepository = new EvaluationOrdererWorkflowRepository();
     this.partnerCandidateRepository = new EvaluationPartnerCandidateRepository();
+    this.partnerWorkflowRepository = new EvaluationPartnerWorkflowRepository();
   }
 
   /**
@@ -127,6 +131,17 @@ export class EvaluationService {
     state: OrdererWorkflowState
   ): Promise<OrdererWorkflowState> {
     return await this.ordererWorkflowRepository.upsert(evaluationNo, state);
+  }
+
+  async getPartnerWorkflow(evaluationNo: string): Promise<PartnerWorkflowState> {
+    return await this.partnerWorkflowRepository.findByEvaluation(evaluationNo);
+  }
+
+  async updatePartnerWorkflow(
+    evaluationNo: string,
+    state: PartnerWorkflowState
+  ): Promise<PartnerWorkflowState> {
+    return await this.partnerWorkflowRepository.upsert(evaluationNo, state);
   }
 
   async getCompanyOptions(search?: string) {

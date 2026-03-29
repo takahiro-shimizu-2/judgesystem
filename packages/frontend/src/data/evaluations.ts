@@ -10,6 +10,7 @@ import type {
   WorkStatus,
   SimilarCase,
   OrdererWorkflowState,
+  PartnerWorkflowState,
   Partner,
   PartnerStatus,
   PartnerCandidatePayload,
@@ -23,11 +24,21 @@ const EMPTY_ORDERER_WORKFLOW_STATE: OrdererWorkflowState = {
   transcriptions: [],
 };
 
+const EMPTY_PARTNER_WORKFLOW_STATE: PartnerWorkflowState = {
+  sentDocuments: [],
+  partners: {},
+};
+
 export const createEmptyOrdererWorkflowState = (): OrdererWorkflowState => ({
   callMemos: [],
   evaluations: [],
   preSubmitDocs: [],
   transcriptions: [],
+});
+
+export const createEmptyPartnerWorkflowState = (): PartnerWorkflowState => ({
+  sentDocuments: [],
+  partners: {},
 });
 
 export const updateWorkStatus = async (
@@ -140,6 +151,62 @@ export const updateOrdererWorkflowState = async (
     };
   } catch (error) {
     console.error('Error updating orderer workflow:', error);
+    return null;
+  }
+};
+
+export const fetchPartnerWorkflowState = async (
+  evaluationNo: string
+): Promise<PartnerWorkflowState> => {
+  try {
+    const response = await fetch(getApiUrl(`/api/evaluations/${evaluationNo}/partner-workflow`));
+    if (!response.ok) {
+      console.error(`Failed to fetch partner workflow: ${response.status} ${response.statusText}`);
+      return createEmptyPartnerWorkflowState();
+    }
+    const data = await response.json();
+    return {
+      ...EMPTY_PARTNER_WORKFLOW_STATE,
+      ...data,
+    };
+  } catch (error) {
+    console.error('Error fetching partner workflow:', error);
+    return createEmptyPartnerWorkflowState();
+  }
+};
+
+export const updatePartnerWorkflowState = async (
+  evaluationNo: string,
+  state: PartnerWorkflowState
+): Promise<PartnerWorkflowState | null> => {
+  try {
+    const response = await fetch(getApiUrl(`/api/evaluations/${evaluationNo}/partner-workflow`), {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(state),
+    });
+
+    if (!response.ok) {
+      let message = `Failed to update partner workflow: ${response.status} ${response.statusText}`;
+      try {
+        const body = await response.json();
+        if (typeof body?.message === 'string') {
+          message = body.message;
+        }
+      } catch {
+        // ignore json parse errors
+      }
+      console.error(message);
+      return null;
+    }
+
+    const data = await response.json();
+    return {
+      ...EMPTY_PARTNER_WORKFLOW_STATE,
+      ...data,
+    };
+  } catch (error) {
+    console.error('Error updating partner workflow:', error);
     return null;
   }
 };
