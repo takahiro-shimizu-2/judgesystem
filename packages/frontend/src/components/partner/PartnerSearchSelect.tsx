@@ -89,7 +89,7 @@ export function PartnerSearchSelect({
     };
   }, [debouncedInput]);
 
-  const selectedOption = useMemo(() => value, [value]);
+  const selectedOption = useMemo(() => value || undefined, [value]);
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>

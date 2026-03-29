@@ -66,7 +66,6 @@ import { ContactInfo, ContactActions } from '../../common/ContactInfo';
 import { useStaffDirectory } from '../../../contexts/StaffContext';
 import { PersonIcon } from '../../../constants/icons';
 import { PartnerSearchSelect, type PartnerSearchOption } from '../../partner';
-import { PartnerSearchSelect, type PartnerSearchOption } from '../../partner';
 
 // RecordMemoをCallMemoとして使用
 type CallMemo = RecordMemo;
