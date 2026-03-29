@@ -41,6 +41,10 @@ from packages.engine.domain.notice_structures import (
 
 FILE_LINK_PATTERN = re.compile(r'\.(pdf|xlsx?|csv|zip|docx?|txt)$', re.IGNORECASE)
 
+DEFAULT_STEP0_SKIP_INDICES = (51, 52, 53, 54, 55, 56, 57, 58)
+STEP0_SKIP_INDICES_ENV = "STEP0_SKIP_INDICES"
+STEP0_SKIP_CONFIG_REL_PATH = Path("config/step0_skip_indices.json")
+
 
 class DocumentPreparationMixin:
     """step0関連メソッドを提供するMixin"""
@@ -1300,6 +1304,39 @@ class DocumentPreparationMixin:
         """
         df1 = pd.read_csv(input_list2_path, sep="\t")
         df2 = pd.read_csv(links_file, sep="\t", quoting=csv.QUOTE_NONE)
+
+        df1["index"] = pd.to_numeric(df1["index"], errors="coerce")
+        invalid_df1 = df1["index"].isna().sum()
+        if invalid_df1:
+            print(f"[Warning] Dropping {invalid_df1} rows without valid index in input list")
+            df1 = df1.dropna(subset=["index"])  # index欠損行は後続処理不能
+        df1["index"] = df1["index"].astype(int)
+
+        extracted_index = df2["target_link"].astype(str).str.extract(r"^(\d+)")
+        df2.insert(0, "index", pd.to_numeric(extracted_index[0], errors="coerce"))
+        invalid_df2 = df2["index"].isna().sum()
+        if invalid_df2:
+            print(f"[Warning] Dropping {invalid_df2} rows without numeric prefix in target_link")
+            df2 = df2.dropna(subset=["index"])
+        df2["index"] = df2["index"].astype(int)
+
+        skip_indices = self._load_step0_skip_indices()
+        if skip_indices:
+            before_df1 = len(df1)
+            df1 = df1[~df1["index"].isin(skip_indices)]
+            df1_dropped = before_df1 - len(df1)
+
+            before_df2 = len(df2)
+            df2 = df2[~df2["index"].isin(skip_indices)]
+            df2_dropped = before_df2 - len(df2)
+
+            if df1_dropped or df2_dropped:
+                print(
+                    "[Info] Excluded configured skip indices {}: input_rows={}, link_rows={}".format(
+                        sorted(skip_indices), df1_dropped, df2_dropped
+                    )
+                )
+
         print(f"[DEBUG] Loaded {len(df1)} rows from input_list_converted.txt")
         print(f"[DEBUG] df1 columns: {df1.columns.tolist()}")
         print(f"[DEBUG] Loaded {len(df2)} rows from announcements_links.txt")
@@ -1320,9 +1357,7 @@ class DocumentPreparationMixin:
 
         df2["announcement_name"] = df2["announcement_name"].str.replace('"', '', regex=False)
         df2["link_text"] = df2["link_text"].str.replace('"', '', regex=False)
-
-        df2.insert(0, "index", df2["target_link"].str.split("_").str[0].astype(int))
-        df2["adhoc_index"] = df2["target_link"].apply(lambda x: f"{int(x.split('_')[0]):05d}")
+        df2["adhoc_index"] = df2["index"].apply(lambda x: f"{int(x):05d}")
         print(f"[DEBUG] Extracted index values: {df2['index'].unique().tolist()}")
 
         df1_sub = df1[["index", "入札公告（現在募集中）2"]].copy() if "入札公告（現在募集中）2" in df1.columns else df1[["index"]].copy()
@@ -1703,3 +1738,64 @@ class DocumentPreparationMixin:
         affected_rows = self.db_operator.replaceBidAnnouncementDates(tablename, tmp_table)
         self.db_operator.dropTable(tmp_table)
         print(f"Merged: {affected_rows} rows updated")
+
+
+    def _load_step0_skip_indices(self):
+        env_value = os.getenv(STEP0_SKIP_INDICES_ENV)
+        if env_value is not None:
+            parsed = self._parse_skip_indices(env_value)
+            if parsed is not None:
+                print(
+                    f"[Info] STEP0 skip indices resolved from env {STEP0_SKIP_INDICES_ENV}: {sorted(parsed)}"
+                )
+                return parsed
+
+        project_root = Path(__file__).resolve().parent.parent.parent.parent
+        config_path = project_root / STEP0_SKIP_CONFIG_REL_PATH
+        if config_path.exists():
+            try:
+                with config_path.open("r", encoding="utf-8") as f:
+                    loaded = json.load(f)
+            except Exception as exc:
+                print(f"[Warning] Failed to load skip index config {config_path}: {exc}")
+            else:
+                if isinstance(loaded, dict):
+                    loaded = loaded.get("skip_indices")
+                parsed = self._parse_skip_indices(loaded)
+                if parsed is not None:
+                    print(f"[Info] STEP0 skip indices resolved from {config_path}: {sorted(parsed)}")
+                    return parsed
+
+        defaults = set(DEFAULT_STEP0_SKIP_INDICES)
+        print(f"[Info] Using default STEP0 skip indices: {sorted(defaults)}")
+        return defaults
+
+
+    def _parse_skip_indices(self, raw):
+        if raw is None:
+            return None
+
+        tokens = []
+        if isinstance(raw, str):
+            stripped = raw.strip()
+            if not stripped:
+                return set()
+            tokens = re.split(r"[\s,;]+", stripped)
+        elif isinstance(raw, (list, tuple, set)):
+            tokens = list(raw)
+        else:
+            return None
+
+        indices = set()
+        for token in tokens:
+            if token is None:
+                continue
+            if isinstance(token, str):
+                token = token.strip()
+            if token in ("", "None"):
+                continue
+            try:
+                indices.add(int(token))
+            except (TypeError, ValueError):
+                continue
+        return indices
