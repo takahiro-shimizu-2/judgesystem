@@ -295,6 +295,54 @@ export class EvaluationController {
     }
   };
 
+  /**
+   * GET /api/evaluations/:evaluationNo/partner-workflow - Get saved partner workflow state
+   */
+  getPartnerWorkflow = async (req: Request, res: Response): Promise<void> => {
+    const { evaluationNo } = req.params;
+    logger.info(`GET /api/evaluations/${evaluationNo}/partner-workflow`);
+
+    try {
+      const state = await this.service.getPartnerWorkflow(evaluationNo);
+      res.setHeader("Content-Type", "application/json");
+      res.status(200).json(state);
+    } catch (error) {
+      logger.error({ err: error }, `ERROR in GET /api/evaluations/${evaluationNo}/partner-workflow`);
+      if (!res.headersSent) {
+        res.status(500).json({
+          error: "Internal Server Error",
+          message: process.env.NODE_ENV === "production"
+            ? "An unexpected error occurred"
+            : error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+  };
+
+  /**
+   * PUT /api/evaluations/:evaluationNo/partner-workflow - Save partner workflow state
+   */
+  updatePartnerWorkflow = async (req: Request, res: Response): Promise<void> => {
+    const { evaluationNo } = req.params;
+    logger.info(`PUT /api/evaluations/${evaluationNo}/partner-workflow`);
+
+    try {
+      const state = await this.service.updatePartnerWorkflow(evaluationNo, req.body ?? {});
+      res.setHeader("Content-Type", "application/json");
+      res.status(200).json(state);
+    } catch (error) {
+      logger.error({ err: error }, `ERROR in PUT /api/evaluations/${evaluationNo}/partner-workflow`);
+      if (!res.headersSent) {
+        res.status(500).json({
+          error: "Internal Server Error",
+          message: process.env.NODE_ENV === "production"
+            ? "An unexpected error occurred"
+            : error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+  };
+
   getPartnerCandidates = async (req: Request, res: Response): Promise<void> => {
     const { evaluationNo } = req.params;
     logger.info(`GET /api/evaluations/${evaluationNo}/partners`);
@@ -485,6 +533,151 @@ export class EvaluationController {
       }
     }
   };
+
+  uploadPartnerFile = async (req: Request, res: Response): Promise<void> => {
+    const { evaluationNo } = req.params;
+    const { partnerId, flowType, name, contentType, size, dataUrl } = req.body ?? {};
+
+    if (!evaluationNo) {
+      res.status(400).json({ error: "Bad Request", message: "evaluationNo is required" });
+      return;
+    }
+
+    if (flowType !== "sent" && flowType !== "received") {
+      res.status(400).json({ error: "Bad Request", message: "flowType must be 'sent' or 'received'" });
+      return;
+    }
+
+    if (!name || typeof name !== "string" || !name.trim()) {
+      res.status(400).json({ error: "Bad Request", message: "name is required" });
+      return;
+    }
+
+    if (!dataUrl || typeof dataUrl !== "string") {
+      res.status(400).json({ error: "Bad Request", message: "dataUrl is required" });
+      return;
+    }
+
+    let buffer: Buffer;
+    let inferredContentType: string | undefined;
+    try {
+      const parsed = this.parseDataUrl(dataUrl);
+      buffer = parsed.buffer;
+      inferredContentType = parsed.contentType;
+    } catch (error) {
+      logger.warn({ err: error }, "Failed to parse uploaded partner workflow file");
+      res.status(400).json({ error: "Bad Request", message: "Invalid dataUrl" });
+      return;
+    }
+
+    const resolvedSize = typeof size === "number" && size > 0 ? size : buffer.length;
+    const maxSize = Number(process.env.PARTNER_FILE_MAX_BYTES ?? 15 * 1024 * 1024);
+    if (buffer.length > maxSize) {
+      res.status(413).json({ error: "Payload Too Large", message: "ファイルサイズが上限を超えています。" });
+      return;
+    }
+
+    const resolvedContentType =
+      typeof contentType === "string" && contentType.trim() ? contentType.trim() : inferredContentType ?? "application/octet-stream";
+
+    try {
+      const metadata = await this.service.uploadPartnerFile(evaluationNo, {
+        partnerId: typeof partnerId === "string" && partnerId.trim() ? partnerId.trim() : null,
+        flowType,
+        name: name.trim(),
+        contentType: resolvedContentType,
+        size: resolvedSize,
+        data: buffer,
+      });
+      res.status(201).json(metadata);
+    } catch (error) {
+      logger.error({ err: error }, `ERROR in POST /api/evaluations/${evaluationNo}/partner-files`);
+      if (!res.headersSent) {
+        res.status(500).json({
+          error: "Internal Server Error",
+          message: process.env.NODE_ENV === "production"
+            ? "An unexpected error occurred"
+            : error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+  };
+
+  downloadPartnerFile = async (req: Request, res: Response): Promise<void> => {
+    const { evaluationNo, fileId } = req.params;
+
+    if (!evaluationNo || !fileId) {
+      res.status(400).json({ error: "Bad Request", message: "evaluationNo and fileId are required" });
+      return;
+    }
+
+    try {
+      const file = await this.service.getPartnerFile(evaluationNo, fileId);
+      if (!file) {
+        res.status(404).json({ error: "File not found" });
+        return;
+      }
+
+      res.setHeader("Content-Type", file.contentType || "application/octet-stream");
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="${encodeURIComponent(file.name)}"`
+      );
+      res.status(200).send(file.data);
+    } catch (error) {
+      logger.error({ err: error }, `ERROR in GET /api/evaluations/${evaluationNo}/partner-files/${fileId}`);
+      if (!res.headersSent) {
+        res.status(500).json({
+          error: "Internal Server Error",
+          message: process.env.NODE_ENV === "production"
+            ? "An unexpected error occurred"
+            : error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+  };
+
+  deletePartnerFile = async (req: Request, res: Response): Promise<void> => {
+    const { evaluationNo, fileId } = req.params;
+
+    if (!evaluationNo || !fileId) {
+      res.status(400).json({ error: "Bad Request", message: "evaluationNo and fileId are required" });
+      return;
+    }
+
+    try {
+      const deleted = await this.service.deletePartnerFile(evaluationNo, fileId);
+      if (!deleted) {
+        res.status(404).json({ error: "File not found" });
+        return;
+      }
+
+      res.status(204).send();
+    } catch (error) {
+      logger.error({ err: error }, `ERROR in DELETE /api/evaluations/${evaluationNo}/partner-files/${fileId}`);
+      if (!res.headersSent) {
+        res.status(500).json({
+          error: "Internal Server Error",
+          message: process.env.NODE_ENV === "production"
+            ? "An unexpected error occurred"
+            : error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+  };
+
+  private parseDataUrl(dataUrl: string): { buffer: Buffer; contentType?: string } {
+    const matches = dataUrl.match(/^data:(.*?);base64,(.+)$/);
+    if (!matches || matches.length < 3) {
+      throw new Error("Invalid dataUrl");
+    }
+    const mimeType = matches[1];
+    const base64Data = matches[2];
+    return {
+      buffer: Buffer.from(base64Data, "base64"),
+      contentType: mimeType || undefined,
+    };
+  }
 
   getCompanyOptions = async (req: Request, res: Response): Promise<void> => {
     logger.info("GET /api/evaluations/company-options");

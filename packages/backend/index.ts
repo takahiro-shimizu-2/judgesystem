@@ -94,6 +94,11 @@ app.get("/api/evaluations/:evaluationNo/assignees", evaluationController.getAssi
 app.put("/api/evaluations/:evaluationNo/assignees", authorize("admin", "evaluator"), evaluationController.updateAssignee);
 app.get("/api/evaluations/:evaluationNo/orderer-workflow", evaluationController.getOrdererWorkflow);
 app.put("/api/evaluations/:evaluationNo/orderer-workflow", authorize("admin", "evaluator", "orderer"), evaluationController.updateOrdererWorkflow);
+app.get("/api/evaluations/:evaluationNo/partner-workflow", evaluationController.getPartnerWorkflow);
+app.put("/api/evaluations/:evaluationNo/partner-workflow", authorize("admin", "evaluator"), evaluationController.updatePartnerWorkflow);
+app.post("/api/evaluations/:evaluationNo/partner-files", authorize("admin", "evaluator"), evaluationController.uploadPartnerFile);
+app.get("/api/evaluations/:evaluationNo/partner-files/:fileId", authorize("admin", "evaluator"), evaluationController.downloadPartnerFile);
+app.delete("/api/evaluations/:evaluationNo/partner-files/:fileId", authorize("admin", "evaluator"), evaluationController.deletePartnerFile);
 app.get("/api/evaluations/:evaluationNo/partners", evaluationController.getPartnerCandidates);
 app.post("/api/evaluations/:evaluationNo/partners", authorize("admin", "evaluator"), evaluationController.addPartnerCandidate);
 app.patch("/api/evaluations/:evaluationNo/partners/:partnerId", authorize("admin", "evaluator"), evaluationController.updatePartnerCandidate);

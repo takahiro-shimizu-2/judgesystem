@@ -3,6 +3,8 @@ import {
   EvaluationAssignmentRepository,
   EvaluationOrdererWorkflowRepository,
   EvaluationPartnerCandidateRepository,
+  EvaluationPartnerWorkflowRepository,
+  EvaluationPartnerFileRepository,
 } from "../repositories";
 import { FilterParams, PaginatedResponse } from "../types";
 import type {
@@ -12,6 +14,8 @@ import type {
   EvaluationStats,
 } from "../types/evaluation";
 import type { OrdererWorkflowState } from "../repositories/evaluationOrdererWorkflowRepository";
+import type { PartnerWorkflowState } from "../repositories/evaluationPartnerWorkflowRepository";
+import type { PartnerFileFlowType, PartnerFileMetadata, PartnerFileRecord } from "../repositories/evaluationPartnerFileRepository";
 import type { EvaluationPartnerCandidate } from "../types/evaluationPartnerCandidate";
 
 export interface CreatePartnerCandidateParams {
@@ -38,12 +42,16 @@ export class EvaluationService {
   private assignmentRepository: EvaluationAssignmentRepository;
   private ordererWorkflowRepository: EvaluationOrdererWorkflowRepository;
   private partnerCandidateRepository: EvaluationPartnerCandidateRepository;
+  private partnerWorkflowRepository: EvaluationPartnerWorkflowRepository;
+  private partnerFileRepository: EvaluationPartnerFileRepository;
 
   constructor() {
     this.repository = new EvaluationRepository();
     this.assignmentRepository = new EvaluationAssignmentRepository();
     this.ordererWorkflowRepository = new EvaluationOrdererWorkflowRepository();
     this.partnerCandidateRepository = new EvaluationPartnerCandidateRepository();
+    this.partnerWorkflowRepository = new EvaluationPartnerWorkflowRepository();
+    this.partnerFileRepository = new EvaluationPartnerFileRepository();
   }
 
   /**
@@ -127,6 +135,47 @@ export class EvaluationService {
     state: OrdererWorkflowState
   ): Promise<OrdererWorkflowState> {
     return await this.ordererWorkflowRepository.upsert(evaluationNo, state);
+  }
+
+  async getPartnerWorkflow(evaluationNo: string): Promise<PartnerWorkflowState> {
+    return await this.partnerWorkflowRepository.findByEvaluation(evaluationNo);
+  }
+
+  async updatePartnerWorkflow(
+    evaluationNo: string,
+    state: PartnerWorkflowState
+  ): Promise<PartnerWorkflowState> {
+    return await this.partnerWorkflowRepository.upsert(evaluationNo, state);
+  }
+
+  async uploadPartnerFile(
+    evaluationNo: string,
+    params: {
+      partnerId?: string | null;
+      flowType: PartnerFileFlowType;
+      name: string;
+      contentType?: string | null;
+      size: number;
+      data: Buffer;
+    }
+  ): Promise<PartnerFileMetadata> {
+    return await this.partnerFileRepository.create({
+      evaluationNo,
+      partnerId: params.partnerId,
+      flowType: params.flowType,
+      name: params.name,
+      contentType: params.contentType,
+      size: params.size,
+      data: params.data,
+    });
+  }
+
+  async getPartnerFile(evaluationNo: string, fileId: string): Promise<PartnerFileRecord | null> {
+    return await this.partnerFileRepository.findById(evaluationNo, fileId);
+  }
+
+  async deletePartnerFile(evaluationNo: string, fileId: string): Promise<boolean> {
+    return await this.partnerFileRepository.delete(evaluationNo, fileId);
   }
 
   async getCompanyOptions(search?: string) {

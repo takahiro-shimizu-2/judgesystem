@@ -49,6 +49,22 @@ export interface PartnerDocument {
   name: string;
   type: DocumentFlowType;
   date?: string;
+  uploadedAt?: string;
+  fileName?: string;
+  contentType?: string;
+  size?: number;
+  fileId?: string;
+}
+
+export interface PartnerWorkflowEntry {
+  callMemos: WorkflowRecordMemo[];
+  receivedDocuments: PartnerDocument[];
+  transcriptions: WorkflowTranscription[];
+}
+
+export interface PartnerWorkflowState {
+  sentDocuments: PartnerDocument[];
+  partners: Record<string, PartnerWorkflowEntry>;
 }
 
 /** 事前提出資料 */
