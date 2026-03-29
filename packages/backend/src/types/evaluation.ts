@@ -69,3 +69,10 @@ export interface EvaluationStats {
   organizationCount: number;
   topCategories: JsonValue;
 }
+
+export interface CompanyOption {
+  companyNo: string;
+  officeNo: string;
+  companyName: string;
+  branchName: string;
+}

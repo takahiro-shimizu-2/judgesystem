@@ -7,6 +7,7 @@ export { PriorityCell } from './PriorityCell';
 export { StatusCell } from './StatusCell';
 export { WorkStatusCell } from './WorkStatusCell';
 export { RequirementCard } from './RequirementCard';
+export { CompanyBranchSelect } from './CompanyBranchSelect';
 
 // Detail Page Components
 export { DetailHeader } from './DetailHeader';

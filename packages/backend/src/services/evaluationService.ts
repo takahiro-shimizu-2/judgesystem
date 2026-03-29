@@ -105,4 +105,8 @@ export class EvaluationService {
   ): Promise<OrdererWorkflowState> {
     return await this.ordererWorkflowRepository.upsert(evaluationNo, state);
   }
+
+  async getCompanyOptions(search?: string) {
+    return await this.repository.getCompanyOptions(search);
+  }
 }

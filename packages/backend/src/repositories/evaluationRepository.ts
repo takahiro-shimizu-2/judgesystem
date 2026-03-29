@@ -6,6 +6,7 @@ import type {
   EvaluationDetail,
   EvaluationWorkStatusResult,
   EvaluationStats,
+  CompanyOption,
 } from "../types/evaluation";
 import { logger } from "../utils/logger";
 import { escapeLikePattern } from "../utils/sql";
@@ -561,6 +562,12 @@ export class EvaluationRepository {
       paramIndex += filters.prefectures.length;
     }
 
+    if (filters.officeIds && filters.officeIds.length > 0) {
+      whereClauses.push(`COALESCE(cbj.office_no::text, '') = ANY($${paramIndex})`);
+      queryParams.push(filters.officeIds);
+      paramIndex++;
+    }
+
     if (filters.searchQuery && filters.searchQuery.trim()) {
       whereClauses.push(
         `(ba."workName" ILIKE $${paramIndex} OR ` +
@@ -748,6 +755,42 @@ export class EvaluationRepository {
 
   private getPriorityExpression(): string {
     return `1`;
+  }
+
+  async getCompanyOptions(search?: string, limit = 1000): Promise<CompanyOption[]> {
+    const client = await pool.connect();
+    try {
+      const tables = this.getQualifiedTables();
+    const params: unknown[] = [];
+    let paramIndex = 1;
+    let whereClause = "";
+
+    if (search && search.trim()) {
+      const normalized = `%${escapeLikePattern(search.trim())}%`;
+      whereClause = `WHERE (cm.company_name ILIKE $${paramIndex} OR COALESCE(om.office_name, '') ILIKE $${paramIndex})`;
+      params.push(normalized);
+      paramIndex += 1;
+    }
+
+    const query = `
+      SELECT DISTINCT ON (cbj.office_no::text)
+        cbj.company_no::text AS "companyNo",
+        cbj.office_no::text AS "officeNo",
+        COALESCE(cm.company_name, '') AS "companyName",
+        COALESCE(om.office_name, '') AS "branchName"
+      FROM ${tables.companyBidJudgement} cbj
+      JOIN ${tables.companyMaster} cm ON cm.company_no::text = cbj.company_no::text
+      JOIN ${tables.officeMaster} om ON om.office_no::text = cbj.office_no::text
+      ${whereClause}
+      ORDER BY cbj.office_no::text, cm.company_name ASC, om.office_name ASC
+      LIMIT ${Math.max(1, limit)}
+    `;
+
+    const result = await client.query(query, params);
+      return result.rows;
+    } finally {
+      client.release();
+    }
   }
 
   private async attachDocumentContents(documents: Record<string, unknown>[]): Promise<Record<string, unknown>[]> {
