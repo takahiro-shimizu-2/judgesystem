@@ -51,7 +51,7 @@ app.use(pinoHttp({ logger }));
 app.use(compression());
 
 // Middleware to parse JSON body (must be before routes)
-app.use(express.json());
+app.use(express.json({ limit: process.env.EXPRESS_JSON_LIMIT || "10mb" }));
 
 // Health check endpoints
 app.get("/health", (_req, res) => {

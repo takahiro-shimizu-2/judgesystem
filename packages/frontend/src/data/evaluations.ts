@@ -120,7 +120,16 @@ export const updateOrdererWorkflowState = async (
     });
 
     if (!response.ok) {
-      console.error(`Failed to update orderer workflow: ${response.status} ${response.statusText}`);
+      let message = `Failed to update orderer workflow: ${response.status} ${response.statusText}`;
+      try {
+        const errorBody = await response.json();
+        if (typeof errorBody?.message === 'string') {
+          message = errorBody.message;
+        }
+      } catch {
+        // ignore parse errors
+      }
+      console.error(message);
       return null;
     }
 
