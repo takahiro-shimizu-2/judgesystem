@@ -86,6 +86,7 @@ app.use("/api", authenticate);
 // Evaluation routes
 app.get("/api/evaluations/stats", evaluationController.getStats);
 app.get("/api/evaluations/status-counts", evaluationController.getStatusCounts);
+app.get("/api/evaluations/company-options", evaluationController.getCompanyOptions);
 app.get("/api/evaluations", evaluationController.getList);
 app.get("/api/evaluations/:id", evaluationController.getById);
 app.patch("/api/evaluations/:evaluationNo", authorize("admin", "evaluator"), evaluationController.updateWorkStatus);

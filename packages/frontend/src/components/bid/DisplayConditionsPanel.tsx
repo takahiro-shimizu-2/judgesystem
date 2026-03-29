@@ -26,6 +26,7 @@ import { priorityLabels, priorityColors } from '../../constants/priority';
 import { organizationGroupsByRegion } from '../../constants/organizations';
 import { prefecturesByRegion } from '../../constants/prefectures';
 import type { FilterState, EvaluationStatus, CompanyPriority, WorkStatus } from '../../types';
+import { CompanyBranchSelect } from './CompanyBranchSelect';
 
 // ソートオプションの定義
 const SORT_FIELDS = [
@@ -154,6 +155,8 @@ export function DisplayConditionsPanel({
     onTabChange?.(tab);
   };
 
+  const selectedCompanyBranch = filters.companyBranches.length > 0 ? filters.companyBranches[0] : null;
+
   // ステータストグル
   const toggleStatus = (status: EvaluationStatus) => {
     const newStatuses = filters.statuses.includes(status)
@@ -257,6 +260,7 @@ export function DisplayConditionsPanel({
     category: filters.categorySegments.length + categoryDetailCount,
     prefecture: filters.prefectures.length,
     organization: filters.organizations.length,
+    company: selectedCompanyBranch ? 1 : 0,
   };
 
   const totalFilterCount = Object.values(filterCounts).reduce((a, b) => a + b, 0);
@@ -965,6 +969,51 @@ export function DisplayConditionsPanel({
               {renderFilterContent()}
             </Box>
           </Box>
+        )}
+      </Box>
+
+      {/* 企業・拠点フィルター */}
+      <Box sx={sectionDivider}>
+        <CompanyBranchSelect
+          value={selectedCompanyBranch}
+          valueLabel={filters.companyBranchLabel || undefined}
+          onChange={(officeId, label) => {
+            if (!officeId) {
+              onFilterChange({
+                ...filters,
+                companyBranches: [],
+                companyBranchLabel: null,
+              });
+            } else {
+              onFilterChange({
+                ...filters,
+                companyBranches: [officeId],
+                companyBranchLabel: label ?? null,
+              });
+            }
+          }}
+          helperText="企業・拠点を1件選択して結果を絞り込みます。"
+        />
+        {selectedCompanyBranch && (
+          <Button
+            size="small"
+            onClick={() =>
+              onFilterChange({
+                ...filters,
+                companyBranches: [],
+                companyBranchLabel: null,
+              })
+            }
+            sx={{
+              mt: 1,
+              alignSelf: 'flex-start',
+              textTransform: 'none',
+              fontSize: fontSizes.xs,
+              color: colors.accent.red,
+            }}
+          >
+            選択解除
+          </Button>
         )}
       </Box>
     </Box>

@@ -59,6 +59,7 @@ export interface EvaluationFilterParams extends BaseFilterParams {
   organizations?: string[];
   prefectures?: string[];
   ordererId?: string;
+  officeIds?: string[];
 }
 
 /**

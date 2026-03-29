@@ -89,6 +89,13 @@ export interface SubmissionDocument {
   timepointType: string;
 }
 
+export interface CompanyBranchOption {
+  officeId: string;
+  companyId: string;
+  companyName: string;
+  branchName: string;
+}
+
 // 公告情報
 export interface Announcement {
   id: string;
@@ -160,6 +167,8 @@ export interface FilterState {
   bidTypes: string[];
   organizations: string[];
   prefectures: string[];
+  companyBranches: string[];
+  companyBranchLabel: string | null;
 }
 
 // DataGrid行データの型

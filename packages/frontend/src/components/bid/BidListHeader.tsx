@@ -56,6 +56,8 @@ export function BidListHeader({
     }
   };
 
+  const companySelectionLabel = filters.companyBranchLabel || (filters.companyBranches[0] ? `拠点ID: ${filters.companyBranches[0]}` : undefined);
+
   return (
     <Box
       sx={{
@@ -250,6 +252,24 @@ export function BidListHeader({
               sx={premiumChipSx}
             />
           ))}
+
+          {/* 企業・拠点フィルター */}
+          {companySelectionLabel && filters.companyBranches.length > 0 && (
+            <Chip
+              key="companySelection"
+              label={companySelectionLabel}
+              size="small"
+              onDelete={() =>
+                onFilterChange({
+                  ...filters,
+                  companyBranches: [],
+                  companyBranchLabel: null,
+                })
+              }
+              deleteIcon={<CloseIcon />}
+              sx={premiumChipSx}
+            />
+          )}
         </Box>
       )}
     </Box>

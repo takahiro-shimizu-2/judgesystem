@@ -25,6 +25,7 @@ import type { EvaluationStatus, CompanyPriority, WorkStatus, FilterState } from 
 import { FilterOptionButton } from '../common/FilterOptionButton';
 import { SelectAllButton } from '../common/SelectAllButton';
 import { fontSizes, iconStyles, borderRadius, colors } from '../../constants/styles';
+import { CompanyBranchSelect } from './CompanyBranchSelect';
 
 // 優先順位の選択肢
 const priorities: CompanyPriority[] = [1, 2, 3, 4, 5];
@@ -100,6 +101,8 @@ export function FilterModal({
       bidTypes: [],
       organizations: [],
       prefectures: [],
+      companyBranches: [],
+      companyBranchLabel: null,
     });
     setColumnFilters({ ...DEFAULT_COLUMN_FILTERS });
   };
@@ -261,6 +264,8 @@ export function FilterModal({
     ? localFilters.categoryDetails.length
     : localFilters.categories.length;
 
+  const companyFilterCount = localFilters.companyBranches.length > 0 ? 1 : 0;
+
   const activeFilterCount =
     localFilters.statuses.length +
     localFilters.workStatuses.length +
@@ -268,9 +273,11 @@ export function FilterModal({
     localFilters.categorySegments.length +
     categoryDetailCount +
     localFilters.bidTypes.length +
-    localFilters.organizations.length;
+    localFilters.organizations.length +
+    companyFilterCount;
   const columnFilterCount = Object.values(columnFilters).filter(f => f.value || f.operator === 'isEmpty' || f.operator === 'isNotEmpty').length;
   const totalFilterCount = activeFilterCount + columnFilterCount;
+  const selectedCompanyBranch = localFilters.companyBranches.length > 0 ? localFilters.companyBranches[0] : null;
 
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -322,6 +329,51 @@ export function FilterModal({
         <div style={{ flex: 1, overflow: 'auto', padding: '24px' }}>
           {activeTab === 'preset' ? (
             <>
+              <div style={{ marginBottom: '24px' }}>
+                <CompanyBranchSelect
+                  value={selectedCompanyBranch}
+                  valueLabel={localFilters.companyBranchLabel || undefined}
+                  onChange={(officeId, label) => {
+                    if (!officeId) {
+                      setLocalFilters((prev) => ({
+                        ...prev,
+                        companyBranches: [],
+                        companyBranchLabel: null,
+                      }));
+                    } else {
+                      setLocalFilters((prev) => ({
+                        ...prev,
+                        companyBranches: [officeId],
+                        companyBranchLabel: label ?? null,
+                      }));
+                    }
+                  }}
+                  helperText="企業・拠点を1件選択して一覧を絞り込みます。"
+                />
+                {selectedCompanyBranch && (
+                  <button
+                    onClick={() =>
+                      setLocalFilters((prev) => ({
+                        ...prev,
+                        companyBranches: [],
+                        companyBranchLabel: null,
+                      }))
+                    }
+                    style={{
+                      marginTop: '8px',
+                      background: 'none',
+                      border: 'none',
+                      color: colors.accent.red,
+                      fontSize: fontSizes.xs,
+                      cursor: 'pointer',
+                      textDecoration: 'underline',
+                    }}
+                  >
+                    選択解除
+                  </button>
+                )}
+              </div>
+
               {/* ステータス */}
               <div style={{ marginBottom: '24px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>

@@ -32,6 +32,8 @@ const DEFAULT_FILTERS: FilterState = {
   bidTypes: [],
   organizations: [],
   prefectures: [],
+  companyBranches: [],
+  companyBranchLabel: null,
 };
 
 const DEFAULT_SORT: GridSortModel = [];
@@ -163,6 +165,9 @@ function appendFilterParams(
   if (filters.prefectures.length > 0) {
     filters.prefectures.forEach(s => queryParams.append('prefectures', s));
   }
+  if (filters.companyBranches && filters.companyBranches.length > 0) {
+    filters.companyBranches.forEach((id) => queryParams.append('officeIds', id));
+  }
 }
 
 async function fetchEvaluations(params: {
@@ -243,7 +248,6 @@ export function useBidListState() {
   // カスタムフィルター（ステータス/優先順位/工種/発注機関）
   const [filters, setFilters] = useState<FilterState>(() => {
     const saved = loadFromStorage<Partial<FilterState>>(STORAGE_KEYS.FILTERS, {});
-    // 古い保存データに新しいプロパティがない場合に備えてマージ
     return { ...DEFAULT_FILTERS, ...saved };
   });
 
@@ -433,7 +437,8 @@ export function useBidListState() {
     categoryDetailCount +
     filters.bidTypes.length +
     filters.organizations.length +
-    filters.prefectures.length;
+    filters.prefectures.length +
+    filters.companyBranches.length;
 
   const columnFilterCount = gridFilterModel.items.filter(
     item => item.value

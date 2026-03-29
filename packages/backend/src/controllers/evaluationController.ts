@@ -285,6 +285,27 @@ export class EvaluationController {
     }
   };
 
+  getCompanyOptions = async (req: Request, res: Response): Promise<void> => {
+    logger.info("GET /api/evaluations/company-options");
+    try {
+      const search = typeof req.query.search === "string" ? req.query.search : undefined;
+      const options = await this.service.getCompanyOptions(search);
+      res.setHeader("Content-Type", "application/json");
+      res.setHeader("Cache-Control", "no-cache");
+      res.status(200).json(options);
+    } catch (error) {
+      logger.error({ err: error }, "ERROR in GET /api/evaluations/company-options");
+      if (!res.headersSent) {
+        res.status(500).json({
+          error: "Internal Server Error",
+          message: process.env.NODE_ENV === "production"
+            ? "An unexpected error occurred"
+            : error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+  };
+
   /**
    * Helper: Parse array parameter from query string
    */
@@ -331,6 +352,7 @@ export class EvaluationController {
       bidTypes: this.parseArrayParam(req.query.bidTypes),
       organizations: this.parseArrayParam(req.query.organizations),
       prefectures: this.parseArrayParam(req.query.prefectures),
+      officeIds: this.parseArrayParam(req.query.officeIds),
       searchQuery: (req.query.searchQuery as string) || "",
       sortField: sortOptions[0]?.field || sortFields[0] || "",
       sortOrder: sortOptions[0]?.order || this.parseSortOrderParam(req.query.sortOrder) || "asc",
