@@ -1919,17 +1919,6 @@ export default function AnnouncementDetailPage() {
                           value={formatCategoryLabel(announcement.categorySegment, announcement.categoryDetail, announcement.category)}
                           icon={<CategoryIcon sx={{ ...iconStyles.small, color: colors.text.light }} />}
                         />
-                        {announcement.noticeCategoryName && (
-                          <InfoRow
-                            label="公告種別"
-                            value={
-                              announcement.noticeCategoryCode
-                                ? `${announcement.noticeCategoryName} (${announcement.noticeCategoryCode})`
-                                : announcement.noticeCategoryName
-                            }
-                            icon={<CategoryIcon sx={{ ...iconStyles.small, color: colors.text.light }} />}
-                          />
-                        )}
                         {announcement.noticeProcurementMethod && (
                           <InfoRow
                             label="調達方式"
