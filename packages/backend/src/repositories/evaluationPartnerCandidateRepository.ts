@@ -107,7 +107,7 @@ export class EvaluationPartnerCandidateRepository {
         created_at,
         updated_at
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'not_called', false, NOW(), NOW())
+      VALUES ($1, $2, $3, $4, $5, $6, $7, 'not_called', false, NOW(), NOW())
       RETURNING
         id,
         evaluation_no,

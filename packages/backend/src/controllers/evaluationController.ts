@@ -331,6 +331,8 @@ export class EvaluationController {
 
     const {
       partnerId,
+      partnerCompanyId,
+      partnerOfficeId,
       partnerName,
       contactPerson,
       phone,
@@ -338,20 +340,29 @@ export class EvaluationController {
       fax,
     } = req.body ?? {};
 
-    if (!partnerId || typeof partnerId !== "string") {
+    const resolvedPartnerId =
+      typeof partnerId === "string" && partnerId.trim()
+        ? partnerId.trim()
+        : typeof partnerCompanyId === "string" && partnerCompanyId.trim()
+          ? partnerCompanyId.trim()
+          : typeof partnerOfficeId === "string" && partnerOfficeId.trim()
+            ? partnerOfficeId.trim()
+            : null;
+
+    if (!resolvedPartnerId) {
       res.status(400).json({ error: "Bad Request", message: "partnerId is required" });
       return;
     }
 
-    if (!partnerName || typeof partnerName !== "string") {
+    if (!partnerName || typeof partnerName !== "string" || partnerName.trim().length === 0) {
       res.status(400).json({ error: "Bad Request", message: "partnerName is required" });
       return;
     }
 
     try {
       const partner = await this.service.createPartnerCandidate(evaluationNo, {
-        partnerId,
-        partnerName,
+        partnerId: resolvedPartnerId,
+        partnerName: partnerName.trim(),
         contactPerson: contactPerson ?? null,
         phone: phone ?? null,
         email: email ?? null,
