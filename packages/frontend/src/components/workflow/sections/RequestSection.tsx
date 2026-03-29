@@ -141,6 +141,7 @@ export function RequestSection({ evaluation, partners = [], workflowAssigneeId }
     return filled;
   }, [manualTemplateAssignees, workflowAssigneeId]);
   const currentAssignee = templateAssignees[getAssigneeKey(recipientCategory, selectedTemplateId)] || '';
+  const currentStaffMember = currentAssignee ? findById(currentAssignee) : undefined;
 
   // 案件・企業情報
   const projectName = evaluation?.announcement?.title || '';
@@ -159,8 +160,9 @@ export function RequestSection({ evaluation, partners = [], workflowAssigneeId }
   }, [requesterCompanyId]);
 
   // 自社情報（実際はログイン企業情報から取得）
-  const myCompanyName = '株式会社サンプル建設';
-  const myName = '田中一郎';
+  const defaultCompanyName = evaluation?.company?.name || '（自社名）';
+  const myCompanyName = currentStaffMember?.companyName || defaultCompanyName;
+  const myName = currentStaffMember?.name || '担当者';
 
   // 見積採用した協力会社
   const adoptedPartners = partners.filter(p => p.status === 'estimate_adopted');

@@ -138,8 +138,9 @@ export function AwardSection({ evaluation, partners = [], workflowAssigneeId }: 
   }, [requesterCompanyId]);
 
   // 自社情報（実際はログイン企業情報から取得）
-  const myCompanyName = '株式会社サンプル建設';
-  const myName = '田中一郎';
+  const defaultCompanyName = evaluation?.company?.name || '（自社名）';
+  const myCompanyName = defaultCompanyName;
+  const myNameFallback = '担当者';
 
   type AnnouncementWithExtras = Announcement & {
     actualAmount?: number;
@@ -217,6 +218,9 @@ export function AwardSection({ evaluation, partners = [], workflowAssigneeId }: 
     return filled;
   }, [manualTemplateAssignees, workflowAssigneeId]);
   const currentAssignee = templateAssignees[getAssigneeKey(recipientCategory, selectedTemplateId)] || '';
+  const currentStaffMember = currentAssignee ? findById(currentAssignee) : undefined;
+  const myName = currentStaffMember?.name || myNameFallback;
+  const effectiveCompanyName = currentStaffMember?.companyName || myCompanyName;
 
   // テンプレートフィルター
   const getFilteredTemplates = (): EmailTemplate[] => {
@@ -268,7 +272,7 @@ export function AwardSection({ evaluation, partners = [], workflowAssigneeId }: 
     // 利用可能な情報は常に置換（送信先が選択されていなくても）
     const data: Record<string, string> = {
       '案件名': projectName,
-      '自社名': myCompanyName,
+      '自社名': effectiveCompanyName,
       '自社担当者': myName,
       '企業名': selectedRecipient?.name || requesterCompany?.name || '',
       '担当者名': selectedRecipient?.contactPerson || requesterCompanyDetails?.representative || '',

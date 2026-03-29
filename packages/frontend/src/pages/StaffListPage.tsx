@@ -146,6 +146,15 @@ function StaffCard({
         >
           {row.name}
         </Typography>
+        <Typography
+          sx={{
+            fontSize: fontSizes.sm,
+            color: colors.text.muted,
+            mb: 1,
+          }}
+        >
+          {row.companyName || '会社名未設定'}
+        </Typography>
 
         {/* 3行目: 連絡先 */}
         <Box
@@ -655,7 +664,8 @@ export default function StaffListPage() {
     return staffRows.filter(
       (row) =>
         row.name.toLowerCase().includes(query) ||
-        row.email.toLowerCase().includes(query)
+        row.email.toLowerCase().includes(query) ||
+        (row.companyName?.toLowerCase().includes(query) ?? false)
     );
   }, [staffRows, searchQuery]);
 

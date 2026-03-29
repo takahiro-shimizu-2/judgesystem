@@ -281,8 +281,9 @@ export function OrdererWorkflowSection({ evaluation, workflowAssigneeId }: Order
   const projectName = evaluation?.announcement?.title || '（案件名）';
   const ordererOrg = evaluation?.announcement?.organization || '（発注機関）';
   const ordererContact = evaluation?.announcement?.department?.contactPerson || '担当者';
-  const companyName = evaluation?.company?.name || '（自社名）';
-  const myName = '営業担当';
+  const defaultStaffMember = workflowAssigneeId ? findById(workflowAssigneeId) : undefined;
+  const companyName = defaultStaffMember?.companyName || evaluation?.company?.name || '（自社名）';
+  const myName = defaultStaffMember?.name || '営業担当';
 
   const [workflowState, setWorkflowState] = useState<OrdererWorkflowState>(createEmptyOrdererWorkflowState);
   const workflowStateRef = useRef<OrdererWorkflowState>(createEmptyOrdererWorkflowState());

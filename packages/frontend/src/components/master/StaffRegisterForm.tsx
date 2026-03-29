@@ -66,6 +66,18 @@ export function StaffRegisterForm({ onSubmit, initialData, editMode, entityId }:
         <FormSection title="基本情報" icon={<PersonIcon sx={{ fontSize: 18 }} />}>
           <Box sx={formGridStyles.twoColumn}>
             <TextField
+              label="会社名"
+              required
+              size="small"
+              value={formData.companyName}
+              onChange={(e) => updateField('companyName', e.target.value)}
+              onBlur={() => setFieldTouched('companyName')}
+              error={!!showError('companyName')}
+              helperText={showError('companyName') || ''}
+              sx={formFieldStyles}
+              fullWidth
+            />
+            <TextField
               label="氏名"
               required
               size="small"

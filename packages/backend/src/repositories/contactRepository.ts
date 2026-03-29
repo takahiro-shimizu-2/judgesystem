@@ -3,6 +3,7 @@ import { pool, schemaPrefix, TABLES } from "../config/database";
 
 export interface ContactInput {
   name: string;
+  companyName: string;
   department: string;
   email: string;
   phone: string;
@@ -22,6 +23,7 @@ export class ContactRepository {
         contact_id::text AS id,
         ROW_NUMBER() OVER (ORDER BY LOWER(name), contact_id) AS no,
         name,
+        company_name,
         department,
         email,
         phone
@@ -35,6 +37,7 @@ export class ContactRepository {
       id: row.id,
       no: Number(row.no) || 0,
       name: row.name ?? "",
+      companyName: row.company_name ?? "",
       department: row.department ?? "",
       email: row.email ?? "",
       phone: row.phone ?? "",
@@ -77,12 +80,13 @@ export class ContactRepository {
 
   async create(input: ContactInput): Promise<ContactRecord> {
     const sql = `
-      INSERT INTO ${this.tableName} (name, department, email, phone)
-      VALUES ($1, $2, $3, $4)
+      INSERT INTO ${this.tableName} (name, company_name, department, email, phone)
+      VALUES ($1, $2, $3, $4, $5)
       RETURNING contact_id::text AS id
     `;
     const rows = await this.query<{ id: string }>(sql, [
       input.name,
+      input.companyName,
       input.department,
       input.email,
       input.phone,
@@ -103,9 +107,10 @@ export class ContactRepository {
     const values: any[] = [];
     let index = 1;
 
-    (["name", "department", "email", "phone"] as const).forEach((key) => {
+    (["name", "companyName", "department", "email", "phone"] as const).forEach((key) => {
       if (input[key] !== undefined) {
-        fields.push(`${key} = $${index + 1}`);
+        const column = key === "companyName" ? "company_name" : key;
+        fields.push(`${column} = $${index + 1}`);
         values.push(input[key]);
         index += 1;
       }

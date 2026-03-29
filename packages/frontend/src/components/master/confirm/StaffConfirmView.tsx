@@ -14,6 +14,7 @@ export function StaffConfirmView({ data }: StaffConfirmViewProps) {
     <Box>
       <ConfirmSection title="基本情報" icon={<PersonIcon sx={{ fontSize: 18 }} />}>
         <Box sx={formGridStyles.twoColumn}>
+          <ConfirmField label="会社名" value={data.companyName} />
           <ConfirmField label="氏名" value={data.name} />
           <ConfirmField label="部署" value={data.department} />
         </Box>

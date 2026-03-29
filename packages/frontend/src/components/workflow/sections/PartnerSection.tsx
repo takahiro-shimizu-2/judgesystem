@@ -186,7 +186,7 @@ const replacePlaceholders = (
   partner: Partner,
   projectName: string,
   companyName: string,
-  myName: string
+  staffName: string
 ): string => {
   return template
     .replace(/\{\{企業名\}\}/g, partner.name)
@@ -194,7 +194,7 @@ const replacePlaceholders = (
     .replace(/\{\{電話番号\}\}/g, partner.phone)
     .replace(/\{\{案件名\}\}/g, projectName)
     .replace(/\{\{自社名\}\}/g, companyName)
-    .replace(/\{\{自社担当者\}\}/g, myName);
+    .replace(/\{\{自社担当者\}\}/g, staffName);
 };
 
 // ============================================================================
@@ -359,8 +359,8 @@ function PartnerCard({
   onStatusChange,
   onToggleSurvey,
   projectName,
-  companyName,
-  myName,
+  defaultCompanyName,
+  defaultStaffName,
   workflowAssigneeId,
   onDelete,
 }: {
@@ -370,8 +370,8 @@ function PartnerCard({
   onStatusChange: (status: PartnerStatus) => void;
   onToggleSurvey: (nextValue: boolean) => void;
   projectName: string;
-  companyName: string;
-  myName: string;
+  defaultCompanyName: string;
+  defaultStaffName: string;
   workflowAssigneeId?: string;
   onDelete?: () => void;
 }) {
@@ -392,6 +392,17 @@ function PartnerCard({
   const [editedEmailSubject, setEditedEmailSubject] = useState<string | null>(null);
   const [editedEmailContent, setEditedEmailContent] = useState<string | null>(null);
   const [manualEmailAssignees, setManualEmailAssignees] = useState<Record<string, string>>({});
+
+  const getStaffInfo = useCallback(
+    (staffId?: string | null) => {
+      const staffMember = staffId ? findById(staffId) : undefined;
+      return {
+        companyName: staffMember?.companyName || defaultCompanyName,
+        name: staffMember?.name || defaultStaffName,
+      };
+    },
+    [defaultCompanyName, defaultStaffName, findById]
+  );
 
   const talkTemplateAssignees = useMemo(() => {
     const updated = { ...manualTalkAssignees };
@@ -471,7 +482,14 @@ function PartnerCard({
 
   // 選択中のテンプレート（スクリプトタブ用）
   const selectedTemplate = SCRIPT_TEMPLATES.find((t) => t.id === selectedTemplateId) || SCRIPT_TEMPLATES[0];
-  const renderedContent = replacePlaceholders(selectedTemplate.content, partner, projectName, companyName, myName);
+  const talkStaffInfo = getStaffInfo(talkTemplateAssignees[selectedTemplateId]);
+  const renderedContent = replacePlaceholders(
+    selectedTemplate.content,
+    partner,
+    projectName,
+    talkStaffInfo.companyName,
+    talkStaffInfo.name
+  );
 
   // 表示用（編集済みならその内容、なければテンプレートから生成）
   const displayContent = editedContent !== null ? editedContent : renderedContent;
@@ -989,11 +1007,12 @@ function PartnerCard({
               {/* 件名 */}
               {(() => {
                 const emailTemplate = SCRIPT_TEMPLATES.find((t) => t.id === selectedEmailTemplateId);
+                const emailStaffInfo = getStaffInfo(emailTemplateAssignees[selectedEmailTemplateId]);
                 const renderedEmailSubject = emailTemplate?.subject
-                  ? replacePlaceholders(emailTemplate.subject, partner, projectName, companyName, myName)
+                  ? replacePlaceholders(emailTemplate.subject, partner, projectName, emailStaffInfo.companyName, emailStaffInfo.name)
                   : '';
                 const renderedEmailContent = emailTemplate
-                  ? replacePlaceholders(emailTemplate.content, partner, projectName, companyName, myName)
+                  ? replacePlaceholders(emailTemplate.content, partner, projectName, emailStaffInfo.companyName, emailStaffInfo.name)
                   : '';
                 const displayEmailSubject = editedEmailSubject !== null ? editedEmailSubject : renderedEmailSubject;
                 const displayEmailContent = editedEmailContent !== null ? editedEmailContent : renderedEmailContent;
@@ -1205,9 +1224,9 @@ export function PartnerSection({
   const { staff, findById } = useStaffDirectory();
   // 案件・自社情報をevaluationから取得
   const projectName = evaluation?.announcement?.title || '（案件名）';
-  const companyName = evaluation?.company?.name || '（自社名）';
-  // 自社担当者は仮で設定（実際はログインユーザー情報などから取得）
-  const myName = '営業担当';
+  const defaultStaffMember = workflowAssigneeId ? findById(workflowAssigneeId) : undefined;
+  const defaultCompanyName = defaultStaffMember?.companyName || evaluation?.company?.name || '（自社名）';
+  const defaultStaffName = defaultStaffMember?.name || '担当者';
 
   // 展開状態
   const [expandedPartnerId, setExpandedPartnerId] = useState<string | null>(null);
@@ -1383,8 +1402,8 @@ export function PartnerSection({
                 onStatusChange={(s) => changeStatus(partner.id, s)}
                 onToggleSurvey={(nextValue) => toggleSurvey(partner.id, nextValue)}
                 projectName={projectName}
-                companyName={companyName}
-                myName={myName}
+                defaultCompanyName={defaultCompanyName}
+                defaultStaffName={defaultStaffName}
                 workflowAssigneeId={workflowAssigneeId}
                 onDelete={onRemovePartner ? () => handleRemovePartner(partner) : undefined}
               />

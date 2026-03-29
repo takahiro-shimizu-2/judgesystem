@@ -9,8 +9,8 @@ interface StaffContextValue {
   loading: boolean;
   error: string | null;
   refresh: () => Promise<void>;
-  createStaff: (data: Pick<Staff, 'name' | 'department' | 'email' | 'phone'>) => Promise<Staff | null>;
-  updateStaff: (id: string, data: Partial<Pick<Staff, 'name' | 'department' | 'email' | 'phone'>>) => Promise<Staff | null>;
+  createStaff: (data: Pick<Staff, 'name' | 'companyName' | 'department' | 'email' | 'phone'>) => Promise<Staff | null>;
+  updateStaff: (id: string, data: Partial<Pick<Staff, 'name' | 'companyName' | 'department' | 'email' | 'phone'>>) => Promise<Staff | null>;
   deleteStaff: (id: string) => Promise<boolean>;
   findById: (id: string) => Staff | undefined;
 }
@@ -52,7 +52,7 @@ export function StaffProvider({ children }: { children: ReactNode }) {
   }, [loadStaff]);
 
   const createStaff = useCallback(
-    async (data: Pick<Staff, 'name' | 'department' | 'email' | 'phone'>) => {
+    async (data: Pick<Staff, 'name' | 'companyName' | 'department' | 'email' | 'phone'>) => {
       const created = await createStaffRecord(data);
       if (created) {
         setStaff((prev) => [...prev, created]);
@@ -64,7 +64,7 @@ export function StaffProvider({ children }: { children: ReactNode }) {
   );
 
   const updateStaff = useCallback(
-    async (id: string, data: Partial<Pick<Staff, 'name' | 'department' | 'email' | 'phone'>>) => {
+    async (id: string, data: Partial<Pick<Staff, 'name' | 'companyName' | 'department' | 'email' | 'phone'>>) => {
       const updated = await updateStaffRecord(id, data);
       if (updated) {
         setStaff((prev) => prev.map((s) => (s.id === id ? updated : s)));
