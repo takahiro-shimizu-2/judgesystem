@@ -1,3 +1,5 @@
+import { unifiedSubCategories } from './qualifications';
+
 /**
  * 工事カテゴリ一覧
  * 建設業許可の業種区分に基づく
@@ -35,3 +37,19 @@ export const categories = [
 ] as const;
 
 export type Category = typeof categories[number];
+
+export type CategoryHierarchy = Record<string, readonly string[]>;
+
+export const categoryHierarchy: CategoryHierarchy = {
+  工事: categories,
+  ...unifiedSubCategories,
+};
+
+export const defaultCategorySegments = Object.keys(categoryHierarchy);
+
+export const defaultCategoryDetails = Array.from(
+  new Set(
+    Object.values(categoryHierarchy)
+      .flatMap((details) => details)
+  ),
+);

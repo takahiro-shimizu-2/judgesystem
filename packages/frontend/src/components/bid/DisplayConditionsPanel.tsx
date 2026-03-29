@@ -23,10 +23,10 @@ import { evaluationStatusConfig } from '../../constants/status';
 import { workStatusConfig } from '../../constants/workStatus';
 import { bidTypeConfig, bidTypes } from '../../constants/bidType';
 import { priorityLabels, priorityColors } from '../../constants/priority';
-import { categories } from '../../constants/categories';
 import { organizationGroupsByRegion } from '../../constants/organizations';
 import { prefecturesByRegion } from '../../constants/prefectures';
 import type { FilterState, EvaluationStatus, CompanyPriority, WorkStatus } from '../../types';
+import { CompanyBranchSelect } from './CompanyBranchSelect';
 
 // ソートオプションの定義
 const SORT_FIELDS = [
@@ -65,6 +65,9 @@ interface DisplayConditionsPanelProps {
   onFilterChange: (filters: FilterState) => void;
   onClearAll: () => void;
   statusCounts: Record<EvaluationStatus, number>;
+  availableCategorySegments: string[];
+  availableCategoryDetails: string[];
+  categoryHierarchy: Record<string, readonly string[]>;
   activeTab?: 'sort' | 'filter';
   onTabChange?: (tab: 'sort' | 'filter') => void;
 }
@@ -136,6 +139,9 @@ export function DisplayConditionsPanel({
   onFilterChange,
   onClearAll,
   statusCounts,
+  availableCategorySegments,
+  availableCategoryDetails,
+  categoryHierarchy,
   activeTab,
   onTabChange,
 }: DisplayConditionsPanelProps) {
@@ -148,6 +154,8 @@ export function DisplayConditionsPanel({
     setInternalTab(tab);
     onTabChange?.(tab);
   };
+
+  const selectedCompanyBranch = filters.companyBranches.length > 0 ? filters.companyBranches[0] : null;
 
   // ステータストグル
   const toggleStatus = (status: EvaluationStatus) => {
@@ -179,14 +187,6 @@ export function DisplayConditionsPanel({
       ? filters.bidTypes.filter(b => b !== bidType)
       : [...filters.bidTypes, bidType];
     onFilterChange({ ...filters, bidTypes: newBidTypes });
-  };
-
-  // カテゴリトグル
-  const toggleCategory = (category: string) => {
-    const newCategories = filters.categories.includes(category)
-      ? filters.categories.filter(c => c !== category)
-      : [...filters.categories, category];
-    onFilterChange({ ...filters, categories: newCategories });
   };
 
   // 発注機関トグル
@@ -248,14 +248,19 @@ export function DisplayConditionsPanel({
   };
 
   // 各フィルターの選択件数
+  const categoryDetailCount = filters.categoryDetails.length > 0
+    ? filters.categoryDetails.length
+    : filters.categories.length;
+
   const filterCounts = {
     status: filters.statuses.length,
     priority: filters.priorities.length,
     workStatus: filters.workStatuses.length,
     bidType: filters.bidTypes.length,
-    category: filters.categories.length,
+    category: filters.categorySegments.length + categoryDetailCount,
     prefecture: filters.prefectures.length,
     organization: filters.organizations.length,
+    company: selectedCompanyBranch ? 1 : 0,
   };
 
   const totalFilterCount = Object.values(filterCounts).reduce((a, b) => a + b, 0);
@@ -266,6 +271,24 @@ export function DisplayConditionsPanel({
     borderBottom: `1px solid ${rightPanelColors.border}`,
     pb: 2.5,
     mb: 2.5,
+  };
+
+  const toggleCategorySegment = (segment: string) => {
+    const newSegments = filters.categorySegments.includes(segment)
+      ? filters.categorySegments.filter(c => c !== segment)
+      : [...filters.categorySegments, segment];
+    onFilterChange({ ...filters, categorySegments: newSegments });
+  };
+
+  const toggleCategoryDetail = (detail: string) => {
+    const newDetails = filters.categoryDetails.includes(detail)
+      ? filters.categoryDetails.filter(c => c !== detail)
+      : [...filters.categoryDetails, detail];
+    onFilterChange({
+      ...filters,
+      categoryDetails: newDetails,
+      categories: newDetails,
+    });
   };
 
   // フィルターコンテンツをレンダリング
@@ -351,15 +374,74 @@ export function DisplayConditionsPanel({
 
       case 'category':
         return (
-          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75 }}>
-            {categories.map((cat) => (
-              <FilterButton
-                key={cat}
-                label={cat}
-                selected={filters.categories.includes(cat)}
-                onClick={() => toggleCategory(cat)}
-              />
-            ))}
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <Box>
+              <Typography sx={{ fontSize: fontSizes.sm, fontWeight: 600, color: rightPanelColors.text, mb: 1 }}>
+                カテゴリ区分
+              </Typography>
+              {availableCategorySegments.length === 0 && (
+                <Typography sx={{ fontSize: fontSizes.xs, color: rightPanelColors.textMuted }}>
+                  利用可能なカテゴリ区分がありません
+                </Typography>
+              )}
+              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75 }}>
+                {availableCategorySegments.map((segment) => (
+                  <FilterButton
+                    key={segment}
+                    label={segment}
+                    selected={filters.categorySegments.includes(segment)}
+                    onClick={() => toggleCategorySegment(segment)}
+                  />
+                ))}
+              </Box>
+            </Box>
+
+            <Box>
+              <Typography sx={{ fontSize: fontSizes.sm, fontWeight: 600, color: rightPanelColors.text, mb: 1 }}>
+                カテゴリ詳細
+              </Typography>
+              {(!availableCategoryDetails.length || !availableCategorySegments.length) && (
+                <Typography sx={{ fontSize: fontSizes.xs, color: rightPanelColors.textMuted }}>
+                  利用可能なカテゴリ詳細がありません
+                </Typography>
+              )}
+              {availableCategorySegments.length > 0 && (
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+                  {availableCategorySegments.every((segment) => (categoryHierarchy[segment]?.length ?? 0) === 0) && (
+                    <Typography sx={{ fontSize: fontSizes.xs, color: rightPanelColors.textMuted }}>
+                      利用可能なカテゴリ詳細がありません
+                    </Typography>
+                  )}
+                  {availableCategorySegments.map((segment) => {
+                    const details = categoryHierarchy[segment] || [];
+                    if (!details.length) {
+                      return null;
+                    }
+                    const selectedCount = details.filter((detail) => filters.categoryDetails.includes(detail)).length;
+                    return (
+                      <Box key={segment}>
+                        <Typography sx={{ fontSize: fontSizes.xs, fontWeight: 600, color: rightPanelColors.textMuted, mb: 0.5 }}>
+                          {segment}
+                          <Typography component="span" sx={{ ml: 1, fontSize: fontSizes.xs, color: rightPanelColors.textMuted }}>
+                            ({selectedCount}/{details.length})
+                          </Typography>
+                        </Typography>
+                        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75 }}>
+                          {details.map((detail) => (
+                            <FilterButton
+                              key={`${segment}-${detail}`}
+                              label={detail}
+                              selected={filters.categoryDetails.includes(detail)}
+                              onClick={() => toggleCategoryDetail(detail)}
+                            />
+                          ))}
+                        </Box>
+                      </Box>
+                    );
+                  })}
+                </Box>
+              )}
+            </Box>
           </Box>
         );
 
@@ -887,6 +969,51 @@ export function DisplayConditionsPanel({
               {renderFilterContent()}
             </Box>
           </Box>
+        )}
+      </Box>
+
+      {/* 企業・拠点フィルター */}
+      <Box sx={sectionDivider}>
+        <CompanyBranchSelect
+          value={selectedCompanyBranch}
+          valueLabel={filters.companyBranchLabel || undefined}
+          onChange={(officeId, label) => {
+            if (!officeId) {
+              onFilterChange({
+                ...filters,
+                companyBranches: [],
+                companyBranchLabel: null,
+              });
+            } else {
+              onFilterChange({
+                ...filters,
+                companyBranches: [officeId],
+                companyBranchLabel: label ?? null,
+              });
+            }
+          }}
+          helperText="企業・拠点を1件選択して結果を絞り込みます。"
+        />
+        {selectedCompanyBranch && (
+          <Button
+            size="small"
+            onClick={() =>
+              onFilterChange({
+                ...filters,
+                companyBranches: [],
+                companyBranchLabel: null,
+              })
+            }
+            sx={{
+              mt: 1,
+              alignSelf: 'flex-start',
+              textTransform: 'none',
+              fontSize: fontSizes.xs,
+              color: colors.accent.red,
+            }}
+          >
+            選択解除
+          </Button>
         )}
       </Box>
     </Box>

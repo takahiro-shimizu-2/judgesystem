@@ -16,10 +16,12 @@ export type {
   EvaluationWorkStatusResult,
   EvaluationStats,
 } from "./evaluation";
+export type { EvaluationPartnerCandidate } from "./evaluationPartnerCandidate";
 export type {
   AnnouncementListItem,
   AnnouncementDetail,
   AnnouncementDocument,
+  SubmissionDocument,
   ProgressingCompany,
   SimilarCase,
   DocumentFile,
@@ -52,10 +54,13 @@ export interface EvaluationFilterParams extends BaseFilterParams {
   workStatuses?: string[];
   priorities?: string[];
   categories?: string[];
+  categorySegments?: string[];
+  categoryDetails?: string[];
   bidTypes?: string[];
   organizations?: string[];
   prefectures?: string[];
   ordererId?: string;
+  officeIds?: string[];
 }
 
 /**
@@ -72,6 +77,8 @@ export interface AnnouncementFilterParams extends BaseFilterParams {
   statuses?: string[];
   bidTypes?: string[];
   categories?: string[];
+  categorySegments?: string[];
+  categoryDetails?: string[];
   organizations?: string[];
   prefectures?: string[];
   ordererId?: string;

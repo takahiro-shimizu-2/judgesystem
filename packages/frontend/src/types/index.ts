@@ -80,12 +80,33 @@ export interface DocumentOcr {
   url?: string;                       // 資料URL
 }
 
+export interface SubmissionDocument {
+  documentId: string | null;
+  name: string;
+  dateValue: string | null;
+  dateRaw: string;
+  dateMeaning: string;
+  timepointType: string;
+}
+
+export interface CompanyBranchOption {
+  officeId: string;
+  companyId: string;
+  companyName: string;
+  branchName: string;
+}
+
 // 公告情報
 export interface Announcement {
   id: string;
   ordererId?: string;                 // 発注者ID（マスター参照用）
   title: string;                      // 工事名
   category: string;                   // 工事カテゴリ
+  categorySegment?: string;           // カテゴリ区分（役務/工事など）
+  categoryDetail?: string;            // カテゴリ詳細
+  noticeCategoryName?: string;        // HTML由来のカテゴリ名
+  noticeCategoryCode?: string;        // HTML由来のカテゴリコード
+  noticeProcurementMethod?: string;   // 調達方式
   bidType?: BidType;                  // 入札形式
   organization: string;               // 発注機関
   workLocation: string;               // 工事場所
@@ -102,6 +123,7 @@ export interface Announcement {
   estimatedAmountMax?: number;        // 見積予想金額上限（円）
   pdfUrl?: string;
   documents?: DocumentOcr[];          // 資料文字起こし
+  submissionDocuments?: SubmissionDocument[];
   actualAmount?: number;              // 実際の落札金額
   winningCompanyId?: string;          // 落札企業ID
   winningCompanyName?: string;        // 落札企業名
@@ -140,9 +162,13 @@ export interface FilterState {
   workStatuses: WorkStatus[];
   priorities: CompanyPriority[];
   categories: string[];
+  categorySegments: string[];
+  categoryDetails: string[];
   bidTypes: string[];
   organizations: string[];
   prefectures: string[];
+  companyBranches: string[];
+  companyBranchLabel: string | null;
 }
 
 // DataGrid行データの型

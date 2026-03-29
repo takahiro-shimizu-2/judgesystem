@@ -53,6 +53,9 @@ coverage/
 data/ocr
 data/pdf
 data/sec
+data/test_*.db
+data/urllist/list_mod_bid_test*.txt
+output/
 .gitnexus
 .node_modules_ready
 packages/frontend/.vite/

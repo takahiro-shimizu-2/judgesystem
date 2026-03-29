@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components */
 import { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import type { ReactNode } from 'react';
 import { useMediaQuery, useTheme } from '@mui/material';
@@ -22,13 +23,13 @@ export function SidebarProvider({ children }: { children: ReactNode }) {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const [isOpen, setIsOpen] = useState(false);
-  const [mobileOpen, setMobileOpen] = useState(false);
+  const [mobileStateOpen, setMobileStateOpen] = useState(false);
   const [rightPanelOpen, setRightPanelOpen] = useState(true);
+  const mobileOpen = isMobile ? mobileStateOpen : false;
 
-  // モバイル/デスクトップ切り替え時にmobileOpenをリセット
   useEffect(() => {
     if (!isMobile) {
-      setMobileOpen(false);
+      setMobileStateOpen(false);
     }
   }, [isMobile]);
 
@@ -37,11 +38,11 @@ export function SidebarProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const toggleMobile = useCallback(() => {
-    setMobileOpen((prev) => !prev);
+    setMobileStateOpen((prev) => !prev);
   }, []);
 
   const closeMobile = useCallback(() => {
-    setMobileOpen(false);
+    setMobileStateOpen(false);
   }, []);
 
   const toggleRightPanel = useCallback(() => {

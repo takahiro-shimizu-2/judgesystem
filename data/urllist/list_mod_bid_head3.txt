@@ -1,0 +1,4 @@
+index	Unnamed: 0	Unnamed: 1	Unnamed: 2	区分	入札公告（現在募集中）	備考	落札情報（過去）	備考.1
+0	内部部局	不明		建設工事	現在掲載なし（リンクなし）		現在掲載なし（リンクなし）	
+1	内部部局	不明		建設関連業務	https://www.mod.go.jp/j/budget/chotatsu/naikyoku/consul/gyomu.html		https://www.mod.go.jp/j/budget/chotatsu/naikyoku/consul/kekka_gyomu.html	
+2	内部部局	大臣官房 会計課		一般競争入札（政府調達）	https://www.mod.go.jp/j/budget/chotatsu/naikyoku/nyuusatu_seifu/index.html		https://www.mod.go.jp/j/budget/chotatsu/naikyoku/consul/kekka_gyomu.html	

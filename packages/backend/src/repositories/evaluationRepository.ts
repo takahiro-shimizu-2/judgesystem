@@ -6,6 +6,7 @@ import type {
   EvaluationDetail,
   EvaluationWorkStatusResult,
   EvaluationStats,
+  CompanyOption,
 } from "../types/evaluation";
 import { logger } from "../utils/logger";
 import { escapeLikePattern } from "../utils/sql";
@@ -16,6 +17,7 @@ type QualifiedTables = {
   companyMaster: string;
   officeMaster: string;
   documents: string;
+  announcementDates: string;
   requirements: string;
   sufficientRequirements: string;
   insufficientRequirements: string;
@@ -70,6 +72,8 @@ export class EvaluationRepository {
             'title', COALESCE(ba."workName", ''),
             'organization', COALESCE(ba."topAgencyName", ''),
             'category', COALESCE(ba.category, ''),
+            'categorySegment', COALESCE(ba.category_segment, ''),
+            'categoryDetail', COALESCE(ba.category_detail, ''),
             'bidType', COALESCE(ba."bidType", ''),
             'deadline', COALESCE(ba."bidEndDate", ''),
             'workLocation', COALESCE(ba."workPlace", ''),
@@ -187,6 +191,23 @@ export class EvaluationRepository {
            AND cb.company_name = cc.company_name
          GROUP BY cc.announcement_id
         ),
+        submission_docs AS (
+          SELECT
+            announcement_no,
+            jsonb_agg(
+              jsonb_build_object(
+                'documentId', document_id,
+                'name', COALESCE(submission_document_name, ''),
+                'dateValue', CASE WHEN date_value IS NOT NULL THEN TO_CHAR(date_value, 'YYYY-MM-DD') ELSE NULL END,
+                'dateRaw', COALESCE(date_raw, ''),
+                'dateMeaning', COALESCE(date_meaning, ''),
+                'timepointType', COALESCE(timepoint_type, '')
+              )
+              ORDER BY date_value IS NULL, date_value, submission_document_name
+            ) AS submission_documents
+          FROM ${tables.announcementDates}
+          GROUP BY announcement_no
+        ),
         step_assignees AS (
           SELECT
             evaluation_no,
@@ -247,6 +268,8 @@ export class EvaluationRepository {
             'ordererId', COALESCE(ba.orderer_id::text, ''),
             'title', COALESCE(ba."workName", ''),
             'category', COALESCE(ba.category, ''),
+            'categorySegment', COALESCE(ba.category_segment, ''),
+            'categoryDetail', COALESCE(ba.category_detail, ''),
             'organization', COALESCE(ba."topAgencyName", ''),
             'workLocation', COALESCE(ba."workPlace", ''),
             'department', jsonb_build_object(
@@ -270,6 +293,7 @@ export class EvaluationRepository {
             'estimatedAmountMax', aea.estimated_amount_max,
             'pdfUrl', COALESCE(doc.docs->0->>'url', ''),
             'documents', COALESCE(doc.docs, '[]'::jsonb),
+            'submissionDocuments', COALESCE(sd.submission_documents, '[]'::jsonb),
             'competingCompanies', COALESCE(companies.companies, '[]'::jsonb),
             'winningCompanyId', NULL,
             'winningCompanyName', COALESCE(companies.winning_company_name, ''),
@@ -300,6 +324,7 @@ export class EvaluationRepository {
         ${baseFromClause}
         LEFT JOIN documents doc ON doc.announcement_id::text = cbj.announcement_no::text
         LEFT JOIN competing_companies companies ON companies.announcement_id::text = cbj.announcement_no::text
+        LEFT JOIN submission_docs sd ON sd.announcement_no::text = cbj.announcement_no::text
         LEFT JOIN requirement_details req
           ON req.announcement_no::text = cbj.announcement_no::text
          AND COALESCE(req.office_no::text, '-1') = COALESCE(cbj.office_no::text, '-1')
@@ -498,8 +523,20 @@ export class EvaluationRepository {
       }
     }
 
-    if (filters.categories && filters.categories.length > 0) {
-      whereClauses.push(`ba.category = ANY($${paramIndex})`);
+    const hasCategoryDetails = !!(filters.categoryDetails && filters.categoryDetails.length > 0);
+
+    if (filters.categorySegments && filters.categorySegments.length > 0) {
+      whereClauses.push(`ba.category_segment = ANY($${paramIndex})`);
+      queryParams.push(filters.categorySegments);
+      paramIndex++;
+    }
+
+    if (hasCategoryDetails) {
+      whereClauses.push(`(ba.category_detail = ANY($${paramIndex}) OR ba.category = ANY($${paramIndex}))`);
+      queryParams.push(filters.categoryDetails);
+      paramIndex++;
+    } else if (filters.categories && filters.categories.length > 0) {
+      whereClauses.push(`(ba.category_detail = ANY($${paramIndex}) OR ba.category = ANY($${paramIndex}))`);
       queryParams.push(filters.categories);
       paramIndex++;
     }
@@ -523,6 +560,12 @@ export class EvaluationRepository {
       whereClauses.push(`(${prefLikes})`);
       filters.prefectures.forEach(p => queryParams.push(`%${escapeLikePattern(p)}%`));
       paramIndex += filters.prefectures.length;
+    }
+
+    if (filters.officeIds && filters.officeIds.length > 0) {
+      whereClauses.push(`COALESCE(cbj.office_no::text, '') = ANY($${paramIndex})`);
+      queryParams.push(filters.officeIds);
+      paramIndex++;
     }
 
     if (filters.searchQuery && filters.searchQuery.trim()) {
@@ -662,6 +705,7 @@ export class EvaluationRepository {
       companyMaster: `${schemaPrefix}company_master`,
       officeMaster: `${schemaPrefix}office_master`,
       documents: `${schemaPrefix}announcements_documents_master`,
+      announcementDates: `${schemaPrefix}bid_announcements_dates`,
       requirements: `${schemaPrefix}bid_requirements`,
       sufficientRequirements: `${schemaPrefix}sufficient_requirements`,
       insufficientRequirements: `${schemaPrefix}insufficient_requirements`,
@@ -711,6 +755,42 @@ export class EvaluationRepository {
 
   private getPriorityExpression(): string {
     return `1`;
+  }
+
+  async getCompanyOptions(search?: string, limit = 1000): Promise<CompanyOption[]> {
+    const client = await pool.connect();
+    try {
+      const tables = this.getQualifiedTables();
+    const params: unknown[] = [];
+    let paramIndex = 1;
+    let whereClause = "";
+
+    if (search && search.trim()) {
+      const normalized = `%${escapeLikePattern(search.trim())}%`;
+      whereClause = `WHERE (cm.company_name ILIKE $${paramIndex} OR COALESCE(om.office_name, '') ILIKE $${paramIndex})`;
+      params.push(normalized);
+      paramIndex += 1;
+    }
+
+    const query = `
+      SELECT DISTINCT ON (cbj.office_no::text)
+        cbj.company_no::text AS "companyNo",
+        cbj.office_no::text AS "officeNo",
+        COALESCE(cm.company_name, '') AS "companyName",
+        COALESCE(om.office_name, '') AS "branchName"
+      FROM ${tables.companyBidJudgement} cbj
+      JOIN ${tables.companyMaster} cm ON cm.company_no::text = cbj.company_no::text
+      JOIN ${tables.officeMaster} om ON om.office_no::text = cbj.office_no::text
+      ${whereClause}
+      ORDER BY cbj.office_no::text, cm.company_name ASC, om.office_name ASC
+      LIMIT ${Math.max(1, limit)}
+    `;
+
+    const result = await client.query(query, params);
+      return result.rows;
+    } finally {
+      client.release();
+    }
   }
 
   private async attachDocumentContents(documents: Record<string, unknown>[]): Promise<Record<string, unknown>[]> {

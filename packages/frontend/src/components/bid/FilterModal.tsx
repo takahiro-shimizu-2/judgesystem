@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import {
   Close as CloseIcon,
   FilterAlt as FilterIcon,
@@ -10,7 +10,6 @@ import {
   Gavel as BidTypeIcon,
 } from '@mui/icons-material';
 import type { GridFilterModel } from '@mui/x-data-grid';
-import { categories } from '../../constants/categories';
 import { organizationGroups, organizationGroupsByRegion } from '../../constants/organizations';
 import { evaluationStatusConfig } from '../../constants/status';
 import { workStatusConfig } from '../../constants/workStatus';
@@ -26,6 +25,7 @@ import type { EvaluationStatus, CompanyPriority, WorkStatus, FilterState } from 
 import { FilterOptionButton } from '../common/FilterOptionButton';
 import { SelectAllButton } from '../common/SelectAllButton';
 import { fontSizes, iconStyles, borderRadius, colors } from '../../constants/styles';
+import { CompanyBranchSelect } from './CompanyBranchSelect';
 
 // 優先順位の選択肢
 const priorities: CompanyPriority[] = [1, 2, 3, 4, 5];
@@ -38,6 +38,9 @@ interface FilterModalProps {
   onGridFilterApply: (model: GridFilterModel) => void;
   onClose: () => void;
   statusCounts?: Record<EvaluationStatus, number>;
+  categorySegmentOptions: string[];
+  categoryDetailOptions: string[];
+  categoryHierarchy: Record<string, readonly string[]>;
 }
 
 export function FilterModal({
@@ -47,13 +50,14 @@ export function FilterModal({
   onGridFilterApply,
   onClose,
   statusCounts,
+  categorySegmentOptions,
+  categoryDetailOptions,
+  categoryHierarchy,
 }: FilterModalProps) {
   const [activeTab, setActiveTab] = useState<'preset' | 'column'>('preset');
   const [localFilters, setLocalFilters] = useState<FilterState>(filters);
-  const [columnFilters, setColumnFilters] = useState<Record<string, ColumnFilterItem>>({ ...DEFAULT_COLUMN_FILTERS });
 
-  // 初期化時にgridFilterModelから値を復元
-  useEffect(() => {
+  const initialColumnFilters = useMemo(() => {
     const newColumnFilters = { ...DEFAULT_COLUMN_FILTERS };
     gridFilterModel.items.forEach(item => {
       if (item.field in newColumnFilters) {
@@ -63,8 +67,10 @@ export function FilterModal({
         };
       }
     });
-    setColumnFilters(newColumnFilters);
+    return newColumnFilters;
   }, [gridFilterModel]);
+
+  const [columnFilters, setColumnFilters] = useState<Record<string, ColumnFilterItem>>(initialColumnFilters);
 
   useEffect(() => {
     document.body.style.overflow = 'hidden';
@@ -85,7 +91,19 @@ export function FilterModal({
   };
 
   const handleReset = () => {
-    setLocalFilters({ statuses: [], workStatuses: [], priorities: [], categories: [], bidTypes: [], organizations: [], prefectures: [] });
+    setLocalFilters({
+      statuses: [],
+      workStatuses: [],
+      priorities: [],
+      categories: [],
+      categorySegments: [],
+      categoryDetails: [],
+      bidTypes: [],
+      organizations: [],
+      prefectures: [],
+      companyBranches: [],
+      companyBranchLabel: null,
+    });
     setColumnFilters({ ...DEFAULT_COLUMN_FILTERS });
   };
 
@@ -139,19 +157,55 @@ export function FilterModal({
     return 'partial';
   };
 
-  // カテゴリ
-  const toggleCategory = (category: string) => {
+  // カテゴリ区分
+  const toggleCategorySegment = (segment: string) => {
     setLocalFilters(prev => ({
       ...prev,
-      categories: prev.categories.includes(category) ? prev.categories.filter(c => c !== category) : [...prev.categories, category],
+      categorySegments: prev.categorySegments.includes(segment)
+        ? prev.categorySegments.filter(s => s !== segment)
+        : [...prev.categorySegments, segment],
     }));
   };
-  const toggleAllCategories = () => {
-    setLocalFilters(prev => ({ ...prev, categories: prev.categories.length === categories.length ? [] : [...categories] }));
+  const toggleAllCategorySegments = () => {
+    setLocalFilters(prev => ({
+      ...prev,
+      categorySegments: prev.categorySegments.length === categorySegmentOptions.length ? [] : [...categorySegmentOptions],
+    }));
   };
-  const categorySelectionState = (): 'all' | 'partial' | 'none' => {
-    if (localFilters.categories.length === 0) return 'none';
-    if (localFilters.categories.length === categories.length) return 'all';
+  const categorySegmentSelectionState = (): 'all' | 'partial' | 'none' => {
+    if (localFilters.categorySegments.length === 0) return 'none';
+    if (localFilters.categorySegments.length === categorySegmentOptions.length) return 'all';
+    return 'partial';
+  };
+
+  // カテゴリ詳細
+  const toggleCategoryDetail = (detail: string) => {
+    setLocalFilters(prev => {
+      const exists = prev.categoryDetails.includes(detail);
+      const nextDetails = exists
+        ? prev.categoryDetails.filter(d => d !== detail)
+        : [...prev.categoryDetails, detail];
+      return {
+        ...prev,
+        categories: nextDetails,
+        categoryDetails: nextDetails,
+      };
+    });
+  };
+  const toggleAllCategoryDetails = () => {
+    setLocalFilters(prev => {
+      const isAllSelected = prev.categoryDetails.length === categoryDetailOptions.length;
+      const nextDetails = isAllSelected ? [] : [...categoryDetailOptions];
+      return {
+        ...prev,
+        categories: nextDetails,
+        categoryDetails: nextDetails,
+      };
+    });
+  };
+  const categoryDetailSelectionState = (): 'all' | 'partial' | 'none' => {
+    if (localFilters.categoryDetails.length === 0) return 'none';
+    if (localFilters.categoryDetails.length === categoryDetailOptions.length) return 'all';
     return 'partial';
   };
 
@@ -206,9 +260,24 @@ export function FilterModal({
     return 'partial';
   };
 
-  const activeFilterCount = localFilters.statuses.length + localFilters.priorities.length + localFilters.categories.length + localFilters.organizations.length;
+  const categoryDetailCount = localFilters.categoryDetails.length > 0
+    ? localFilters.categoryDetails.length
+    : localFilters.categories.length;
+
+  const companyFilterCount = localFilters.companyBranches.length > 0 ? 1 : 0;
+
+  const activeFilterCount =
+    localFilters.statuses.length +
+    localFilters.workStatuses.length +
+    localFilters.priorities.length +
+    localFilters.categorySegments.length +
+    categoryDetailCount +
+    localFilters.bidTypes.length +
+    localFilters.organizations.length +
+    companyFilterCount;
   const columnFilterCount = Object.values(columnFilters).filter(f => f.value || f.operator === 'isEmpty' || f.operator === 'isNotEmpty').length;
   const totalFilterCount = activeFilterCount + columnFilterCount;
+  const selectedCompanyBranch = localFilters.companyBranches.length > 0 ? localFilters.companyBranches[0] : null;
 
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -260,6 +329,51 @@ export function FilterModal({
         <div style={{ flex: 1, overflow: 'auto', padding: '24px' }}>
           {activeTab === 'preset' ? (
             <>
+              <div style={{ marginBottom: '24px' }}>
+                <CompanyBranchSelect
+                  value={selectedCompanyBranch}
+                  valueLabel={localFilters.companyBranchLabel || undefined}
+                  onChange={(officeId, label) => {
+                    if (!officeId) {
+                      setLocalFilters((prev) => ({
+                        ...prev,
+                        companyBranches: [],
+                        companyBranchLabel: null,
+                      }));
+                    } else {
+                      setLocalFilters((prev) => ({
+                        ...prev,
+                        companyBranches: [officeId],
+                        companyBranchLabel: label ?? null,
+                      }));
+                    }
+                  }}
+                  helperText="企業・拠点を1件選択して一覧を絞り込みます。"
+                />
+                {selectedCompanyBranch && (
+                  <button
+                    onClick={() =>
+                      setLocalFilters((prev) => ({
+                        ...prev,
+                        companyBranches: [],
+                        companyBranchLabel: null,
+                      }))
+                    }
+                    style={{
+                      marginTop: '8px',
+                      background: 'none',
+                      border: 'none',
+                      color: colors.accent.red,
+                      fontSize: fontSizes.xs,
+                      cursor: 'pointer',
+                      textDecoration: 'underline',
+                    }}
+                  >
+                    選択解除
+                  </button>
+                )}
+              </div>
+
               {/* ステータス */}
               <div style={{ marginBottom: '24px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
@@ -370,20 +484,86 @@ export function FilterModal({
                 </div>
               </div>
 
-              {/* 工事カテゴリ */}
+              {/* カテゴリ区分 */}
               <div style={{ marginBottom: '24px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <DescriptionIcon style={{ ...iconStyles.medium, color: colors.text.muted }} />
-                    <span style={{ fontWeight: 600, fontSize: fontSizes.md, color: colors.text.secondary }}>工事カテゴリ</span>
+                    <span style={{ fontWeight: 600, fontSize: fontSizes.md, color: colors.text.secondary }}>カテゴリ区分</span>
                   </div>
-                  <SelectAllButton state={categorySelectionState()} count={localFilters.categories.length} total={categories.length} onClick={toggleAllCategories} />
+                  <SelectAllButton
+                    state={categorySegmentSelectionState()}
+                    count={localFilters.categorySegments.length}
+                    total={categorySegmentOptions.length}
+                    onClick={toggleAllCategorySegments}
+                  />
                 </div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-                  {categories.map((cat) => (
-                    <FilterOptionButton key={cat} label={cat} selected={localFilters.categories.includes(cat)} onClick={() => toggleCategory(cat)} />
-                  ))}
+                {categorySegmentOptions.length === 0 ? (
+                  <div style={{ fontSize: fontSizes.xs, color: colors.text.muted }}>利用可能なカテゴリ区分がありません</div>
+                ) : (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                    {categorySegmentOptions.map((segment) => (
+                      <FilterOptionButton
+                        key={segment}
+                        label={segment}
+                        selected={localFilters.categorySegments.includes(segment)}
+                        onClick={() => toggleCategorySegment(segment)}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* カテゴリ詳細 */}
+              <div style={{ marginBottom: '24px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <DescriptionIcon style={{ ...iconStyles.medium, color: colors.text.muted }} />
+                    <span style={{ fontWeight: 600, fontSize: fontSizes.md, color: colors.text.secondary }}>カテゴリ詳細</span>
+                  </div>
+                  <SelectAllButton
+                    state={categoryDetailSelectionState()}
+                    count={localFilters.categoryDetails.length}
+                    total={categoryDetailOptions.length}
+                    onClick={toggleAllCategoryDetails}
+                  />
                 </div>
+                {categoryDetailOptions.length === 0 || categorySegmentOptions.length === 0 ? (
+                  <div style={{ fontSize: fontSizes.xs, color: colors.text.muted }}>利用可能なカテゴリ詳細がありません</div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                    {categorySegmentOptions.every((segment) => (categoryHierarchy[segment]?.length ?? 0) === 0) && (
+                      <div style={{ fontSize: fontSizes.xs, color: colors.text.muted }}>利用可能なカテゴリ詳細がありません</div>
+                    )}
+                    {categorySegmentOptions.map((segment) => {
+                      const details = categoryHierarchy[segment] || [];
+                      if (!details.length) {
+                        return null;
+                      }
+                      const selectedCount = details.filter((detail) => localFilters.categoryDetails.includes(detail)).length;
+                      return (
+                        <div key={segment}>
+                          <div style={{ fontWeight: 600, fontSize: fontSizes.sm, color: colors.text.secondary, marginBottom: '8px' }}>
+                            {segment}
+                            <span style={{ marginLeft: '8px', fontSize: fontSizes.xs, color: colors.text.muted }}>
+                              ({selectedCount}/{details.length})
+                            </span>
+                          </div>
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                            {details.map((detail) => (
+                              <FilterOptionButton
+                                key={`${segment}-${detail}`}
+                                label={detail}
+                                selected={localFilters.categoryDetails.includes(detail)}
+                                onClick={() => toggleCategoryDetail(detail)}
+                              />
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
 
               {/* 発注機関 */}

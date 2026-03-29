@@ -56,18 +56,18 @@ export class ContactController {
 
   create = async (req: Request, res: Response): Promise<void> => {
     logger.info("POST /api/contacts");
-    const { name, department, email, phone } = req.body ?? {};
+    const { name, companyName, department, email, phone } = req.body ?? {};
 
-    if (!name || !department || !email || !phone) {
+    if (!name || !companyName || !department || !email || !phone) {
       res.status(400).json({
         error: "Bad Request",
-        message: "name, department, email, and phone are required",
+        message: "name, companyName, department, email, and phone are required",
       });
       return;
     }
 
     try {
-      const contact = await this.service.create({ name, department, email, phone });
+      const contact = await this.service.create({ name, companyName, department, email, phone });
       res.setHeader("Content-Type", "application/json");
       res.status(201).json(contact);
     } catch (error) {

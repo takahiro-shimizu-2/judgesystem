@@ -11,7 +11,7 @@ export async function fetchStaffList(): Promise<Staff[]> {
 }
 
 export async function createStaffRecord(
-  data: Pick<Staff, 'name' | 'department' | 'email' | 'phone'>
+  data: Pick<Staff, 'name' | 'companyName' | 'department' | 'email' | 'phone'>
 ): Promise<Staff | null> {
   try {
     const response = await fetch(getApiUrl('/api/contacts'), {
@@ -32,7 +32,7 @@ export async function createStaffRecord(
 
 export async function updateStaffRecord(
   id: string,
-  data: Partial<Pick<Staff, 'name' | 'department' | 'email' | 'phone'>>
+  data: Partial<Pick<Staff, 'name' | 'companyName' | 'department' | 'email' | 'phone'>>
 ): Promise<Staff | null> {
   try {
     const response = await fetch(getApiUrl(`/api/contacts/${id}`), {

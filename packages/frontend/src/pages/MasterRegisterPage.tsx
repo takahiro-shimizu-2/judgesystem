@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { Box, Paper, Typography, Tabs, Tab, Chip } from '@mui/material';
 import { BusinessIcon, OrdererIcon, PersonIcon } from '../constants/icons';
@@ -41,13 +41,6 @@ export default function MasterRegisterPage() {
 
   const editMode = pageState?.editMode ?? false;
   const entityId = pageState?.entityId;
-
-  // 確認画面から戻った場合、タブを復元
-  useEffect(() => {
-    if (pageState?.activeTab !== undefined) {
-      setActiveTab(pageState.activeTab);
-    }
-  }, [pageState?.activeTab]);
 
   const handleTabChange = (_: React.SyntheticEvent, newValue: number) => {
     setActiveTab(newValue);

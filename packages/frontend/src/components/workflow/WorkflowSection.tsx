@@ -100,11 +100,11 @@ export function WorkflowSection({
   const statusColor = getWorkflowStatusColor(status);
   const statusBgColor = getWorkflowStatusBgColor(status);
 
-  const StatusIconComponent = () => {
-    if (isCompleted) return <CheckCircleIcon sx={{ ...iconStyles.medium, color: colors.workflow.completed.main }} />;
-    if (isLocked) return <LockIcon sx={{ ...iconStyles.small, color: colors.workflow.locked.main }} />;
-    return <PendingIcon sx={{ ...iconStyles.medium, color: colors.workflow.active.main }} />;
-  };
+  const statusIcon = isCompleted
+    ? <CheckCircleIcon sx={{ ...iconStyles.medium, color: colors.workflow.completed.main }} />
+    : isLocked
+      ? <LockIcon sx={{ ...iconStyles.small, color: colors.workflow.locked.main }} />
+      : <PendingIcon sx={{ ...iconStyles.medium, color: colors.workflow.active.main }} />;
 
   return (
     <Paper
@@ -146,7 +146,7 @@ export function WorkflowSection({
               <Typography sx={{ ...SECTION_STYLES.title, color: statusColor }}>
                 {title}
               </Typography>
-              <StatusIconComponent />
+              {statusIcon}
             </Box>
             {subLabel && <Typography sx={SECTION_STYLES.subLabel}>{subLabel}</Typography>}
           </Box>

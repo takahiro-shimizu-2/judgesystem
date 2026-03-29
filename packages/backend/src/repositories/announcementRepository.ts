@@ -66,6 +66,11 @@ export class AnnouncementRepository {
           COALESCE("workName", '') AS title,
           COALESCE("topAgencyName", '') AS organization,
           COALESCE(category, '') AS category,
+          COALESCE(category_segment, '') AS "categorySegment",
+          COALESCE(category_detail, '') AS "categoryDetail",
+          COALESCE(notice_category_name, '') AS "noticeCategoryName",
+          COALESCE(notice_category_code, '') AS "noticeCategoryCode",
+          COALESCE(notice_procurement_method, '') AS "noticeProcurementMethod",
           COALESCE("bidType", 'unknown') AS "bidType",
           COALESCE("workPlace", '') AS "workLocation",
           COALESCE("publishDate", '') AS "publishDate",
@@ -155,6 +160,24 @@ export class AnnouncementRepository {
           FROM ${schemaPrefix}announcements_competing_companies_master cc
           WHERE cc.announcement_id = $1
           GROUP BY cc.announcement_id
+        ),
+        submission_docs AS (
+          SELECT
+            announcement_no,
+            jsonb_agg(
+              jsonb_build_object(
+                'documentId', document_id,
+                'name', COALESCE(submission_document_name, ''),
+                'dateValue', CASE WHEN date_value IS NOT NULL THEN TO_CHAR(date_value, 'YYYY-MM-DD') ELSE NULL END,
+                'dateRaw', COALESCE(date_raw, ''),
+                'dateMeaning', COALESCE(date_meaning, ''),
+                'timepointType', COALESCE(timepoint_type, '')
+              )
+              ORDER BY date_value IS NULL, date_value, submission_document_name
+            ) AS submission_documents
+          FROM ${schemaPrefix}bid_announcements_dates
+          WHERE announcement_no = $1
+          GROUP BY announcement_no
         )
         SELECT
           CONCAT('ann-', a.announcement_no) AS id,
@@ -164,6 +187,8 @@ export class AnnouncementRepository {
           COALESCE(a."workName", '') AS title,
           COALESCE(a."topAgencyName", '') AS organization,
           COALESCE(a.category, '') AS category,
+          COALESCE(a.category_segment, '') AS "categorySegment",
+          COALESCE(a.category_detail, '') AS "categoryDetail",
           COALESCE(a."bidType", 'unknown') AS "bidType",
           COALESCE(a."workPlace", '') AS "workLocation",
 
@@ -186,6 +211,9 @@ export class AnnouncementRepository {
           COALESCE(a."bidStartDate", '') AS "bidStartDate",
           COALESCE(a."bidEndDate", '') AS "bidEndDate",
           COALESCE(a."bidEndDate", '') AS deadline,
+          COALESCE(a.notice_category_name, '') AS "noticeCategoryName",
+          COALESCE(a.notice_category_code, '') AS "noticeCategoryCode",
+          COALESCE(a.notice_procurement_method, '') AS "noticeProcurementMethod",
 
           -- ステータスを締切日から動的に計算（文字列比較で安全に）
           CASE
@@ -207,11 +235,13 @@ export class AnnouncementRepository {
 
           -- documents と competing_companies
           COALESCE(d.documents, '[]'::jsonb) AS documents,
-          COALESCE(cc.competing_companies, '[]'::jsonb) AS "competingCompanies"
+          COALESCE(cc.competing_companies, '[]'::jsonb) AS "competingCompanies",
+          COALESCE(sd.submission_documents, '[]'::jsonb) AS "submissionDocuments"
 
         FROM ${schemaPrefix}bid_announcements a
         LEFT JOIN documents_agg d ON d.announcement_id = a.announcement_no
         LEFT JOIN competing_companies_agg cc ON cc.announcement_id = a.announcement_no
+        LEFT JOIN submission_docs sd ON sd.announcement_no = a.announcement_no
         WHERE a.announcement_no = $1
         `,
         [announcementNo]
@@ -436,6 +466,18 @@ export class AnnouncementRepository {
       paramIndex++;
     }
 
+    if (filters.categorySegments && filters.categorySegments.length > 0) {
+      whereClauses.push(`category_segment = ANY($${paramIndex})`);
+      queryParams.push(filters.categorySegments);
+      paramIndex++;
+    }
+
+    if (filters.categoryDetails && filters.categoryDetails.length > 0) {
+      whereClauses.push(`category_detail = ANY($${paramIndex})`);
+      queryParams.push(filters.categoryDetails);
+      paramIndex++;
+    }
+
     if (filters.organizations && filters.organizations.length > 0) {
       whereClauses.push(`"topAgencyName" = ANY($${paramIndex})`);
       queryParams.push(filters.organizations);
@@ -455,7 +497,9 @@ export class AnnouncementRepository {
       whereClauses.push(
         `("workName" ILIKE $${paramIndex} OR ` +
         `"topAgencyName" ILIKE $${paramIndex} OR ` +
-        `category ILIKE $${paramIndex})`
+        `category ILIKE $${paramIndex} OR ` +
+        `category_segment ILIKE $${paramIndex} OR ` +
+        `category_detail ILIKE $${paramIndex})`
       );
       queryParams.push(`%${escapeLikePattern(filters.searchQuery)}%`);
       paramIndex++;

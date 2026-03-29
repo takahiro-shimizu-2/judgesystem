@@ -53,6 +53,7 @@ import { useSidebar } from '../contexts/SidebarContext';
 import type { PastProject } from '../types/partner';
 import type { BidType } from '../types/announcement';
 import type { EvaluationStatus, WorkStatus, CompanyPriority } from '../types';
+import type { PartnerListItem } from '../types/partner';
 import { getApiUrl } from '../config/api';
 
 // ソートオプション
@@ -919,7 +920,7 @@ export default function PartnerDetailPage() {
   const [conditionTab, setConditionTab] = useState<'sort' | 'filter'>('sort');
 
   // APIからデータ取得
-  const [partner, setPartner] = useState<any>(null);
+  const [partner, setPartner] = useState<PartnerListItem | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -941,7 +942,7 @@ export default function PartnerDetailPage() {
         if (!response.ok) {
           throw new Error(`Failed to fetch partner: ${response.status}`);
         }
-        const data = await response.json();
+        const data: PartnerListItem = await response.json();
         setPartner(data);
       } catch (err) {
         setError(err instanceof Error ? err.message : String(err));
@@ -1096,12 +1097,12 @@ export default function PartnerDetailPage() {
   }
 
   // データ構造の保証（デフォルト値設定）
-  const safePartner = {
+  const safePartner: PartnerListItem = {
     ...partner,
-    branches: partner.branches || [],
-    categories: partner.categories || [],
-    pastProjects: partner.pastProjects || [],
-    qualifications: partner.qualifications || { unified: [], orderers: [] },
+    branches: partner.branches ?? [],
+    categories: partner.categories ?? [],
+    pastProjects: partner.pastProjects ?? [],
+    qualifications: partner.qualifications ?? { unified: [], orderers: [] },
   };
 
   const ratingValue = safePartner.rating ?? 0;
@@ -1244,7 +1245,7 @@ export default function PartnerDetailPage() {
                         <Typography sx={{ fontSize: fontSizes.base, fontWeight: 600, color: colors.primary.main }}>拠点一覧 ({safePartner.branches.length})</Typography>
                       </AccordionSummary>
                       <AccordionDetails sx={{ pt: 2, pb: 2, px: 2.5 }}>
-                        {safePartner.branches.map((branch: any, index: number) => (
+                        {safePartner.branches.map((branch, index) => (
                           <Box key={index} sx={{ py: 1.25, borderBottom: index < safePartner.branches.length - 1 ? `1px solid ${colors.border.light}` : 'none' }}>
                             <Typography sx={{ fontWeight: 600, fontSize: fontSizes.md, color: colors.text.secondary }}>{branch.name}</Typography>
                             <Typography sx={{ fontSize: fontSizes.md, color: colors.text.muted }}>{branch.address}</Typography>
@@ -1361,7 +1362,7 @@ export default function PartnerDetailPage() {
                               <Typography sx={{ px: 1.5, py: 1, fontSize: fontSizes.xs, fontWeight: 600, color: colors.text.muted, textAlign: 'center' }}>等級</Typography>
                             </Box>
                             {/* テーブルボディ */}
-                            {safePartner.qualifications.unified.map((q: any, idx: number) => (
+                            {safePartner.qualifications.unified.map((q, idx) => (
                               <Box key={idx} sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr 100px 80px 70px', borderBottom: idx < safePartner.qualifications.unified.length - 1 ? `1px solid ${colors.border.light}` : 'none', '&:hover': { backgroundColor: 'rgba(0,0,0,0.02)' } }}>
                                 <Typography sx={{ px: 1.5, py: 1, fontSize: fontSizes.sm, color: colors.text.secondary }}>{q.mainCategory}</Typography>
                                 <Typography sx={{ px: 1.5, py: 1, fontSize: fontSizes.sm, color: colors.text.secondary }}>{q.category}</Typography>
@@ -1378,7 +1379,7 @@ export default function PartnerDetailPage() {
                           <Typography sx={{ color: colors.text.light, fontSize: fontSizes.sm }}>登録なし</Typography>
                         ) : (
                           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                            {safePartner.qualifications.orderers.map((orderer: any, idx: number) => (
+                            {safePartner.qualifications.orderers.map((orderer, idx) => (
                               <Box key={idx}>
                                 <Typography sx={{ fontSize: fontSizes.sm, fontWeight: 600, color: colors.text.secondary, mb: 1, pl: 1.5, borderLeft: `3px solid ${colors.accent.blue}` }}>{orderer.ordererName}</Typography>
                                 <Box sx={{ border: `1px solid ${colors.border.main}`, borderRadius: borderRadius.xs, overflow: 'hidden' }}>
@@ -1390,7 +1391,7 @@ export default function PartnerDetailPage() {
                                     <Typography sx={{ px: 1.5, py: 1, fontSize: fontSizes.xs, fontWeight: 600, color: colors.text.muted, textAlign: 'center' }}>等級</Typography>
                                   </Box>
                                   {/* テーブルボディ */}
-                                  {orderer.items.map((item: any, itemIdx: number) => (
+                                  {orderer.items.map((item, itemIdx) => (
                                     <Box key={itemIdx} sx={{ display: 'grid', gridTemplateColumns: '1fr 120px 80px 70px', borderBottom: itemIdx < orderer.items.length - 1 ? `1px solid ${colors.border.light}` : 'none', '&:hover': { backgroundColor: 'rgba(0,0,0,0.02)' } }}>
                                       <Typography sx={{ px: 1.5, py: 1, fontSize: fontSizes.sm, color: colors.text.secondary }}>{item.category}</Typography>
                                       <Typography sx={{ px: 1.5, py: 1, fontSize: fontSizes.sm, color: colors.text.muted }}>{item.region}</Typography>

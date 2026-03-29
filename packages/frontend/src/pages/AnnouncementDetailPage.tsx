@@ -1,6 +1,6 @@
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
-import { Box, Typography, Button, Paper, Tabs, Tab, Accordion, AccordionSummary, AccordionDetails, TextField, InputAdornment, IconButton, CircularProgress } from '@mui/material';
+import { Box, Typography, Button, Paper, Tabs, Tab, Accordion, AccordionSummary, AccordionDetails, TextField, InputAdornment, IconButton, CircularProgress, Chip } from '@mui/material';
 import {
   AccountBalance as OrdererIcon,
   LocationOn as LocationIcon,
@@ -37,7 +37,8 @@ import { NotFoundView, FloatingBackButton, ScrollToTopButton } from '../componen
 import { CustomPagination } from '../components/bid';
 import { RightSidePanel } from '../components/layout';
 import { useSidebar } from '../contexts/SidebarContext';
-import { formatAmountInManYen } from '../utils';
+import { getApiUrl } from '../config/api';
+import { formatAmountInManYen, buildScheduleFromSubmissionDocuments, buildFallbackScheduleFromAnnouncement, buildSubmissionDocumentDisplayItems } from '../utils';
 import type { BidType, AnnouncementStatus } from '../types/announcement';
 import type { EvaluationStatus, WorkStatus, CompanyPriority, Announcement as AnnouncementType, DocumentOcr } from '../types';
 
@@ -60,7 +61,25 @@ const resolveBidType = (bidType?: string | null): BidType => {
   }
   return 'unknown';
 };
-import { getApiUrl } from '../config/api';
+
+const formatCategoryLabel = (segment?: string, detail?: string, fallback?: string): string => {
+  if (segment && detail) return `${segment}／${detail}`;
+  if (segment) return segment;
+  if (detail) return detail;
+  return fallback || '未分類';
+};
+
+const getDocumentDisplayLabel = (doc: DocumentOcr, typeLabel?: string) => {
+  const normalizedTitle = doc.title?.trim();
+  if (normalizedTitle) {
+    return normalizedTitle;
+  }
+  const normalizedType = typeLabel?.trim();
+  if (normalizedType) {
+    return normalizedType;
+  }
+  return '資料';
+};
 
 // 関連案件用ソートオプション
 type SortOption = 'deadline_asc' | 'deadline_desc' | 'publish_asc' | 'publish_desc' | 'status_asc' | 'status_desc' | 'prefecture_asc' | 'prefecture_desc';
@@ -131,6 +150,19 @@ interface CompanyFilterState {
   priorities: (1 | 2 | 3 | 4 | 5)[];
 }
 
+interface RelatedAnnouncement {
+  id: string;
+  no?: number | string;
+  title: string;
+  category: string;
+  workLocation: string;
+  publishDate: string;
+  deadline: string;
+  status: AnnouncementStatus | string;
+  bidType?: string;
+  organization: string;
+}
+
 type ProgressingCompany = {
   companyId: string;
   companyName: string;
@@ -140,6 +172,17 @@ type ProgressingCompany = {
   workStatus: Extract<WorkStatus, 'in_progress' | 'completed'>;
   evaluationId: string;
   evaluationStatus: EvaluationStatus;
+};
+
+type ProgressingCompanyApiRow = {
+  companyId?: string | number | null;
+  companyName?: string | null;
+  branchId?: string | number | null;
+  branchName?: string | null;
+  priority?: number | null;
+  workStatus?: string | null;
+  evaluationId?: string | number | null;
+  evaluationStatus?: string | null;
 };
 
 // 参加可否オプション
@@ -180,6 +223,13 @@ const normalizePriority = (value: number): CompanyPriority => {
 
 const normalizeWorkStatus = (value: string): Extract<WorkStatus, 'in_progress' | 'completed'> => {
   return value === 'completed' ? 'completed' : 'in_progress';
+};
+
+const normalizeEvaluationStatus = (value: string): EvaluationStatus => {
+  if (value === 'all_met' || value === 'other_only_unmet' || value === 'unmet') {
+    return value;
+  }
+  return 'unmet';
 };
 
 // フィルターボタン
@@ -1322,6 +1372,7 @@ export default function AnnouncementDetailPage() {
   const [announcement, setAnnouncement] = useState<AnnouncementDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const announcementNo = announcement?.announcementNo;
   const [documentPreviewState, setDocumentPreviewState] = useState<Record<string, PreviewState>>({});
   const previewUrlRef = useRef<Record<string, string>>({});
   const documentPreviewStateRef = useRef<Record<string, PreviewState>>({});
@@ -1476,7 +1527,7 @@ export default function AnnouncementDetailPage() {
   }, [announcement?.documents, loadPdfPreview]);
 
   useEffect(() => {
-    if (!announcement || !announcement.announcementNo) {
+    if (!announcementNo) {
       setProgressingCompanies([]);
       return;
     }
@@ -1487,7 +1538,7 @@ export default function AnnouncementDetailPage() {
       setIsProgressingLoading(true);
       try {
         const response = await fetch(
-          getApiUrl(`/api/announcements/${announcement.announcementNo}/progressing-companies`)
+          getApiUrl(`/api/announcements/${announcementNo}/progressing-companies`)
         );
         if (!response.ok) {
           throw new Error(`Failed to fetch progressing companies: ${response.status}`);
@@ -1495,7 +1546,7 @@ export default function AnnouncementDetailPage() {
         const data = await response.json();
         if (isCancelled) return;
         const mapped = Array.isArray(data)
-          ? data.map((row: any) => ({
+          ? data.map((row: ProgressingCompanyApiRow) => ({
               companyId: String(row.companyId ?? ''),
               companyName: row.companyName ?? '',
               branchId: String(row.branchId ?? ''),
@@ -1503,7 +1554,7 @@ export default function AnnouncementDetailPage() {
               priority: normalizePriority(Number(row.priority ?? 1)),
               workStatus: normalizeWorkStatus(row.workStatus ?? ''),
               evaluationId: String(row.evaluationId ?? ''),
-              evaluationStatus: (row.evaluationStatus ?? 'unmet') as EvaluationStatus,
+              evaluationStatus: normalizeEvaluationStatus(row.evaluationStatus ?? ''),
             }))
           : [];
         setProgressingCompanies(mapped);
@@ -1524,7 +1575,7 @@ export default function AnnouncementDetailPage() {
     return () => {
       isCancelled = true;
     };
-  }, [announcement?.announcementNo]);
+  }, [announcementNo]);
 
   // サイドパネル制御
   const handleOpenWithTab = useCallback((tab: 'sort' | 'filter') => {
@@ -1548,12 +1599,12 @@ export default function AnnouncementDetailPage() {
 
   // 関連案件のベースデータ（メモ化）
   // TODO: 関連案件APIを実装後に復活
-  const baseRelatedAnnouncements = useMemo((): any[] => {
+  const baseRelatedAnnouncements = useMemo<RelatedAnnouncement[]>(() => {
     return [];
-  }, [announcement]);
+  }, []);
 
   // フィルタリング・ソート済み関連案件
-  const filteredRelatedAnnouncements = useMemo(() => {
+  const filteredRelatedAnnouncements = useMemo<RelatedAnnouncement[]>(() => {
     let filtered = baseRelatedAnnouncements;
 
     // 検索フィルター
@@ -1708,15 +1759,12 @@ export default function AnnouncementDetailPage() {
   const statusConfig = announcementStatusConfig[announcementStatus];
 
   // スケジュールデータ
-  const scheduleItems = [
-    { label: '公告日', date: announcement.publishDate },
-    { label: '説明書交付開始', date: announcement.explanationStartDate },
-    { label: '説明書交付終了', date: announcement.explanationEndDate },
-    { label: '申請受付開始', date: announcement.applicationStartDate },
-    { label: '申請受付終了', date: announcement.applicationEndDate },
-    { label: '入札開始', date: announcement.bidStartDate },
-    { label: '入札締切', date: announcement.bidEndDate, highlight: true },
-  ];
+  const derivedSchedule = buildScheduleFromSubmissionDocuments(announcement.submissionDocuments);
+  const fallbackSchedule = buildFallbackScheduleFromAnnouncement(announcement);
+  const scheduleItems = derivedSchedule.length > 0 ? derivedSchedule : fallbackSchedule;
+  const hasScheduleItems = scheduleItems.length > 0;
+  const submissionDocumentItems = buildSubmissionDocumentDisplayItems(announcement.submissionDocuments);
+  const hasSubmissionDocumentItems = submissionDocumentItems.length > 0;
 
   // タブインデックス計算用（資料タブが条件付きのため）
   const hasDocuments = announcement.documents && announcement.documents.length > 0;
@@ -1776,7 +1824,7 @@ export default function AnnouncementDetailPage() {
 
               {/* カテゴリ */}
               <Typography sx={{ fontSize: fontSizes.base, fontWeight: 700, color: colors.primary.dark }}>
-                {announcement.category}
+                {formatCategoryLabel(announcement.categorySegment, announcement.categoryDetail, announcement.category)}
               </Typography>
 
               <Typography sx={{ color: colors.border.dark }}>|</Typography>
@@ -1855,7 +1903,18 @@ export default function AnnouncementDetailPage() {
                       </AccordionSummary>
                       <AccordionDetails sx={{ pt: 2, pb: 2, px: 2.5 }}>
                         <InfoRow label="発注機関" value={announcement.organization} icon={<OrdererIcon sx={{ ...iconStyles.small, color: colors.text.light }} />} />
-                        <InfoRow label="工種" value={announcement.category} icon={<CategoryIcon sx={{ ...iconStyles.small, color: colors.text.light }} />} />
+                        <InfoRow
+                          label="工種"
+                          value={formatCategoryLabel(announcement.categorySegment, announcement.categoryDetail, announcement.category)}
+                          icon={<CategoryIcon sx={{ ...iconStyles.small, color: colors.text.light }} />}
+                        />
+                        {announcement.noticeProcurementMethod && (
+                          <InfoRow
+                            label="調達方式"
+                            value={announcement.noticeProcurementMethod}
+                            icon={<CategoryIcon sx={{ ...iconStyles.small, color: colors.text.light }} />}
+                          />
+                        )}
                         <InfoRow label="入札形式" value={bidTypeConfig[resolveBidType(announcement.bidType)].label} icon={<BidTypeIcon sx={{ ...iconStyles.small, color: colors.text.light }} />} />
                         <InfoRow label="履行場所" value={announcement.workLocation} icon={<LocationIcon sx={{ ...iconStyles.small, color: colors.text.light }} />} />
                         <InfoRow label="予想金額" value={formatAmountInManYen(announcement.estimatedAmountMin, announcement.estimatedAmountMax)} icon={<CurrencyYenIcon sx={{ ...iconStyles.small, color: colors.text.light }} />} />
@@ -1888,6 +1947,7 @@ export default function AnnouncementDetailPage() {
                             {announcement.documents.map((doc: DocumentOcr) => {
                               const typeConfig = getDocumentTypeConfig(doc.type || 'other');
                               const formatConfig = getFileFormatConfig(doc.fileFormat);
+                              const displayLabel = getDocumentDisplayLabel(doc, typeConfig.label);
                               return (
                                 <Button
                                   key={doc.id}
@@ -1900,7 +1960,7 @@ export default function AnnouncementDetailPage() {
                                   disabled={!doc.url}
                                   sx={{ borderRadius: borderRadius.xs, borderColor: formatConfig.color, color: doc.url ? formatConfig.color : colors.text.light, fontWeight: 500, fontSize: fontSizes.md, textTransform: 'none', justifyContent: 'space-between' }}
                                 >
-                                  {typeConfig.label}（{formatConfig.label}）
+                                  {displayLabel}（{formatConfig.label}）
                                 </Button>
                               );
                             })}
@@ -2014,29 +2074,92 @@ export default function AnnouncementDetailPage() {
                         <Typography sx={{ fontSize: fontSizes.base, fontWeight: 600, color: colors.primary.main }}>スケジュール</Typography>
                       </AccordionSummary>
                       <AccordionDetails sx={{ pt: 1, pb: 0, px: 0 }}>
-                        {scheduleItems.map((item, index) => (
+                        {!hasScheduleItems && (
+                          <Typography sx={{ fontSize: fontSizes.sm, color: colors.text.light, px: 2.5, py: 1.25 }}>
+                            スケジュール情報はありません。
+                          </Typography>
+                        )}
+                        {hasScheduleItems && scheduleItems.map((item, index) => (
                           <Box
-                            key={item.label}
+                            key={item.id}
                             sx={{
                               display: 'flex',
                               justifyContent: 'space-between',
-                              alignItems: 'center',
+                              alignItems: 'flex-start',
+                              gap: 2,
                               px: 2.5,
                               py: 1.25,
                               borderBottom: index < scheduleItems.length - 1 ? `1px solid ${colors.border.light}` : 'none',
-                              backgroundColor: item.highlight ? colors.status.info.bg : 'transparent',
+                              backgroundColor: item.isDeadline ? colors.status.info.bg : 'transparent',
                             }}
                           >
-                            <Typography sx={{ fontSize: fontSizes.md, color: item.highlight ? colors.primary.main : colors.text.muted, fontWeight: item.highlight ? 600 : 400 }}>
-                              {item.label}
-                            </Typography>
-                            <Typography sx={{ fontSize: fontSizes.md, color: item.highlight ? colors.primary.main : colors.text.secondary, fontWeight: item.highlight ? 700 : 500 }}>
-                              {item.date}
+                            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, flex: 1, minWidth: 0 }}>
+                              <Typography sx={{ fontSize: fontSizes.md, color: item.isDeadline ? colors.primary.main : colors.text.muted, fontWeight: item.isDeadline ? 600 : 500 }}>
+                                {item.meaning || item.label}
+                              </Typography>
+                              {item.documentName && (
+                                <Typography sx={{ fontSize: fontSizes.xs, color: colors.text.light }}>
+                                  書類: {item.documentName}
+                                </Typography>
+                              )}
+                            </Box>
+                            <Typography sx={{ fontSize: fontSizes.md, color: item.isDeadline ? colors.primary.main : colors.text.secondary, fontWeight: item.isDeadline ? 700 : 500, whiteSpace: 'nowrap' }}>
+                              {item.dateText}
                             </Typography>
                           </Box>
                         ))}
                       </AccordionDetails>
                     </Accordion>
+                    {hasSubmissionDocumentItems && (
+                      <Accordion
+                        defaultExpanded
+                        sx={{ boxShadow: 'none', border: `1px solid ${colors.border.main}`, borderRadius: `${borderRadius.xs} !important`, '&:before': { display: 'none' }, '&.Mui-expanded': { margin: 0 } }}
+                      >
+                        <AccordionSummary expandIcon={<ExpandMoreIcon />} sx={{ minHeight: 48, borderBottom: `1px solid ${colors.border.main}`, '&.Mui-expanded': { minHeight: 48 } }}>
+                          <Typography sx={{ fontSize: fontSizes.base, fontWeight: 600, color: colors.primary.main }}>提出書類と期日</Typography>
+                        </AccordionSummary>
+                        <AccordionDetails sx={{ pt: 1, pb: 0, px: 0 }}>
+                          {submissionDocumentItems.map((item, index) => (
+                            <Box
+                              key={item.id}
+                              sx={{
+                                display: 'flex',
+                                flexDirection: 'column',
+                                gap: 0.5,
+                                px: 2.5,
+                                py: 1.25,
+                                borderBottom: index < submissionDocumentItems.length - 1 ? `1px solid ${colors.border.light}` : 'none',
+                              }}
+                            >
+                              <Typography sx={{ fontSize: fontSizes.md, fontWeight: 600, color: colors.text.primary }}>
+                                {item.documentName || '提出書類'}
+                              </Typography>
+                              {item.meaning && (
+                                <Typography sx={{ fontSize: fontSizes.xs, color: colors.text.light }}>
+                                  {item.meaning}
+                                </Typography>
+                              )}
+                              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 1 }}>
+                                <Typography sx={{ fontSize: fontSizes.sm, color: colors.text.secondary }}>
+                                  {item.type === 'range' ? '期間' : '期日'}: {item.dateText}
+                                </Typography>
+                                <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
+                                  <Chip size="small" label={item.type === 'range' ? '期間' : '単日'} sx={{ height: 20, fontSize: fontSizes.xs }} />
+                                  {item.documentIds.map((docId) => (
+                                    <Chip
+                                      key={`${item.id}-${docId}`}
+                                      size="small"
+                                      label={`ID: ${docId}`}
+                                      sx={{ height: 20, fontSize: fontSizes.xs, color: colors.text.light }}
+                                    />
+                                  ))}
+                                </Box>
+                              </Box>
+                            </Box>
+                          ))}
+                        </AccordionDetails>
+                      </Accordion>
+                    )}
                   </Box>
                 </Box>
               </Box>
@@ -2214,6 +2337,7 @@ export default function AnnouncementDetailPage() {
                 {announcement.documents.map((doc: DocumentOcr, index: number) => {
                   const typeConfig = getDocumentTypeConfig(doc.type || 'other');
                   const formatConfig = getFileFormatConfig(doc.fileFormat);
+                  const displayLabel = getDocumentDisplayLabel(doc, typeConfig.label);
                   const isPdfDocument = doc.fileFormat && doc.fileFormat.toLowerCase() === 'pdf';
                   const docId = doc.id;
                   const docKey = String(docId);
@@ -2250,7 +2374,7 @@ export default function AnnouncementDetailPage() {
                         }}
                       >
                         <TextSnippetIcon sx={{ ...iconStyles.medium, color: colors.text.light }} />
-                        <Typography sx={{ fontSize: fontSizes.md, fontWeight: 600, color: colors.text.secondary }}>{doc.title}</Typography>
+                        <Typography sx={{ fontSize: fontSizes.md, fontWeight: 600, color: colors.text.secondary }}>{displayLabel}</Typography>
                         <Typography sx={{ fontSize: fontSizes.md, fontWeight: 600, color: typeConfig.color, backgroundColor: typeConfig.bgColor, px: 1, py: 0.25, borderRadius: '2px' }}>
                           {typeConfig.label}
                         </Typography>
@@ -2320,7 +2444,7 @@ export default function AnnouncementDetailPage() {
                             ) : previewUrl ? (
                               <Box
                                 component="iframe"
-                                title={`${doc.title} プレビュー`}
+                                title={`${displayLabel} プレビュー`}
                                 src={previewUrl}
                                 sx={{
                                   width: '100%',

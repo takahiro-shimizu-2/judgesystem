@@ -49,6 +49,22 @@ export interface PartnerDocument {
   name: string;
   type: DocumentFlowType;
   date?: string;
+  uploadedAt?: string;
+  fileName?: string;
+  contentType?: string;
+  size?: number;
+  fileId?: string;
+}
+
+export interface PartnerWorkflowEntry {
+  callMemos: WorkflowRecordMemo[];
+  receivedDocuments: PartnerDocument[];
+  transcriptions: WorkflowTranscription[];
+}
+
+export interface PartnerWorkflowState {
+  sentDocuments: PartnerDocument[];
+  partners: Record<string, PartnerWorkflowEntry>;
 }
 
 /** 事前提出資料 */
@@ -140,6 +156,16 @@ export interface Partner {
   surveyApproved: boolean;   // 現地調査OK
   receivedDocuments: PartnerReceivedDocument[]; // 受信資料
   assignedStaffId?: string;  // 担当者ID
+}
+
+/** 協力会社候補追加時の入力 */
+export interface PartnerCandidatePayload {
+  partnerId: string;
+  partnerName: string;
+  contactPerson?: string;
+  phone?: string;
+  email?: string;
+  fax?: string;
 }
 
 // ============================================================================

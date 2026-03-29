@@ -48,7 +48,6 @@ const VALID_MEMO_TAGS: WorkflowMemoTag[] = [
 
 export class EvaluationOrdererWorkflowRepository {
   private readonly tableName = `${schemaPrefix}${TABLES.evaluationOrdererWorkflowStates}`;
-  private ensureTablePromise: Promise<void> | null = null;
 
   private createEmptyState(): OrdererWorkflowState {
     return {
@@ -68,22 +67,6 @@ export class EvaluationOrdererWorkflowRepository {
     } finally {
       client?.release();
     }
-  }
-
-  private async ensureTable(): Promise<void> {
-    if (!this.ensureTablePromise) {
-      this.ensureTablePromise = this.query(
-        `
-        CREATE TABLE IF NOT EXISTS ${this.tableName} (
-          evaluation_no TEXT PRIMARY KEY,
-          state JSONB NOT NULL DEFAULT '{}'::jsonb,
-          "updatedAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
-        )
-        `
-      ).then(() => undefined);
-    }
-
-    return this.ensureTablePromise;
   }
 
   private normalizeString(value: unknown): string | undefined {
@@ -174,8 +157,6 @@ export class EvaluationOrdererWorkflowRepository {
   }
 
   async findByEvaluation(evaluationNo: string): Promise<OrdererWorkflowState> {
-    await this.ensureTable();
-
     const rows = await this.query<{ state: unknown }>(
       `
       SELECT state
@@ -193,17 +174,15 @@ export class EvaluationOrdererWorkflowRepository {
   }
 
   async upsert(evaluationNo: string, state: OrdererWorkflowState): Promise<OrdererWorkflowState> {
-    await this.ensureTable();
-
     const normalizedState = this.normalizeState(state);
     const rows = await this.query<{ state: unknown }>(
       `
-      INSERT INTO ${this.tableName} (evaluation_no, state, "updatedAt")
+      INSERT INTO ${this.tableName} (evaluation_no, state, updated_at)
       VALUES ($1, $2::jsonb, NOW())
       ON CONFLICT (evaluation_no)
       DO UPDATE SET
         state = EXCLUDED.state,
-        "updatedAt" = NOW()
+        updated_at = NOW()
       RETURNING state
       `,
       [evaluationNo, JSON.stringify(normalizedState)]

@@ -124,21 +124,23 @@ export function AwardSection({ evaluation, partners = [], workflowAssigneeId }: 
   // 案件情報
   const projectName = evaluation?.announcement?.title || '';
   const requesterCompany = evaluation?.company;
+  const requesterCompanyId = requesterCompany?.id;
   // 依頼元企業の詳細情報を取得（非同期）
   const [requesterCompanyDetails, setRequesterCompanyDetails] = useState<CompanyWithDetails | undefined>(undefined);
 
   useEffect(() => {
-    if (!requesterCompany) return;
+    if (!requesterCompanyId) return;
     let isMounted = true;
     fetchCompanyList().then((list) => {
-      if (isMounted) setRequesterCompanyDetails(list.find(c => c.id === requesterCompany.id));
+      if (isMounted) setRequesterCompanyDetails(list.find(c => c.id === requesterCompanyId));
     });
     return () => { isMounted = false; };
-  }, [requesterCompany?.id]);
+  }, [requesterCompanyId]);
 
   // 自社情報（実際はログイン企業情報から取得）
-  const myCompanyName = '株式会社サンプル建設';
-  const myName = '田中一郎';
+  const defaultCompanyName = evaluation?.company?.name || '（自社名）';
+  const myCompanyName = defaultCompanyName;
+  const myNameFallback = '担当者';
 
   type AnnouncementWithExtras = Announcement & {
     actualAmount?: number;
@@ -148,7 +150,10 @@ export function AwardSection({ evaluation, partners = [], workflowAssigneeId }: 
 
   const announcementExtras = evaluation?.announcement as AnnouncementWithExtras | undefined;
 
-  const competingCompanies = announcementExtras?.competingCompanies ?? [];
+  const competingCompanies = useMemo(
+    () => announcementExtras?.competingCompanies ?? [],
+    [announcementExtras?.competingCompanies]
+  );
 
   const participants: ParticipantCompany[] = useMemo(() => {
     return competingCompanies.map((company: CompetingCompany, index: number) => {
@@ -190,35 +195,32 @@ export function AwardSection({ evaluation, partners = [], workflowAssigneeId }: 
   const [editedBody, setEditedBody] = useState<string | null>(null);
 
   // 送信先カテゴリ×テンプレートごとの担当者 (key: `${category}-${templateId}`)
-  const [templateAssignees, setTemplateAssignees] = useState<Record<string, string>>({});
+  const [manualTemplateAssignees, setManualTemplateAssignees] = useState<Record<string, string>>({});
   const getAssigneeKey = (category: RecipientCategory, templateId: string) => `${category}-${templateId}`;
   const handleTemplateAssigneeChange = (staffId: string) => {
     const key = getAssigneeKey(recipientCategory, selectedTemplateId);
-    setTemplateAssignees((prev) => ({ ...prev, [key]: staffId }));
+    setManualTemplateAssignees((prev) => ({ ...prev, [key]: staffId }));
   };
-  const currentAssignee = templateAssignees[getAssigneeKey(recipientCategory, selectedTemplateId)] || '';
-
-  // ワークフロー担当者が変更されたら、空の担当者欄を自動で埋める
-  useEffect(() => {
-    if (!workflowAssigneeId) return;
-
-    // すべての送信先カテゴリ×テンプレートの組み合わせの空のところを更新
+  const templateAssignees = useMemo(() => {
     const categories: RecipientCategory[] = ['requester', 'adopted_partner'];
     const templateIds = awardEmailTemplates.map(t => t.id);
-
-    setTemplateAssignees((prev) => {
-      const updated = { ...prev };
+    const filled = { ...manualTemplateAssignees };
+    if (workflowAssigneeId) {
       categories.forEach((category) => {
         templateIds.forEach((templateId) => {
           const key = getAssigneeKey(category, templateId);
-          if (!updated[key]) {
-            updated[key] = workflowAssigneeId;
+          if (filled[key] === undefined) {
+            filled[key] = workflowAssigneeId;
           }
         });
       });
-      return updated;
-    });
-  }, [workflowAssigneeId]);
+    }
+    return filled;
+  }, [manualTemplateAssignees, workflowAssigneeId]);
+  const currentAssignee = templateAssignees[getAssigneeKey(recipientCategory, selectedTemplateId)] || '';
+  const currentStaffMember = currentAssignee ? findById(currentAssignee) : undefined;
+  const myName = currentStaffMember?.name || myNameFallback;
+  const effectiveCompanyName = currentStaffMember?.companyName || myCompanyName;
 
   // テンプレートフィルター
   const getFilteredTemplates = (): EmailTemplate[] => {
@@ -270,7 +272,7 @@ export function AwardSection({ evaluation, partners = [], workflowAssigneeId }: 
     // 利用可能な情報は常に置換（送信先が選択されていなくても）
     const data: Record<string, string> = {
       '案件名': projectName,
-      '自社名': myCompanyName,
+      '自社名': effectiveCompanyName,
       '自社担当者': myName,
       '企業名': selectedRecipient?.name || requesterCompany?.name || '',
       '担当者名': selectedRecipient?.contactPerson || requesterCompanyDetails?.representative || '',

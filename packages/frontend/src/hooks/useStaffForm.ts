@@ -3,6 +3,7 @@ import { validationRules } from '../constants/formStyles';
 
 export interface StaffFormData {
   name: string;
+  companyName: string;
   department: string;
   email: string;
   phone: string;
@@ -10,6 +11,7 @@ export interface StaffFormData {
 
 const initialFormData: StaffFormData = {
   name: '',
+  companyName: '',
   department: '',
   email: '',
   phone: '',
@@ -33,6 +35,8 @@ export function useStaffForm() {
   const validateField = useCallback((field: keyof StaffFormData, value: string): string | undefined => {
     switch (field) {
       case 'name':
+        return validationRules.required(value);
+      case 'companyName':
         return validationRules.required(value);
       case 'department':
         return validationRules.required(value);

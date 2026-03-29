@@ -5,7 +5,8 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import type { GridFilterModel, GridSortModel, GridPaginationModel } from '@mui/x-data-grid';
 import { extractPrefecture } from '../constants/prefectures';
-import type { EvaluationStatus, FilterState } from '../types';
+import type { EvaluationStatus, FilterState, CompanyPriority, WorkStatus } from '../types';
+import type { BidType } from '../types/announcement';
 import { getApiUrl } from '../config/api';
 
 // ナビゲーション追跡用のsessionStorageキー
@@ -26,9 +27,13 @@ const DEFAULT_FILTERS: FilterState = {
   workStatuses: [],
   priorities: [],
   categories: [],
+  categorySegments: [],
+  categoryDetails: [],
   bidTypes: [],
   organizations: [],
   prefectures: [],
+  companyBranches: [],
+  companyBranchLabel: null,
 };
 
 const DEFAULT_SORT: GridSortModel = [];
@@ -38,6 +43,52 @@ const DEFAULT_STATUS_COUNTS: Record<EvaluationStatus, number> = {
   other_only_unmet: 0,
   unmet: 0,
 };
+
+interface EvaluationListApiItem {
+  id: string;
+  evaluationNo: string;
+  status: EvaluationStatus;
+  workStatus: WorkStatus;
+  evaluatedAt?: string | null;
+  company?: {
+    name?: string;
+    priority?: CompanyPriority;
+  };
+  branch?: {
+    name?: string;
+  };
+  announcement?: {
+    title?: string;
+    organization?: string;
+    category?: string;
+    categorySegment?: string | null;
+    categoryDetail?: string | null;
+    bidType?: BidType | null;
+    deadline?: string;
+    workLocation?: string;
+  };
+}
+
+interface BidListRow {
+  id: string;
+  evaluationNo: string;
+  status: EvaluationStatus;
+  workStatus: WorkStatus;
+  priority: CompanyPriority;
+  title: string;
+  company: string;
+  branch: string;
+  organization: string;
+  category: string;
+  categorySegment?: string;
+  categoryDetail?: string;
+  bidType?: BidType;
+  deadline: string;
+  evaluatedAt: string;
+  prefecture: string;
+}
+
+const DEFAULT_PRIORITY = 3 as CompanyPriority;
 
 /**
  * localStorage から安全に値を読み込む
@@ -85,6 +136,7 @@ function appendFilterParams(
   options?: { includeStatuses?: boolean }
 ) {
   const includeStatuses = options?.includeStatuses ?? true;
+  const hasCategoryDetails = filters.categoryDetails.length > 0;
 
   if (includeStatuses && filters.statuses.length > 0) {
     filters.statuses.forEach(s => queryParams.append('statuses', s));
@@ -95,8 +147,14 @@ function appendFilterParams(
   if (filters.priorities.length > 0) {
     filters.priorities.forEach(s => queryParams.append('priorities', s.toString()));
   }
-  if (filters.categories.length > 0) {
+  if (filters.categorySegments.length > 0) {
+    filters.categorySegments.forEach(s => queryParams.append('categorySegments', s));
+  }
+  if (!hasCategoryDetails && filters.categories.length > 0) {
     filters.categories.forEach(s => queryParams.append('categories', s));
+  }
+  if (hasCategoryDetails) {
+    filters.categoryDetails.forEach(s => queryParams.append('categoryDetails', s));
   }
   if (filters.bidTypes.length > 0) {
     filters.bidTypes.forEach(s => queryParams.append('bidTypes', s));
@@ -107,6 +165,9 @@ function appendFilterParams(
   if (filters.prefectures.length > 0) {
     filters.prefectures.forEach(s => queryParams.append('prefectures', s));
   }
+  if (filters.companyBranches && filters.companyBranches.length > 0) {
+    filters.companyBranches.forEach((id) => queryParams.append('officeIds', id));
+  }
 }
 
 async function fetchEvaluations(params: {
@@ -115,7 +176,7 @@ async function fetchEvaluations(params: {
   filters: FilterState;
   searchQuery: string;
   sortModel: GridSortModel;
-}): Promise<{ data: any[]; total: number }> {
+}): Promise<{ data: EvaluationListApiItem[]; total: number }> {
   const { page, pageSize, filters, searchQuery, sortModel } = params;
 
   // クエリパラメータを構築
@@ -187,7 +248,6 @@ export function useBidListState() {
   // カスタムフィルター（ステータス/優先順位/工種/発注機関）
   const [filters, setFilters] = useState<FilterState>(() => {
     const saved = loadFromStorage<Partial<FilterState>>(STORAGE_KEYS.FILTERS, {});
-    // 古い保存データに新しいプロパティがない場合に備えてマージ
     return { ...DEFAULT_FILTERS, ...saved };
   });
 
@@ -215,7 +275,7 @@ export function useBidListState() {
   const [showFilterModal, setShowFilterModal] = useState(false);
 
   // API状態
-  const [rows, setRows] = useState<any[]>([]);
+  const [rows, setRows] = useState<BidListRow[]>([]);
   const [totalCount, setTotalCount] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -298,21 +358,23 @@ export function useBidListState() {
             throw new Error('Invalid API response: data is not an array');
           }
 
-          const mapped = result.data.map((e: any) => ({
-            id: e.id,
-            evaluationNo: e.evaluationNo,
-            status: e.status,
-            workStatus: e.workStatus,
-            priority: e.company?.priority || 0,
-            title: e.announcement?.title || '',
-            company: e.company?.name || '',
-            branch: e.branch?.name || '',
-            organization: e.announcement?.organization || '',
-            category: e.announcement?.category || '',
-            bidType: e.announcement?.bidType,
-            deadline: e.announcement?.deadline || '',
-            evaluatedAt: e.evaluatedAt ? e.evaluatedAt.substring(0, 10) : '',
-            prefecture: extractPrefecture(e.announcement?.workLocation || '') ?? '',
+          const mapped: BidListRow[] = result.data.map((item) => ({
+            id: item.id,
+            evaluationNo: item.evaluationNo,
+            status: item.status,
+            workStatus: item.workStatus,
+            priority: item.company?.priority ?? DEFAULT_PRIORITY,
+            title: item.announcement?.title ?? '',
+            company: item.company?.name ?? '',
+            branch: item.branch?.name ?? '',
+            organization: item.announcement?.organization ?? '',
+            category: item.announcement?.category ?? '',
+            categorySegment: item.announcement?.categorySegment ?? '',
+            categoryDetail: item.announcement?.categoryDetail ?? '',
+            bidType: item.announcement?.bidType ? item.announcement.bidType as BidType : undefined,
+            deadline: item.announcement?.deadline ?? '',
+            evaluatedAt: item.evaluatedAt ? item.evaluatedAt.substring(0, 10) : '',
+            prefecture: extractPrefecture(item.announcement?.workLocation || '') ?? '',
           }));
 
           setRows(mapped);
@@ -363,14 +425,20 @@ export function useBidListState() {
   }, [filters, searchQuery]);
 
   // フィルター件数
+  const categoryDetailCount = filters.categoryDetails.length > 0
+    ? filters.categoryDetails.length
+    : filters.categories.length;
+
   const activeFilterCount =
     filters.statuses.length +
     filters.workStatuses.length +
     filters.priorities.length +
-    filters.categories.length +
+    filters.categorySegments.length +
+    categoryDetailCount +
     filters.bidTypes.length +
     filters.organizations.length +
-    filters.prefectures.length;
+    filters.prefectures.length +
+    filters.companyBranches.length;
 
   const columnFilterCount = gridFilterModel.items.filter(
     item => item.value

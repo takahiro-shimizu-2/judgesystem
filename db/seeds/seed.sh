@@ -37,6 +37,7 @@ cat >> "$SCRIPT" << 'SQL'
 TRUNCATE
   company_master,
   office_master,
+  office_work_achivements_master,
   partners_master,
   partners_categories,
   partners_branches,
@@ -46,10 +47,13 @@ TRUNCATE
   partners_past_projects,
   announcements_competing_companies_master,
   announcements_competing_company_bids_master,
+  announcements_estimated_amounts,
   agency_master,
   construction_master,
   technician_qualification_master,
-  office_registration_authorization_master
+  office_registration_authorization_master,
+  similar_cases_master,
+  similar_cases_competitors
 CASCADE;
 SQL
 
@@ -120,6 +124,9 @@ load_data "$MASTER_DIR/announcements_competing_companies_master.txt" \
 load_data "$MASTER_DIR/announcements_competing_company_bids_master.txt" \
   'announcements_competing_company_bids_master(announcement_id, company_name, bid_order, bid_amount)'
 
+load_data "$MASTER_DIR/announcements_estimated_amounts.txt" \
+  'announcements_estimated_amounts(announcement_no, estimated_amount_min, estimated_amount_max)'
+
 load_data "$MASTER_DIR/agency_master.txt" \
   'agency_master(agency_no, agency_name, parent_agency_no, agency_level, sort_order, agency_area, official_url, remarks, created_at, updated_at)'
 
@@ -131,6 +138,15 @@ load_data "$MASTER_DIR/technician_qualification_master.txt" \
 
 load_data "$MASTER_DIR/office_registration_authorization_master.txt" \
   'office_registration_authorization_master(office_no, office_registration_no, agency_no, construction_no, license_grade, license_score, status, registered_date, expiration_date, is_suspended, remarks, created_at, updated_at)'
+
+load_data "$MASTER_DIR/office_work_achivements_master.txt" \
+  'office_work_achivements_master(office_experience_no, office_no, agency_no, construction_no, project_name, contractor_layer, start_date, completion_date, final_score, total_amount, is_jv_flag, jv_ratio, remarks)'
+
+load_data "$MASTER_DIR/similar_cases_master.txt" \
+  'similar_cases_master(announcement_id, similar_case_announcement_id, case_name, winning_company, winning_amount)'
+
+load_data "$MASTER_DIR/similar_cases_competitors.txt" \
+  'similar_cases_competitors(similar_case_announcement_id, competitor_name)'
 
 echo "COMMIT;" >> "$SCRIPT"
 

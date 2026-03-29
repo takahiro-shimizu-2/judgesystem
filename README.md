@@ -94,6 +94,12 @@ python -m packages.engine.main --bid_announcements_pre_file data/bid_announcemen
 
 ## 資料類
 
+### 入札リストの取り扱い
+
+- `data/urllist/list_mod_bid.txt` は全公告元ページの一覧で、`index` 列が各ページを識別する固定IDです。処理全体（HTML取得→リンク抽出→DB登録→PDF命名）でこの `index` を用いるため、ファイルを編集する際は行の入れ替えや番号の詰め替えを行わないでください。
+- Vertex AI などのAPI負荷を分散するため、`list_mod_bid_1_2.txt` / `list_mod_bid_2_2.txt` のように同じ `index` を保持したまま分割したファイルを入力しても問題ありません。分割実行する場合は、それぞれ同じDB/出力先に対して順番に step0 を回すと、単一ファイルを処理した場合と同じ結果が得られます。
+- 西部方面隊など 404 が続くページは、`config/step0_skip_indices.json` もしくは環境変数 `STEP0_SKIP_INDICES` で除外できます。デフォルトは `[51,52,53,54,55,56,57,58]` になっており、必要に応じて編集してください。
+
 ### スクリプト資料
 
 pdoc で作成できます。作成ファイルはレポジトリには登録していませんので、pdoc で作成してください。

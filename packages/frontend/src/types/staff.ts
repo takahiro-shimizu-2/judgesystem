@@ -7,6 +7,7 @@ export interface Staff {
   id: string;
   no: number;
   name: string;           // 氏名
+  companyName: string;    // 会社名
   department: string;     // 部署
   email: string;          // メールアドレス
   phone: string;          // 電話番号

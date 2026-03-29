@@ -1,0 +1,60 @@
+index	Unnamed: 0	Unnamed: 1	Unnamed: 2	区分	入札公告（現在募集中）	備考	落札情報（過去）	備考.1
+0	内部部局	不明		建設工事	現在掲載なし（リンクなし）		現在掲載なし（リンクなし）	
+1	内部部局	不明		建設関連業務	https://www.mod.go.jp/j/budget/chotatsu/naikyoku/consul/gyomu.html		https://www.mod.go.jp/j/budget/chotatsu/naikyoku/consul/kekka_gyomu.html	
+2	内部部局	大臣官房 会計課		一般競争入札（政府調達）	https://www.mod.go.jp/j/budget/chotatsu/naikyoku/nyuusatu_seifu/index.html		https://www.mod.go.jp/j/budget/chotatsu/naikyoku/consul/kekka_gyomu.html	
+3	内部部局	大臣官房 会計課		一般競争入札（政府調達以外）	https://www.mod.go.jp/j/budget/chotatsu/naikyoku/nyuusatu/index.html		https://www.mod.go.jp/j/budget/chotatsu/naikyoku/keiyaku/index.html	
+4	内部部局	大臣官房 会計課		オープンカウンター方式	https://www.mod.go.jp/j/budget/chotatsu/naikyoku/mitsumori/index.html	「依頼中の案件」に記載	https://www.mod.go.jp/j/budget/chotatsu/naikyoku/mitsumori/index.html        	見積合せ（随意契約）結果に掲載
+5	内部部局	大臣官房 会計課		公募	https://www.mod.go.jp/j/budget/chotatsu/naikyoku/koubo/index.html		https://www.mod.go.jp/j/budget/chotatsu/naikyoku/index.html	「低入札価格調査」に記載
+6	内部部局	人事教育局 厚生課		業者の募集（福利厚生施設関連）	https://www.mod.go.jp/j/budget/chotatsu/naikyoku/boshu/index.html			
+7	内部部局	地方協力局 在日米軍協力課		実弾射撃訓練の移転に伴う輸送等役務			https://www.mod.go.jp/j/budget/chotatsu/naikyoku/iten/index.html	
+8	陸上自衛隊	北部方面	会計隊	入札公告	https://www.mod.go.jp/gsdf/nae/fin/nafin/infonafinR6.htm		https://www.mod.go.jp/gsdf/nae/fin/nafin/infonafinR6.htm	備考欄に「結　果」と記載あり
+9	陸上自衛隊	北部方面		オープンカウンター	https://www.mod.go.jp/gsdf/nae/fin/nafin/openkauntaR6-.htm		https://www.mod.go.jp/gsdf/nae/fin/nafin/r5kensetukouzihattyuuzisseki.htm	工事実績
+10	陸上自衛隊	北部方面					https://www.mod.go.jp/gsdf/nae/fin/nafin/infonafinR5.htm	前年度入札結果
+11	陸上自衛隊	北部方面					https://www.mod.go.jp/gsdf/nae/fin/nafin/ppR5.htm	公共調達前年度分
+12	陸上自衛隊	東北方面	会計隊	公共調達			https://www.mod.go.jp/gsdf/nae/fin/nafin/ppR6.htm	月別
+13	陸上自衛隊	東北方面		物品（R7）	https://www.mod.go.jp/gsdf/neae/koukoku/fin/gaiyou7-1.htm		https://www.mod.go.jp/gsdf/neae/koukoku/fin/gaiyou7-1.htm	
+14	陸上自衛隊	東北方面		工事（R7）	https://www.mod.go.jp/gsdf/neae/koukoku/fin/gaiyou7-2.htm		https://www.mod.go.jp/gsdf/neae/koukoku/fin/gaiyou7-2.htm	
+15	陸上自衛隊	東北方面		役務（R7）	https://www.mod.go.jp/gsdf/neae/koukoku/fin/gaiyou7-3.htm		https://www.mod.go.jp/gsdf/neae/koukoku/fin/gaiyou7-3.htm	
+16	陸上自衛隊	東北方面		売払（R7）	https://www.mod.go.jp/gsdf/neae/koukoku/fin/gaiyou7-4.htm		https://www.mod.go.jp/gsdf/neae/koukoku/fin/gaiyou7-4.htm	
+17	陸上自衛隊	東北方面		糧食（R7）	https://www.mod.go.jp/gsdf/neae/koukoku/fin/gaiyou7-5.htm		https://www.mod.go.jp/gsdf/neae/koukoku/fin/gaiyou7-5.htm	
+18	陸上自衛隊	東北方面		オープンカウンター	https://www.mod.go.jp/gsdf/neae/koukoku/fin/opencounter7.htm		https://www.mod.go.jp/gsdf/neae/koukoku/fin/opencounter7.htm	会計隊別
+19	陸上自衛隊	東北方面		物品（R6）	https://www.mod.go.jp/gsdf/neae/koukoku/fin/gaiyou6-1.htm		https://www.mod.go.jp/gsdf/neae/koukoku/fin/gaiyou6-1.htm	備考欄に結果と記載あり
+20	陸上自衛隊	東北方面		工事（R6）	https://www.mod.go.jp/gsdf/neae/koukoku/fin/gaiyou6-2.htm		https://www.mod.go.jp/gsdf/neae/koukoku/fin/gaiyou6-2.htm	〃
+21	陸上自衛隊	東北方面		役務（R6）	https://www.mod.go.jp/gsdf/neae/koukoku/fin/gaiyou6-3.htm		https://www.mod.go.jp/gsdf/neae/koukoku/fin/gaiyou6-3.htm	〃
+22	陸上自衛隊	東北方面		売払（R6）	https://www.mod.go.jp/gsdf/neae/koukoku/fin/gaiyou6-4.htm		https://www.mod.go.jp/gsdf/neae/koukoku/fin/gaiyou6-4.htm	〃
+23	陸上自衛隊	東北方面		糧食（R6）	https://www.mod.go.jp/gsdf/neae/koukoku/fin/gaiyou6-5.htm		https://www.mod.go.jp/gsdf/neae/koukoku/fin/gaiyou6-5.htm	〃
+24	陸上自衛隊	東北方面		オープンカウンター（R6）	https://www.mod.go.jp/gsdf/neae/koukoku/fin/opencounter6.htm		https://www.mod.go.jp/gsdf/neae/koukoku/fin/opencounter6.htm	〃
+25	陸上自衛隊	東北方面		物品（R5）			https://www.mod.go.jp/gsdf/neae/koukoku/fin/gaiyou5-1.htm	〃
+26	陸上自衛隊	東北方面		工事（R5）			https://www.mod.go.jp/gsdf/neae/koukoku/fin/gaiyou5-2.htm	〃
+27	陸上自衛隊	東北方面		役務（R5）			https://www.mod.go.jp/gsdf/neae/koukoku/fin/gaiyou5-3.htm	〃
+28	陸上自衛隊	東北方面		売払（R5）			https://www.mod.go.jp/gsdf/neae/koukoku/fin/gaiyou5-4.htm	〃
+29	陸上自衛隊	東北方面		糧食（R5）			https://www.mod.go.jp/gsdf/neae/koukoku/fin/gaiyou5-5.htm	〃
+30	陸上自衛隊	東北方面		オープンカウンター（R5）			https://www.mod.go.jp/gsdf/neae/koukoku/fin/opencounter5.htm	〃
+31	陸上自衛隊	東北方面		物品（R4）			https://www.mod.go.jp/gsdf/neae/koukoku/fin/gaiyou4-1.htm	〃
+32	陸上自衛隊	東北方面		工事（R4）			https://www.mod.go.jp/gsdf/neae/koukoku/fin/gaiyou4-2.htm	〃
+33	陸上自衛隊	東北方面		役務（R4）			https://www.mod.go.jp/gsdf/neae/koukoku/fin/gaiyou4-3.htm	〃
+34	陸上自衛隊	東北方面		売払（R4）			https://www.mod.go.jp/gsdf/neae/koukoku/fin/gaiyou4-4.htm	〃
+35	陸上自衛隊	東北方面		糧食（R4）			https://www.mod.go.jp/gsdf/neae/koukoku/fin/gaiyou4-5.htm	〃
+36	陸上自衛隊	東北方面		オープンカウンター（R4）			https://www.mod.go.jp/gsdf/neae/koukoku/fin/opencounter4.htm	〃
+37	陸上自衛隊	東北方面		物品（R3）			https://www.mod.go.jp/gsdf/neae/koukoku/fin/gaiyou3-1.htm	〃
+38	陸上自衛隊	東北方面		工事（R3）			https://www.mod.go.jp/gsdf/neae/koukoku/fin/gaiyou3-2.htm	〃
+39	陸上自衛隊	東北方面		役務（R3）			https://www.mod.go.jp/gsdf/neae/koukoku/fin/gaiyou3-3.htm	〃
+40	陸上自衛隊	東北方面		売払（R3）			https://www.mod.go.jp/gsdf/neae/koukoku/fin/gaiyou3-4.htm	〃
+41	陸上自衛隊	東北方面		糧食（R3）			https://www.mod.go.jp/gsdf/neae/koukoku/fin/gaiyou3-5.htm	〃
+42	陸上自衛隊	東北方面		オープンカウンター（R3）			https://www.mod.go.jp/gsdf/neae/koukoku/fin/gaiyou3-4.htm	〃
+43	陸上自衛隊	中部方面隊	会計隊	工事	https://www.mod.go.jp/gsdf/mae/mafin/k/k.files/sheet002.htm	古いwebページの仕様。URLは全てhttps://www.mod.go.jp/gsdf/mae/mafin/k/k.htm で統一のように見えるが実際はタブにカーソルを合わせることで各ページのURLが表示される	https://www.mod.go.jp/gsdf/mae/mafin/k/k.files/sheet016.htm	工事実績のみ
+44	陸上自衛隊	中部方面隊		役務	https://www.mod.go.jp/gsdf/mae/mafin/k/k.files/sheet003.htm	〃	https://www.mod.go.jp/gsdf/mae/mafin/k/k.files/sheet013.htm#RANGE!A1	
+45	陸上自衛隊	中部方面隊		物品	https://www.mod.go.jp/gsdf/mae/mafin/k/k.files/sheet004.htm	〃		
+46	陸上自衛隊	中部方面隊		糧食	https://www.mod.go.jp/gsdf/mae/mafin/k/k.files/sheet004.htm	〃		
+47	陸上自衛隊	中部方面隊		売払	https://www.mod.go.jp/gsdf/mae/mafin/k/k.files/sheet006.htm	〃		
+48	陸上自衛隊	中部方面隊		公募	https://www.mod.go.jp/gsdf/mae/mafin/k/k.files/sheet007.htm	〃		
+49	陸上自衛隊	東部方面隊	会計隊	地域別	https://www.mod.go.jp/gsdf/eae/kaikei/eafin/nyusatsu_area.html		https://www.mod.go.jp/gsdf/eae/kaikei/eafin/28kensetsu_kouji.html	
+50	陸上自衛隊	東部方面隊		業種別	https://www.mod.go.jp/gsdf/eae/kaikei/eafin/nyusatsu_gyousyu.html	地域と業種で分かれている		
+51	陸上自衛隊	西部方面隊	会計隊	物品（R6）	https://www.mod.go.jp/gsdf/wae/info/nyusatu/wa-fin/kou/R6ippan.files/sheet001.htm	古いwebページの仕様。URLは全てhttps://www.mod.go.jp/gsdf/wae/info/nyusatu/wa-fin/kou/R6ippan.htmで統一のように見えるが実際はタブにカーソルを合わせることで各ページのURLが表示される	https://www.mod.go.jp/gsdf/wae/info/nyusatu/wa-fin/jh/tekisei.files/sheet001.htm	競争入札公共工事（古いwebページの仕様。URLは全てhttps://www.mod.go.jp/gsdf/wae/info/nyusatu/wa-fin/kou/R6ippan.htmで統一のように見えるが実際はタブにカーソルを合わせることで各ページのURLが表示される
+52	陸上自衛隊	西部方面隊		工事（R6）	https://www.mod.go.jp/gsdf/wae/info/nyusatu/wa-fin/kou/R6ippan.files/sheet004.htm	〃	https://www.mod.go.jp/gsdf/wae/info/nyusatu/wa-fin/jh/tekisei.files/sheet002.htm	随意契約公共工事
+53	陸上自衛隊	西部方面隊		糧食（R6）	https://www.mod.go.jp/gsdf/wae/info/nyusatu/wa-fin/kou/R6ippan.files/sheet002.htm	〃	https://www.mod.go.jp/gsdf/wae/info/nyusatu/wa-fin/jh/tekisei.files/sheet003.htm	競争入札物品・役務等
+54	陸上自衛隊	西部方面隊		売払（R6）	https://www.mod.go.jp/gsdf/wae/info/nyusatu/wa-fin/kou/R6ippan.files/sheet003.htm	〃	https://www.mod.go.jp/gsdf/wae/info/nyusatu/wa-fin/jh/tekisei.files/sheet004.htm	随意契約物品・役務等
+55	陸上自衛隊	西部方面隊		部外委託（R6）	https://www.mod.go.jp/gsdf/wae/info/nyusatu/wa-fin/kou/R6ippan.files/sheet005.htm	〃	https://www.mod.go.jp/gsdf/wae/info/nyusatu/wa-fin/jisseki.htm	建設工事発注実績(R6)
+56	陸上自衛隊	西部方面隊		公募（R6）	https://www.mod.go.jp/gsdf/wae/info/nyusatu/wa-fin/kou/R6ippan.files/sheet006.htm	〃		
+57	陸上自衛隊	西部方面隊		給食業務（R6）	https://www.mod.go.jp/gsdf/wae/info/nyusatu/wa-fin/kou/R6ippan.files/sheet007.htm	〃		
+58	陸上自衛隊	西部方面隊		物品（R7）	https://www.mod.go.jp/gsdf/wae/info/nyusatu/wa-fin/kou/R7ippan.files/sheet001.htm#RANGE!A1	〃		

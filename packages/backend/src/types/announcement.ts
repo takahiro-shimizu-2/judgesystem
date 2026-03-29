@@ -18,6 +18,11 @@ export interface AnnouncementListItem {
   title: string;
   organization: string;
   category: string;
+  categorySegment: string;
+  categoryDetail: string;
+  noticeCategoryName: string;
+  noticeCategoryCode: string;
+  noticeProcurementMethod: string;
   bidType: string;
   workLocation: string;
   publishDate: string;
@@ -41,6 +46,15 @@ export interface AnnouncementDocument {
   content: string;
 }
 
+export interface SubmissionDocument {
+  documentId: string | null;
+  name: string;
+  dateValue: string | null;
+  dateRaw: string;
+  dateMeaning: string;
+  timepointType: string;
+}
+
 /** Row returned by `AnnouncementRepository.findByNo`. */
 export interface AnnouncementDetail {
   id: string;
@@ -50,6 +64,8 @@ export interface AnnouncementDetail {
   title: string;
   organization: string;
   category: string;
+  categorySegment: string;
+  categoryDetail: string;
   bidType: string;
   workLocation: string;
   department: JsonValue;
@@ -62,12 +78,16 @@ export interface AnnouncementDetail {
   bidEndDate: string;
   deadline: string;
   status: string;
+  noticeCategoryName: string;
+  noticeCategoryCode: string;
+  noticeProcurementMethod: string;
   estimatedAmountMin: number | null;
   estimatedAmountMax: number | null;
   actualAmount: number | null;
   winningCompanyId: string | null;
   winningCompanyName: string | null;
   documents: AnnouncementDocument[];
+  submissionDocuments: SubmissionDocument[];
   competingCompanies: JsonValue;
 }
 

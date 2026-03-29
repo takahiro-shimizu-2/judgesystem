@@ -3,7 +3,7 @@
  * 入札可否判定結果の一覧表示（カード形式）
  * サーバーサイドページネーション対応
  */
-import { useCallback, useState, useRef, useEffect } from 'react';
+import { useCallback, useState, useRef, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Box, Typography, Paper, CircularProgress, Alert } from '@mui/material';
 import { AccountBalance as OrdererIcon } from '@mui/icons-material';
@@ -18,6 +18,7 @@ import { bidTypeConfig } from '../constants/bidType';
 import { evaluationStatusConfig } from '../constants/status';
 import { workStatusConfig } from '../constants/workStatus';
 import { priorityLabels, priorityColors } from '../constants/priority';
+import { categoryHierarchy as baseCategoryHierarchy, defaultCategoryDetails, defaultCategorySegments } from '../constants/categories';
 import type { BidType } from '../types/announcement';
 import type { EvaluationStatus, WorkStatus, CompanyPriority } from '../types';
 
@@ -31,6 +32,13 @@ import {
 import { RightSidePanel } from '../components/layout';
 
 // 行データの型
+const formatCategoryLabel = (segment?: string, detail?: string, fallback?: string): string => {
+  if (segment && detail) return `${segment}／${detail}`;
+  if (segment) return segment;
+  if (detail) return detail;
+  return fallback || '未分類';
+};
+
 interface RowData {
   id: string;
   evaluationNo: string;
@@ -42,6 +50,8 @@ interface RowData {
   branch: string;
   organization: string;
   category: string;
+  categorySegment?: string;
+  categoryDetail?: string;
   bidType?: BidType;
   deadline: string;
   evaluatedAt: string;
@@ -254,7 +264,7 @@ function EvaluationCard({ row, onClick }: { row: RowData; onClick: () => void })
               borderRadius: '2px',
             }}
           >
-            {row.category}
+            {formatCategoryLabel(row.categorySegment, row.categoryDetail, row.category)}
           </Typography>
         </Box>
 
@@ -383,6 +393,55 @@ export default function BidListPage() {
     clearAllFilters,
   } = useBidListState();
 
+  const categoryHierarchyOptions = useMemo(() => {
+    const hierarchyMap = new Map<string, Set<string>>();
+    Object.entries(baseCategoryHierarchy).forEach(([segment, details]) => {
+      hierarchyMap.set(segment, new Set(details));
+    });
+    rows.forEach((row) => {
+      if (!row.categorySegment && !row.categoryDetail) {
+        return;
+      }
+      const segmentKey = row.categorySegment || 'その他';
+      if (!hierarchyMap.has(segmentKey)) {
+        hierarchyMap.set(segmentKey, new Set());
+      }
+      if (row.categoryDetail) {
+        hierarchyMap.get(segmentKey)!.add(row.categoryDetail);
+      }
+    });
+    const result: Record<string, string[]> = {};
+    const appendSegment = (segment: string) => {
+      const detailSet = hierarchyMap.get(segment);
+      if (!detailSet) return;
+      result[segment] = Array.from(detailSet).sort((a, b) => a.localeCompare(b, 'ja'));
+    };
+    defaultCategorySegments.forEach(appendSegment);
+    Array.from(hierarchyMap.keys())
+      .filter((segment) => !defaultCategorySegments.includes(segment))
+      .sort((a, b) => a.localeCompare(b, 'ja'))
+      .forEach(appendSegment);
+    return result;
+  }, [rows]);
+
+  const categorySegmentOptions = useMemo(
+    () => Object.keys(categoryHierarchyOptions),
+    [categoryHierarchyOptions]
+  );
+
+  const categoryDetailOptions = useMemo(() => {
+    const set = new Set<string>(defaultCategoryDetails);
+    Object.values(categoryHierarchyOptions).forEach((details) => {
+      details.forEach((detail) => set.add(detail));
+    });
+    return Array.from(set).sort((a, b) => a.localeCompare(b, 'ja'));
+  }, [categoryHierarchyOptions]);
+
+  const filterModalKey = useMemo(
+    () => JSON.stringify(gridFilterModel.items ?? []),
+    [gridFilterModel.items]
+  );
+
   // ページ変更時にスクロール位置をリセット
   useEffect(() => {
     if (listContainerRef.current) {
@@ -502,18 +561,25 @@ export default function BidListPage() {
           onFilterChange={setFilters}
           onClearAll={clearAllFilters}
           statusCounts={statusCounts}
+          availableCategorySegments={categorySegmentOptions}
+          availableCategoryDetails={categoryDetailOptions}
+          categoryHierarchy={categoryHierarchyOptions}
           activeTab={conditionTab}
           onTabChange={setConditionTab}
         />
       </RightSidePanel>
       {showFilterModal && (
         <FilterModal
+          key={filterModalKey}
           filters={filters}
           gridFilterModel={gridFilterModel}
           onApply={setFilters}
           onGridFilterApply={handleGridFilterChange}
           onClose={() => setShowFilterModal(false)}
           statusCounts={statusCounts}
+          categorySegmentOptions={categorySegmentOptions}
+          categoryDetailOptions={categoryDetailOptions}
+          categoryHierarchy={categoryHierarchyOptions}
         />
       )}
     </Box>

@@ -13,6 +13,7 @@ import time
 import uuid
 import asyncio
 import random
+import unicodedata
 from datetime import datetime
 from pathlib import Path
 from collections import Counter
@@ -33,6 +34,128 @@ from packages.engine.domain.master import (
     file_exists_gcs_or_local,
     get_pages,
 )
+
+# UI が期待するカテゴリ体系に合わせるための定数
+GOODS_SERVICE_SEGMENTS = {
+    "物品の製造",
+    "物品の販売",
+    "役務の提供等",
+    "物品の買受け",
+}
+
+_CONSTRUCTION_CATEGORY_BASE = {
+    "土木": "土木一式工事",
+    "建築": "建築一式工事",
+    "大工": "大工工事",
+    "左官": "左官工事",
+    "とび・土工・コンクリート": "とび・土工・コンクリート工事",
+    "石": "石工事",
+    "屋根": "屋根工事",
+    "電気": "電気工事",
+    "管": "管工事",
+    "タイル・れんが・ブロック": "タイル・れんが・ブロック工事",
+    "鋼構造物": "鋼構造物工事",
+    "鉄筋": "鉄筋工事",
+    "舗装": "舗装工事",
+    "しゅんせつ": "しゅんせつ工事",
+    "板金": "板金工事",
+    "ガラス": "ガラス工事",
+    "塗装": "塗装工事",
+    "防水": "防水工事",
+    "内装仕上": "内装仕上工事",
+    "機械装置": "機械器具設置工事",
+    "熱絶縁": "熱絶縁工事",
+    "電気通信": "電気通信工事",
+    "造園": "造園工事",
+    "さく井": "さく井工事",
+    "建具": "建具工事",
+    "水道施設": "水道施設工事",
+    "消防施設": "消防施設工事",
+    "清掃施設": "清掃施設工事",
+    "解体": "解体工事",
+    "その他": "その他",
+    "グラウト": "グラウト",
+    "維持": "維持",
+    "自然環境共生": "自然環境共生",
+    "水環境処理": "水環境処理",
+}
+
+# Gemini からの値/HTML 由来の値の双方を正規化できるよう、シノニムを用意
+CONSTRUCTION_CATEGORY_MAP = {}
+for raw_value, detail_value in _CONSTRUCTION_CATEGORY_BASE.items():
+    CONSTRUCTION_CATEGORY_MAP[raw_value] = detail_value
+    CONSTRUCTION_CATEGORY_MAP[detail_value] = detail_value
+
+BID_TYPE_RULES = [
+    {
+        "canonical": "open_counter",
+        "keywords": [
+            "オープンカウンター",
+            "open counter",
+            "見積合せ",
+            "見積合わせ",
+            "見積り合わせ",
+            "見積合わせ方式",
+            "見積合せ方式",
+            "見積もり合わせ",
+        ],
+    },
+    {
+        "canonical": "open_competitive",
+        "keywords": ["一般競争", "一般競争入札", "general competitive", "general competition"],
+    },
+    {
+        "canonical": "planning_competition",
+        "keywords": ["企画競争", "プロポーザル", "公募型プロポーザル", "proposal"],
+    },
+    {
+        "canonical": "designated_competitive",
+        "keywords": ["指名競争", "指名入札", "designated competitive"],
+    },
+    {
+        "canonical": "document_request",
+        "keywords": ["資料提供招請", "document request"],
+    },
+    {
+        "canonical": "opinion_request",
+        "keywords": ["意見招請", "opinion request"],
+    },
+    {
+        "canonical": "preferred_designation",
+        "keywords": ["希望制指名", "preferred designation"],
+    },
+    {
+        "canonical": "negotiated_contract",
+        "keywords": ["随意契約", "negotiated contract"],
+    },
+    {
+        "canonical": "other",
+        "keywords": ["その他"],
+    },
+]
+
+BID_TYPE_PRIORITY = {rule["canonical"]: index for index, rule in enumerate(BID_TYPE_RULES)}
+
+NEGATION_SUFFIXES = [
+    "によらない",
+    "によらず",
+    "以外",
+    "以外の",
+    "以外の方法",
+    "を除く",
+    "ではない",
+    "でない",
+    "に該当しない",
+]
+
+NEGATION_PREFIXES = ["非", "不"]
+
+NEGATION_EN_PATTERNS = [
+    "not ",
+    "no ",
+    "other than ",
+    "without ",
+]
 
 
 class OcrProcessingMixin:
@@ -292,6 +415,9 @@ class OcrProcessingMixin:
         client = self._create_gemini_client()
         df_main = df_main.copy()
         df_main["document_id"] = df_main["document_id"].astype(str).str.strip()
+        doc_title_lookup = {}
+        if "document_id" in df_main.columns and "title" in df_main.columns:
+            doc_title_lookup = df_main.set_index("document_id")["title"].to_dict()
 
         def clean_markdown(text):
             if not text:
@@ -604,6 +730,168 @@ class OcrProcessingMixin:
         updated = self.db_operator.updateMarkdownPaths(tablename, df_updates)
         print(f"Updated markdown_path for {updated} documents.")
 
+    def fill_markdown_paths_from_storage(
+        self,
+        use_gcs=False,
+        document_ids=None,
+        include_file_404_flagged=False
+    ):
+        """
+        ストレージ上の既存 Markdown を確認し、DB の markdown_path を補完する
+        """
+        tablename = self.tablenamesconfig.bid_announcements_document_table
+        if not self.db_operator.ifTableExists(tablename):
+            print(f"Table {tablename} does not exist.")
+            return
+
+        where_clauses = ["(markdown_path IS NULL OR markdown_path = '')"]
+        if not include_file_404_flagged:
+            where_clauses.append("(file_404_flag IS NULL OR file_404_flag = FALSE)")
+
+        if document_ids:
+            sanitized = []
+            for doc_id in document_ids:
+                doc = (doc_id or "").strip()
+                if doc:
+                    sanitized.append("'" + doc.replace("'", "''") + "'")
+            if sanitized:
+                where_clauses.append(f"document_id IN ({', '.join(sanitized)})")
+
+        where_clause = ""
+        if where_clauses:
+            where_clause = "WHERE " + " AND ".join(where_clauses)
+
+        df_main = self.db_operator.selectToTable(tablename, where_clause)
+        if df_main.empty:
+            print("No documents require markdown_path backfill.")
+            return
+
+        print(f"Checking storage for {len(df_main)} documents without markdown_path...")
+        file_cache = {}
+        updates = []
+        for _, row in tqdm(df_main.iterrows(), total=len(df_main), desc="Backfilling Markdown paths"):
+            document_id = str(row.get("document_id", "")).strip()
+            file_format = str(row.get("fileFormat", "")).strip().lower()
+            if not document_id or file_format not in ("pdf", "pdfx", "pdf/a", "pdf/a-1"):
+                continue
+
+            md_path = self._build_markdown_path(
+                document_id=document_id,
+                file_format=file_format or None,
+                use_gcs=use_gcs,
+            )
+            if self._path_exists_with_cache(md_path, file_cache):
+                updates.append({
+                    "document_id": document_id,
+                    "fileFormat": row.get("fileFormat"),
+                    "markdown_path": md_path,
+                })
+
+        if not updates:
+            print("Could not find any Markdown files in storage to backfill.")
+            return
+
+        df_updates = pd.DataFrame(updates)
+        updated = self.db_operator.updateMarkdownPaths(tablename, df_updates)
+        print(f"Backfilled markdown_path for {updated} documents (found {len(updates)} files in storage).")
+
+    def _normalize_bid_type_value(self, raw_value):
+        if raw_value is None:
+            return None
+        text = unicodedata.normalize("NFKC", str(raw_value)).strip()
+        if not text:
+            return None
+        cleaned = re.sub(r"[\[\]［］【】「」『』（）()〈〉《》｛｝{}<>〔〕]", "", text)
+        lowered = cleaned.lower()
+        normalized = re.sub(r"\s+", "", lowered)
+
+        matches = []
+        for rule in BID_TYPE_RULES:
+            canonical = rule["canonical"]
+            canonical_compact = canonical.replace(" ", "")
+            if lowered == canonical or normalized == canonical_compact:
+                return canonical
+
+            for keyword in rule["keywords"]:
+                keyword_norm = unicodedata.normalize("NFKC", keyword).strip().lower()
+                if not keyword_norm:
+                    continue
+                keyword_compact = re.sub(r"\s+", "", keyword_norm)
+
+                if keyword_compact in {"その他"}:
+                    if normalized == keyword_compact:
+                        matches.append((BID_TYPE_PRIORITY.get(canonical, 99), canonical))
+                    continue
+
+                if not self._keyword_matches(lowered, normalized, keyword_norm, keyword_compact):
+                    continue
+
+                if self._is_negated_keyword(lowered, normalized, keyword_norm, keyword_compact):
+                    continue
+
+                matches.append((BID_TYPE_PRIORITY.get(canonical, 99), canonical))
+
+        if not matches:
+            return None
+
+        matches.sort(key=lambda item: (item[0], BID_TYPE_PRIORITY.get(item[1], 99)))
+        return matches[0][1]
+
+    def _keyword_matches(self, lowered, normalized, keyword_norm, keyword_compact):
+        if keyword_norm in lowered:
+            return True
+        if keyword_compact and keyword_compact in normalized:
+            return True
+        return False
+
+    def _is_negated_keyword(self, lowered, normalized, keyword_norm, keyword_compact):
+        for suffix in NEGATION_SUFFIXES:
+            suffix_norm = unicodedata.normalize("NFKC", suffix).strip().lower()
+            if not suffix_norm:
+                continue
+            suffix_compact = re.sub(r"\s+", "", suffix_norm)
+            if keyword_norm + suffix_norm in lowered:
+                return True
+            if keyword_compact and suffix_compact and keyword_compact + suffix_compact in normalized:
+                return True
+
+        for prefix in NEGATION_PREFIXES:
+            prefix_norm = unicodedata.normalize("NFKC", prefix).strip().lower()
+            if not prefix_norm:
+                continue
+            if prefix_norm + keyword_norm in lowered:
+                return True
+            if keyword_compact and prefix_norm + keyword_compact in normalized:
+                return True
+
+        for pattern in NEGATION_EN_PATTERNS:
+            pattern_norm_raw = unicodedata.normalize("NFKC", pattern).lower()
+            pattern_norm = pattern_norm_raw.strip()
+            if not pattern_norm:
+                continue
+            if pattern_norm_raw and (pattern_norm_raw + keyword_norm in lowered):
+                return True
+            if pattern_norm_raw and (keyword_norm + pattern_norm_raw in lowered):
+                return True
+            if pattern_norm + " " + keyword_norm in lowered:
+                return True
+            if keyword_norm + " " + pattern_norm in lowered:
+                return True
+
+        return False
+
+    def _select_preferred_bid_type(self, *candidates):
+        ranked = []
+        for index, candidate in enumerate(candidates):
+            if not candidate:
+                continue
+            priority = BID_TYPE_PRIORITY.get(candidate, len(BID_TYPE_PRIORITY) + 1)
+            ranked.append((priority, index, candidate))
+        if not ranked:
+            return None
+        ranked.sort()
+        return ranked[0][2]
+
     def regenerate_ocr_json_from_database(
         self,
         use_gcs=False,
@@ -798,6 +1086,56 @@ class OcrProcessingMixin:
         return most_common
 
 
+    def _normalize_category_fields(self, category_raw, notice_category_name, notice_category_code):
+        """
+        UI が期待する category_segment/category_detail に合わせて正規化する
+        """
+        def _clean(value):
+            if isinstance(value, str):
+                stripped = value.strip()
+                return stripped or None
+            return None
+
+        segment = None
+        detail = None
+
+        raw = _clean(category_raw)
+        if raw:
+            normalized_raw = raw.replace("／", "/")
+            parts = [p.strip() for p in normalized_raw.split("/") if p.strip()]
+            if len(parts) >= 2 and parts[0] in GOODS_SERVICE_SEGMENTS:
+                segment = parts[0]
+                detail = parts[1]
+            elif raw in GOODS_SERVICE_SEGMENTS:
+                segment = raw
+            else:
+                mapped_detail = CONSTRUCTION_CATEGORY_MAP.get(raw)
+                if mapped_detail:
+                    segment = "工事"
+                    detail = mapped_detail
+
+        notice_name = _clean(notice_category_name)
+        if not segment and notice_name:
+            mapped_detail = CONSTRUCTION_CATEGORY_MAP.get(notice_name)
+            if mapped_detail:
+                segment = "工事"
+                detail = detail or mapped_detail
+            else:
+                segment = notice_name
+
+        notice_code = _clean(notice_category_code)
+        if notice_code and not detail:
+            mapped_detail = CONSTRUCTION_CATEGORY_MAP.get(notice_code)
+            if mapped_detail:
+                detail = mapped_detail
+                if not segment:
+                    segment = "工事"
+            elif notice_code != segment:
+                detail = notice_code
+
+        return segment, detail
+
+
     def _step0_ocr_with_gemini(
         self,
         df_main,
@@ -816,6 +1154,9 @@ class OcrProcessingMixin:
 
         df_main = df_main.copy()
         df_main["document_id"] = df_main["document_id"].astype(str).str.strip()
+        doc_title_lookup = {}
+        if "document_id" in df_main.columns and "title" in df_main.columns:
+            doc_title_lookup = df_main.set_index("document_id")["title"].to_dict()
 
         if "done" in df_main.columns:
             df_main["done"] = (
@@ -971,6 +1312,7 @@ class OcrProcessingMixin:
                                     ann_records_by_doc[announcement_id] = []
                                 ann_records_by_doc[announcement_id].append({
                                     "document_id": document_id,
+                                    "document_title": doc_title_lookup.get(document_id),
                                     "workplace": None, "zipcode": None, "address": None,
                                     "department": None, "assigneename": None, "telephone": None,
                                     "fax": None, "mail": None, "publishdate": None,
@@ -979,6 +1321,7 @@ class OcrProcessingMixin:
                                     "submissionstart": None, "submissionend": None,
                                     "bidstartdate": None, "bidenddate": None,
                                     "ocr_failed": True,
+                                    "submission_documents": [],
                                 })
 
                             ann_done_updates += 1
@@ -992,7 +1335,8 @@ class OcrProcessingMixin:
                             "document_id": document_id,
                             "pageCount": dict0.get("pageCount"),
                             "done": True,
-                            "is_ocr_failed": False
+                            "is_ocr_failed": False,
+                            "doc_type": dict0.get("type")
                         })
 
                         for announcement_id in announcement_ids:
@@ -1001,6 +1345,7 @@ class OcrProcessingMixin:
 
                             ann_records_by_doc[announcement_id].append({
                                 "document_id": document_id,
+                                "document_title": doc_title_lookup.get(document_id),
                                 "workplace": dict0.get("workplace"),
                                 "zipcode": dict0.get("zipcode"),
                                 "address": dict0.get("address"),
@@ -1020,18 +1365,20 @@ class OcrProcessingMixin:
                                 "bidstartdate": dict0.get("bidstartdate"),
                                 "bidenddate": dict0.get("bidenddate"),
                                 "ocr_failed": False,
+                                "submission_documents": dict0.get("submission_documents", []),
                             })
 
                         ann_done_updates += 1
                     except Exception as e:
                         tqdm.write(f"Error processing {document_id}: {e}")
-                        doc_records.append({"document_id": document_id, "done": True, "is_ocr_failed": True})
+                        doc_records.append({"document_id": document_id, "done": True, "is_ocr_failed": True, "doc_type": None})
 
                         for announcement_id in announcement_ids:
                             if announcement_id not in ann_records_by_doc:
                                 ann_records_by_doc[announcement_id] = []
                             ann_records_by_doc[announcement_id].append({
                                 "document_id": document_id,
+                                "document_title": doc_title_lookup.get(document_id),
                                 "workplace": None, "zipcode": None, "address": None,
                                 "department": None, "assigneename": None, "telephone": None,
                                 "fax": None, "mail": None, "publishdate": None,
@@ -1040,11 +1387,14 @@ class OcrProcessingMixin:
                                 "submissionstart": None, "submissionend": None,
                                 "bidstartdate": None, "bidenddate": None,
                                 "ocr_failed": True,
+                                "submission_documents": [],
                             })
 
                         ann_done_updates += 1
 
                 df_doc_records = pd.DataFrame(doc_records)
+                if "doc_type" in df_doc_records.columns:
+                    df_doc_records.rename(columns={"doc_type": "doc_type_new"}, inplace=True)
                 df_doc_records = df_doc_records.drop_duplicates(subset="document_id", keep="first")
 
                 df_main = df_main.merge(df_doc_records, on="document_id", how="left", suffixes=("", "_new"))
@@ -1054,30 +1404,65 @@ class OcrProcessingMixin:
                     df_main.drop(columns=["done_new"], inplace=True, errors="ignore")
 
                 if "pageCount_new" in df_main.columns:
-                    df_main["pageCount"] = df_main["pageCount_new"].fillna(df_main.get("pageCount"))
+                    existing = df_main.get("pageCount")
+                    new_pc = df_main["pageCount_new"]
+                    df_main["pageCount"] = existing
+                    mask = (existing.isna()) | (existing <= 0)
+                    df_main.loc[mask, "pageCount"] = new_pc.loc[mask]
                     df_main.drop(columns=["pageCount_new"], inplace=True, errors="ignore")
 
                 if "is_ocr_failed_new" in df_main.columns:
                     df_main["is_ocr_failed"] = (df_main["is_ocr_failed"] | df_main["is_ocr_failed_new"].fillna(False)).astype("boolean")
                     df_main.drop(columns=["is_ocr_failed_new"], inplace=True, errors="ignore")
 
+                if "doc_type_new" in df_main.columns:
+                    if "type" not in df_main.columns:
+                        df_main["type"] = None
+                    mask = (
+                        df_main["type"].isna()
+                        | (df_main["type"].astype(str).str.strip().isin(["", "None", "nan", "その他"]))
+                    )
+                    df_main.loc[mask, "type"] = df_main.loc[mask, "doc_type_new"]
+                    df_main.drop(columns=["doc_type_new"], inplace=True, errors="ignore")
+
                 aggregated_announcements = []
+                aggregated_date_records = []
+                timestamp_now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
                 for announcement_id, docs_data in ann_records_by_doc.items():
                     ann_docs = df_main[df_main['announcement_id'] == announcement_id]
                     if len(ann_docs) > 0:
                         workName = self._select_best_value(ann_docs['title'].tolist())
                         topAgencyName = self._select_best_value(ann_docs['topAgencyName'].tolist())
                         orderer_id = self._select_best_value(ann_docs['orderer_id'].tolist())
+                        notice_category_name = self._select_best_value(ann_docs['notice_category_name'].tolist()) if 'notice_category_name' in ann_docs else None
+                        notice_category_code = self._select_best_value(ann_docs['notice_category_code'].tolist()) if 'notice_category_code' in ann_docs else None
+                        notice_procurement_method = self._select_best_value(ann_docs['notice_procurement_method'].tolist()) if 'notice_procurement_method' in ann_docs else None
                     else:
                         workName = None
                         topAgencyName = None
                         orderer_id = None
+                        notice_category_name = None
+                        notice_category_code = None
+                        notice_procurement_method = None
 
                     category_ocr = self._select_best_value([d["category"] for d in docs_data])
                     bidType_ocr = self._select_best_value([d["bidType"] for d in docs_data])
 
                     has_ocr_failure = any(d.get("ocr_failed", False) for d in docs_data)
 
+                    category_segment, category_detail = self._normalize_category_fields(
+                        category_ocr,
+                        notice_category_name,
+                        notice_category_code,
+                    )
+                    if not category_segment:
+                        category_segment = notice_category_name
+                    if (not category_detail) and notice_category_code and notice_category_code != category_segment:
+                        category_detail = notice_category_code
+
+                    bidType_normalized = self._normalize_bid_type_value(bidType_ocr)
+                    notice_bid_type = self._normalize_bid_type_value(notice_procurement_method)
+                    bidType_effective = self._select_preferred_bid_type(bidType_normalized, notice_bid_type)
                     aggregated = {
                         "announcement_no": announcement_id,
                         "workName": workName,
@@ -1092,8 +1477,10 @@ class OcrProcessingMixin:
                         "fax": self._select_best_value([d["fax"] for d in docs_data]),
                         "mail": self._select_best_value([d["mail"] for d in docs_data]),
                         "publishDate": self._select_best_value([d["publishdate"] for d in docs_data]),
-                        "bidType": bidType_ocr,
+                        "bidType": bidType_effective or "unknown",
                         "category": category_ocr,
+                        "category_segment": category_segment,
+                        "category_detail": category_detail,
                         "docDistStart": self._select_best_value([d["docdiststart"] for d in docs_data]),
                         "docDistEnd": self._select_best_value([d["docdistend"] for d in docs_data]),
                         "submissionStart": self._select_best_value([d["submissionstart"] for d in docs_data]),
@@ -1103,16 +1490,48 @@ class OcrProcessingMixin:
                         "is_ocr_failed": has_ocr_failure,
                         "doneOCR": True,
                         "createdDate": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-                        "updatedDate": datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                        "updatedDate": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                        "notice_category_name": notice_category_name,
+                        "notice_category_code": notice_category_code,
+                        "notice_procurement_method": notice_procurement_method,
                     }
                     aggregated_announcements.append(aggregated)
 
+                    for doc_entry in docs_data:
+                        submission_docs = doc_entry.get("submission_documents") or []
+                        doc_id = doc_entry.get("document_id")
+                        for submission in submission_docs:
+                            submission_name = submission.get("submission_document_name")
+                            date_raw = submission.get("date_raw")
+                            date_value = submission.get("date_value")
+                            date_meaning = submission.get("date_meaning")
+                            timepoint_type = submission.get("timepoint_type") or "single"
+                            if not any([submission_name, date_raw, date_value, date_meaning]):
+                                continue
+                            aggregated_date_records.append({
+                                "announcement_no": announcement_id,
+                                "document_id": doc_id,
+                                "submission_document_name": submission_name,
+                                "date_value": date_value,
+                                "date_raw": date_raw,
+                                "date_meaning": date_meaning,
+                                "timepoint_type": timepoint_type,
+                                "createdDate": timestamp_now,
+                                "updatedDate": timestamp_now
+                            })
+
                 df_announcements = pd.DataFrame(aggregated_announcements) if aggregated_announcements else pd.DataFrame()
+                df_dates = pd.DataFrame(aggregated_date_records) if aggregated_date_records else pd.DataFrame()
+                if not df_dates.empty:
+                    subset_cols = ["announcement_no", "document_id", "submission_document_name", "date_value", "date_meaning", "timepoint_type"]
+                    df_dates = df_dates.sort_values(subset_cols + ["date_raw"])
+                    df_dates = df_dates.drop_duplicates(subset=subset_cols, keep="first")
 
                 print(f"Updated {len(doc_records)} documents with pageCount and done status")
                 print(f"Aggregated {len(aggregated_announcements)} announcements from {len(ann_results)} OCR results")
             else:
                 df_announcements = pd.DataFrame()
+                df_dates = pd.DataFrame()
 
             req_results = [r for r in results if r.get("type") == "req"]
             db_req_records = []
@@ -1184,8 +1603,9 @@ class OcrProcessingMixin:
         else:
             df_announcements = pd.DataFrame()
             df_requirements = pd.DataFrame()
+            df_dates = pd.DataFrame()
 
-        return df_main, df_announcements, df_requirements
+        return df_main, df_announcements, df_requirements, df_dates
 
 
     async def _call_parallel(self, client, params, max_concurrency=5):
@@ -1415,6 +1835,28 @@ class OcrProcessingMixin:
             except ValueError:
                 return ""
 
+        def normalize_category(value):
+            if isinstance(value, list):
+                flattened = [str(v).strip() for v in value if isinstance(v, str) and v.strip()]
+                return " / ".join(flattened) if flattened else None
+            if isinstance(value, str):
+                value = value.strip()
+                return value or None
+            return None
+
+        def normalize_timepoint(value, meaning):
+            if isinstance(value, str):
+                t = value.strip().lower()
+                if t in ["開始", "start", "begin", "start_date", "start_time"]:
+                    return "start"
+                if t in ["終了", "完了", "end", "finish", "end_date", "end_time"]:
+                    return "end"
+                if t in ["単日", "single", "single_day"]:
+                    return "single"
+            if meaning and ("公告" in meaning or "説明会" in meaning or "開札" in meaning or "入札日" in meaning):
+                return "single"
+            return "single"
+
         new_json = {}
         new_json["workplace"] = json_value.get("工事場所", None)
 
@@ -1434,9 +1876,13 @@ class OcrProcessingMixin:
         else:
             new_json["publishdate"] = None
 
-        new_json["bidType"] = json_value.get("入札方式", None)
+        raw_bid_type = json_value.get("入札方式", None)
+        normalized_bid_type = self._normalize_bid_type_value(raw_bid_type)
+        new_json["bidTypeRaw"] = raw_bid_type
+        new_json["bidTypeNormalized"] = normalized_bid_type
+        new_json["bidType"] = raw_bid_type
         new_json["type"] = json_value.get("資料種類", None)
-        new_json["category"] = json_value.get("category", None)
+        new_json["category"] = normalize_category(json_value.get("category", None))
         new_json["pageCount"] = json_value.get("pageCount", None)
 
         tmp_json = json_value.get("入札説明書の交付期間", None)
@@ -1465,5 +1911,28 @@ class OcrProcessingMixin:
                 handle_same_year=extract_year(new_json.get("bidstartdate")),
                 handle_same_month=extract_same_year_month(new_json.get("bidstartdate"))
             )
+
+        submission_records = []
+        doc_entries = json_value.get("提出書類一覧", None)
+        if isinstance(doc_entries, list):
+            for entry in doc_entries:
+                if not isinstance(entry, dict):
+                    continue
+                document_name = entry.get("書類名") or entry.get("提出書類") or entry.get("document") or entry.get("書類")
+                date_raw = entry.get("日付") or entry.get("date")
+                meaning = entry.get("意味") or entry.get("説明") or entry.get("日付の意味")
+                timepoint = entry.get("時点") or entry.get("timepoint")
+                if not any([document_name, date_raw, meaning]):
+                    continue
+                normalized_date = _modifyDate(datestr=date_raw) if date_raw else None
+                submission_records.append({
+                    "submission_document_name": document_name,
+                    "date_raw": date_raw,
+                    "date_value": normalized_date,
+                    "date_meaning": meaning,
+                    "timepoint_type": normalize_timepoint(timepoint, meaning)
+                })
+
+        new_json["submission_documents"] = submission_records
 
         return new_json
