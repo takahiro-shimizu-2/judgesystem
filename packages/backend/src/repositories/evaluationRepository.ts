@@ -16,6 +16,7 @@ type QualifiedTables = {
   companyMaster: string;
   officeMaster: string;
   documents: string;
+  announcementDates: string;
   requirements: string;
   sufficientRequirements: string;
   insufficientRequirements: string;
@@ -189,6 +190,23 @@ export class EvaluationRepository {
            AND cb.company_name = cc.company_name
          GROUP BY cc.announcement_id
         ),
+        submission_docs AS (
+          SELECT
+            announcement_no,
+            jsonb_agg(
+              jsonb_build_object(
+                'documentId', document_id,
+                'name', COALESCE(submission_document_name, ''),
+                'dateValue', CASE WHEN date_value IS NOT NULL THEN TO_CHAR(date_value, 'YYYY-MM-DD') ELSE NULL END,
+                'dateRaw', COALESCE(date_raw, ''),
+                'dateMeaning', COALESCE(date_meaning, ''),
+                'timepointType', COALESCE(timepoint_type, '')
+              )
+              ORDER BY date_value IS NULL, date_value, submission_document_name
+            ) AS submission_documents
+          FROM ${tables.announcementDates}
+          GROUP BY announcement_no
+        ),
         step_assignees AS (
           SELECT
             evaluation_no,
@@ -274,6 +292,7 @@ export class EvaluationRepository {
             'estimatedAmountMax', aea.estimated_amount_max,
             'pdfUrl', COALESCE(doc.docs->0->>'url', ''),
             'documents', COALESCE(doc.docs, '[]'::jsonb),
+            'submissionDocuments', COALESCE(sd.submission_documents, '[]'::jsonb),
             'competingCompanies', COALESCE(companies.companies, '[]'::jsonb),
             'winningCompanyId', NULL,
             'winningCompanyName', COALESCE(companies.winning_company_name, ''),
@@ -304,6 +323,7 @@ export class EvaluationRepository {
         ${baseFromClause}
         LEFT JOIN documents doc ON doc.announcement_id::text = cbj.announcement_no::text
         LEFT JOIN competing_companies companies ON companies.announcement_id::text = cbj.announcement_no::text
+        LEFT JOIN submission_docs sd ON sd.announcement_no::text = cbj.announcement_no::text
         LEFT JOIN requirement_details req
           ON req.announcement_no::text = cbj.announcement_no::text
          AND COALESCE(req.office_no::text, '-1') = COALESCE(cbj.office_no::text, '-1')
@@ -678,6 +698,7 @@ export class EvaluationRepository {
       companyMaster: `${schemaPrefix}company_master`,
       officeMaster: `${schemaPrefix}office_master`,
       documents: `${schemaPrefix}announcements_documents_master`,
+      announcementDates: `${schemaPrefix}bid_announcements_dates`,
       requirements: `${schemaPrefix}bid_requirements`,
       sufficientRequirements: `${schemaPrefix}sufficient_requirements`,
       insufficientRequirements: `${schemaPrefix}insufficient_requirements`,

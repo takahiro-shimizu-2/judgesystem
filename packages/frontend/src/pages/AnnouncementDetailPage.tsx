@@ -38,7 +38,7 @@ import { CustomPagination } from '../components/bid';
 import { RightSidePanel } from '../components/layout';
 import { useSidebar } from '../contexts/SidebarContext';
 import { getApiUrl } from '../config/api';
-import { formatAmountInManYen } from '../utils';
+import { formatAmountInManYen, buildScheduleFromSubmissionDocuments, buildFallbackScheduleFromAnnouncement } from '../utils';
 import type { BidType, AnnouncementStatus } from '../types/announcement';
 import type { EvaluationStatus, WorkStatus, CompanyPriority, Announcement as AnnouncementType, DocumentOcr } from '../types';
 
@@ -1767,15 +1767,10 @@ export default function AnnouncementDetailPage() {
   const statusConfig = announcementStatusConfig[announcementStatus];
 
   // スケジュールデータ
-  const scheduleItems = [
-    { label: '公告日', date: announcement.publishDate },
-    { label: '説明書交付開始', date: announcement.explanationStartDate },
-    { label: '説明書交付終了', date: announcement.explanationEndDate },
-    { label: '申請受付開始', date: announcement.applicationStartDate },
-    { label: '申請受付終了', date: announcement.applicationEndDate },
-    { label: '入札開始', date: announcement.bidStartDate },
-    { label: '入札締切', date: announcement.bidEndDate, highlight: true },
-  ];
+  const derivedSchedule = buildScheduleFromSubmissionDocuments(announcement.submissionDocuments);
+  const fallbackSchedule = buildFallbackScheduleFromAnnouncement(announcement);
+  const scheduleItems = derivedSchedule.length > 0 ? derivedSchedule : fallbackSchedule;
+  const hasScheduleItems = scheduleItems.length > 0;
 
   // タブインデックス計算用（資料タブが条件付きのため）
   const hasDocuments = announcement.documents && announcement.documents.length > 0;
@@ -2085,24 +2080,37 @@ export default function AnnouncementDetailPage() {
                         <Typography sx={{ fontSize: fontSizes.base, fontWeight: 600, color: colors.primary.main }}>スケジュール</Typography>
                       </AccordionSummary>
                       <AccordionDetails sx={{ pt: 1, pb: 0, px: 0 }}>
-                        {scheduleItems.map((item, index) => (
+                        {!hasScheduleItems && (
+                          <Typography sx={{ fontSize: fontSizes.sm, color: colors.text.light, px: 2.5, py: 1.25 }}>
+                            スケジュール情報はありません。
+                          </Typography>
+                        )}
+                        {hasScheduleItems && scheduleItems.map((item, index) => (
                           <Box
-                            key={item.label}
+                            key={item.id}
                             sx={{
                               display: 'flex',
                               justifyContent: 'space-between',
-                              alignItems: 'center',
+                              alignItems: 'flex-start',
+                              gap: 2,
                               px: 2.5,
                               py: 1.25,
                               borderBottom: index < scheduleItems.length - 1 ? `1px solid ${colors.border.light}` : 'none',
-                              backgroundColor: item.highlight ? colors.status.info.bg : 'transparent',
+                              backgroundColor: item.isDeadline ? colors.status.info.bg : 'transparent',
                             }}
                           >
-                            <Typography sx={{ fontSize: fontSizes.md, color: item.highlight ? colors.primary.main : colors.text.muted, fontWeight: item.highlight ? 600 : 400 }}>
-                              {item.label}
-                            </Typography>
-                            <Typography sx={{ fontSize: fontSizes.md, color: item.highlight ? colors.primary.main : colors.text.secondary, fontWeight: item.highlight ? 700 : 500 }}>
-                              {item.date}
+                            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, flex: 1, minWidth: 0 }}>
+                              <Typography sx={{ fontSize: fontSizes.md, color: item.isDeadline ? colors.primary.main : colors.text.muted, fontWeight: item.isDeadline ? 600 : 500 }}>
+                                {item.meaning || item.label}
+                              </Typography>
+                              {item.documentName && (
+                                <Typography sx={{ fontSize: fontSizes.xs, color: colors.text.light }}>
+                                  書類: {item.documentName}
+                                </Typography>
+                              )}
+                            </Box>
+                            <Typography sx={{ fontSize: fontSizes.md, color: item.isDeadline ? colors.primary.main : colors.text.secondary, fontWeight: item.isDeadline ? 700 : 500, whiteSpace: 'nowrap' }}>
+                              {item.dateText}
                             </Typography>
                           </Box>
                         ))}

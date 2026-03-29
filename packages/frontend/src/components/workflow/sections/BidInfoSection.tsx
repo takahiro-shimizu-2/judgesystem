@@ -6,6 +6,7 @@ import { Box, Chip, Typography } from '@mui/material';
 import { CollapsibleSection, InfoRow } from '../../common';
 import { colors, chipStyles } from '../../../constants/styles';
 import { bidTypeConfig } from '../../../constants/bidType';
+import { buildScheduleFromSubmissionDocuments, buildFallbackScheduleFromAnnouncement, type SubmissionScheduleItem } from '../../../utils';
 import type { Announcement } from '../../../types';
 
 export interface BidInfoSectionProps {
@@ -20,18 +21,10 @@ const formatCategoryLabel = (segment?: string, detail?: string, fallback?: strin
 };
 
 export function BidInfoSection({ announcement }: BidInfoSectionProps) {
-  const scheduleItems = [
-    { label: '申請書提出日', value: announcement.deadline },
-    {
-      label: '入札書提出期間',
-      value: `${announcement.bidStartDate} 〜 ${announcement.bidEndDate}`,
-    },
-    {
-      label: '説明書交付期間',
-      value: `${announcement.explanationStartDate} 〜 ${announcement.explanationEndDate}`,
-    },
-    { label: '公告掲載日', value: announcement.publishDate },
-  ];
+  const derivedSchedule = buildScheduleFromSubmissionDocuments(announcement.submissionDocuments);
+  const fallbackSchedule = buildFallbackScheduleFromAnnouncement(announcement);
+  const scheduleItems: SubmissionScheduleItem[] = derivedSchedule.length > 0 ? derivedSchedule : fallbackSchedule;
+  const hasSchedule = scheduleItems.length > 0;
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
@@ -72,42 +65,80 @@ export function BidInfoSection({ announcement }: BidInfoSectionProps) {
       </CollapsibleSection>
 
       <CollapsibleSection title="スケジュール">
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-          {scheduleItems.map((item) => (
-            <InfoRow key={item.label} label={item.label} value={item.value} />
-          ))}
-          {announcement.submissionDocuments && announcement.submissionDocuments.length > 0 && (
-            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-              <Typography sx={{ fontWeight: 600, color: colors.primary.main }}>提出書類と期日</Typography>
-              {announcement.submissionDocuments.map((doc, idx) => (
-                <Box
-                  key={`${doc.documentId || 'doc'}-${idx}`}
-                  sx={{
-                    border: `1px solid ${colors.border.light}`,
-                    borderRadius: 1,
-                    p: 1,
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: 0.5,
-                    backgroundColor: colors.background.paper,
-                  }}
-                >
-                  <Typography sx={{ fontWeight: 600, color: colors.text.primary }}>
-                    {doc.name || '提出書類'}
+        {!hasSchedule && (
+          <Typography sx={{ color: colors.text.light }}>スケジュール情報はありません。</Typography>
+        )}
+        {hasSchedule && (
+          <Box sx={{ border: `1px solid ${colors.border.light}`, borderRadius: 1, overflow: 'hidden' }}>
+            {scheduleItems.map((item, index) => (
+              <Box
+                key={item.id}
+                sx={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'flex-start',
+                  gap: 1.5,
+                  px: 1.5,
+                  py: 1,
+                  borderBottom: index < scheduleItems.length - 1 ? `1px solid ${colors.border.light}` : 'none',
+                  backgroundColor: item.isDeadline ? colors.accent.redBg : 'transparent',
+                }}
+              >
+                <Box sx={{ flex: 1, minWidth: 0 }}>
+                  <Typography sx={{ fontWeight: 600, color: item.isDeadline ? colors.accent.red : colors.text.secondary }}>
+                    {item.meaning || item.label}
                   </Typography>
-                  <Typography sx={{ color: colors.text.secondary }}>
-                    期日: {doc.dateValue || doc.dateRaw || '日付情報なし'}
-                  </Typography>
-                  {doc.dateMeaning && (
+                  {item.documentName && (
                     <Typography sx={{ fontSize: '0.8rem', color: colors.text.light }}>
-                      {doc.dateMeaning}
+                      書類: {item.documentName}
                     </Typography>
                   )}
                 </Box>
-              ))}
-            </Box>
-          )}
-        </Box>
+                <Typography
+                  sx={{
+                    fontWeight: 600,
+                    color: item.isDeadline ? colors.accent.red : colors.text.primary,
+                    textAlign: 'right',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {item.dateText}
+                </Typography>
+              </Box>
+            ))}
+          </Box>
+        )}
+        {announcement.submissionDocuments && announcement.submissionDocuments.length > 0 && (
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, mt: 1.5 }}>
+            <Typography sx={{ fontWeight: 600, color: colors.primary.main }}>提出書類と期日</Typography>
+            {announcement.submissionDocuments.map((doc, idx) => (
+              <Box
+                key={`${doc.documentId || 'doc'}-${idx}`}
+                sx={{
+                  border: `1px solid ${colors.border.light}`,
+                  borderRadius: 1,
+                  p: 1,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 0.5,
+                  backgroundColor: colors.background.paper,
+                }}
+              >
+                <Typography sx={{ fontWeight: 600, color: colors.text.primary }}>
+                  {doc.name || '提出書類'}
+                </Typography>
+                <Typography sx={{ color: colors.text.secondary }}>
+                  期日: {doc.dateValue || doc.dateRaw || '日付情報なし'}
+                </Typography>
+                {doc.dateMeaning && (
+                  <Typography sx={{ fontSize: '0.8rem', color: colors.text.light }}>
+                    {doc.dateMeaning}
+                  </Typography>
+                )}
+              </Box>
+            ))}
+          </Box>
+        )}
       </CollapsibleSection>
     </Box>
   );
