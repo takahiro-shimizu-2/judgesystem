@@ -114,7 +114,7 @@ export function CompanyBranchSelect({
   }, [debouncedInput]);
 
   const selectedOption = useMemo(() => {
-    if (!value) return null;
+    if (!value) return undefined;
     const match = options.find((option) => option.officeId === value);
     if (match) return match;
     return {
