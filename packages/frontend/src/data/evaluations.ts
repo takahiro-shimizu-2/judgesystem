@@ -211,6 +211,81 @@ export const updatePartnerWorkflowState = async (
   }
 };
 
+interface PartnerWorkflowFileUploadPayload {
+  partnerId?: string;
+  flowType: 'sent' | 'received';
+  name: string;
+  contentType?: string;
+  size: number;
+  dataUrl: string;
+}
+
+interface PartnerWorkflowFileMetadata {
+  id: string;
+  evaluationNo: string;
+  partnerId: string | null;
+  flowType: 'sent' | 'received';
+  name: string;
+  contentType?: string | null;
+  size: number;
+}
+
+export const uploadPartnerWorkflowFile = async (
+  evaluationNo: string,
+  payload: PartnerWorkflowFileUploadPayload
+): Promise<PartnerWorkflowFileMetadata> => {
+  const response = await fetch(getApiUrl(`/api/evaluations/${evaluationNo}/partner-files`), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    let message = `Failed to upload partner file: ${response.status} ${response.statusText}`;
+    try {
+      const body = await response.json();
+      if (typeof body?.message === 'string') {
+        message = body.message;
+      }
+    } catch {
+      // ignore
+    }
+    throw new Error(message);
+  }
+
+  return (await response.json()) as PartnerWorkflowFileMetadata;
+};
+
+export const deletePartnerWorkflowFile = async (
+  evaluationNo: string,
+  fileId: string
+): Promise<boolean> => {
+  const response = await fetch(getApiUrl(`/api/evaluations/${evaluationNo}/partner-files/${fileId}`), {
+    method: 'DELETE',
+  });
+
+  if (response.status === 404) {
+    return false;
+  }
+
+  if (!response.ok && response.status !== 204) {
+    throw new Error(`Failed to delete partner file: ${response.status} ${response.statusText}`);
+  }
+
+  return true;
+};
+
+export const downloadPartnerWorkflowFile = async (
+  evaluationNo: string,
+  fileId: string
+): Promise<Blob> => {
+  const response = await fetch(getApiUrl(`/api/evaluations/${evaluationNo}/partner-files/${fileId}`));
+  if (!response.ok) {
+    throw new Error(`Failed to download partner file: ${response.status} ${response.statusText}`);
+  }
+  return await response.blob();
+};
+
 const PARTNER_STATUS_VALUES: PartnerStatus[] = [
   'not_called',
   'waiting_documents',

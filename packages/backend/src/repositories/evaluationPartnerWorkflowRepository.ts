@@ -19,8 +19,8 @@ export interface PartnerWorkflowDocument {
   uploadedAt?: string;
   fileName?: string;
   contentType?: string;
-  dataUrl?: string;
   size?: number;
+  fileId?: string;
 }
 
 export interface PartnerWorkflowTranscription {
@@ -92,8 +92,8 @@ export class EvaluationPartnerWorkflowRepository {
       uploadedAt: this.normalizeString(raw?.uploadedAt),
       fileName: this.normalizeString(raw?.fileName),
       contentType: this.normalizeString(raw?.contentType),
-      dataUrl: this.normalizeString(raw?.dataUrl),
       size,
+      fileId: this.normalizeString(raw?.fileId) ?? id,
     };
   }
 

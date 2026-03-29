@@ -45,6 +45,7 @@ import {
   ExpandLess as ExpandLessIcon,
   AttachFile as AttachFileIcon,
   Check as CheckIcon,
+  Download as DownloadIcon,
 } from '@mui/icons-material';
 import {
   colors,
@@ -69,6 +70,9 @@ import {
   createEmptyPartnerWorkflowState,
   fetchPartnerWorkflowState,
   updatePartnerWorkflowState,
+  uploadPartnerWorkflowFile,
+  deletePartnerWorkflowFile,
+  downloadPartnerWorkflowFile,
 } from '../../../data/evaluations';
 
 const TALK_TEMPLATE_IDS = ['talk-intro', 'talk-followup'] as const;
@@ -391,6 +395,7 @@ function PartnerCard({
   defaultCompanyName,
   defaultStaffName,
   workflowAssigneeId,
+  evaluationNo,
   workflowEntry,
   onWorkflowEntryUpdate,
   onWorkflowError,
@@ -405,6 +410,7 @@ function PartnerCard({
   defaultCompanyName: string;
   defaultStaffName: string;
   workflowAssigneeId?: string;
+  evaluationNo: string;
   workflowEntry: PartnerWorkflowEntry;
   onWorkflowEntryUpdate: (updater: (prev: PartnerWorkflowEntry) => PartnerWorkflowEntry) => Promise<boolean>;
   onWorkflowError: (message: string | null) => void;
@@ -544,44 +550,101 @@ function PartnerCard({
 
   const handleAddReceivedDocument = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
-    if (!file) {
+    if (!file || !evaluationNo) {
+      event.target.value = '';
       return;
     }
     setIsUploadingReceivedDoc(true);
+    let uploadedFile: { id: string; name: string; contentType?: string | null; size: number } | null = null;
     try {
       const dataUrl = await readFileAsDataUrl(file);
+      uploadedFile = await uploadPartnerWorkflowFile(evaluationNo, {
+        partnerId: partner.id,
+        flowType: 'received',
+        name: file.name,
+        contentType: file.type || undefined,
+        size: file.size,
+        dataUrl,
+      });
+      if (!uploadedFile) {
+        throw new Error('Upload failed');
+      }
+      const fileMeta = uploadedFile;
       const uploadedAt = formatTimestamp();
-      await onWorkflowEntryUpdate((entry) => ({
+      const success = await onWorkflowEntryUpdate((entry) => ({
         ...entry,
         receivedDocuments: [
           {
-            id: createId('partner-received-doc'),
-            name: file.name,
+            id: fileMeta.id,
+            name: fileMeta.name,
             type: 'received',
             uploadedAt,
             date: uploadedAt,
-            fileName: file.name,
-            contentType: file.type || 'application/octet-stream',
-            dataUrl,
-            size: file.size,
+            fileName: fileMeta.name,
+            contentType: fileMeta.contentType || undefined,
+            size: fileMeta.size,
+            fileId: fileMeta.id,
           },
           ...entry.receivedDocuments,
         ],
       }));
+      if (!success) {
+        await deletePartnerWorkflowFile(evaluationNo, fileMeta.id).catch(() => {});
+      } else {
+        onWorkflowError(null);
+      }
     } catch (error) {
-      console.error('Failed to read received document file:', error);
-      onWorkflowError('ファイルの読み込みに失敗しました。');
+      console.error('Failed to upload received document file:', error);
+      onWorkflowError('ファイルのアップロードに失敗しました。');
+      if (uploadedFile) {
+        await deletePartnerWorkflowFile(evaluationNo, uploadedFile.id).catch(() => {});
+      }
     } finally {
       setIsUploadingReceivedDoc(false);
       event.target.value = '';
     }
   };
 
-  const handleDeleteReceivedDocument = async (docId: string) => {
-    await onWorkflowEntryUpdate((entry) => ({
-      ...entry,
-      receivedDocuments: entry.receivedDocuments.filter((doc) => doc.id !== docId),
-    }));
+  const handleDeleteReceivedDocument = async (doc: PartnerDocument) => {
+    if (!evaluationNo) {
+      return;
+    }
+    try {
+      if (doc.fileId) {
+        await deletePartnerWorkflowFile(evaluationNo, doc.fileId);
+      }
+      await onWorkflowEntryUpdate((entry) => ({
+        ...entry,
+        receivedDocuments: entry.receivedDocuments.filter((item) => item.id !== doc.id),
+      }));
+      onWorkflowError(null);
+    } catch (error) {
+      console.error('Failed to delete received document:', error);
+      onWorkflowError('ファイルの削除に失敗しました。');
+    }
+  };
+
+  const handleDownloadReceivedDocument = async (doc: PartnerDocument) => {
+    const fileToken = doc.fileId || doc.id;
+    if (!evaluationNo || !fileToken) {
+      onWorkflowError('ファイルをダウンロードできません。');
+      return;
+    }
+    try {
+      const blob = await downloadPartnerWorkflowFile(evaluationNo, fileToken);
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = doc.fileName || doc.name;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+      onWorkflowError(null);
+    } catch (error) {
+      console.error('Failed to download received document:', error);
+      onWorkflowError('ファイルのダウンロードに失敗しました。');
+    }
   };
 
   // 選択中のテンプレート（スクリプトタブ用）
@@ -1270,7 +1333,15 @@ function PartnerCard({
                           受信日: {doc.uploadedAt || doc.date || '未登録'}
                         </Typography>
                       </Box>
-                      <IconButton size="small" onClick={() => handleDeleteReceivedDocument(doc.id)}>
+                      <IconButton
+                        size="small"
+                        onClick={() => handleDownloadReceivedDocument(doc)}
+                        disabled={!(doc.fileId || doc.id)}
+                        sx={{ opacity: doc.fileId || doc.id ? 1 : 0.6 }}
+                      >
+                        <DownloadIcon sx={{ ...iconStyles.small, color: doc.fileId || doc.id ? colors.text.muted : colors.text.light }} />
+                      </IconButton>
+                      <IconButton size="small" onClick={() => handleDeleteReceivedDocument(doc)}>
                         <DeleteIcon sx={{ ...iconStyles.small, color: colors.text.light, '&:hover': { color: colors.status.error.main } }} />
                       </IconButton>
                     </Box>
@@ -1439,47 +1510,102 @@ export function PartnerSection({
 
   const handleSentDocUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
-    if (!file) {
+    if (!file || !evaluationNo) {
+      event.target.value = '';
       return;
     }
 
+    let uploadedFile: { id: string; name: string; contentType?: string | null; size: number } | null = null;
+
     try {
-      const dataUrl = await readFileAsDataUrl(file);
-      const uploadedAt = formatTimestamp();
       setIsSentDocsSaving(true);
-      await persistPartnerWorkflow((prev) => ({
+      const dataUrl = await readFileAsDataUrl(file);
+      uploadedFile = await uploadPartnerWorkflowFile(evaluationNo, {
+        flowType: 'sent',
+        name: file.name,
+        contentType: file.type || undefined,
+        size: file.size,
+        dataUrl,
+      });
+      if (!uploadedFile) {
+        throw new Error('Upload failed');
+      }
+      const fileMeta = uploadedFile;
+      const uploadedAt = formatTimestamp();
+      const success = await persistPartnerWorkflow((prev) => ({
         ...prev,
         sentDocuments: [
           {
-            id: createId('partner-doc'),
-            name: file.name,
+            id: fileMeta.id,
+            name: fileMeta.name,
             type: 'sent',
             uploadedAt,
             date: uploadedAt,
-            fileName: file.name,
-            contentType: file.type || 'application/octet-stream',
-            dataUrl,
-            size: file.size,
+            fileName: fileMeta.name,
+            contentType: fileMeta.contentType || undefined,
+            size: fileMeta.size,
+            fileId: fileMeta.id,
           },
           ...prev.sentDocuments,
         ],
       }), { onError: setDocsError });
+      if (!success) {
+        await deletePartnerWorkflowFile(evaluationNo, fileMeta.id).catch(() => {});
+      }
     } catch (error) {
-      console.error('Failed to read file:', error);
-      setDocsError('ファイルの読み込みに失敗しました。');
+      console.error('Failed to upload sent document:', error);
+      setDocsError('ファイルのアップロードに失敗しました。');
+      if (uploadedFile) {
+        await deletePartnerWorkflowFile(evaluationNo, uploadedFile.id).catch(() => {});
+      }
     } finally {
       setIsSentDocsSaving(false);
       event.target.value = '';
     }
   };
 
-  const handleDeleteSentDocument = async (id: string) => {
+  const handleDeleteSentDocument = async (doc: PartnerDocument) => {
+    if (!evaluationNo) {
+      return;
+    }
     setIsSentDocsSaving(true);
-    await persistPartnerWorkflow((prev) => ({
-      ...prev,
-      sentDocuments: prev.sentDocuments.filter((doc) => doc.id !== id),
-    }), { onError: setDocsError });
-    setIsSentDocsSaving(false);
+    try {
+      if (doc.fileId) {
+        await deletePartnerWorkflowFile(evaluationNo, doc.fileId);
+      }
+      await persistPartnerWorkflow((prev) => ({
+        ...prev,
+        sentDocuments: prev.sentDocuments.filter((item) => item.id !== doc.id),
+      }), { onError: setDocsError });
+    } catch (error) {
+      console.error('Failed to delete sent document:', error);
+      setDocsError('ファイルの削除に失敗しました。');
+    } finally {
+      setIsSentDocsSaving(false);
+    }
+  };
+
+  const handleDownloadDocument = async (doc: PartnerDocument) => {
+    const fileToken = doc.fileId || doc.id;
+    if (!evaluationNo || !fileToken) {
+      setDocsError('ファイルをダウンロードできません。');
+      return;
+    }
+
+    try {
+      const blob = await downloadPartnerWorkflowFile(evaluationNo, fileToken);
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = doc.fileName || doc.name;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Failed to download partner document:', error);
+      setDocsError('ファイルのダウンロードに失敗しました。');
+    }
   };
 
   const triggerSentDocUpload = () => {
@@ -1665,6 +1791,7 @@ export function PartnerSection({
                   defaultCompanyName={defaultCompanyName}
                   defaultStaffName={defaultStaffName}
                   workflowAssigneeId={workflowAssigneeId}
+                  evaluationNo={evaluationNo}
                   workflowEntry={workflowEntry}
                   onWorkflowEntryUpdate={(updater) => updatePartnerEntry(partner.id, updater)}
                   onWorkflowError={setActionError}
@@ -1770,7 +1897,15 @@ export function PartnerSection({
                     送付日: {doc.uploadedAt || doc.date || '未登録'}
                   </Typography>
                 </Box>
-                <IconButton size="small" onClick={() => handleDeleteSentDocument(doc.id)}>
+                <IconButton
+                  size="small"
+                  onClick={() => handleDownloadDocument(doc)}
+                  disabled={!(doc.fileId || doc.id)}
+                  sx={{ opacity: doc.fileId || doc.id ? 1 : 0.6 }}
+                >
+                  <DownloadIcon sx={{ ...iconStyles.small, color: doc.fileId || doc.id ? colors.text.muted : colors.text.light }} />
+                </IconButton>
+                <IconButton size="small" onClick={() => handleDeleteSentDocument(doc)}>
                   <DeleteIcon sx={{ ...iconStyles.small, color: colors.text.light, '&:hover': { color: colors.status.error.main } }} />
                 </IconButton>
               </Box>

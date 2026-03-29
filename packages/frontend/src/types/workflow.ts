@@ -52,8 +52,8 @@ export interface PartnerDocument {
   uploadedAt?: string;
   fileName?: string;
   contentType?: string;
-  dataUrl?: string;
   size?: number;
+  fileId?: string;
 }
 
 export interface PartnerWorkflowEntry {
