@@ -230,7 +230,8 @@ export class EvaluationPartnerCandidateRepository {
     try {
       client = await pool.connect();
       const result = await client.query(sql, [evaluationNo, candidateId]);
-      return result.rowCount > 0;
+      const rowCount = result.rowCount ?? 0;
+      return rowCount > 0;
     } finally {
       client?.release();
     }
