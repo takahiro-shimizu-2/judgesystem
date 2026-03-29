@@ -485,6 +485,10 @@ function PartnerCard({
   const [editCallMemoText, setEditCallMemoText] = useState('');
   const [answerTargetId, setAnswerTargetId] = useState<string | null>(null);
   const [answerText, setAnswerText] = useState('');
+  const [showTranscriptionInput, setShowTranscriptionInput] = useState(false);
+  const [newTranscriptionText, setNewTranscriptionText] = useState('');
+  const [editingTranscriptionId, setEditingTranscriptionId] = useState<string | null>(null);
+  const [editTranscriptionText, setEditTranscriptionText] = useState('');
 
   const getDateStr = () => formatTimestamp();
 
@@ -545,6 +549,65 @@ function PartnerCard({
     if (success && editingCallMemoId === id) {
       setEditingCallMemoId(null);
       setEditCallMemoText('');
+    }
+  };
+
+  const addTranscription = async () => {
+    const content = newTranscriptionText.trim();
+    if (!content) return;
+    const success = await onWorkflowEntryUpdate((entry) => ({
+      ...entry,
+      transcriptions: [
+        {
+          id: createId('transcription'),
+          createdAt: getDateStr(),
+          content,
+        },
+        ...entry.transcriptions,
+      ],
+    }));
+    if (success) {
+      setNewTranscriptionText('');
+      setShowTranscriptionInput(false);
+      onWorkflowError(null);
+    }
+  };
+
+  const startEditingTranscription = (transcription: PartnerWorkflowEntry['transcriptions'][number]) => {
+    setEditingTranscriptionId(transcription.id);
+    setEditTranscriptionText(transcription.content);
+  };
+
+  const cancelEditingTranscription = () => {
+    setEditingTranscriptionId(null);
+    setEditTranscriptionText('');
+  };
+
+  const saveTranscription = async (id: string) => {
+    const content = editTranscriptionText.trim();
+    if (!content) return;
+    const success = await onWorkflowEntryUpdate((entry) => ({
+      ...entry,
+      transcriptions: entry.transcriptions.map((transcription) =>
+        transcription.id === id ? { ...transcription, content, updatedAt: getDateStr() } : transcription
+      ),
+    }));
+    if (success) {
+      cancelEditingTranscription();
+      onWorkflowError(null);
+    }
+  };
+
+  const deleteTranscription = async (id: string) => {
+    const success = await onWorkflowEntryUpdate((entry) => ({
+      ...entry,
+      transcriptions: entry.transcriptions.filter((transcription) => transcription.id !== id),
+    }));
+    if (success) {
+      if (editingTranscriptionId === id) {
+        cancelEditingTranscription();
+      }
+      onWorkflowError(null);
     }
   };
 
@@ -737,7 +800,7 @@ function PartnerCard({
           >
             <Tab icon={<ScriptIcon sx={iconStyles.small} />} iconPosition="start" label="スクリプト" />
             <Tab icon={<EmailIcon sx={iconStyles.small} />} iconPosition="start" label="メール" />
-            <Tab icon={<AttachFileIcon sx={iconStyles.small} />} iconPosition="start" label={`受信資料(${partner.receivedDocuments.length})`} />
+            <Tab icon={<AttachFileIcon sx={iconStyles.small} />} iconPosition="start" label={`受信資料(${receivedDocuments.length})`} />
             <Tab icon={<MicIcon sx={iconStyles.small} />} iconPosition="start" label={`文字起こし(${partner.transcriptions.length})`} />
           </Tabs>
 
@@ -1354,19 +1417,115 @@ function PartnerCard({
           {/* 文字起こしタブ */}
           {activeTab === 3 && (
             <Box>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+                <Typography sx={{ fontSize: fontSizes.sm, color: colors.text.muted }}>打合せや通話の文字起こしを記録</Typography>
+                <Button
+                  size="small"
+                  variant="outlined"
+                  startIcon={<AddIcon />}
+                  onClick={() => setShowTranscriptionInput((prev) => !prev)}
+                  sx={{ ...buttonStyles.small }}
+                >
+                  {showTranscriptionInput ? '入力を閉じる' : '文字起こしを追加'}
+                </Button>
+              </Box>
+
+              {showTranscriptionInput && (
+                <Box sx={{ mb: 1.5, display: 'flex', flexDirection: 'column', gap: 1 }}>
+                  <TextField
+                    value={newTranscriptionText}
+                    onChange={(e) => setNewTranscriptionText(e.target.value)}
+                    multiline
+                    minRows={3}
+                    placeholder="文字起こし内容を入力..."
+                    fullWidth
+                    sx={sectionStyles.textField}
+                  />
+                  <Box sx={{ display: 'flex', gap: 1 }}>
+                    <Button
+                      variant="contained"
+                      size="small"
+                      onClick={addTranscription}
+                      disabled={!newTranscriptionText.trim()}
+                      sx={{ ...buttonStyles.small, backgroundColor: colors.accent.blue, '&:hover': { backgroundColor: colors.accent.blueHover } }}
+                    >
+                      記録
+                    </Button>
+                    <Button
+                      size="small"
+                      onClick={() => {
+                        setNewTranscriptionText('');
+                        setShowTranscriptionInput(false);
+                      }}
+                    >
+                      キャンセル
+                    </Button>
+                  </Box>
+                </Box>
+              )}
+
               {workflowTranscriptions.length === 0 ? (
                 <Typography sx={{ fontSize: fontSizes.md, color: colors.text.muted, textAlign: 'center', py: 2 }}>文字起こしデータなし</Typography>
               ) : (
-                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, maxHeight: 200, overflow: 'auto' }}>
-                  {workflowTranscriptions.map((trans) => (
-                    <Box key={trans.id} sx={{ p: 1.5, backgroundColor: 'rgba(37, 99, 235, 0.05)', borderRadius: borderRadius.xs, border: '1px solid rgba(37, 99, 235, 0.15)' }}>
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.5 }}>
-                        <MicIcon sx={{ ...iconStyles.small, color: colors.accent.blue }} />
-                        <Typography sx={{ fontSize: fontSizes.sm, color: colors.text.muted }}>{trans.createdAt}</Typography>
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, maxHeight: 220, overflow: 'auto' }}>
+                  {workflowTranscriptions.map((trans) => {
+                    const isEditing = editingTranscriptionId === trans.id;
+                    return (
+                      <Box
+                        key={trans.id}
+                        sx={{ p: 1.5, backgroundColor: 'rgba(37, 99, 235, 0.05)', borderRadius: borderRadius.xs, border: '1px solid rgba(37, 99, 235, 0.15)' }}
+                      >
+                        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 0.5 }}>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                            <MicIcon sx={{ ...iconStyles.small, color: colors.accent.blue }} />
+                            <Typography sx={{ fontSize: fontSizes.sm, color: colors.text.muted }}>{trans.createdAt}</Typography>
+                            {trans.updatedAt && trans.updatedAt !== trans.createdAt && (
+                              <Typography sx={{ fontSize: fontSizes.xs, color: colors.text.light }}>更新: {trans.updatedAt}</Typography>
+                            )}
+                          </Box>
+                          {!isEditing && (
+                            <Box sx={{ display: 'flex', gap: 0.5 }}>
+                              <IconButton size="small" onClick={() => startEditingTranscription(trans)} sx={{ p: 0.25 }}>
+                                <EditIcon sx={{ ...iconStyles.small, color: colors.text.muted }} />
+                              </IconButton>
+                              <IconButton size="small" onClick={() => deleteTranscription(trans.id)} sx={{ p: 0.25 }}>
+                                <DeleteIcon sx={{ ...iconStyles.small, color: colors.status.error.main }} />
+                              </IconButton>
+                            </Box>
+                          )}
+                        </Box>
+                        {isEditing ? (
+                          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                            <TextField
+                              value={editTranscriptionText}
+                              onChange={(e) => setEditTranscriptionText(e.target.value)}
+                              multiline
+                              minRows={3}
+                              sx={sectionStyles.textField}
+                            />
+                            <Box sx={{ display: 'flex', gap: 1 }}>
+                              <Button
+                                variant="contained"
+                                size="small"
+                                onClick={() => saveTranscription(trans.id)}
+                                disabled={!editTranscriptionText.trim()}
+                                sx={{ ...buttonStyles.small, backgroundColor: colors.accent.blue }}
+                              >
+                                保存
+                              </Button>
+                              <Button size="small" onClick={cancelEditingTranscription}>
+                                キャンセル
+                              </Button>
+                            </Box>
+                          </Box>
+                        ) : (
+                          <Typography sx={{ fontSize: fontSizes.md, color: colors.text.secondary, whiteSpace: 'pre-wrap' }}>
+                            {trans.content}
+                          </Typography>
+                        )}
                       </Box>
-                      <Typography sx={{ fontSize: fontSizes.md, fontStyle: 'italic', color: colors.text.secondary }}>{trans.content}</Typography>
-                    </Box>
-                  ))}
+                    );
+                  })}
                 </Box>
               )}
             </Box>
