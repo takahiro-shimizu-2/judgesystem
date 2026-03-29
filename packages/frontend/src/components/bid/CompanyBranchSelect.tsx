@@ -48,12 +48,15 @@ export function CompanyBranchSelect({
       setInputValue('');
       return;
     }
-
     if (valueLabel) {
       setInputValue(valueLabel);
+    }
+  }, [value, valueLabel]);
+
+  useEffect(() => {
+    if (!value || valueLabel) {
       return;
     }
-
     const match = options.find((option) => option.officeId === value);
     if (match) {
       setInputValue(getOptionLabel(match));
