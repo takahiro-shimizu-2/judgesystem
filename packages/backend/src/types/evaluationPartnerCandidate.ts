@@ -1,8 +1,7 @@
 export interface EvaluationPartnerCandidate {
   id: string;
   evaluationNo: string;
-  partnerCompanyId: string | null;
-  partnerOfficeId: string | null;
+  partnerId: string;
   partnerName: string;
   contactPerson: string | null;
   phone: string | null;

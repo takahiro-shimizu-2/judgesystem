@@ -144,11 +144,8 @@ export interface Partner {
 
 /** 協力会社候補追加時の入力 */
 export interface PartnerCandidatePayload {
-  partnerCompanyId: string;
-  partnerOfficeId: string;
+  partnerId: string;
   partnerName: string;
-  companyName: string;
-  branchName?: string;
   contactPerson?: string;
   phone?: string;
   email?: string;

@@ -148,8 +148,7 @@ const PARTNER_STATUS_VALUES: PartnerStatus[] = [
 interface PartnerCandidateResponse {
   id: string;
   evaluationNo: string;
-  partnerCompanyId?: string | null;
-  partnerOfficeId?: string | null;
+  partnerId: string;
   partnerName: string;
   contactPerson?: string | null;
   phone?: string | null;
@@ -209,7 +208,16 @@ export const createPartnerCandidate = async (
       body: JSON.stringify(payload),
     });
     if (!response.ok) {
-      throw new Error(`Failed to create partner candidate: ${response.status}`);
+      let message = `Failed to create partner candidate: ${response.status}`;
+      try {
+        const errorBody = await response.json();
+        if (typeof errorBody?.message === 'string') {
+          message = errorBody.message;
+        }
+      } catch {
+        // ignore parse errors
+      }
+      throw new Error(message);
     }
     const data: PartnerCandidateResponse = await response.json();
     return mapPartnerFromApi(data);

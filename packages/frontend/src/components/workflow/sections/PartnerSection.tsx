@@ -57,7 +57,7 @@ import {
   staffSelectStyles,
 } from '../../../constants/styles';
 import { MEMO_TAGS, type MemoTag, type MemoTagConfig, type RecordMemo } from '../../../constants/memoTags';
-import type { Partner, PartnerStatus, PartnerDocument, CompanyBranchOption, PartnerCandidatePayload } from '../../../types';
+import type { Partner, PartnerStatus, PartnerDocument, PartnerCandidatePayload } from '../../../types';
 
 const TALK_TEMPLATE_IDS = ['talk-intro', 'talk-followup'] as const;
 const EMAIL_TEMPLATE_IDS = ['email-request', 'email-estimate'] as const;
@@ -65,7 +65,8 @@ import { partnerStatusLabels, partnerStatusColors, partnerStatusPriority } from 
 import { ContactInfo, ContactActions } from '../../common/ContactInfo';
 import { useStaffDirectory } from '../../../contexts/StaffContext';
 import { PersonIcon } from '../../../constants/icons';
-import { CompanyBranchSelect } from '../../bid/CompanyBranchSelect';
+import { PartnerSearchSelect, type PartnerSearchOption } from '../../partner';
+import { PartnerSearchSelect, type PartnerSearchOption } from '../../partner';
 
 // RecordMemoをCallMemoとして使用
 type CallMemo = RecordMemo;
@@ -1218,20 +1219,13 @@ export function PartnerSection({
   ]);
   const [actionError, setActionError] = useState<string | null>(null);
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
-  const [selectedBranchOption, setSelectedBranchOption] = useState<CompanyBranchOption | null>(null);
-  const [selectedOfficeId, setSelectedOfficeId] = useState<string | null>(null);
-  const [selectedBranchLabel, setSelectedBranchLabel] = useState<string | null>(null);
+  const [selectedPartnerOption, setSelectedPartnerOption] = useState<PartnerSearchOption | null>(null);
   const [addContactPerson, setAddContactPerson] = useState('');
   const [addPhone, setAddPhone] = useState('');
   const [addEmail, setAddEmail] = useState('');
   const [addFax, setAddFax] = useState('');
   const [addError, setAddError] = useState<string | null>(null);
   const [isSubmittingAdd, setIsSubmittingAdd] = useState(false);
-
-  const formatBranchLabel = useCallback((option: CompanyBranchOption | null) => {
-    if (!option) return '';
-    return option.branchName ? `${option.companyName}／${option.branchName}` : option.companyName;
-  }, []);
 
   // 送付資料の担当者
   const [manualSentDocsAssignee, setManualSentDocsAssignee] = useState<string>('');
@@ -1278,9 +1272,7 @@ export function PartnerSection({
   }, [onRemovePartner]);
 
   const resetAddForm = () => {
-    setSelectedBranchOption(null);
-    setSelectedOfficeId(null);
-    setSelectedBranchLabel(null);
+    setSelectedPartnerOption(null);
     setAddContactPerson('');
     setAddPhone('');
     setAddEmail('');
@@ -1299,18 +1291,15 @@ export function PartnerSection({
       setAddError('この環境では協力会社を追加できません。');
       return;
     }
-    if (!selectedBranchOption) {
+    if (!selectedPartnerOption) {
       setAddError('協力会社を選択してください。');
       return;
     }
     setIsSubmittingAdd(true);
     try {
       await onAddPartner({
-        partnerCompanyId: selectedBranchOption.companyId,
-        partnerOfficeId: selectedBranchOption.officeId,
-        partnerName: formatBranchLabel(selectedBranchOption),
-        companyName: selectedBranchOption.companyName,
-        branchName: selectedBranchOption.branchName,
+        partnerId: selectedPartnerOption.id,
+        partnerName: selectedPartnerOption.name,
         contactPerson: addContactPerson || undefined,
         phone: addPhone || undefined,
         email: addEmail || undefined,
@@ -1513,26 +1502,17 @@ export function PartnerSection({
               {addError}
             </Alert>
           )}
-          <CompanyBranchSelect
-            value={selectedOfficeId}
-            valueLabel={selectedBranchLabel ?? undefined}
-            onChange={(officeId, label) => {
-              setSelectedOfficeId(officeId);
-              if (!officeId) {
-                setSelectedBranchOption(null);
-                setSelectedBranchLabel(null);
+          <PartnerSearchSelect
+            value={selectedPartnerOption}
+            onChange={(option) => {
+              setSelectedPartnerOption(option);
+              if (option?.phone) {
+                setAddPhone((prev) => prev || option.phone || '');
               }
-              if (label) {
-                setSelectedBranchLabel(label);
-              }
-            }}
-            onOptionSelected={(option) => {
-              setSelectedBranchOption(option);
-              setSelectedBranchLabel(option ? formatBranchLabel(option) : null);
             }}
             label="協力会社"
-            placeholder="企業・拠点名で検索"
-            helperText="協力してもらいたい企業や支店を検索して選択してください"
+            placeholder="協力会社名で検索"
+            helperText="候補に追加したい協力会社を検索して選択してください"
           />
           <TextField
             label="担当者名"

@@ -3,8 +3,7 @@
 CREATE TABLE IF NOT EXISTS evaluation_partner_candidates (
   id BIGSERIAL PRIMARY KEY,
   evaluation_no TEXT NOT NULL,
-  partner_company_id TEXT,
-  partner_office_id TEXT,
+  partner_id TEXT NOT NULL,
   partner_name TEXT NOT NULL,
   contact_person TEXT,
   phone TEXT,
@@ -15,7 +14,7 @@ CREATE TABLE IF NOT EXISTS evaluation_partner_candidates (
   notes TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  UNIQUE (evaluation_no, partner_company_id, partner_office_id)
+  UNIQUE (evaluation_no, partner_id)
 );
 
 CREATE INDEX IF NOT EXISTS idx_evaluation_partner_candidates_eval_no

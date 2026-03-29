@@ -15,8 +15,7 @@ import type { OrdererWorkflowState } from "../repositories/evaluationOrdererWork
 import type { EvaluationPartnerCandidate } from "../types/evaluationPartnerCandidate";
 
 export interface CreatePartnerCandidateParams {
-  partnerCompanyId: string | null;
-  partnerOfficeId: string | null;
+  partnerId: string;
   partnerName: string;
   contactPerson?: string | null;
   phone?: string | null;

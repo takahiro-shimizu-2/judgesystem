@@ -4,8 +4,7 @@ import { pool, schemaPrefix, TABLES } from "../config/database";
 export interface EvaluationPartnerCandidateRecord {
   id: string;
   evaluationNo: string;
-  partnerCompanyId: string | null;
-  partnerOfficeId: string | null;
+  partnerId: string;
   partnerName: string;
   contactPerson: string | null;
   phone: string | null;
@@ -18,8 +17,7 @@ export interface EvaluationPartnerCandidateRecord {
 }
 
 export interface CreateEvaluationPartnerCandidateInput {
-  partnerCompanyId: string | null;
-  partnerOfficeId: string | null;
+  partnerId: string;
   partnerName: string;
   contactPerson?: string | null;
   phone?: string | null;
@@ -44,8 +42,7 @@ export class EvaluationPartnerCandidateRepository {
     return {
       id: String(row.id),
       evaluationNo: row.evaluation_no?.toString() ?? "",
-      partnerCompanyId: row.partner_company_id ? String(row.partner_company_id) : null,
-      partnerOfficeId: row.partner_office_id ? String(row.partner_office_id) : null,
+      partnerId: row.partner_id ? String(row.partner_id) : "",
       partnerName: row.partner_name ?? "",
       contactPerson: row.contact_person ?? null,
       phone: row.phone ?? null,
@@ -74,8 +71,7 @@ export class EvaluationPartnerCandidateRepository {
       SELECT
         id,
         evaluation_no,
-        partner_company_id,
-        partner_office_id,
+        partner_id,
         partner_name,
         contact_person,
         phone,
@@ -100,8 +96,7 @@ export class EvaluationPartnerCandidateRepository {
     const sql = `
       INSERT INTO ${this.tableName} (
         evaluation_no,
-        partner_company_id,
-        partner_office_id,
+        partner_id,
         partner_name,
         contact_person,
         phone,
@@ -116,8 +111,7 @@ export class EvaluationPartnerCandidateRepository {
       RETURNING
         id,
         evaluation_no,
-        partner_company_id,
-        partner_office_id,
+        partner_id,
         partner_name,
         contact_person,
         phone,
@@ -131,8 +125,7 @@ export class EvaluationPartnerCandidateRepository {
 
     const rows = await this.query(sql, [
       evaluationNo,
-      input.partnerCompanyId,
-      input.partnerOfficeId,
+      input.partnerId,
       input.partnerName,
       input.contactPerson ?? null,
       input.phone ?? null,
@@ -199,8 +192,7 @@ export class EvaluationPartnerCandidateRepository {
       RETURNING
         id,
         evaluation_no,
-        partner_company_id,
-        partner_office_id,
+        partner_id,
         partner_name,
         contact_person,
         phone,
@@ -242,8 +234,7 @@ export class EvaluationPartnerCandidateRepository {
       SELECT
         id,
         evaluation_no,
-        partner_company_id,
-        partner_office_id,
+        partner_id,
         partner_name,
         contact_person,
         phone,
