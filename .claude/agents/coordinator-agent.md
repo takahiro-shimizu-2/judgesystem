@@ -60,6 +60,10 @@ Issue本文から以下の形式を自動認識:
    - `gitnexus_query({query: "<Issue内容のキーワード>"})` で関連フロー特定
    - `gitnexus_impact({target: "<対象シンボル>"})` で影響範囲把握
    - 結果をタスク分解・依存関係構築に反映
+0.5 **Context-and-Impact Pipeline**: GitNexus の直後、Issue分析の前に実行
+   - アプリコード変更や Agent dispatch を含む作業では `bash scripts/context-impact/plan-init.sh "<Issue要約>" M` で `.ai/execution-plan.json` を初期化する
+   - `npm run pipeline:l1 -- "<キーワード>"` と必要な repo 文脈を集め、品質確認に進む
+   - docs / config / script-only 変更 (`.claude/*`, `.ai/*`, `docs/*`, `*.md`, `*.json`, `*.yml`, `*.yaml`, `*.txt`, `*.sh`) は skip 可
 1. **Issue分析**: Issue本文からタスク抽出
 2. **DAG構築**: 依存関係グラフ作成・循環依存チェック
 3. **Agent割り当て**: タスク種別に応じた専門Agent決定

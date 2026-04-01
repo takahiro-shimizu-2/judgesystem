@@ -50,6 +50,7 @@ coverage/
 .gcp-*.json
 
 # Project-specific data
+.ai/execution-plan.json
 data/ocr
 data/pdf
 data/sec

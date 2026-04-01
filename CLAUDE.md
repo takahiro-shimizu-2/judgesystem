@@ -144,6 +144,44 @@ Located in `.claude/commands/`:
 - `/security-scan` - Security vulnerability scan
 - `/generate-docs` - Auto-generate documentation from code
 
+## Context-and-Impact Pipeline
+
+Run this pipeline after GitNexus context gathering and before Issue analysis whenever the task changes application code or dispatches agents.
+
+### Default Flow
+
+1. `npm run pipeline:plan:init -- "<task summary>" M`
+2. `npm run pipeline:l1 -- "<keyword>"`
+3. Gather GitNexus impact and relevant local context
+4. `npm run pipeline:quality -- --task "<task summary>" --context "<assembled context>"`
+5. `npm run pipeline:classify -- --task "<task summary>"`
+6. `npm run pipeline:record -- "<task summary>" success 0.8`
+
+### Commands
+
+```bash
+npm run pipeline:l1 -- "auth"
+npm run pipeline:quality -- --task "Fix eligibility lookup" --context "..."
+npm run pipeline:classify -- --task "Fix eligibility lookup"
+npm run pipeline:dashboard
+npm run pipeline:plan:init -- "Fix eligibility lookup" M
+npm run pipeline:plan:status
+npm run pipeline:plan:clean
+npm run pipeline:record -- "Fix eligibility lookup" success 0.9
+```
+
+### Skip Conditions
+
+Skip the pipeline only for docs / config / script-only work that stays inside the enforcer allowlist:
+
+- `.claude/*`
+- `.ai/*`
+- `docs/*`
+- `.gitignore`
+- `*.md`, `*.json`, `*.yml`, `*.yaml`, `*.txt`, `*.sh`, `*.css`, `*.html`
+
+For application code changes, initialize the execution plan first and keep `project_memory/worklog.md` and `project_memory/tasks.json` up to date.
+
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
 

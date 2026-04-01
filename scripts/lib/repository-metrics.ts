@@ -107,8 +107,8 @@ export function resolveGitHubToken(options?: { preferProjectToken?: boolean }) {
 }
 
 export function getSkillBusSummary(rootDir = process.cwd()): SkillBusSummary {
-  const healthPath = path.join(rootDir, '.skill-bus', 'monitor', 'skill-health.json');
-  const runsPath = path.join(rootDir, '.skill-bus', 'monitor', 'skill-runs.jsonl');
+  const healthPath = path.join(rootDir, 'skills', 'self-improving-skills', 'skill-health.json');
+  const runsPath = path.join(rootDir, 'skills', 'self-improving-skills', 'skill-runs.jsonl');
 
   let health: RawSkillHealth = {};
   if (fs.existsSync(healthPath)) {
