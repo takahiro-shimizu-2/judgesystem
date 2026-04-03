@@ -14,7 +14,7 @@ try:
 except Exception as e:
     print(e)
 
-from packages.engine.repository.base import DBOperator, TablenamesConfig
+from packages.engine.repository.base import DBOperator, TablenamesConfig, validate_sql_identifier
 
 
 class DBOperatorPOSTGRES(DBOperator):
@@ -50,6 +50,7 @@ class DBOperatorPOSTGRES(DBOperator):
             print(fr"    SQLAlchemy Engine: {str(e)}")
 
     def lower_column_expr(self, column_name):
+        validate_sql_identifier(column_name, "column name")
         return f'LOWER("{column_name}")'
 
     def any_query(self, sql):
@@ -85,15 +86,18 @@ class DBOperatorPOSTGRES(DBOperator):
         return df
 
     def dropTable(self, tablename):
-        self.cur.execute(fr"DROP TABLE IF EXISTS {tablename}")
+        validate_sql_identifier(tablename, "table name")
+        drop_sql = sql.SQL("DROP TABLE IF EXISTS {}").format(sql.Identifier(tablename))
+        self.cur.execute(drop_sql)
 
     def uploadDataToTable(self, data, tablename, chunksize=1):
         # SQLAlchemy エンジンを使用して pandas DataFrame を PostgreSQL にアップロード
         data.to_sql(tablename, self.engine, if_exists="replace", index=False, chunksize=chunksize)
 
     def selectToTable(self, tablename, where_clause=""):
-        sql = fr"SELECT * FROM {tablename} {where_clause}"
-        ret = pd.read_sql_query(sql, self.engine)
+        validate_sql_identifier(tablename, "table name")
+        query = f'SELECT * FROM "{tablename}" {where_clause}'
+        ret = pd.read_sql_query(query, self.engine)
         return ret
 
     def createIndex(self, index_name, table_name, columns):
@@ -107,28 +111,45 @@ class DBOperatorPOSTGRES(DBOperator):
                 - 文字列: 単一カラムまたは式 (例: '"evaluatedAt"' or '((company->>\'priority\')::integer)')
                 - リスト: 複数カラム (例: ['status', '"evaluatedAt" DESC'])
         """
+        validate_sql_identifier(index_name, "index name")
+        validate_sql_identifier(table_name, "table name")
+
         if isinstance(columns, list):
             columns_clause = ", ".join(columns)
         else:
             columns_clause = columns
 
-        sql = f"CREATE INDEX IF NOT EXISTS {index_name} ON {table_name} ({columns_clause})"
+        # Note: columns_clause may contain expressions (e.g. casts, DESC)
+        # so we validate table/index names but leave the column expression as-is.
+        idx_sql = sql.SQL("CREATE INDEX IF NOT EXISTS {} ON {} ({})").format(
+            sql.Identifier(index_name),
+            sql.Identifier(table_name),
+            sql.SQL(columns_clause),
+        )
 
         try:
-            self.cur.execute(sql)
+            self.cur.execute(idx_sql)
             print(f"Index '{index_name}' created successfully")
         except Exception as e:
             print(f"Index '{index_name}' failed: {str(e)}")
 
     def ensure_column(self, tablename, column_name, column_type):
+        validate_sql_identifier(tablename, "table name")
+        validate_sql_identifier(column_name, "column name")
+        validate_sql_identifier(column_type, "column type")
         if not self.ifTableExists(tablename):
             return
-        sql = f'ALTER TABLE {tablename} ADD COLUMN IF NOT EXISTS "{column_name}" {column_type}'
-        self.cur.execute(sql)
+        alter_sql = sql.SQL('ALTER TABLE {} ADD COLUMN IF NOT EXISTS {} {}').format(
+            sql.Identifier(tablename),
+            sql.Identifier(column_name),
+            sql.SQL(column_type),
+        )
+        self.cur.execute(alter_sql)
 
     def createBidAnnouncements(self, bid_announcements_tablename):
+        validate_sql_identifier(bid_announcements_tablename, "table name")
         sql = fr"""
-        CREATE TABLE {bid_announcements_tablename} (
+        CREATE TABLE "{bid_announcements_tablename}" (
         announcement_no INTEGER PRIMARY KEY,
         "workName" TEXT,
         "userAnnNo" INTEGER,
@@ -170,8 +191,9 @@ class DBOperatorPOSTGRES(DBOperator):
         self.cur.execute(sql)
 
     def createBidAnnouncementsV2(self, bid_announcements_tablename):
+        validate_sql_identifier(bid_announcements_tablename, "table name")
         sql = fr"""
-        CREATE TABLE {bid_announcements_tablename} (
+        CREATE TABLE "{bid_announcements_tablename}" (
         announcement_no INTEGER PRIMARY KEY,
         "workName" TEXT,
         "userAnnNo" INTEGER,
@@ -216,8 +238,9 @@ class DBOperatorPOSTGRES(DBOperator):
         self.cur.execute(sql)
 
     def createBidAnnouncementDates(self, tablename):
-        sql = fr"""
-        CREATE TABLE {tablename} (
+        validate_sql_identifier(tablename, "table name")
+        create_sql = fr"""
+        CREATE TABLE "{tablename}" (
         announcement_no INTEGER NOT NULL,
         document_id TEXT,
         submission_document_name TEXT,
@@ -229,13 +252,21 @@ class DBOperatorPOSTGRES(DBOperator):
         "updatedDate" TEXT
         )
         """
-        self.cur.execute(sql)
-        self.cur.execute(fr"CREATE INDEX IF NOT EXISTS idx_{tablename}_announcement_no ON {tablename} (announcement_no)")
+        self.cur.execute(create_sql)
+        idx_name = f"idx_{tablename}_announcement_no"
+        validate_sql_identifier(idx_name, "index name")
+        idx_sql = sql.SQL("CREATE INDEX IF NOT EXISTS {} ON {} (announcement_no)").format(
+            sql.Identifier(idx_name),
+            sql.Identifier(tablename),
+        )
+        self.cur.execute(idx_sql)
 
 
     def createBidOrderersFromAnnouncements(self, bid_orderer_tablename, bid_announcements_tablename):
+        validate_sql_identifier(bid_orderer_tablename, "table name")
+        validate_sql_identifier(bid_announcements_tablename, "table name")
         sql = fr"""
-        CREATE TABLE {bid_orderer_tablename} AS
+        CREATE TABLE "{bid_orderer_tablename}" AS
         SELECT
         a.orderer_id,
         ROW_NUMBER() OVER() AS "no",
@@ -264,7 +295,7 @@ class DBOperatorPOSTGRES(DBOperator):
             0 AS awardCount,
             0 AS averageAmount,
             MIN("updatedDate") AS lastAnnouncementDate
-            FROM {bid_announcements_tablename}
+            FROM "{bid_announcements_tablename}"
             GROUP BY
             orderer_id
         ) a
@@ -428,8 +459,9 @@ class DBOperatorPOSTGRES(DBOperator):
 
 
     def createBidRequirements(self, bid_requirements_tablename):
+        validate_sql_identifier(bid_requirements_tablename, "table name")
         sql = fr"""
-        CREATE TABLE {bid_requirements_tablename} (
+        CREATE TABLE "{bid_requirements_tablename}" (
         document_id TEXT,
         announcement_no INTEGER,
         requirement_no INTEGER,
@@ -445,7 +477,9 @@ class DBOperatorPOSTGRES(DBOperator):
         self.cur.execute(sql)
 
     def updateAnnouncements(self, bid_announcements_tablename, bid_announcements_tablename_for_update):
-        sql = fr"""INSERT INTO {bid_announcements_tablename} (
+        validate_sql_identifier(bid_announcements_tablename, "table name")
+        validate_sql_identifier(bid_announcements_tablename_for_update, "table name")
+        sql = fr"""INSERT INTO "{bid_announcements_tablename}" (
             announcement_no,
             "workName",
             "userAnnNo",
@@ -500,15 +534,15 @@ class DBOperatorPOSTGRES(DBOperator):
         NULL,
         NULL,
         NULL
-        FROM {bid_announcements_tablename_for_update} source WHERE true
+        FROM "{bid_announcements_tablename_for_update}" source WHERE true
         ON CONFLICT(announcement_no) DO UPDATE SET
-            announcement_no = {bid_announcements_tablename}.announcement_no,
-            "workName" = {bid_announcements_tablename}."workName",
-            "userAnnNo" = {bid_announcements_tablename}."userAnnNo",
-            "topAgencyNo" = {bid_announcements_tablename}."topAgencyNo",
-            "topAgencyName" = {bid_announcements_tablename}."topAgencyName",
-            "subAgencyNo" = {bid_announcements_tablename}."subAgencyNo",
-            "subAgencyName" = {bid_announcements_tablename}."subAgencyName",
+            announcement_no = "{bid_announcements_tablename}".announcement_no,
+            "workName" = "{bid_announcements_tablename}"."workName",
+            "userAnnNo" = "{bid_announcements_tablename}"."userAnnNo",
+            "topAgencyNo" = "{bid_announcements_tablename}"."topAgencyNo",
+            "topAgencyName" = "{bid_announcements_tablename}"."topAgencyName",
+            "subAgencyNo" = "{bid_announcements_tablename}"."subAgencyNo",
+            "subAgencyName" = "{bid_announcements_tablename}"."subAgencyName",
             "workPlace" = EXCLUDED."workPlace",
             zipcode = EXCLUDED.zipcode,
             address = EXCLUDED.address,
@@ -525,20 +559,23 @@ class DBOperatorPOSTGRES(DBOperator):
             "bidStartDate" = EXCLUDED."bidStartDate",
             "bidEndDate" = EXCLUDED."bidEndDate",
             "doneOCR" = TRUE,
-            remarks = {bid_announcements_tablename}.remarks,
-            "createdDate" = {bid_announcements_tablename}."createdDate",
-            "updatedDate" = {bid_announcements_tablename}."updatedDate"
+            remarks = "{bid_announcements_tablename}".remarks,
+            "createdDate" = "{bid_announcements_tablename}"."createdDate",
+            "updatedDate" = "{bid_announcements_tablename}"."updatedDate"
         """
         self.cur.execute(sql)
 
     def getMaxOfColumn(self, tablename, column_name):
-        sql = fr"SELECT MAX({column_name}) FROM {tablename}"
-        ret = pd.read_sql_query(sql, self.engine)
+        validate_sql_identifier(tablename, "table name")
+        validate_sql_identifier(column_name, "column name")
+        query = f'SELECT MAX("{column_name}") FROM "{tablename}"'
+        ret = pd.read_sql_query(query, self.engine)
         return ret
 
     def createCompanyBidJudgements(self, company_bid_judgement_tablename):
+        validate_sql_identifier(company_bid_judgement_tablename, "table name")
         sql = fr"""
-        CREATE TABLE {company_bid_judgement_tablename} (
+        CREATE TABLE "{company_bid_judgement_tablename}" (
             evaluation_no TEXT,
             announcement_no INTEGER,
             company_no INTEGER,
@@ -561,8 +598,9 @@ class DBOperatorPOSTGRES(DBOperator):
         self.cur.execute(sql)
 
     def createSufficientRequirements(self, sufficient_requirements_tablename):
+        validate_sql_identifier(sufficient_requirements_tablename, "table name")
         sql = fr"""
-        CREATE TABLE {sufficient_requirements_tablename} (
+        CREATE TABLE "{sufficient_requirements_tablename}" (
             sufficiency_detail_no TEXT,
             evaluation_no TEXT,
             announcement_no INTEGER,
@@ -579,8 +617,9 @@ class DBOperatorPOSTGRES(DBOperator):
         self.cur.execute(sql)
 
     def createInsufficientRequirements(self, insufficient_requirements_tablename):
+        validate_sql_identifier(insufficient_requirements_tablename, "table name")
         sql = fr"""
-        CREATE TABLE {insufficient_requirements_tablename} (
+        CREATE TABLE "{insufficient_requirements_tablename}" (
             shortage_detail_no TEXT,
             evaluation_no TEXT,
             announcement_no INTEGER,
@@ -599,10 +638,11 @@ class DBOperatorPOSTGRES(DBOperator):
         self.cur.execute(sql)
 
     def createWorkflowContacts(self, workflow_contacts_tablename):
+        validate_sql_identifier(workflow_contacts_tablename, "table name")
         # gen_random_uuid を使用できるように拡張機能を有効化
         self.cur.execute('CREATE EXTENSION IF NOT EXISTS "pgcrypto"')
         sql = fr"""
-        CREATE TABLE {workflow_contacts_tablename} (
+        CREATE TABLE "{workflow_contacts_tablename}" (
             contact_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
             name TEXT,
             role TEXT,
@@ -618,8 +658,10 @@ class DBOperatorPOSTGRES(DBOperator):
         self.cur.execute(sql)
 
     def createEvaluationAssignees(self, evaluation_assignees_tablename, workflow_contacts_tablename="workflow_contacts"):
+        validate_sql_identifier(evaluation_assignees_tablename, "table name")
+        validate_sql_identifier(workflow_contacts_tablename, "table name")
         sql = fr"""
-        CREATE TABLE {evaluation_assignees_tablename} (
+        CREATE TABLE "{evaluation_assignees_tablename}" (
             evaluation_no TEXT NOT NULL,
             step_id TEXT NOT NULL,
             contact_id UUID NOT NULL,
@@ -627,7 +669,7 @@ class DBOperatorPOSTGRES(DBOperator):
             assigned_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
             assigned_by TEXT,
             PRIMARY KEY (evaluation_no, step_id),
-            FOREIGN KEY (contact_id) REFERENCES {workflow_contacts_tablename}(contact_id)
+            FOREIGN KEY (contact_id) REFERENCES "{workflow_contacts_tablename}"(contact_id)
         )
         """
         self.cur.execute(sql)
@@ -636,8 +678,9 @@ class DBOperatorPOSTGRES(DBOperator):
         """
         Ensure the table for persisting workflow states exists.
         """
+        validate_sql_identifier(tablename, "table name")
         sql = fr"""
-        CREATE TABLE IF NOT EXISTS {tablename} (
+        CREATE TABLE IF NOT EXISTS "{tablename}" (
             "evaluationNo" TEXT PRIMARY KEY,
             "workStatus" TEXT NOT NULL DEFAULT 'not_started',
             "currentStep" TEXT NOT NULL DEFAULT 'judgment',
@@ -648,7 +691,10 @@ class DBOperatorPOSTGRES(DBOperator):
         self.cur.execute(sql)
 
     def preupdateCompanyBidJudgement(self, company_bid_judgement_tablename, office_master_tablename, bid_announcements_tablename):
-        sql = fr"""INSERT INTO {company_bid_judgement_tablename} (
+        validate_sql_identifier(company_bid_judgement_tablename, "table name")
+        validate_sql_identifier(office_master_tablename, "table name")
+        validate_sql_identifier(bid_announcements_tablename, "table name")
+        sql = fr"""INSERT INTO "{company_bid_judgement_tablename}" (
             evaluation_no,
             announcement_no,
             company_no,
@@ -683,15 +729,18 @@ class DBOperatorPOSTGRES(DBOperator):
         NULL,
         NULL,
         NULL
-        FROM {bid_announcements_tablename} AS a
+        FROM "{bid_announcements_tablename}" AS a
         CROSS JOIN
-        {office_master_tablename} AS b
+        "{office_master_tablename}" AS b
         WHERE true
         ON CONFLICT(evaluation_no, announcement_no, company_no, office_no) DO NOTHING
         """
         self.cur.execute(sql)
 
     def preselectCompanyBidJudgement(self, company_bid_judgement_tablename, office_master_tablename, bid_announcements_tablename):
+        validate_sql_identifier(company_bid_judgement_tablename, "table name")
+        validate_sql_identifier(office_master_tablename, "table name")
+        validate_sql_identifier(bid_announcements_tablename, "table name")
         sql = fr"""
         SELECT
         x.announcement_no,
@@ -703,11 +752,11 @@ class DBOperatorPOSTGRES(DBOperator):
             a.announcement_no,
             b.company_no,
             b.office_no
-            FROM {bid_announcements_tablename} AS a
+            FROM "{bid_announcements_tablename}" AS a
             CROSS JOIN
-            {office_master_tablename} AS b
+            "{office_master_tablename}" AS b
         ) x
-        LEFT OUTER JOIN {company_bid_judgement_tablename} y
+        LEFT OUTER JOIN "{company_bid_judgement_tablename}" y
         ON
         x.announcement_no = y.announcement_no
         AND x.company_no = y.company_no
@@ -718,9 +767,11 @@ class DBOperatorPOSTGRES(DBOperator):
         return ret
 
     def updateCompanyBidJudgement(self, company_bid_judgement_tablename, company_bid_judgement_tablename_for_update):
+        validate_sql_identifier(company_bid_judgement_tablename, "table name")
+        validate_sql_identifier(company_bid_judgement_tablename_for_update, "table name")
         # preselectCompanyBidJudgementで未判定のみ取得済み、かつUUID使用のため単純INSERTでOK
         sql = f"""
-        INSERT INTO {company_bid_judgement_tablename} (
+        INSERT INTO "{company_bid_judgement_tablename}" (
             evaluation_no,
             announcement_no,
             company_no,
@@ -755,13 +806,15 @@ class DBOperatorPOSTGRES(DBOperator):
             remarks,
             "createdDate",
             "updatedDate"
-        FROM {company_bid_judgement_tablename_for_update}
+        FROM "{company_bid_judgement_tablename_for_update}"
         """
         self.cur.execute(sql)
 
     def updateSufficientRequirements(self, sufficient_requirements_tablename, sufficient_requirements_tablename_for_update):
+        validate_sql_identifier(sufficient_requirements_tablename, "table name")
+        validate_sql_identifier(sufficient_requirements_tablename_for_update, "table name")
         # UUID使用のため単純INSERTでOK
-        sql = fr"""INSERT INTO {sufficient_requirements_tablename} (
+        sql = fr"""INSERT INTO "{sufficient_requirements_tablename}" (
             sufficiency_detail_no,
             evaluation_no,
             announcement_no,
@@ -784,13 +837,15 @@ class DBOperatorPOSTGRES(DBOperator):
             requirement_description,
             "createdDate",
             "updatedDate"
-        FROM {sufficient_requirements_tablename_for_update} WHERE true
+        FROM "{sufficient_requirements_tablename_for_update}" WHERE true
         """
         self.cur.execute(sql)
 
     def updateInsufficientRequirements(self, insufficient_requirements_tablename, insufficient_requirements_tablename_for_update):
+        validate_sql_identifier(insufficient_requirements_tablename, "table name")
+        validate_sql_identifier(insufficient_requirements_tablename_for_update, "table name")
         # UUID使用のため単純INSERTでOK
-        sql = fr"""INSERT INTO {insufficient_requirements_tablename} (
+        sql = fr"""INSERT INTO "{insufficient_requirements_tablename}" (
             shortage_detail_no,
             evaluation_no,
             announcement_no,
@@ -817,7 +872,7 @@ class DBOperatorPOSTGRES(DBOperator):
             final_comment,
             "createdDate",
             "updatedDate"
-        FROM {insufficient_requirements_tablename_for_update} WHERE true
+        FROM "{insufficient_requirements_tablename_for_update}" WHERE true
         """
         self.cur.execute(sql)
 
@@ -835,63 +890,71 @@ class DBOperatorPOSTGRES(DBOperator):
         Returns:
             int: 挿入された行数
         """
+        validate_sql_identifier(target_tablename, "table name")
+        validate_sql_identifier(source_tablename, "table name")
+        for col in columns:
+            validate_sql_identifier(col, "column name")
+
         # 列名を引用符で囲んでカンマ区切りで結合（PostgreSQL の CamelCase 対策）
         quoted_columns = [f'"{col}"' if any(c.isupper() for c in col) else col for col in columns]
         columns_str = ", ".join(quoted_columns)
 
         # INSERT ... SELECT ... WHERE NOT EXISTS を使用して重複を避ける（document_id のみで重複チェック）
-        sql = f"""
-        INSERT INTO {target_tablename} ({columns_str})
+        merge_sql = f"""
+        INSERT INTO "{target_tablename}" ({columns_str})
         SELECT {columns_str}
-        FROM {source_tablename} AS S
+        FROM "{source_tablename}" AS S
         WHERE NOT EXISTS (
             SELECT 1
-            FROM {target_tablename} AS T
+            FROM "{target_tablename}" AS T
             WHERE T.document_id = S.document_id
         )
         """
 
-        self.cur.execute(sql)
+        self.cur.execute(merge_sql)
         # PostgreSQL では affected rows を取得
         return self.cur.rowcount
 
     def updateMarkdownPaths(self, tablename, df_markdown):
+        validate_sql_identifier(tablename, "table name")
         df_tmp = df_markdown[["document_id", "fileFormat", "markdown_path"]].dropna()
         if df_tmp.empty:
             return 0
         records = [(row["document_id"], row["fileFormat"], row["markdown_path"]) for _, row in df_tmp.iterrows()]
-        sql = f"""
-        UPDATE {tablename} AS t SET markdown_path = v.markdown_path
+        update_sql = f"""
+        UPDATE "{tablename}" AS t SET markdown_path = v.markdown_path
         FROM (VALUES %s) AS v(document_id, "fileFormat", markdown_path)
         WHERE t.document_id = v.document_id AND t."fileFormat" = v."fileFormat"
         """
-        execute_values(self.cur, sql, records)
+        execute_values(self.cur, update_sql, records)
         return len(records)
 
     def updateOcrJsonPaths(self, tablename, df_json):
+        validate_sql_identifier(tablename, "table name")
         df_tmp = df_json[["document_id", "fileFormat", "ocr_json_path"]].dropna()
         if df_tmp.empty:
             return 0
         records = [(row["document_id"], row["fileFormat"], row["ocr_json_path"]) for _, row in df_tmp.iterrows()]
-        sql = f"""
-        UPDATE {tablename} AS t SET ocr_json_path = v.ocr_json_path
+        update_sql = f"""
+        UPDATE "{tablename}" AS t SET ocr_json_path = v.ocr_json_path
         FROM (VALUES %s) AS v(document_id, "fileFormat", ocr_json_path)
         WHERE t.document_id = v.document_id AND t."fileFormat" = v."fileFormat"
         """
-        execute_values(self.cur, sql, records)
+        execute_values(self.cur, update_sql, records)
         return len(records)
 
     def updateFile404Flags(self, tablename, df_flags):
+        validate_sql_identifier(tablename, "table name")
         df_tmp = df_flags[["document_id", "fileFormat", "file_404_flag"]].dropna(subset=["document_id", "fileFormat"])
         if df_tmp.empty:
             return 0
         records = [(row["document_id"], row["fileFormat"], bool(row["file_404_flag"])) for _, row in df_tmp.iterrows()]
-        sql = f"""
-        UPDATE {tablename} AS t SET file_404_flag = v.file_404_flag
+        update_sql = f"""
+        UPDATE "{tablename}" AS t SET file_404_flag = v.file_404_flag
         FROM (VALUES %s) AS v(document_id, "fileFormat", file_404_flag)
         WHERE t.document_id = v.document_id AND t."fileFormat" = v."fileFormat"
         """
-        execute_values(self.cur, sql, records)
+        execute_values(self.cur, update_sql, records)
         return len(records)
 
     def mergeRequirements(self, target_tablename, source_tablename):
@@ -907,20 +970,22 @@ class DBOperatorPOSTGRES(DBOperator):
         Returns:
             int: 挿入された行数
         """
-        sql = f"""
-        INSERT INTO {target_tablename} (document_id, announcement_no, requirement_no,
+        validate_sql_identifier(target_tablename, "table name")
+        validate_sql_identifier(source_tablename, "table name")
+        merge_sql = f"""
+        INSERT INTO "{target_tablename}" (document_id, announcement_no, requirement_no,
                                          requirement_type, requirement_text, is_ocr_failed, done_judgement, "createdDate", "updatedDate")
         SELECT document_id, announcement_no, requirement_no,
                requirement_type, requirement_text, is_ocr_failed, done_judgement, "createdDate", "updatedDate"
-        FROM {source_tablename} AS S
+        FROM "{source_tablename}" AS S
         WHERE NOT EXISTS (
             SELECT 1
-            FROM {target_tablename} AS T
+            FROM "{target_tablename}" AS T
             WHERE T.announcement_no = S.announcement_no
         )
         """
 
-        self.cur.execute(sql)
+        self.cur.execute(merge_sql)
         return self.cur.rowcount
 
     def mergeBidAnnouncements(self, target_tablename, source_tablename):
@@ -936,8 +1001,10 @@ class DBOperatorPOSTGRES(DBOperator):
         Returns:
             int: 挿入された行数
         """
-        sql = f"""
-        INSERT INTO {target_tablename} (
+        validate_sql_identifier(target_tablename, "table name")
+        validate_sql_identifier(source_tablename, "table name")
+        merge_sql = f"""
+        INSERT INTO "{target_tablename}" (
             announcement_no, "workName", "topAgencyName", orderer_id,
             "workPlace", zipcode, address, department, "assigneeName",
             telephone, fax, mail, "publishDate", "docDistStart", "docDistEnd",
@@ -954,28 +1021,30 @@ class DBOperatorPOSTGRES(DBOperator):
             "bidType", category, is_ocr_failed, "doneOCR", "createdDate", "updatedDate",
             notice_category_name, notice_category_code, notice_procurement_method,
             category_segment, category_detail
-        FROM {source_tablename} AS S
+        FROM "{source_tablename}" AS S
         WHERE NOT EXISTS (
             SELECT 1
-            FROM {target_tablename} AS T
+            FROM "{target_tablename}" AS T
             WHERE T.announcement_no = S.announcement_no
         )
         """
 
-        self.cur.execute(sql)
+        self.cur.execute(merge_sql)
         return self.cur.rowcount
 
     def replaceBidAnnouncementDates(self, target_tablename, source_tablename):
+        validate_sql_identifier(target_tablename, "table name")
+        validate_sql_identifier(source_tablename, "table name")
         delete_sql = f"""
-        DELETE FROM {target_tablename}
+        DELETE FROM "{target_tablename}"
         WHERE announcement_no IN (
-            SELECT DISTINCT announcement_no FROM {source_tablename}
+            SELECT DISTINCT announcement_no FROM "{source_tablename}"
         )
         """
         self.cur.execute(delete_sql)
 
         insert_sql = f"""
-        INSERT INTO {target_tablename} (
+        INSERT INTO "{target_tablename}" (
             announcement_no, document_id, submission_document_name,
             date_value, date_raw, date_meaning, timepoint_type,
             "createdDate", "updatedDate"
@@ -983,13 +1052,13 @@ class DBOperatorPOSTGRES(DBOperator):
         SELECT
             announcement_no, document_id, submission_document_name,
             CASE
-                WHEN date_value ~ '^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$'
+                WHEN date_value ~ '^[0-9]{{4}}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$'
                     THEN date_value::DATE
                 ELSE NULL
             END AS date_value,
             date_raw, date_meaning, timepoint_type,
             "createdDate", "updatedDate"
-        FROM {source_tablename}
+        FROM "{source_tablename}"
         """
         self.cur.execute(insert_sql)
         return self.cur.rowcount
@@ -1005,14 +1074,16 @@ class DBOperatorPOSTGRES(DBOperator):
         Returns:
             DataFrame: announcement_id と req_exists (bool) の列を持つ DataFrame
         """
+        validate_sql_identifier(tmp_check_table, "table name")
+        validate_sql_identifier(requirements_table, "table name")
         query = f"""
         SELECT
             t.announcement_id,
             CASE WHEN r.announcement_no IS NOT NULL THEN 1 ELSE 0 END AS req_exists
-        FROM {tmp_check_table} t
+        FROM "{tmp_check_table}" t
         LEFT JOIN (
             SELECT DISTINCT announcement_no
-            FROM {requirements_table}
+            FROM "{requirements_table}"
         ) r ON t.announcement_id = r.announcement_no
         """
         return pd.read_sql_query(query, self.engine)
@@ -1027,9 +1098,10 @@ class DBOperatorPOSTGRES(DBOperator):
         Returns:
             DataFrame: document_id 列を持つ DataFrame
         """
+        validate_sql_identifier(tablename, "table name")
         query = f"""
         SELECT DISTINCT document_id
-        FROM {tablename}
+        FROM "{tablename}"
         """
         return pd.read_sql_query(query, self.engine)
 
@@ -1037,10 +1109,12 @@ class DBOperatorPOSTGRES(DBOperator):
         """
         DBOperatorPOSTGRES: 一時テーブルと既存テーブルを document_id で比較し、新規レコードを取得するクエリを生成
         """
+        validate_sql_identifier(tmp_table, "table name")
+        validate_sql_identifier(existing_table, "table name")
         query = f"""
         SELECT n.*
-        FROM {tmp_table} n
-        LEFT JOIN {existing_table} e ON n.document_id = e.document_id
+        FROM "{tmp_table}" n
+        LEFT JOIN "{existing_table}" e ON n.document_id = e.document_id
         WHERE e.document_id IS NULL
         """
         return query
@@ -1049,6 +1123,8 @@ class DBOperatorPOSTGRES(DBOperator):
         """
         DBOperatorPOSTGRES: 既存テーブルからグループごとの最大 announcement_id を取得するクエリを生成
         """
+        validate_sql_identifier(existing_table, "table name")
+        divisor = int(divisor)
         query = f"""
         SELECT
           announcement_group,
@@ -1057,7 +1133,7 @@ class DBOperatorPOSTGRES(DBOperator):
           SELECT
             announcement_id,
             CAST(FLOOR(announcement_id / {divisor}) AS INTEGER) AS announcement_group
-          FROM {existing_table}
+          FROM "{existing_table}"
         ) subquery
         GROUP BY announcement_group
         """
@@ -1075,14 +1151,16 @@ class DBOperatorPOSTGRES(DBOperator):
         Returns:
             DataFrame: announcement_no, document_id の列を持つ DataFrame
         """
+        validate_sql_identifier(announcements_document_tablename, "table name")
+        validate_sql_identifier(requirements_tablename, "table name")
         if requirements_exists:
             # 既存の announcement_no を除外
             query = f"""
             SELECT ad.announcement_id AS announcement_no, ad.document_id
-            FROM {announcements_document_tablename} AS ad
+            FROM "{announcements_document_tablename}" AS ad
             LEFT JOIN (
                 SELECT DISTINCT announcement_no
-                FROM {requirements_tablename}
+                FROM "{requirements_tablename}"
             ) AS r ON ad.announcement_id = r.announcement_no
             WHERE r.announcement_no IS NULL
             ORDER BY ad.announcement_id, ad.document_id
@@ -1091,7 +1169,7 @@ class DBOperatorPOSTGRES(DBOperator):
             # 全ての announcement-document ペアを取得
             query = f"""
             SELECT announcement_id AS announcement_no, document_id
-            FROM {announcements_document_tablename}
+            FROM "{announcements_document_tablename}"
             ORDER BY announcement_id, document_id
             """
 

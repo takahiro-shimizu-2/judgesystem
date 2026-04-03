@@ -8,7 +8,7 @@ try:
 except Exception as e:
     print(e)
 
-from packages.engine.repository.base import DBOperator, TablenamesConfig
+from packages.engine.repository.base import DBOperator, TablenamesConfig, validate_sql_identifier
 
 
 class DBOperatorGCPVM(DBOperator):
@@ -27,6 +27,7 @@ class DBOperatorGCPVM(DBOperator):
         return df
 
     def ifTableExists(self, tablename):
+        validate_sql_identifier(tablename, "table name")
         sql = fr"""
         SELECT table_name FROM `{self.project_id}.{self.dataset_name}.INFORMATION_SCHEMA.TABLES`
         WHERE table_name = '{tablename}'
@@ -52,6 +53,7 @@ class DBOperatorGCPVM(DBOperator):
         return df
 
     def dropTable(self, tablename):
+        validate_sql_identifier(tablename, "table name")
         self.client.delete_table(fr"{self.project_id}.{self.dataset_name}.{tablename}", not_found_ok=True)
 
     def uploadDataToTable(self, data, tablename, chunksize=1):
@@ -68,6 +70,7 @@ class DBOperatorGCPVM(DBOperator):
         )
 
     def selectToTable(self, tablename, where_clause=""):
+        validate_sql_identifier(tablename, "table name")
         sql = fr"select * from `{self.project_id}.{self.dataset_name}.{tablename}` {where_clause}"
         df = self.client.query(sql).result().to_dataframe()
         return df
@@ -77,6 +80,9 @@ class DBOperatorGCPVM(DBOperator):
         raise NotImplementedError("BigQuery does not support explicit indexes")
 
     def ensure_column(self, tablename, column_name, column_type):
+        validate_sql_identifier(tablename, "table name")
+        validate_sql_identifier(column_name, "column name")
+        validate_sql_identifier(column_type, "column type")
         if not self.ifTableExists(tablename):
             return
         sql = f"""
@@ -86,6 +92,7 @@ class DBOperatorGCPVM(DBOperator):
         self.client.query(sql).result()
 
     def createBidAnnouncements(self, bid_announcements_tablename):
+        validate_sql_identifier(bid_announcements_tablename, "table name")
         sql = fr"""
         create table `{self.project_id}.{self.dataset_name}.{bid_announcements_tablename}` (
         announcement_no int64,
@@ -129,6 +136,7 @@ class DBOperatorGCPVM(DBOperator):
         self.client.query(sql).result()
 
     def createBidAnnouncementsV2(self, bid_announcements_tablename):
+        validate_sql_identifier(bid_announcements_tablename, "table name")
         sql = fr"""
         create table `{self.project_id}.{self.dataset_name}.{bid_announcements_tablename}` (
         announcement_no int64,
@@ -175,6 +183,7 @@ class DBOperatorGCPVM(DBOperator):
         self.client.query(sql).result()
 
     def createBidAnnouncementDates(self, tablename):
+        validate_sql_identifier(tablename, "table name")
         sql = fr"""
         create table `{self.project_id}.{self.dataset_name}.{tablename}` (
         announcement_no int64,
@@ -192,6 +201,8 @@ class DBOperatorGCPVM(DBOperator):
 
 
     def createBidOrderersFromAnnouncements(self, bid_orderer_tablename, bid_announcements_tablename):
+        validate_sql_identifier(bid_orderer_tablename, "table name")
+        validate_sql_identifier(bid_announcements_tablename, "table name")
         sql = fr"""
         create table `{self.project_id}.{self.dataset_name}.{bid_orderer_tablename}` as
         select
@@ -340,6 +351,7 @@ class DBOperatorGCPVM(DBOperator):
 
 
     def createBidRequirements(self, bid_requirements_tablename):
+        validate_sql_identifier(bid_requirements_tablename, "table name")
         sql = fr"""
         create table `{self.project_id}.{self.dataset_name}.{bid_requirements_tablename}` (
         document_id string,
@@ -357,6 +369,8 @@ class DBOperatorGCPVM(DBOperator):
 
 
     def updateAnnouncements(self, bid_announcements_tablename, bid_announcements_tablename_for_update):
+        validate_sql_identifier(bid_announcements_tablename, "table name")
+        validate_sql_identifier(bid_announcements_tablename_for_update, "table name")
         sql = fr"""MERGE `{self.project_id}.{self.dataset_name}.{bid_announcements_tablename}` AS target
         USING `{self.project_id}.{self.dataset_name}.{bid_announcements_tablename_for_update}` AS source
         ON target.announcement_no = source.announcement_no
@@ -382,12 +396,15 @@ class DBOperatorGCPVM(DBOperator):
         self.client.query(sql).result()
 
     def getMaxOfColumn(self, tablename, column_name):
-        sql = fr"SELECT max({column_name}) FROM `{self.project_id}.{self.dataset_name}.{tablename}`"
+        validate_sql_identifier(tablename, "table name")
+        validate_sql_identifier(column_name, "column name")
+        sql = fr"SELECT max(`{column_name}`) FROM `{self.project_id}.{self.dataset_name}.{tablename}`"
         df = self.client.query(sql).result().to_dataframe()
         return df
 
 
     def createCompanyBidJudgements(self, company_bid_judgement_tablename):
+        validate_sql_identifier(company_bid_judgement_tablename, "table name")
         sql = fr"""
         create table `{self.project_id}.{self.dataset_name}.{company_bid_judgement_tablename}` (
             evaluation_no string,
@@ -411,6 +428,7 @@ class DBOperatorGCPVM(DBOperator):
         self.client.query(sql).result()
 
     def createSufficientRequirements(self, sufficient_requirements_tablename):
+        validate_sql_identifier(sufficient_requirements_tablename, "table name")
         sql = fr"""
         create table `{self.project_id}.{self.dataset_name}.{sufficient_requirements_tablename}` (
             sufficiency_detail_no string,
@@ -428,6 +446,7 @@ class DBOperatorGCPVM(DBOperator):
         self.client.query(sql).result()
 
     def createInsufficientRequirements(self, insufficient_requirements_tablename):
+        validate_sql_identifier(insufficient_requirements_tablename, "table name")
         sql = fr"""
         create table `{self.project_id}.{self.dataset_name}.{insufficient_requirements_tablename}` (
             shortage_detail_no string,
@@ -447,6 +466,7 @@ class DBOperatorGCPVM(DBOperator):
         self.client.query(sql).result()
 
     def createWorkflowContacts(self, workflow_contacts_tablename):
+        validate_sql_identifier(workflow_contacts_tablename, "table name")
         sql = fr"""
         create table `{self.project_id}.{self.dataset_name}.{workflow_contacts_tablename}` (
             contact_id string default generate_uuid(),
@@ -464,6 +484,8 @@ class DBOperatorGCPVM(DBOperator):
         self.client.query(sql).result()
 
     def createEvaluationAssignees(self, evaluation_assignees_tablename, workflow_contacts_tablename="workflow_contacts"):
+        validate_sql_identifier(evaluation_assignees_tablename, "table name")
+        validate_sql_identifier(workflow_contacts_tablename, "table name")
         sql = fr"""
         create table `{self.project_id}.{self.dataset_name}.{evaluation_assignees_tablename}` (
             evaluation_no string,
@@ -477,6 +499,9 @@ class DBOperatorGCPVM(DBOperator):
         self.client.query(sql).result()
 
     def preupdateCompanyBidJudgement(self, company_bid_judgement_tablename, office_master_tablename, bid_announcements_tablename):
+        validate_sql_identifier(company_bid_judgement_tablename, "table name")
+        validate_sql_identifier(office_master_tablename, "table name")
+        validate_sql_identifier(bid_announcements_tablename, "table name")
         sql = fr"""MERGE `{self.project_id}.{self.dataset_name}.{company_bid_judgement_tablename}` AS target
         USING (
             select
@@ -534,6 +559,9 @@ class DBOperatorGCPVM(DBOperator):
         self.client.query(sql).result()
 
     def preselectCompanyBidJudgement(self, company_bid_judgement_tablename, office_master_tablename, bid_announcements_tablename):
+        validate_sql_identifier(company_bid_judgement_tablename, "table name")
+        validate_sql_identifier(office_master_tablename, "table name")
+        validate_sql_identifier(bid_announcements_tablename, "table name")
         sql = fr"""
         select
         x.announcement_no,
@@ -561,6 +589,8 @@ class DBOperatorGCPVM(DBOperator):
 
 
     def updateCompanyBidJudgement(self, company_bid_judgement_tablename, company_bid_judgement_tablename_for_update):
+        validate_sql_identifier(company_bid_judgement_tablename, "table name")
+        validate_sql_identifier(company_bid_judgement_tablename_for_update, "table name")
         # preselectCompanyBidJudgementで未判定のみ取得済み、かつUUID使用のため単純INSERTでOK
         sql = f"""
         INSERT INTO `{self.project_id}.{self.dataset_name}.{company_bid_judgement_tablename}` (
@@ -603,6 +633,8 @@ class DBOperatorGCPVM(DBOperator):
         self.client.query(sql).result()
 
     def updateSufficientRequirements(self, sufficient_requirements_tablename, sufficient_requirements_tablename_for_update):
+        validate_sql_identifier(sufficient_requirements_tablename, "table name")
+        validate_sql_identifier(sufficient_requirements_tablename_for_update, "table name")
         # UUID使用のため単純INSERTでOK
         sql = f"""
         INSERT INTO `{self.project_id}.{self.dataset_name}.{sufficient_requirements_tablename}` (
@@ -633,6 +665,8 @@ class DBOperatorGCPVM(DBOperator):
         self.client.query(sql).result()
 
     def updateInsufficientRequirements(self, insufficient_requirements_tablename, insufficient_requirements_tablename_for_update):
+        validate_sql_identifier(insufficient_requirements_tablename, "table name")
+        validate_sql_identifier(insufficient_requirements_tablename_for_update, "table name")
         # UUID使用のため単純INSERTでOK
         sql = f"""
         INSERT INTO `{self.project_id}.{self.dataset_name}.{insufficient_requirements_tablename}` (
@@ -667,6 +701,10 @@ class DBOperatorGCPVM(DBOperator):
         self.client.query(sql).result()
 
     def mergeAnnouncementsDocumentTable(self, target_tablename, source_tablename, columns):
+        validate_sql_identifier(target_tablename, "table name")
+        validate_sql_identifier(source_tablename, "table name")
+        for col in columns:
+            validate_sql_identifier(col, "column name")
         """
         BigQuery MERGE文で announcements_document_table に新しいレコードを挿入
 
@@ -701,6 +739,7 @@ class DBOperatorGCPVM(DBOperator):
         return query_job.num_dml_affected_rows
 
     def updateMarkdownPaths(self, tablename, df_markdown):
+        validate_sql_identifier(tablename, "table name")
         if df_markdown.empty:
             return 0
 
@@ -723,6 +762,7 @@ class DBOperatorGCPVM(DBOperator):
         return job.num_dml_affected_rows
 
     def updateOcrJsonPaths(self, tablename, df_json):
+        validate_sql_identifier(tablename, "table name")
         if df_json.empty:
             return 0
 
@@ -745,6 +785,7 @@ class DBOperatorGCPVM(DBOperator):
         return job.num_dml_affected_rows
 
     def updateFile404Flags(self, tablename, df_flags):
+        validate_sql_identifier(tablename, "table name")
         if df_flags.empty:
             return 0
 
@@ -767,6 +808,8 @@ class DBOperatorGCPVM(DBOperator):
         return job.num_dml_affected_rows
 
     def mergeRequirements(self, target_tablename, source_tablename):
+        validate_sql_identifier(target_tablename, "table name")
+        validate_sql_identifier(source_tablename, "table name")
         """
         BigQuery MERGE文で bid_requirements に新しいレコードを挿入
 
@@ -795,6 +838,8 @@ class DBOperatorGCPVM(DBOperator):
         return query_job.num_dml_affected_rows
 
     def mergeBidAnnouncements(self, target_tablename, source_tablename):
+        validate_sql_identifier(target_tablename, "table name")
+        validate_sql_identifier(source_tablename, "table name")
         """
         BigQuery MERGE文で bid_announcements に新しいレコードを挿入
 
@@ -833,6 +878,8 @@ class DBOperatorGCPVM(DBOperator):
         return query_job.num_dml_affected_rows
 
     def replaceBidAnnouncementDates(self, target_tablename, source_tablename):
+        validate_sql_identifier(target_tablename, "table name")
+        validate_sql_identifier(source_tablename, "table name")
         target = f"`{self.project_id}.{self.dataset_name}.{target_tablename}`"
         source = f"`{self.project_id}.{self.dataset_name}.{source_tablename}`"
         delete_sql = f"""
@@ -860,6 +907,8 @@ class DBOperatorGCPVM(DBOperator):
         return query_job.num_dml_affected_rows
 
     def checkRequirementsExist(self, tmp_check_table, requirements_table):
+        validate_sql_identifier(tmp_check_table, "table name")
+        validate_sql_identifier(requirements_table, "table name")
         """
         BigQuery で一時テーブルの announcement_id について requirements の存在をチェック
 
@@ -884,6 +933,7 @@ class DBOperatorGCPVM(DBOperator):
         return query_job.to_dataframe()
 
     def getDistinctDocumentIds(self, tablename):
+        validate_sql_identifier(tablename, "table name")
         """
         BigQuery でテーブルから DISTINCT な document_id を取得
 
@@ -900,6 +950,8 @@ class DBOperatorGCPVM(DBOperator):
         return self.client.query(query).result().to_dataframe()
 
     def build_new_documents_query(self, tmp_table, existing_table):
+        validate_sql_identifier(tmp_table, "table name")
+        validate_sql_identifier(existing_table, "table name")
         """
         DBOperatorGCPVM: 一時テーブルと既存テーブルを document_id で比較し、新規レコードを取得するクエリを生成
         """
@@ -913,6 +965,8 @@ class DBOperatorGCPVM(DBOperator):
         return query
 
     def build_max_announcement_id_query(self, existing_table, divisor):
+        validate_sql_identifier(existing_table, "table name")
+        divisor = int(divisor)
         """
         DBOperatorGCPVM: 既存テーブルからグループごとの最大 announcement_id を取得するクエリを生成
         """
@@ -931,6 +985,8 @@ class DBOperatorGCPVM(DBOperator):
         return query
 
     def selectUnprocessedAnnouncementDocuments(self, announcements_document_tablename, requirements_tablename, requirements_exists):
+        validate_sql_identifier(announcements_document_tablename, "table name")
+        validate_sql_identifier(requirements_tablename, "table name")
         """
         BigQuery で未処理の announcement-document ペアを取得する
 

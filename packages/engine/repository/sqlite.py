@@ -2,7 +2,7 @@
 
 import pandas as pd
 
-from packages.engine.repository.base import DBOperator, TablenamesConfig
+from packages.engine.repository.base import DBOperator, TablenamesConfig, validate_sql_identifier
 
 
 class DBOperatorSQLITE3(DBOperator):
@@ -42,14 +42,16 @@ class DBOperatorSQLITE3(DBOperator):
         return df
 
     def dropTable(self, tablename):
-        self.cur.execute(fr"DROP TABLE IF EXISTS {tablename}")
+        validate_sql_identifier(tablename, "table name")
+        self.cur.execute(f'DROP TABLE IF EXISTS "{tablename}"')
 
     def uploadDataToTable(self, data, tablename, chunksize=1):
         data.to_sql(tablename, self.conn, if_exists="replace", index=False, chunksize=chunksize)
 
     def selectToTable(self, tablename, where_clause=""):
-        sql = fr"SELECT * FROM {tablename} {where_clause}"
-        ret = pd.read_sql_query(sql, self.conn)
+        validate_sql_identifier(tablename, "table name")
+        query = f'SELECT * FROM "{tablename}" {where_clause}'
+        ret = pd.read_sql_query(query, self.conn)
         return ret
 
     def createIndex(self, index_name, table_name, columns):
@@ -57,19 +59,23 @@ class DBOperatorSQLITE3(DBOperator):
         raise NotImplementedError("SQLite3 index creation is not implemented yet")
 
     def ensure_column(self, tablename, column_name, column_type):
+        validate_sql_identifier(tablename, "table name")
+        validate_sql_identifier(column_name, "column name")
+        validate_sql_identifier(column_type, "column type")
         if not self.ifTableExists(tablename):
             return
-        info_sql = fr"PRAGMA table_info({tablename})"
+        info_sql = f'PRAGMA table_info("{tablename}")'
         df_info = pd.read_sql_query(info_sql, self.conn)
         if column_name in df_info["name"].tolist():
             return
-        alter_sql = fr"ALTER TABLE {tablename} ADD COLUMN {column_name} {column_type}"
+        alter_sql = f'ALTER TABLE "{tablename}" ADD COLUMN "{column_name}" {column_type}'
         self.cur.execute(alter_sql)
         self.conn.commit()
 
     def createBidAnnouncements(self, bid_announcements_tablename):
+        validate_sql_identifier(bid_announcements_tablename, "table name")
         sql = fr"""
-        create table {bid_announcements_tablename} (
+        create table "{bid_announcements_tablename}" (
         announcement_no integer PRIMARY KEY,
         workName string,
         userAnnNo integer,
@@ -257,8 +263,9 @@ class DBOperatorSQLITE3(DBOperator):
         self.conn.commit()
 
     def createBidAnnouncementsV2(self, bid_announcements_tablename):
+        validate_sql_identifier(bid_announcements_tablename, "table name")
         sql = fr"""
-        create table {bid_announcements_tablename} (
+        create table "{bid_announcements_tablename}" (
         announcement_no integer PRIMARY KEY,
         workName string,
         userAnnNo integer,
@@ -303,8 +310,9 @@ class DBOperatorSQLITE3(DBOperator):
         self.cur.execute(sql)
 
     def createBidAnnouncementDates(self, tablename):
+        validate_sql_identifier(tablename, "table name")
         sql = fr"""
-        create table {tablename} (
+        create table "{tablename}" (
         id integer PRIMARY KEY AUTOINCREMENT,
         announcement_no integer NOT NULL,
         document_id text,
@@ -318,12 +326,16 @@ class DBOperatorSQLITE3(DBOperator):
         )
         """
         self.cur.execute(sql)
-        self.cur.execute(fr"CREATE INDEX IF NOT EXISTS idx_{tablename}_announcement_no ON {tablename}(announcement_no)")
+        idx_name = f"idx_{tablename}_announcement_no"
+        validate_sql_identifier(idx_name, "index name")
+        self.cur.execute(f'CREATE INDEX IF NOT EXISTS "{idx_name}" ON "{tablename}"(announcement_no)')
 
 
     def createBidOrderersFromAnnouncements(self, bid_orderer_tablename, bid_announcements_tablename):
+        validate_sql_identifier(bid_orderer_tablename, "table name")
+        validate_sql_identifier(bid_announcements_tablename, "table name")
         sql = fr"""
-        create table {bid_orderer_tablename} as
+        create table "{bid_orderer_tablename}" as
         select
         a.orderer_id,
         row_number() over() as `no`,
@@ -352,7 +364,7 @@ class DBOperatorSQLITE3(DBOperator):
             0 as awardCount,
             0 as averageAmount,
             min(updatedDate) as lastAnnouncementDate
-            from {bid_announcements_tablename}
+            from "{bid_announcements_tablename}"
             group by
             orderer_id
         ) a
@@ -361,8 +373,9 @@ class DBOperatorSQLITE3(DBOperator):
 
 
     def createBidRequirements(self, bid_requirements_tablename):
+        validate_sql_identifier(bid_requirements_tablename, "table name")
         sql = fr"""
-        create table {bid_requirements_tablename} (
+        create table "{bid_requirements_tablename}" (
         document_id text,
         announcement_no integer,
         requirement_no integer,
@@ -378,7 +391,9 @@ class DBOperatorSQLITE3(DBOperator):
         self.cur.execute(sql)
 
     def updateAnnouncements(self, bid_announcements_tablename, bid_announcements_tablename_for_update):
-        sql = fr"""insert into {bid_announcements_tablename} (
+        validate_sql_identifier(bid_announcements_tablename, "table name")
+        validate_sql_identifier(bid_announcements_tablename_for_update, "table name")
+        sql = fr"""insert into "{bid_announcements_tablename}" (
             announcement_no,
             workName,
             userAnnNo,
@@ -433,15 +448,15 @@ class DBOperatorSQLITE3(DBOperator):
         NULL,
         NULL,
         NULL
-        from {bid_announcements_tablename_for_update} source where true
+        from "{bid_announcements_tablename_for_update}" source where true
         ON CONFLICT(announcement_no) DO UPDATE SET
-            announcement_no = {bid_announcements_tablename}.announcement_no,
-            workname = {bid_announcements_tablename}.workname,
-            userAnnNo = {bid_announcements_tablename}.userannno,
-            topAgencyNo = {bid_announcements_tablename}.topagencyno,
-            topAgencyName = {bid_announcements_tablename}.topagencyname,
-            subAgencyNo = {bid_announcements_tablename}.subagencyno,
-            subAgencyName = {bid_announcements_tablename}.subagencyname,
+            announcement_no = "{bid_announcements_tablename}".announcement_no,
+            workname = "{bid_announcements_tablename}".workname,
+            userAnnNo = "{bid_announcements_tablename}".userannno,
+            topAgencyNo = "{bid_announcements_tablename}".topagencyno,
+            topAgencyName = "{bid_announcements_tablename}".topagencyname,
+            subAgencyNo = "{bid_announcements_tablename}".subagencyno,
+            subAgencyName = "{bid_announcements_tablename}".subagencyname,
             workplace = excluded.workplace,
             zipcode = excluded.zipcode,
             address = excluded.address,
@@ -458,20 +473,23 @@ class DBOperatorSQLITE3(DBOperator):
             bidstartdate = excluded.bidstartdate,
             bidenddate = excluded.bidenddate,
             doneocr = TRUE,
-            remarks = {bid_announcements_tablename}.remarks,
-            createdDate = {bid_announcements_tablename}.createddate,
-            updatedDate = {bid_announcements_tablename}.updateddate
+            remarks = "{bid_announcements_tablename}".remarks,
+            createdDate = "{bid_announcements_tablename}".createddate,
+            updatedDate = "{bid_announcements_tablename}".updateddate
         """
         self.cur.execute(sql)
 
     def getMaxOfColumn(self, tablename, column_name):
-        sql = fr"SELECT max({column_name}) FROM {tablename}"
-        ret = pd.read_sql_query(sql, self.conn)
+        validate_sql_identifier(tablename, "table name")
+        validate_sql_identifier(column_name, "column name")
+        query = f'SELECT max("{column_name}") FROM "{tablename}"'
+        ret = pd.read_sql_query(query, self.conn)
         return ret
 
     def createCompanyBidJudgements(self, company_bid_judgement_tablename):
+        validate_sql_identifier(company_bid_judgement_tablename, "table name")
         sql = fr"""
-        create table {company_bid_judgement_tablename} (
+        create table "{company_bid_judgement_tablename}" (
             evaluation_no text,
             announcement_no integer,
             company_no integer,
@@ -494,8 +512,9 @@ class DBOperatorSQLITE3(DBOperator):
         self.cur.execute(sql)
 
     def createSufficientRequirements(self, sufficient_requirements_tablename):
+        validate_sql_identifier(sufficient_requirements_tablename, "table name")
         sql = fr"""
-        create table {sufficient_requirements_tablename} (
+        create table "{sufficient_requirements_tablename}" (
             sufficiency_detail_no text,
             evaluation_no text,
             announcement_no integer,
@@ -512,8 +531,9 @@ class DBOperatorSQLITE3(DBOperator):
         self.cur.execute(sql)
 
     def createInsufficientRequirements(self, insufficient_requirements_tablename):
+        validate_sql_identifier(insufficient_requirements_tablename, "table name")
         sql = fr"""
-        create table {insufficient_requirements_tablename} (
+        create table "{insufficient_requirements_tablename}" (
             shortage_detail_no text,
             evaluation_no text,
             announcement_no integer,
@@ -532,8 +552,9 @@ class DBOperatorSQLITE3(DBOperator):
         self.cur.execute(sql)
 
     def createWorkflowContacts(self, workflow_contacts_tablename):
+        validate_sql_identifier(workflow_contacts_tablename, "table name")
         sql = fr"""
-        create table {workflow_contacts_tablename} (
+        create table "{workflow_contacts_tablename}" (
             contact_id text primary key default (
                 lower(hex(randomblob(4))) || '-' ||
                 lower(hex(randomblob(2))) || '-' ||
@@ -555,8 +576,10 @@ class DBOperatorSQLITE3(DBOperator):
         self.cur.execute(sql)
 
     def createEvaluationAssignees(self, evaluation_assignees_tablename, workflow_contacts_tablename="workflow_contacts"):
+        validate_sql_identifier(evaluation_assignees_tablename, "table name")
+        validate_sql_identifier(workflow_contacts_tablename, "table name")
         sql = fr"""
-        create table {evaluation_assignees_tablename} (
+        create table "{evaluation_assignees_tablename}" (
             evaluation_no text not null,
             step_id text not null,
             contact_id text not null,
@@ -564,13 +587,16 @@ class DBOperatorSQLITE3(DBOperator):
             assigned_at timestamp default current_timestamp,
             assigned_by text,
             primary key (evaluation_no, step_id),
-            foreign key(contact_id) references {workflow_contacts_tablename}(contact_id)
+            foreign key(contact_id) references "{workflow_contacts_tablename}"(contact_id)
         )
         """
         self.cur.execute(sql)
 
     def preupdateCompanyBidJudgement(self, company_bid_judgement_tablename, office_master_tablename, bid_announcements_tablename):
-        sql = fr"""insert into {company_bid_judgement_tablename} (
+        validate_sql_identifier(company_bid_judgement_tablename, "table name")
+        validate_sql_identifier(office_master_tablename, "table name")
+        validate_sql_identifier(bid_announcements_tablename, "table name")
+        sql = fr"""insert into "{company_bid_judgement_tablename}" (
             evaluation_no,
             announcement_no,
             company_no,
@@ -605,15 +631,18 @@ class DBOperatorSQLITE3(DBOperator):
         NULL,
         NULL,
         NULL
-        from {bid_announcements_tablename} as a
+        from "{bid_announcements_tablename}" as a
         cross join
-        {office_master_tablename} as b
+        "{office_master_tablename}" as b
         where true
         ON CONFLICT(evaluation_no, announcement_no, company_no, office_no) DO NOTHING
         """
         self.cur.execute(sql)
 
     def preselectCompanyBidJudgement(self, company_bid_judgement_tablename, office_master_tablename, bid_announcements_tablename):
+        validate_sql_identifier(company_bid_judgement_tablename, "table name")
+        validate_sql_identifier(office_master_tablename, "table name")
+        validate_sql_identifier(bid_announcements_tablename, "table name")
         sql = fr"""
         select
         x.announcement_no,
@@ -625,11 +654,11 @@ class DBOperatorSQLITE3(DBOperator):
             a.announcement_no,
             b.company_no,
             b.office_no
-            from {bid_announcements_tablename} as a
+            from "{bid_announcements_tablename}" as a
             cross join
-            {office_master_tablename} as b
+            "{office_master_tablename}" as b
         ) x
-        left outer join {company_bid_judgement_tablename} y
+        left outer join "{company_bid_judgement_tablename}" y
         ON
         x.announcement_no = y.announcement_no
         and x.company_no = y.company_no
@@ -640,9 +669,11 @@ class DBOperatorSQLITE3(DBOperator):
         return ret
 
     def updateCompanyBidJudgement(self, company_bid_judgement_tablename, company_bid_judgement_tablename_for_update):
+        validate_sql_identifier(company_bid_judgement_tablename, "table name")
+        validate_sql_identifier(company_bid_judgement_tablename_for_update, "table name")
         # preselectCompanyBidJudgementで未判定のみ取得済み、かつUUID使用のため単純INSERTでOK
         sql = f"""
-        INSERT INTO {company_bid_judgement_tablename} (
+        INSERT INTO "{company_bid_judgement_tablename}" (
             evaluation_no,
             announcement_no,
             company_no,
@@ -677,13 +708,15 @@ class DBOperatorSQLITE3(DBOperator):
             remarks,
             createdDate,
             updatedDate
-        FROM {company_bid_judgement_tablename_for_update}
+        FROM "{company_bid_judgement_tablename_for_update}"
         """
         self.cur.execute(sql)
 
     def updateSufficientRequirements(self, sufficient_requirements_tablename, sufficient_requirements_tablename_for_update):
+        validate_sql_identifier(sufficient_requirements_tablename, "table name")
+        validate_sql_identifier(sufficient_requirements_tablename_for_update, "table name")
         # UUID使用のため単純INSERTでOK
-        sql = fr"""insert into {sufficient_requirements_tablename} (
+        sql = fr"""insert into "{sufficient_requirements_tablename}" (
             sufficiency_detail_no,
             evaluation_no,
             announcement_no,
@@ -706,13 +739,15 @@ class DBOperatorSQLITE3(DBOperator):
             requirement_description,
             createdDate,
             updatedDate
-        from {sufficient_requirements_tablename_for_update} where true
+        from "{sufficient_requirements_tablename_for_update}" where true
         """
         self.cur.execute(sql)
 
     def updateInsufficientRequirements(self, insufficient_requirements_tablename, insufficient_requirements_tablename_for_update):
+        validate_sql_identifier(insufficient_requirements_tablename, "table name")
+        validate_sql_identifier(insufficient_requirements_tablename_for_update, "table name")
         # UUID使用のため単純INSERTでOK
-        sql = fr"""insert into {insufficient_requirements_tablename} (
+        sql = fr"""insert into "{insufficient_requirements_tablename}" (
             shortage_detail_no,
             evaluation_no,
             announcement_no,
@@ -739,7 +774,7 @@ class DBOperatorSQLITE3(DBOperator):
             final_comment,
             createdDate,
             updatedDate
-        from {insufficient_requirements_tablename_for_update} where true
+        from "{insufficient_requirements_tablename_for_update}" where true
         """
         self.cur.execute(sql)
 
@@ -757,50 +792,58 @@ class DBOperatorSQLITE3(DBOperator):
         Returns:
             int: 挿入された行数
         """
+        validate_sql_identifier(target_tablename, "table name")
+        validate_sql_identifier(source_tablename, "table name")
+        for col in columns:
+            validate_sql_identifier(col, "column name")
+
         # 列名をカンマ区切りで結合
         columns_str = ", ".join(columns)
 
         # INSERT ... SELECT ... WHERE NOT EXISTS を使用して重複を避ける（document_id のみで重複チェック）
-        sql = f"""
-        INSERT INTO {target_tablename} ({columns_str})
+        merge_sql = f"""
+        INSERT INTO "{target_tablename}" ({columns_str})
         SELECT {columns_str}
-        FROM {source_tablename} AS S
+        FROM "{source_tablename}" AS S
         WHERE NOT EXISTS (
             SELECT 1
-            FROM {target_tablename} AS T
+            FROM "{target_tablename}" AS T
             WHERE T.document_id = S.document_id
         )
         """
 
-        self.cur.execute(sql)
+        self.cur.execute(merge_sql)
         # SQLite3では affected rows を取得
         return self.cur.rowcount
 
     def updateMarkdownPaths(self, tablename, df_markdown):
+        validate_sql_identifier(tablename, "table name")
         df_tmp = df_markdown[["document_id", "fileFormat", "markdown_path"]].dropna()
         if df_tmp.empty:
             return 0
-        sql = fr"UPDATE {tablename} SET markdown_path = ? WHERE document_id = ? AND fileFormat = ?"
+        sql = f'UPDATE "{tablename}" SET markdown_path = ? WHERE document_id = ? AND fileFormat = ?'
         values = [(row["markdown_path"], row["document_id"], row["fileFormat"]) for _, row in df_tmp.iterrows()]
         self.cur.executemany(sql, values)
         self.conn.commit()
         return len(values)
 
     def updateOcrJsonPaths(self, tablename, df_json):
+        validate_sql_identifier(tablename, "table name")
         df_tmp = df_json[["document_id", "fileFormat", "ocr_json_path"]].dropna()
         if df_tmp.empty:
             return 0
-        sql = fr"UPDATE {tablename} SET ocr_json_path = ? WHERE document_id = ? AND fileFormat = ?"
+        sql = f'UPDATE "{tablename}" SET ocr_json_path = ? WHERE document_id = ? AND fileFormat = ?'
         values = [(row["ocr_json_path"], row["document_id"], row["fileFormat"]) for _, row in df_tmp.iterrows()]
         self.cur.executemany(sql, values)
         self.conn.commit()
         return len(values)
 
     def updateFile404Flags(self, tablename, df_flags):
+        validate_sql_identifier(tablename, "table name")
         df_tmp = df_flags[["document_id", "fileFormat", "file_404_flag"]].dropna(subset=["document_id", "fileFormat"])
         if df_tmp.empty:
             return 0
-        sql = fr"UPDATE {tablename} SET file_404_flag = ? WHERE document_id = ? AND fileFormat = ?"
+        sql = f'UPDATE "{tablename}" SET file_404_flag = ? WHERE document_id = ? AND fileFormat = ?'
         values = [(bool(row["file_404_flag"]), row["document_id"], row["fileFormat"]) for _, row in df_tmp.iterrows()]
         self.cur.executemany(sql, values)
         self.conn.commit()
@@ -819,20 +862,22 @@ class DBOperatorSQLITE3(DBOperator):
         Returns:
             int: 挿入された行数
         """
-        sql = f"""
-        INSERT INTO {target_tablename} (document_id, announcement_no, requirement_no,
+        validate_sql_identifier(target_tablename, "table name")
+        validate_sql_identifier(source_tablename, "table name")
+        merge_sql = f"""
+        INSERT INTO "{target_tablename}" (document_id, announcement_no, requirement_no,
                                          requirement_type, requirement_text, is_ocr_failed, done_judgement, createdDate, updatedDate)
         SELECT document_id, announcement_no, requirement_no,
                requirement_type, requirement_text, is_ocr_failed, done_judgement, createdDate, updatedDate
-        FROM {source_tablename} AS S
+        FROM "{source_tablename}" AS S
         WHERE NOT EXISTS (
             SELECT 1
-            FROM {target_tablename} AS T
+            FROM "{target_tablename}" AS T
             WHERE T.announcement_no = S.announcement_no
         )
         """
 
-        self.cur.execute(sql)
+        self.cur.execute(merge_sql)
         return self.cur.rowcount
 
     def mergeBidAnnouncements(self, target_tablename, source_tablename):
@@ -848,8 +893,10 @@ class DBOperatorSQLITE3(DBOperator):
         Returns:
             int: 挿入された行数
         """
+        validate_sql_identifier(target_tablename, "table name")
+        validate_sql_identifier(source_tablename, "table name")
         sql = f"""
-        INSERT INTO {target_tablename} (
+        INSERT INTO "{target_tablename}" (
             announcement_no, workName, topAgencyName, orderer_id,
             workPlace, zipcode, address, department, assigneeName,
             telephone, fax, mail, publishDate, docDistStart, docDistEnd,
@@ -866,10 +913,10 @@ class DBOperatorSQLITE3(DBOperator):
             bidType, category, is_ocr_failed, doneOCR, createdDate, updatedDate,
             notice_category_name, notice_category_code, notice_procurement_method,
             category_segment, category_detail
-        FROM {source_tablename} AS S
+        FROM "{source_tablename}" AS S
         WHERE NOT EXISTS (
             SELECT 1
-            FROM {target_tablename} AS T
+            FROM "{target_tablename}" AS T
             WHERE T.announcement_no = S.announcement_no
         )
         """
@@ -878,16 +925,18 @@ class DBOperatorSQLITE3(DBOperator):
         return self.cur.rowcount
 
     def replaceBidAnnouncementDates(self, target_tablename, source_tablename):
+        validate_sql_identifier(target_tablename, "table name")
+        validate_sql_identifier(source_tablename, "table name")
         delete_sql = f"""
-        DELETE FROM {target_tablename}
+        DELETE FROM "{target_tablename}"
         WHERE announcement_no IN (
-            SELECT DISTINCT announcement_no FROM {source_tablename}
+            SELECT DISTINCT announcement_no FROM "{source_tablename}"
         )
         """
         self.cur.execute(delete_sql)
 
         insert_sql = f"""
-        INSERT INTO {target_tablename} (
+        INSERT INTO "{target_tablename}" (
             announcement_no, document_id, submission_document_name,
             date_value, date_raw, date_meaning, timepoint_type,
             createdDate, updatedDate
@@ -896,7 +945,7 @@ class DBOperatorSQLITE3(DBOperator):
             announcement_no, document_id, submission_document_name,
             date_value, date_raw, date_meaning, timepoint_type,
             createdDate, updatedDate
-        FROM {source_tablename}
+        FROM "{source_tablename}"
         """
         self.cur.execute(insert_sql)
         return self.cur.rowcount
@@ -912,14 +961,16 @@ class DBOperatorSQLITE3(DBOperator):
         Returns:
             DataFrame: announcement_id と req_exists (bool) の列を持つ DataFrame
         """
+        validate_sql_identifier(tmp_check_table, "table name")
+        validate_sql_identifier(requirements_table, "table name")
         query = f"""
         SELECT
             t.announcement_id,
             CASE WHEN r.announcement_no IS NOT NULL THEN 1 ELSE 0 END as req_exists
-        FROM {tmp_check_table} t
+        FROM "{tmp_check_table}" t
         LEFT JOIN (
             SELECT DISTINCT announcement_no
-            FROM {requirements_table}
+            FROM "{requirements_table}"
         ) r ON t.announcement_id = r.announcement_no
         """
         return pd.read_sql_query(query, self.conn)
@@ -934,9 +985,10 @@ class DBOperatorSQLITE3(DBOperator):
         Returns:
             DataFrame: document_id 列を持つ DataFrame
         """
+        validate_sql_identifier(tablename, "table name")
         query = f"""
         SELECT DISTINCT document_id
-        FROM {tablename}
+        FROM "{tablename}"
         """
         return pd.read_sql_query(query, self.conn)
 
@@ -944,10 +996,12 @@ class DBOperatorSQLITE3(DBOperator):
         """
         DBOperatorSQLITE3: 一時テーブルと既存テーブルを document_id で比較し、新規レコードを取得するクエリを生成
         """
+        validate_sql_identifier(tmp_table, "table name")
+        validate_sql_identifier(existing_table, "table name")
         query = f"""
         SELECT n.*
-        FROM {tmp_table} n
-        LEFT JOIN {existing_table} e ON n.document_id = e.document_id
+        FROM "{tmp_table}" n
+        LEFT JOIN "{existing_table}" e ON n.document_id = e.document_id
         WHERE e.document_id IS NULL
         """
         return query
@@ -956,6 +1010,8 @@ class DBOperatorSQLITE3(DBOperator):
         """
         DBOperatorSQLITE3: 既存テーブルからグループごとの最大 announcement_id を取得するクエリを生成
         """
+        validate_sql_identifier(existing_table, "table name")
+        divisor = int(divisor)
         query = f"""
         SELECT
           announcement_group,
@@ -964,7 +1020,7 @@ class DBOperatorSQLITE3(DBOperator):
           SELECT
             announcement_id,
             CAST(announcement_id / {divisor} AS INTEGER) as announcement_group
-          FROM {existing_table}
+          FROM "{existing_table}"
         )
         GROUP BY announcement_group
         """
@@ -982,14 +1038,16 @@ class DBOperatorSQLITE3(DBOperator):
         Returns:
             DataFrame: announcement_no, document_id の列を持つ DataFrame
         """
+        validate_sql_identifier(announcements_document_tablename, "table name")
+        validate_sql_identifier(requirements_tablename, "table name")
         if requirements_exists:
             # 既存の announcement_no を除外
             query = f"""
             SELECT ad.announcement_id AS announcement_no, ad.document_id
-            FROM {announcements_document_tablename} AS ad
+            FROM "{announcements_document_tablename}" AS ad
             LEFT JOIN (
                 SELECT DISTINCT announcement_no
-                FROM {requirements_tablename}
+                FROM "{requirements_tablename}"
             ) AS r ON ad.announcement_id = r.announcement_no
             WHERE r.announcement_no IS NULL
             ORDER BY ad.announcement_id, ad.document_id
@@ -998,7 +1056,7 @@ class DBOperatorSQLITE3(DBOperator):
             # 全ての announcement-document ペアを取得
             query = f"""
             SELECT announcement_id AS announcement_no, document_id
-            FROM {announcements_document_tablename}
+            FROM "{announcements_document_tablename}"
             ORDER BY announcement_id, document_id
             """
 
