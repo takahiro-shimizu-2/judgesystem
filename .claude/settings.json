@@ -1,0 +1,49 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm *)",
+      "Bash(npx *)",
+      "Bash(python3 *)",
+      "Bash(bash *)",
+      "Bash(docker compose *)",
+      "Bash(git *)",
+      "Bash(gh *)",
+      "Bash(miyabi *)"
+    ],
+    "deny": []
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "PROJECT_ROOT=$(git rev-parse --show-toplevel) && bash \"$PROJECT_ROOT/.claude/hooks/estack-enforcer.sh\"",
+            "timeout": 3
+          }
+        ]
+      },
+      {
+        "matcher": "Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "PROJECT_ROOT=$(git rev-parse --show-toplevel) && bash \"$PROJECT_ROOT/.claude/hooks/estack-enforcer.sh\"",
+            "timeout": 3
+          }
+        ]
+      },
+      {
+        "matcher": "Agent",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "PROJECT_ROOT=$(git rev-parse --show-toplevel) && bash \"$PROJECT_ROOT/.claude/hooks/estack-enforcer.sh\"",
+            "timeout": 3
+          }
+        ]
+      }
+    ]
+  }
+}

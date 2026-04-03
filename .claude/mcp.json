@@ -3,7 +3,7 @@
     "miyabi": {
       "command": "node",
       "args": [
-        "node_modules/miyabi/templates/mcp-servers/miyabi-integration.js"
+        ".claude/mcp-servers/miyabi-integration.js"
       ],
       "disabled": false,
       "description": "Miyabi CLI統合 - プロジェクト作成、Agent実行、自動化機能"
