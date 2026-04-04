@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-04-04T21:19:06+09:00",
-  "query": "Full autonomy deployment-contract rollout",
+  "generated_at": "2026-04-04T22:08:00+09:00",
+  "query": "Full autonomy event execute gate rollout",
   "repo": "judgesystem",
   "quality_score": 0,
   "tasks": [
@@ -37,6 +37,11 @@
     {
       "id": "github-check-alignment",
       "title": "Validate push/PR Actions, permissions, env gates, and failure paths while rolling out autonomy slices",
+      "status": "completed"
+    },
+    {
+      "id": "event-execute-gate",
+      "title": "Keep issue/comment triggers planning-first by default while allowing explicit execute only behind repository-variable gates",
       "status": "completed"
     }
   ]
