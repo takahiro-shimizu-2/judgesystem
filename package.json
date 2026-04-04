@@ -19,6 +19,7 @@
     "pipeline:record": "bash scripts/context-impact/record-run.sh",
     "test": "echo \"No tests configured yet\" && exit 0",
     "typecheck": "tsc -p scripts/tsconfig.json --noEmit",
+    "automation:smoke": "bash scripts/automation/smoke/full-autonomy.sh",
     "agents:parallel:exec": "tsx scripts/agents-parallel-exec.ts",
     "deploy:cloud-run:backend": "bash scripts/automation/deploy/cloud-run.sh backend",
     "deploy:cloud-run:frontend": "bash scripts/automation/deploy/cloud-run.sh frontend",
