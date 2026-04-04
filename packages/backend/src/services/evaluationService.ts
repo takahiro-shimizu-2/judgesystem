@@ -7,6 +7,7 @@ import {
   EvaluationPartnerFileRepository,
 } from "../repositories";
 import { FilterParams, PaginatedResponse } from "../types";
+import { DEFAULT_PAGE_SIZE } from "../constants";
 import type {
   EvaluationListItem,
   EvaluationDetail,
@@ -61,7 +62,7 @@ export class EvaluationService {
     const { data, total } = await this.repository.findWithFilters(filters);
 
     const page = filters.page || 0;
-    const pageSize = filters.pageSize || 25;
+    const pageSize = filters.pageSize || DEFAULT_PAGE_SIZE;
 
     return {
       data,

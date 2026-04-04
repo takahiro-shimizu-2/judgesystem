@@ -1,8 +1,9 @@
 import { z } from "zod";
+import { DEFAULT_PAGE_SIZE } from "../constants";
 
 export const paginationSchema = z.object({
   page: z.coerce.number().int().min(0).default(0),
-  pageSize: z.coerce.number().int().min(1).max(1000).default(25),
+  pageSize: z.coerce.number().int().min(1).max(1000).default(DEFAULT_PAGE_SIZE),
 });
 
 export const evaluationFilterSchema = paginationSchema.extend({

@@ -1,6 +1,7 @@
 import { pool, TABLES, schemaPrefix } from "../config/database";
 import { readMarkdownFromGCS } from "../utils/gcs";
 import { FilterParams, SortOption } from "../types";
+import { DEFAULT_PAGE_SIZE } from "../constants";
 import type {
   EvaluationListItem,
   EvaluationDetail,
@@ -66,7 +67,7 @@ export class EvaluationRepository {
 
       // Get paginated data with total count via Window function
       const page = filters.page || 0;
-      const pageSize = filters.pageSize || 25;
+      const pageSize = filters.pageSize || DEFAULT_PAGE_SIZE;
       const offset = page * pageSize;
 
       const dataQuery = `
