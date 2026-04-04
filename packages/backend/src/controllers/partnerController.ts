@@ -3,6 +3,19 @@ import { PartnerService } from "../services/partnerService";
 import { PartnerFilterParams } from "../repositories/partnerRepository";
 import { logger } from "../utils/logger";
 
+/**
+ * Allowed sort field names for partners.
+ * Must match the sortFieldMap keys in PartnerRepository.getList.
+ */
+const VALID_SORT_FIELDS = new Set([
+  "name",
+  "rating",
+  "resultCount",
+  "surveyCount",
+  "address",
+  "no",
+]);
+
 export class PartnerController {
   private service: PartnerService;
 
@@ -44,6 +57,16 @@ export class PartnerController {
         return;
       }
 
+      // Validate sort field
+      const sortFieldParam = (req.query.sort as string) || undefined;
+      if (sortFieldParam && !VALID_SORT_FIELDS.has(sortFieldParam)) {
+        res.status(400).json({
+          error: "Bad Request",
+          message: `Invalid sort field: ${sortFieldParam}`,
+        });
+        return;
+      }
+
       const ratingsRaw = this.parseCommaSeparated(req.query.ratings);
       const ratings = ratingsRaw.map(Number).filter((n) => !isNaN(n));
 
@@ -63,7 +86,7 @@ export class PartnerController {
           req.query.hasPrimeQualification === "no"
             ? (req.query.hasPrimeQualification as "yes" | "no")
             : undefined,
-        sortField: (req.query.sort as string) || undefined,
+        sortField: sortFieldParam,
         sortOrder:
           req.query.order === "asc" || req.query.order === "desc"
             ? (req.query.order as "asc" | "desc")

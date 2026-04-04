@@ -3,6 +3,24 @@ import { AnnouncementService } from "../services";
 import { AnnouncementFilterParams, SortOption } from "../types";
 import { logger } from "../utils/logger";
 
+/**
+ * Allowed sort field names for announcements.
+ * Must match the fieldMap keys in AnnouncementRepository.buildOrderByClause.
+ */
+const VALID_SORT_FIELDS = new Set([
+  "announcementNo",
+  "no",
+  "status",
+  "bidType",
+  "title",
+  "organization",
+  "category",
+  "publishDate",
+  "deadline",
+  "workLocation",
+  "prefecture",
+]);
+
 export class AnnouncementController {
   private service: AnnouncementService;
 
@@ -36,6 +54,15 @@ export class AnnouncementController {
       const pageSize = pageSizeNum;
 
       const sortFields = this.toStringArray(req.query.sortField);
+      const invalidSortFields = sortFields.filter((f) => !VALID_SORT_FIELDS.has(f));
+      if (invalidSortFields.length > 0) {
+        res.status(400).json({
+          error: "Bad Request",
+          message: `Invalid sortField: ${invalidSortFields.join(", ")}`,
+        });
+        return;
+      }
+
       const sortOrders = this.toSortOrderArray(req.query.sortOrder);
       const sortOptions: SortOption[] = sortFields.map((field, index) => {
         const order: "asc" | "desc" = sortOrders[index] ?? "asc";
