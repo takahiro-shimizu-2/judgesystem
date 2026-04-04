@@ -87,6 +87,20 @@ type OrdererItemRow = {
   grade: string | null;
 };
 
+/** Raw row returned by the findWithFilters master query (includes window-function column). */
+interface PartnerListRow {
+  id: string;
+  no: number;
+  name: string;
+  address: string;
+  phone: string;
+  surveyCount: number | null;
+  rating: number | null;
+  resultCount: number | null;
+  hasPrimeQualification: boolean;
+  total_count: string;
+}
+
 export interface PartnerFilterParams extends BaseFilterParams {
   prefectures?: string[];
   categories?: string[];
@@ -215,7 +229,7 @@ export class PartnerRepository {
     try {
       params.push(pageSize, offset);
 
-      const masterResult = await client.query(
+      const masterResult = await client.query<PartnerListRow>(
         `
           SELECT
             p.partner_id AS id,
@@ -249,7 +263,7 @@ export class PartnerRepository {
       }
 
       // Fetch categories only for paginated partner IDs
-      const partnerIds = masterResult.rows.map((r: any) => r.id);
+      const partnerIds = masterResult.rows.map((r) => r.id);
       const categoryResult = await client.query<CategoryRow>(
         `SELECT partner_id, category_group, categories
          FROM ${schemaPrefix}${TABLES.partnerCategories}
@@ -266,7 +280,7 @@ export class PartnerRepository {
       });
 
       const data: PartnerListSummary[] = masterResult.rows.map(
-        ({ total_count, ...row }: any) => ({
+        ({ total_count: _totalCount, ...row }) => ({
           id: row.id as string,
           no: this.toNumberOrDefault(row.no, 0),
           name: this.normalizeString(row.name),

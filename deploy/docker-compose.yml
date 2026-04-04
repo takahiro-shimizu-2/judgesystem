@@ -4,9 +4,9 @@ services:
     ports:
       - "${DB_PORT:-5434}:5432"
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: postgres
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-postgres}
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -19,7 +19,7 @@ services:
     image: ghcr.io/amacneil/dbmate:2
     command: ["up"]
     environment:
-      DATABASE_URL: "postgres://postgres:postgres@db:5432/postgres?sslmode=disable"
+      DATABASE_URL: "postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-postgres}?sslmode=disable"
     volumes:
       - ../db/migrations:/db/migrations:ro
     depends_on:
@@ -34,8 +34,8 @@ services:
       PGHOST: db
       PGPORT: 5432
       PGDATABASE: postgres
-      PGUSER: postgres
-      PGPASSWORD: postgres
+      PGUSER: ${POSTGRES_USER:-postgres}
+      PGPASSWORD: ${POSTGRES_PASSWORD:-postgres}
     volumes:
       - ../db/seeds:/seeds:ro
       - ../data/master:/master-data:ro
@@ -65,10 +65,11 @@ services:
       PGHOST: db
       PGPORT: 5432
       PGDATABASE: postgres
-      PGUSER: postgres
-      PGPASSWORD: postgres
+      PGUSER: ${POSTGRES_USER:-postgres}
+      PGPASSWORD: ${POSTGRES_PASSWORD:-postgres}
       PGSSLMODE: disable
-      AUTH_ENABLED: "false"
+      # WARNING: Set AUTH_ENABLED=true in production. false disables all authentication.
+      AUTH_ENABLED: "${AUTH_ENABLED:-false}"
       CORS_ORIGIN: http://localhost:${FRONTEND_PORT:-3173}
     depends_on:
       db-seed:
@@ -116,8 +117,8 @@ services:
       PGHOST: db
       PGPORT: 5432
       PGDATABASE: postgres
-      PGUSER: postgres
-      PGPASSWORD: postgres
+      PGUSER: ${POSTGRES_USER:-postgres}
+      PGPASSWORD: ${POSTGRES_PASSWORD:-postgres}
       PGSSLMODE: disable
     depends_on:
       db-seed:

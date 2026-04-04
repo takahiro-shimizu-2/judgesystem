@@ -45,6 +45,8 @@ export function CompanyBranchSelect({
     return () => clearTimeout(handle);
   }, [inputValue]);
 
+  // value/valueLabel 変更時に inputValue を同期
+  // valueLabel が未指定の場合は options からラベルを解決
   useEffect(() => {
     if (!value) {
       setInputValue('');
@@ -52,11 +54,6 @@ export function CompanyBranchSelect({
     }
     if (valueLabel) {
       setInputValue(valueLabel);
-    }
-  }, [value, valueLabel]);
-
-  useEffect(() => {
-    if (!value || valueLabel) {
       return;
     }
     const match = options.find((option) => option.officeId === value);
@@ -87,7 +84,7 @@ export function CompanyBranchSelect({
         }
         if (Array.isArray(data)) {
           const normalized = data
-            .map((item: any) => ({
+            .map((item: Record<string, unknown>) => ({
               officeId: item.officeNo ? String(item.officeNo) : null,
               companyId: String(item.companyNo ?? ''),
               companyName: String(item.companyName ?? ''),

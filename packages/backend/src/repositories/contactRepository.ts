@@ -14,6 +14,17 @@ export interface ContactRecord extends ContactInput {
   no: number;
 }
 
+/** Raw row shape returned by the base SELECT query. */
+interface ContactQueryRow {
+  id: string;
+  no: number;
+  name: string;
+  company_name: string;
+  department: string;
+  email: string;
+  phone: string;
+}
+
 export class ContactRepository {
   private readonly tableName = `${schemaPrefix}${TABLES.contacts}`;
 
@@ -32,7 +43,7 @@ export class ContactRepository {
     `;
   }
 
-  private mapRow(row: any): ContactRecord {
+  private mapRow(row: ContactQueryRow): ContactRecord {
     return {
       id: row.id,
       no: Number(row.no) || 0,
@@ -44,7 +55,7 @@ export class ContactRepository {
     };
   }
 
-  private async query<T = ContactRecord>(sql: string, params: any[] = []): Promise<T[]> {
+  private async query<T = ContactQueryRow>(sql: string, params: unknown[] = []): Promise<T[]> {
     let client: PoolClient | undefined;
     try {
       client = await pool.connect();
@@ -104,7 +115,7 @@ export class ContactRepository {
 
   async update(id: string, input: Partial<ContactInput>): Promise<ContactRecord | null> {
     const fields: string[] = [];
-    const values: any[] = [];
+    const values: unknown[] = [];
     let index = 1;
 
     (["name", "companyName", "department", "email", "phone"] as const).forEach((key) => {

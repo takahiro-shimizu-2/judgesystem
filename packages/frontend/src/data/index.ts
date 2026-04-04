@@ -1,15 +1,15 @@
 /**
- * データ層 - 一元管理されたモックデータ（本番想定のデータ量）
+ * データ層 - API呼び出し関数と定数の一元管理
  *
  * 使用方法:
- * import { partners, mockOrderers } from '../data';
+ * import { fetchOrdererList, fetchCompanyList } from '../data';
  *
  * 構造:
- * - orderers.ts     : 発注者マスター（65件）国/独立行政法人/都道府県/政令市
- * - partners.ts     : 会社マスター（250件）※協力会社＋企業情報を統合
- * - companies.ts    : 企業マスター（115件）※評価・案件用の参照データ
- * - announcements.ts: 案件（500件）→ ordererId で発注者参照
- * - evaluations.ts  : 判定結果（3000件）→ 案件ID, 企業IDで参照
+ * - orderers.ts     : 発注者API呼び出し
+ * - partners.ts     : 協力会社API呼び出し
+ * - companies.ts    : 企業API呼び出し
+ * - announcements.ts: 案件（API経由で取得、モックデータは削除済み）
+ * - evaluations.ts  : 判定結果API呼び出し（ワークフロー、パートナー管理含む）
  *
  * 注意:
  * - 型は types/ から import
@@ -44,11 +44,8 @@ export type {
 } from './partners';
 
 // 案件
-export {
-  mockAnnouncements,
-  findAnnouncementById,
-  getAnnouncementsByOrdererId,
-} from './announcements';
+// Note: モックデータ（mockAnnouncements, findAnnouncementById, getAnnouncementsByOrdererId）は
+// 削除済み（Issue #110）。案件データはAPIから取得する。
 
 // 案件の型・設定は適切な場所から re-export
 export { announcementStatusConfig } from '../constants/announcementStatus';
@@ -61,8 +58,6 @@ export type { DocumentType, DocumentOcr } from '../types';
 export {
   updateWorkStatus,
   updateEvaluationAssignee,
-  mockSimilarCases,
-  getSimilarCases,
   fetchPartnerCandidates,
   createPartnerCandidate,
   updatePartnerCandidate,

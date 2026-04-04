@@ -8,7 +8,6 @@
  */
 import type {
   WorkStatus,
-  SimilarCase,
   OrdererWorkflowState,
   PartnerWorkflowState,
   Partner,
@@ -444,94 +443,3 @@ export const deletePartnerCandidate = async (
   }
 };
 
-// 類似案件のモックデータ（より多様な案件名）
-const similarCaseTemplates = [
-  '令和{year}年度{district}地区道路拡幅工事',
-  '令和{year}年度{district}橋梁補強工事',
-  '{district}市庁舎改修工事（第{num}期）',
-  '{district}公園整備工事',
-  '令和{year}年度{district}河川護岸修繕工事',
-  '{district}学校体育館建設工事',
-  '{district}市下水道管渠更新工事',
-  '{district}消防署建設工事',
-  '令和{year}年度{district}高速道路舗装工事',
-  '{district}港湾岸壁補強工事',
-  '令和{year}年度{district}トンネル補修工事',
-  '{district}浄水場ポンプ更新工事',
-  '令和{year}年度{district}堤防補強工事',
-  '{district}庁舎空調設備更新工事',
-  '令和{year}年度{district}砂防堰堤工事',
-  '{district}住宅団地外壁改修工事',
-  '令和{year}年度{district}電線共同溝整備工事',
-  '{district}文化会館音響設備工事',
-  '令和{year}年度{district}急傾斜地対策工事',
-  '{district}スポーツセンター建設工事',
-];
-
-const districts = [
-  '○○', '△△', '□□', '◇◇', '☆☆', '北', '南', '東', '西', '中央',
-  '上流', '下流', 'A', 'B', '甲', '乙', '第一', '第二', '本',
-];
-
-const generateSimilarCases = (): SimilarCase[] => {
-  const cases: SimilarCase[] = [];
-
-  // 落札企業リスト（ハードコード）
-  const topCompanies = [
-    '大成建設', '鹿島建設', '清水建設', '大林組', '竹中工務店',
-    '前田建設工業', '戸田建設', '三井住友建設', '西松建設', 'フジタ',
-    '熊谷組', '安藤ハザマ', '五洋建設', '東急建設', '奥村組',
-    '長谷工コーポレーション', '東亜建設工業', '鉄建建設', '飛島建設', '淺沼組',
-    'ピーエス三菱', '佐藤工業', '錢高組', '東洋建設', '青木あすなろ建設',
-    '若築建設', '大豊建設', '不動テトラ', '松井建設', '北野建設',
-  ];
-
-  for (let i = 0; i < 50; i++) {
-    const template = similarCaseTemplates[i % similarCaseTemplates.length];
-    const district = districts[i % districts.length];
-    const year = 5 + (i % 3); // 令和5〜7年
-    const num = (i % 3) + 1;
-
-    const caseName = template
-      .replace('{year}', String(year))
-      .replace('{district}', district)
-      .replace('{num}', String(num));
-
-    const winningCompany = topCompanies[i % topCompanies.length];
-    const winningAmount = (Math.floor(i * 7 + 10) % 90 + 10) * 10000000; // 1億〜10億
-
-    // 競合会社（3〜6社）
-    const competitorCount = 3 + (i % 4);
-    const competitors = [winningCompany];
-    for (let j = 1; j < competitorCount; j++) {
-      const competitor = topCompanies[(i + j * 3) % topCompanies.length];
-      if (!competitors.includes(competitor)) {
-        competitors.push(competitor);
-      }
-    }
-
-    cases.push({
-      id: `similar-${i + 1}`,
-      announcementId: `ann-${i + 1}`,  // 入札案件IDと紐づけ
-      similarAnnouncementId: `ann-${((i + 5) % 50) + 1}`,
-      caseName,
-      winningCompany,
-      winningAmount,
-      competitors,
-    });
-  }
-
-  return cases;
-};
-
-export const mockSimilarCases: SimilarCase[] = generateSimilarCases();
-
-export const getSimilarCases = (count: number = 5): SimilarCase[] => {
-  // 固定シードでシャッフル（毎回同じ結果）
-  const shuffled = [...mockSimilarCases].sort((a, b) => {
-    const hashA = a.id.charCodeAt(a.id.length - 1);
-    const hashB = b.id.charCodeAt(b.id.length - 1);
-    return hashA - hashB;
-  });
-  return shuffled.slice(0, count);
-};

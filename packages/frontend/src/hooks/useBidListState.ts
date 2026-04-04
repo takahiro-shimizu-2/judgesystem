@@ -305,8 +305,10 @@ export function useBidListState() {
   // フィルターの永続化 & ページリセット
   useEffect(() => {
     saveToStorage(STORAGE_KEYS.FILTERS, filters);
-    // 実際に値が変わった時のみページリセット（初回マウント時はスキップ）
-    if (prevFilters.current !== filters) {
+    // 値比較で実際に内容が変わった時のみページリセット（初回マウント時はスキップ）
+    const prevJson = JSON.stringify(prevFilters.current);
+    const currentJson = JSON.stringify(filters);
+    if (prevJson !== currentJson) {
       prevFilters.current = filters;
       setPaginationModel(prev => prev.page !== 0 ? { ...prev, page: 0 } : prev);
     }

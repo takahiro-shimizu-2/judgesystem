@@ -204,6 +204,7 @@ export default function BidDetailPage() {
   const [partners, setPartners] = useState<Partner[]>([]);
   const [partnersLoading, setPartnersLoading] = useState(false);
   const partnersRequestIdRef = useRef(0);
+  const similarCasesAbortRef = useRef<AbortController | null>(null);
 
   // 評価データ取得
   useEffect(() => {
@@ -289,27 +290,46 @@ export default function BidDetailPage() {
 
   const fetchSimilarCases = useCallback(async (announcementNo: string) => {
     if (!announcementNo) return;
+
+    // 前回のリクエストをキャンセル（レースコンディション防止）
+    similarCasesAbortRef.current?.abort();
+    const controller = new AbortController();
+    similarCasesAbortRef.current = controller;
+
     setIsSimilarCasesLoading(true);
     setSimilarCasesError(null);
     try {
-      const response = await fetch(getApiUrl(`/api/announcements/${announcementNo}/similar-cases`));
+      const response = await fetch(
+        getApiUrl(`/api/announcements/${announcementNo}/similar-cases`),
+        { signal: controller.signal }
+      );
       if (!response.ok) {
         throw new Error(`Failed to fetch similar cases: ${response.status}`);
       }
       const data = await response.json();
-      setSimilarCases(data);
+      if (!controller.signal.aborted) {
+        setSimilarCases(data);
+      }
     } catch (err) {
+      if (err instanceof DOMException && err.name === 'AbortError') {
+        return; // キャンセルされたリクエストは無視
+      }
       console.error("Failed to fetch similar cases:", err);
-      setSimilarCases([]);
-      setSimilarCasesError(err instanceof Error ? err.message : "Unknown error");
+      if (!controller.signal.aborted) {
+        setSimilarCases([]);
+        setSimilarCasesError(err instanceof Error ? err.message : "Unknown error");
+      }
     } finally {
-      setIsSimilarCasesLoading(false);
+      if (!controller.signal.aborted) {
+        setIsSimilarCasesLoading(false);
+      }
     }
   }, []);
 
   useEffect(() => {
     const announcementId = evaluation?.announcement?.id;
     if (!announcementId) {
+      similarCasesAbortRef.current?.abort();
       setSimilarCases([]);
       setTargetAnnouncementNo(null);
       return;
@@ -318,6 +338,10 @@ export default function BidDetailPage() {
     const announcementNo = match ? match[1] : announcementId;
     setTargetAnnouncementNo(announcementNo);
     fetchSimilarCases(announcementNo);
+
+    return () => {
+      similarCasesAbortRef.current?.abort();
+    };
   }, [evaluation?.announcement?.id, fetchSimilarCases]);
 
   const handleRetrySimilarCases = useCallback(() => {
