@@ -15,6 +15,7 @@ except Exception as e:
     print(e)
 
 from packages.engine.repository.base import DBOperator, TablenamesConfig, validate_sql_identifier
+from packages.engine.domain.constants import WORK_STATUS_NOT_STARTED
 
 
 class DBOperatorPOSTGRES(DBOperator):
@@ -451,7 +452,7 @@ class DBOperatorPOSTGRES(DBOperator):
                 force_matrix = EXCLUDED.force_matrix,
                 is_active = EXCLUDED.is_active,
                 created_at = EXCLUDED.created_at,
-                updated_at = EXCLUDED.updated_at
+                updated_at = NOW()::text
         """).format(
             columns=sql.SQL(", ").join(sql.Identifier(col) for col in insert_columns)
         )
@@ -479,6 +480,7 @@ class DBOperatorPOSTGRES(DBOperator):
     def updateAnnouncements(self, bid_announcements_tablename, bid_announcements_tablename_for_update):
         validate_sql_identifier(bid_announcements_tablename, "table name")
         validate_sql_identifier(bid_announcements_tablename_for_update, "table name")
+        # updatedDate は DB 側の NOW() で統一し、Backend との時刻整合性を確保する
         sql = fr"""INSERT INTO "{bid_announcements_tablename}" (
             announcement_no,
             "workName",
@@ -532,8 +534,8 @@ class DBOperatorPOSTGRES(DBOperator):
         "bidEndDate",
         NULL,
         NULL,
-        NULL,
-        NULL
+        NOW()::text,
+        NOW()::text
         FROM "{bid_announcements_tablename_for_update}" source WHERE true
         ON CONFLICT(announcement_no) DO UPDATE SET
             announcement_no = "{bid_announcements_tablename}".announcement_no,
@@ -561,7 +563,7 @@ class DBOperatorPOSTGRES(DBOperator):
             "doneOCR" = TRUE,
             remarks = "{bid_announcements_tablename}".remarks,
             "createdDate" = "{bid_announcements_tablename}"."createdDate",
-            "updatedDate" = "{bid_announcements_tablename}"."updatedDate"
+            "updatedDate" = NOW()::text
         """
         self.cur.execute(sql)
 
@@ -682,7 +684,7 @@ class DBOperatorPOSTGRES(DBOperator):
         sql = fr"""
         CREATE TABLE IF NOT EXISTS "{tablename}" (
             "evaluationNo" TEXT PRIMARY KEY,
-            "workStatus" TEXT NOT NULL DEFAULT 'not_started',
+            "workStatus" TEXT NOT NULL DEFAULT '{WORK_STATUS_NOT_STARTED}',
             "currentStep" TEXT NOT NULL DEFAULT 'judgment',
             "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
             "updatedAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -770,6 +772,7 @@ class DBOperatorPOSTGRES(DBOperator):
         validate_sql_identifier(company_bid_judgement_tablename, "table name")
         validate_sql_identifier(company_bid_judgement_tablename_for_update, "table name")
         # preselectCompanyBidJudgementで未判定のみ取得済み、かつUUID使用のため単純INSERTでOK
+        # updatedDate は DB 側の NOW() で統一し、Backend との時刻整合性を確保する
         sql = f"""
         INSERT INTO "{company_bid_judgement_tablename}" (
             evaluation_no,
@@ -805,7 +808,7 @@ class DBOperatorPOSTGRES(DBOperator):
             message,
             remarks,
             "createdDate",
-            "updatedDate"
+            NOW()::text
         FROM "{company_bid_judgement_tablename_for_update}"
         """
         self.cur.execute(sql)
@@ -814,6 +817,7 @@ class DBOperatorPOSTGRES(DBOperator):
         validate_sql_identifier(sufficient_requirements_tablename, "table name")
         validate_sql_identifier(sufficient_requirements_tablename_for_update, "table name")
         # UUID使用のため単純INSERTでOK
+        # updatedDate は DB 側の NOW() で統一し、Backend との時刻整合性を確保する
         sql = fr"""INSERT INTO "{sufficient_requirements_tablename}" (
             sufficiency_detail_no,
             evaluation_no,
@@ -836,7 +840,7 @@ class DBOperatorPOSTGRES(DBOperator):
             requirement_type,
             requirement_description,
             "createdDate",
-            "updatedDate"
+            NOW()::text
         FROM "{sufficient_requirements_tablename_for_update}" WHERE true
         """
         self.cur.execute(sql)
@@ -845,6 +849,7 @@ class DBOperatorPOSTGRES(DBOperator):
         validate_sql_identifier(insufficient_requirements_tablename, "table name")
         validate_sql_identifier(insufficient_requirements_tablename_for_update, "table name")
         # UUID使用のため単純INSERTでOK
+        # updatedDate は DB 側の NOW() で統一し、Backend との時刻整合性を確保する
         sql = fr"""INSERT INTO "{insufficient_requirements_tablename}" (
             shortage_detail_no,
             evaluation_no,
@@ -871,7 +876,7 @@ class DBOperatorPOSTGRES(DBOperator):
             suggestions_for_improvement,
             final_comment,
             "createdDate",
-            "updatedDate"
+            NOW()::text
         FROM "{insufficient_requirements_tablename_for_update}" WHERE true
         """
         self.cur.execute(sql)
@@ -972,11 +977,12 @@ class DBOperatorPOSTGRES(DBOperator):
         """
         validate_sql_identifier(target_tablename, "table name")
         validate_sql_identifier(source_tablename, "table name")
+        # updatedDate は DB 側の NOW() で統一し、Backend との時刻整合性を確保する
         merge_sql = f"""
         INSERT INTO "{target_tablename}" (document_id, announcement_no, requirement_no,
                                          requirement_type, requirement_text, is_ocr_failed, done_judgement, "createdDate", "updatedDate")
         SELECT document_id, announcement_no, requirement_no,
-               requirement_type, requirement_text, is_ocr_failed, done_judgement, "createdDate", "updatedDate"
+               requirement_type, requirement_text, is_ocr_failed, done_judgement, "createdDate", NOW()::text
         FROM "{source_tablename}" AS S
         WHERE NOT EXISTS (
             SELECT 1
@@ -1003,6 +1009,7 @@ class DBOperatorPOSTGRES(DBOperator):
         """
         validate_sql_identifier(target_tablename, "table name")
         validate_sql_identifier(source_tablename, "table name")
+        # updatedDate は DB 側の NOW() で統一し、Backend との時刻整合性を確保する
         merge_sql = f"""
         INSERT INTO "{target_tablename}" (
             announcement_no, "workName", "topAgencyName", orderer_id,
@@ -1018,7 +1025,7 @@ class DBOperatorPOSTGRES(DBOperator):
             "workPlace", zipcode, address, department, "assigneeName",
             telephone, fax, mail, "publishDate", "docDistStart", "docDistEnd",
             "submissionStart", "submissionEnd", "bidStartDate", "bidEndDate",
-            "bidType", category, is_ocr_failed, "doneOCR", "createdDate", "updatedDate",
+            "bidType", category, is_ocr_failed, "doneOCR", "createdDate", NOW()::text,
             notice_category_name, notice_category_code, notice_procurement_method,
             category_segment, category_detail
         FROM "{source_tablename}" AS S
@@ -1057,7 +1064,7 @@ class DBOperatorPOSTGRES(DBOperator):
                 ELSE NULL
             END AS date_value,
             date_raw, date_meaning, timepoint_type,
-            "createdDate", "updatedDate"
+            "createdDate", NOW()::text
         FROM "{source_tablename}"
         """
         self.cur.execute(insert_sql)
