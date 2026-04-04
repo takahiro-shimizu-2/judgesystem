@@ -1,7 +1,10 @@
 #!/usr/bin/env tsx
 
-import { ProjectsV2Client } from './lib/projects-v2.js';
-import { resolveGitHubToken, resolveRepositoryContext } from './lib/repository-metrics.js';
+import { ProjectsV2Client } from './automation/github/projects-v2.js';
+import {
+  resolveGitHubToken,
+  resolveRepositoryContext,
+} from './automation/reporting/repository-metrics.js';
 
 async function main() {
   const token = resolveGitHubToken({ preferProjectToken: true });

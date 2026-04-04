@@ -9,12 +9,12 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
-import { ProjectsV2Client } from './lib/projects-v2.js';
+import { ProjectsV2Client } from './automation/github/projects-v2.js';
 import {
   collectRepositoryMetrics,
   resolveGitHubToken,
   resolveRepositoryContext,
-} from './lib/repository-metrics.js';
+} from './automation/reporting/repository-metrics.js';
 
 interface DashboardData {
   generated: string;
