@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-04-04T23:00:00+09:00",
+  "generated_at": "2026-04-04T23:20:00+09:00",
   "query": "Miyabi absorption architecture reassessment",
   "repo": "judgesystem",
   "quality_score": 0,
@@ -67,6 +67,11 @@
     {
       "id": "codegen-brief-handler",
       "title": "Connect CodeGenAgent to a safe implementation-brief handler with optional issue state sync, while keeping actual code writing opt-in for future bindings",
+      "status": "completed"
+    },
+    {
+      "id": "agent-skill-bus-overrides",
+      "title": "Add AGENT_SKILL_BUS_BIN / AGENT_SKILL_BUS_ROOT override support so dashboard and record wrappers do not require a sibling checkout",
       "status": "completed"
     }
   ]

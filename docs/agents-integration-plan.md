@@ -250,13 +250,17 @@ repo-local 等価入口が別にあることを明記する方向で truthfulnes
 `package.json` の root runtime dependency からは `miyabi` を外したが、
 sibling repo 前提が完全に消えたわけではない。
 
-- `agent-skill-bus` は `pipeline:dashboard` の optional bridge として残っている
+- `agent-skill-bus` は `pipeline:dashboard` / `pipeline:record` の optional bridge として残っている
 
 また、`.claude/mcp-servers/miyabi-integration.js` は
 optional bridge として `MIYABI_CLI` / `MIYABI_ROOT` override を優先し、
 次に `node_modules/.bin/miyabi`、最後に `../Miyabi/packages/cli` を probe する形へ整理した。
 つまり `../Miyabi` は repo runtime の必須依存ではなくなったが、
 Claude 面の外部 bridge 候補としては残っている。
+
+同様に `scripts/context-impact/common.sh` の `agent-skill-bus` bridge も、
+`AGENT_SKILL_BUS_BIN` / `AGENT_SKILL_BUS_ROOT` override を優先し、
+次に local install、最後に `../agent-skill-bus` を probe する形へ整理できる。
 
 さらに `pipeline:*` script や `scripts/context-impact/*.sh` も sibling repo を呼ぶ。
 このため、現時点では「外部 sibling 依存の完全整理」はまだ未達成である。
