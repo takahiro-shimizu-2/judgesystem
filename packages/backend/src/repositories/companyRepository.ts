@@ -33,6 +33,26 @@ export interface CompanyRecord {
   certifications: string[];
 }
 
+/** Raw row shape returned by the buildBaseQuery SQL. */
+interface CompanyQueryRow {
+  id: string;
+  no: number;
+  name: string;
+  address: string;
+  grade: string;
+  priority: number;
+  phone: string;
+  email: string;
+  fax: string;
+  postalCode: string;
+  representative: string;
+  established: string;
+  capital: number;
+  employeeCount: number;
+  branches: { name: string; address: string }[] | unknown;
+  certifications: string[] | unknown;
+}
+
 export class CompanyRepository {
   private readonly companyTable = `${schemaPrefix}${TABLES.companyMaster}`;
   private readonly officeTable = `${schemaPrefix}${TABLES.officeMaster}`;
@@ -82,7 +102,8 @@ export class CompanyRepository {
     `;
   }
 
-  private mapRow(row: any): CompanyRecord {
+  /** Raw row shape returned by the base SQL query. */
+  private mapRow(row: CompanyQueryRow): CompanyRecord {
     return {
       id: row.id ?? "",
       no: Number(row.no) || 0,
@@ -103,7 +124,7 @@ export class CompanyRepository {
     };
   }
 
-  private async query<T = any>(sql: string, params: any[] = []): Promise<T[]> {
+  private async query<T = CompanyQueryRow>(sql: string, params: unknown[] = []): Promise<T[]> {
     let client: PoolClient | undefined;
     try {
       client = await pool.connect();
@@ -169,13 +190,14 @@ export class CompanyRepository {
     };
 
     const fields: string[] = [];
-    const values: any[] = [];
+    const values: unknown[] = [];
     let index = 1;
 
     for (const [inputKey, dbColumn] of Object.entries(fieldMap)) {
-      if ((input as any)[inputKey] !== undefined) {
+      const value = input[inputKey as keyof CompanyInput];
+      if (value !== undefined) {
         fields.push(`${dbColumn} = $${index + 1}`);
-        values.push((input as any)[inputKey]);
+        values.push(value);
         index += 1;
       }
     }

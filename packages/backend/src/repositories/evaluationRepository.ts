@@ -11,6 +11,11 @@ import type {
 import { logger } from "../utils/logger";
 import { escapeLikePattern } from "../utils/sql";
 
+/** Raw row returned by the findWithFilters query (includes window-function column). */
+interface EvaluationListRow extends EvaluationListItem {
+  total_count: string;
+}
+
 type QualifiedTables = {
   companyBidJudgement: string;
   bidAnnouncements: string;
@@ -104,14 +109,16 @@ export class EvaluationRepository {
         LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
       `;
       const dataParams = [...queryParams, pageSize, offset];
-      const dataResult = await client.query(dataQuery, dataParams);
+      const dataResult = await client.query<EvaluationListRow>(dataQuery, dataParams);
 
       const total = dataResult.rows.length > 0
         ? parseInt(dataResult.rows[0].total_count)
         : 0;
 
       // Remove total_count from each row
-      const data: EvaluationListItem[] = dataResult.rows.map(({ total_count, ...row }: any) => row);
+      const data: EvaluationListItem[] = dataResult.rows.map(
+        ({ total_count: _totalCount, ...row }) => row
+      );
 
       return {
         data,
