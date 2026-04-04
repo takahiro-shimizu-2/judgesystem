@@ -20,3 +20,4 @@ Context-and-impact phase E appends audit entries here.
 - Updated `AGENTS.md`, `CLAUDE.md`, and `.github/workflows/autonomous-agent.yml` so they describe the current planning-first runtime truthfully instead of claiming codegen/review/PR behavior that is not yet wired.
 - Added `scripts/automation/agents/markdown-loader.ts`, `scripts/automation/agents/registry.ts`, and `scripts/automation/agents/handler-contract.ts` to load `.claude/agents/*.md` as runtime metadata.
 - Connected the registry to `TaskManager` and `TaskExecutor`, so dry-run reports now say which Claude-side agent definition was matched and whether a runtime handler is still missing.
+- Fixed PR CI drift by gating `.github/workflows/deploy-pages.yml` behind an explicit `GITHUB_PAGES_ENABLED=true` repository variable so feature-branch pushes do not fail when Pages is not configured yet.

@@ -1,6 +1,8 @@
 name: Deploy GitHub Pages
 
 # Deploy dashboard to GitHub Pages
+# Pages deployment is opt-in. Set repository variable `GITHUB_PAGES_ENABLED=true`
+# after configuring Pages to build from GitHub Actions.
 on:
   push:
     branches:
@@ -53,8 +55,20 @@ jobs:
           name: dashboard-data
           path: docs/dashboard-data.json
 
+  pages-not-enabled:
+    if: vars.GITHUB_PAGES_ENABLED != 'true'
+    runs-on: ubuntu-latest
+    name: Pages disabled - skip deploy
+    steps:
+      - name: Summary
+        run: |
+          echo "### ℹ️ GitHub Pages deploy skipped" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Set repository variable \`GITHUB_PAGES_ENABLED=true\` after configuring Pages to build from GitHub Actions." >> $GITHUB_STEP_SUMMARY
+
   deploy:
     needs: generate-data
+    if: vars.GITHUB_PAGES_ENABLED == 'true'
     runs-on: ubuntu-latest
     name: Deploy to GitHub Pages
     environment:
