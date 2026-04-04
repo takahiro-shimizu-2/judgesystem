@@ -107,3 +107,7 @@ Context-and-impact phase E appends audit entries here.
 - Implemented the first parity slice by adding a session-scoped `plans-<session>.md` living planning artifact under `.ai/parallel-reports/`, generated from the current execution plan/report without disturbing the existing JSON artifact contract.
 - Extended the autonomous summary path and CLI output so both the local runtime and workflow-side summary can resolve and surface the new planning artifact as part of the session handoff set.
 - Added a dry-run `TaskManager` smoke test for planning artifacts and moved parity tracking forward: `plans-artifact-parity` is complete, while `real-worktree-lifecycle` is now the active next slice.
+- Replaced the old staging-only worktree plan with a real `git worktree` lifecycle inside `WorktreeCoordinator`: stable task branch names, linked worktree materialization, reuse-by-path/branch, and optional cleanup.
+- Updated `TaskManager` so execute mode can materialize linked worktrees before handler execution and optionally clean them up afterward, while planning mode remains side-effect free.
+- Made `CodeGenAgent` run its delegated writer contract inside the dedicated task worktree when one exists, so generated changes stay isolated from the main repository working tree.
+- Added a `worktree-lifecycle` smoke that proves create/reuse/cleanup plus code-writing isolation, and advanced parity tracking so `real-worktree-lifecycle` is complete and `review-loop-parity` is now the active slice.

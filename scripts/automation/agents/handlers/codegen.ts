@@ -3,6 +3,7 @@ import * as path from 'path';
 import { spawnSync } from 'child_process';
 
 import { ensureDirectory, slugify, truncateText } from '../../core/utils.js';
+import type { WorktreeAssignmentMode } from '../../orchestration/worktree-coordinator.js';
 import { resolveRepositoryContext } from '../../reporting/repository-metrics.js';
 import { LabelStateMachine } from '../../state/label-state-machine.js';
 import type { AgentType } from '../../state/task-state-machine.js';
@@ -23,6 +24,7 @@ interface CodegenPostcheckResult {
 interface CodegenCommandResult {
   enabled: boolean;
   command?: string;
+  commandCwd: string;
   writerExecuted: boolean;
   note: string;
   requireChanges: boolean;
@@ -44,6 +46,7 @@ interface CodegenArtifactPayload {
   briefPath: string;
   worktreePath: string;
   branchName?: string;
+  commandCwd: string;
   commandResult: CodegenCommandResult;
   generatedAt: string;
 }
@@ -88,6 +91,7 @@ export function createCodeGenAgentHandler(options: CodeGenAgentHandlerFactoryOpt
         taskType: task.type,
         worktreePath,
         branchName,
+        worktreeMode: context.worktree?.mode,
         artifactPath,
       });
 
@@ -101,6 +105,7 @@ export function createCodeGenAgentHandler(options: CodeGenAgentHandlerFactoryOpt
         briefPath: artifactPath,
         worktreePath,
         branchName,
+        commandCwd: codegenResult.commandCwd,
         commandResult: codegenResult,
       });
 
@@ -178,7 +183,7 @@ ${params.definitionEscalation ? `- Escalation: ${params.definitionEscalation}` :
 
 ## Runtime Contract
 - This handler always materializes a local implementation brief first.
-- When \`AUTOMATION_ENABLE_CODEGEN_WRITE=true\` and \`AUTOMATION_CODEGEN_COMMAND\` are set, it can invoke an explicit code-writing command in the repo root.
+- When \`AUTOMATION_ENABLE_CODEGEN_WRITE=true\` and \`AUTOMATION_CODEGEN_COMMAND\` are set, it can invoke an explicit code-writing command in the repo root or in a dedicated git worktree when one is materialized.
 - \`AUTOMATION_CODEGEN_ALLOWED_PATHS\` can restrict which repo-relative paths the writer is allowed to change.
 - \`AUTOMATION_CODEGEN_REQUIRE_CHANGES=true\` can force the writer contract to fail if no changed files are detected.
 - \`AUTOMATION_CODEGEN_POSTCHECK_COMMAND\` can run a follow-up validation step after writing.
@@ -237,6 +242,7 @@ function runCodegenCommand(params: {
   taskType: string;
   worktreePath: string;
   branchName?: string;
+  worktreeMode?: WorktreeAssignmentMode;
   artifactPath: string;
 }): CodegenCommandResult {
   const enabled = params.env.AUTOMATION_ENABLE_CODEGEN_WRITE === 'true';
@@ -244,11 +250,13 @@ function runCodegenCommand(params: {
   const allowedPaths = parseListEnv(params.env.AUTOMATION_CODEGEN_ALLOWED_PATHS).map(normalizeRepoPath);
   const requireChanges = resolveRequiredFlag(params.env.AUTOMATION_CODEGEN_REQUIRE_CHANGES);
   const postcheckCommand = (params.env.AUTOMATION_CODEGEN_POSTCHECK_COMMAND || '').trim();
+  const commandCwd = params.worktreeMode === 'git-worktree' ? params.worktreePath : params.rootDir;
 
   if (!enabled || !command) {
     return {
       enabled,
       command: command || undefined,
+      commandCwd,
       writerExecuted: false,
       note: 'Code writing is disabled. Set AUTOMATION_ENABLE_CODEGEN_WRITE=true and AUTOMATION_CODEGEN_COMMAND to let CodeGenAgent invoke an explicit writer command.',
       requireChanges,
@@ -260,10 +268,10 @@ function runCodegenCommand(params: {
     };
   }
 
-  const before = listChangedFiles(params.rootDir);
+  const before = listChangedFiles(commandCwd);
   const commandResult = runShellCommand({
     command,
-    cwd: params.rootDir,
+    cwd: commandCwd,
     env: {
       ...params.env,
       AUTOMATION_ISSUE_NUMBER: String(params.issueNumber),
@@ -277,7 +285,7 @@ function runCodegenCommand(params: {
     timeoutMs: 30 * 60 * 1000,
   });
 
-  const after = listChangedFiles(params.rootDir);
+  const after = listChangedFiles(commandCwd);
   const newlyChangedFiles = after.filter((file) => !before.includes(file));
   const evaluatedChangedFiles = newlyChangedFiles.length > 0 ? newlyChangedFiles : after;
   const unexpectedFiles =
@@ -289,7 +297,7 @@ function runCodegenCommand(params: {
     commandResult.status === 0 && postcheckCommand
       ? runShellCommand({
           command: postcheckCommand,
-          cwd: params.rootDir,
+          cwd: commandCwd,
           env: params.env,
           timeoutMs: 10 * 60 * 1000,
         })
@@ -321,7 +329,9 @@ function runCodegenCommand(params: {
   }
 
   const noteParts = [
-    `Code writing command ${commandResult.status === 0 ? 'executed successfully' : 'failed'} in the repo root.`,
+    `Code writing command ${commandResult.status === 0 ? 'executed successfully' : 'failed'} in ${
+      commandCwd === params.rootDir ? 'the repo root' : 'the dedicated task worktree'
+    }.`,
     evaluatedChangedFiles.length > 0
       ? `Detected ${evaluatedChangedFiles.length} evaluated changed file(s): ${evaluatedChangedFiles.join(', ')}.`
       : 'No changed files were detected after the writer command.',
@@ -336,6 +346,7 @@ function runCodegenCommand(params: {
   return {
     enabled,
     command,
+    commandCwd,
     writerExecuted: true,
     note: noteParts.join(' '),
     requireChanges,
@@ -359,6 +370,7 @@ function writeCodegenArtifacts(params: {
   briefPath: string;
   worktreePath: string;
   branchName?: string;
+  commandCwd: string;
   commandResult: CodegenCommandResult;
 }) {
   const reportsDir = ensureDirectory(path.join(params.rootDir, '.ai', 'parallel-reports'));
@@ -374,6 +386,7 @@ function writeCodegenArtifacts(params: {
     briefPath: params.briefPath,
     worktreePath: params.worktreePath,
     branchName: params.branchName,
+    commandCwd: params.commandCwd,
     commandResult: params.commandResult,
     generatedAt: new Date().toISOString(),
   };
@@ -401,6 +414,7 @@ function buildCodegenMarkdown(payload: CodegenArtifactPayload) {
 - Brief path: ${payload.briefPath}
 - Worktree path: ${payload.worktreePath}
 - Branch: ${payload.branchName || 'n/a'}
+- Command cwd: ${payload.commandCwd}
 - Writer enabled: ${payload.commandResult.enabled ? 'yes' : 'no'}
 - Writer executed: ${payload.commandResult.writerExecuted ? 'yes' : 'no'}
 - Require changes: ${payload.commandResult.requireChanges ? 'yes' : 'no'}

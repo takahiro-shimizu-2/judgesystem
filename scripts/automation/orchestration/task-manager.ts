@@ -30,6 +30,7 @@ export interface TaskManagerOptions {
   concurrency?: number;
   dryRun?: boolean;
   useWorktree?: boolean;
+  autoCleanupWorktrees?: boolean;
   logLevel?: LogLevel;
   deviceIdentifier?: string;
 }
@@ -56,6 +57,7 @@ export class TaskManager {
   private readonly concurrency: number;
   private readonly dryRun: boolean;
   private readonly useWorktree: boolean;
+  private readonly autoCleanupWorktrees: boolean;
   private readonly logLevel: LogLevel;
   private readonly deviceIdentifier: string;
   private readonly decomposer: LLMDecomposer;
@@ -67,6 +69,7 @@ export class TaskManager {
     this.concurrency = options.concurrency ?? 2;
     this.dryRun = options.dryRun ?? false;
     this.useWorktree = options.useWorktree ?? false;
+    this.autoCleanupWorktrees = options.autoCleanupWorktrees ?? false;
     this.logLevel = options.logLevel ?? 'info';
     this.deviceIdentifier = options.deviceIdentifier ?? 'local-runner';
     this.decomposer = dependencies.decomposer ?? new LLMDecomposer();
@@ -80,7 +83,16 @@ export class TaskManager {
       rootDir: this.rootDir,
       writeToFile: true,
     });
-    const plan = await this.createExecutionPlan(issue, logger);
+    const worktreeCoordinator = new WorktreeCoordinator({
+      rootDir: this.rootDir,
+      useWorktree: this.useWorktree,
+      createDirectories: true,
+      autoCleanup: this.autoCleanupWorktrees,
+    });
+    const plan = await this.createExecutionPlan(issue, logger, worktreeCoordinator);
+    if (!this.dryRun) {
+      plan.worktrees = worktreeCoordinator.materializeAssignments(plan.worktrees);
+    }
     const worktrees = new Map(plan.worktrees.map((assignment) => [assignment.taskId, assignment]));
 
     logger.info('Starting orchestration execution');
@@ -106,7 +118,18 @@ export class TaskManager {
       this.taskRunner,
     );
 
-    const artifactPaths = this.writeArtifacts(plan, report, logger);
+    let artifactPaths = this.writeArtifacts(plan, report, logger);
+    if (!this.dryRun) {
+      const cleanedAssignments = worktreeCoordinator.cleanupAssignments(plan.worktrees);
+      const cleanedCount = cleanedAssignments.filter((assignment) => assignment.lifecycle === 'cleaned').length;
+      if (cleanedCount > 0) {
+        logger.info(`Auto-cleaned ${cleanedCount} git worktree(s) after execution.`);
+      }
+      plan.worktrees = cleanedAssignments;
+      if (cleanedCount > 0) {
+        artifactPaths = this.writeArtifacts(plan, report, logger);
+      }
+    }
     logger.info(
       `Orchestration complete: ${report.summary.completed}/${report.summary.total} tasks completed, ${report.summary.planned} planned`,
     );
@@ -118,7 +141,11 @@ export class TaskManager {
     };
   }
 
-  private async createExecutionPlan(issue: AutomationIssue, logger: AutomationLogger): Promise<ExecutionPlan> {
+  private async createExecutionPlan(
+    issue: AutomationIssue,
+    logger: AutomationLogger,
+    worktreeCoordinator: WorktreeCoordinator,
+  ): Promise<ExecutionPlan> {
     logger.info(`Decomposing Issue #${issue.number}`);
     const decomposition = await this.decomposer.decomposeIssue(issue);
     logger.info(`Found ${decomposition.tasks.length} task candidates`);
@@ -142,11 +169,7 @@ export class TaskManager {
 
     const sessionId = `session-${Date.now()}`;
     const concurrency = Math.max(1, Math.min(this.concurrency, Math.max(1, dag.maxParallelism), 5));
-    const worktrees = new WorktreeCoordinator({
-      rootDir: this.rootDir,
-      useWorktree: this.useWorktree,
-      createDirectories: true,
-    }).planAssignments(issue.number, validated.tasks);
+    const worktrees = worktreeCoordinator.planAssignments(issue.number, validated.tasks);
 
     return {
       sessionId,

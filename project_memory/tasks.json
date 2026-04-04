@@ -17,12 +17,12 @@
     {
       "id": "real-worktree-lifecycle",
       "title": "Replace .ai/worktrees staging-only behavior with real git worktree create/reuse/cleanup lifecycle management",
-      "status": "in_progress"
+      "status": "completed"
     },
     {
       "id": "review-loop-parity",
       "title": "Evolve review from configured one-shot checks to an iterative review loop with explicit handoff and escalation",
-      "status": "pending"
+      "status": "in_progress"
     },
     {
       "id": "test-agent-runtime",
