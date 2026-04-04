@@ -137,6 +137,7 @@ jobs:
     if: needs.check-trigger.outputs.should_execute == 'true'
 
     permissions:
+      actions: write
       issues: write
       contents: read
       pull-requests: write
@@ -247,6 +248,12 @@ jobs:
           AUTOMATION_CLOUD_RUN_PG_SSLMODE: ${{ vars.AUTOMATION_CLOUD_RUN_PG_SSLMODE }}
           AUTOMATION_CLOUD_RUN_PG_SCHEMA: ${{ vars.AUTOMATION_CLOUD_RUN_PG_SCHEMA }}
           AUTOMATION_CLOUD_RUN_ENABLE_CONTACT_DELETE: ${{ vars.AUTOMATION_CLOUD_RUN_ENABLE_CONTACT_DELETE }}
+          AUTOMATION_GITHUB_PAGES_ENABLED: ${{ vars.GITHUB_PAGES_ENABLED }}
+          AUTOMATION_GITHUB_PAGES_WORKFLOW: ${{ vars.AUTOMATION_GITHUB_PAGES_WORKFLOW }}
+          AUTOMATION_GITHUB_PAGES_REF: ${{ vars.AUTOMATION_GITHUB_PAGES_REF }}
+          AUTOMATION_GITHUB_PAGES_WAIT_FOR_RUN: ${{ vars.AUTOMATION_GITHUB_PAGES_WAIT_FOR_RUN }}
+          AUTOMATION_GITHUB_PAGES_RUN_TIMEOUT_MS: ${{ vars.AUTOMATION_GITHUB_PAGES_RUN_TIMEOUT_MS }}
+          AUTOMATION_GITHUB_PAGES_POLL_INTERVAL_MS: ${{ vars.AUTOMATION_GITHUB_PAGES_POLL_INTERVAL_MS }}
         continue-on-error: true
 
       - name: Summarize execution artifacts
