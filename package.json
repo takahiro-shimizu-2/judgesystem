@@ -12,7 +12,7 @@
     "pipeline:l1": "bash ../context-and-impact/src/cli/l1-keyword-search.sh",
     "pipeline:quality": "python3 ../context-and-impact/src/quality/ensemble_judge.py",
     "pipeline:classify": "python3 ../context-and-impact/src/routing/multi_classifier.py",
-    "pipeline:dashboard": "npx agent-skill-bus dashboard",
+    "pipeline:dashboard": "bash scripts/context-impact/pipeline-dashboard.sh",
     "pipeline:plan:init": "bash scripts/context-impact/plan-init.sh",
     "pipeline:plan:status": "bash scripts/context-impact/plan-status.sh",
     "pipeline:plan:clean": "bash scripts/context-impact/plan-clean.sh",
@@ -32,7 +32,6 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.20.0",
     "@octokit/graphql": "^9.0.3",
-    "@octokit/rest": "^22.0.1",
-    "agent-skill-bus": "file:../agent-skill-bus"
+    "@octokit/rest": "^22.0.1"
   }
 }
