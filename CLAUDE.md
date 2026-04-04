@@ -109,7 +109,7 @@ python -m cli.entry         # Run judgment engine
 | ReviewAgent | Repo-root validation checks with score/retry/escalation artifacts | Executor |
 | IssueAgent | Issue analysis and analyzing-state sync | Analyst |
 | PRAgent | Local draft PR artifact generation plus optional remote draft PR | Executor |
-| DeploymentAgent | Env-gated deployment contract with optional preflight/healthcheck/rollback | Executor |
+| DeploymentAgent | Env-gated deployment contract with optional approval/build/preflight/healthcheck/rollback | Executor |
 
 Agent specifications: `.claude/agents/`
 
@@ -120,7 +120,7 @@ Agent specifications: `.claude/agents/`
 - `CodeGenAgent` can now invoke an explicit repo-root code-writing command when `AUTOMATION_ENABLE_CODEGEN_WRITE=true` and `AUTOMATION_CODEGEN_COMMAND` are set
 - `ReviewAgent` now runs repo-root configured checks, writes review artifacts, and only reports score/retry/escalation outcomes that actually occurred
 - `PRAgent` can now open or update a remote draft PR when `AUTOMATION_ENABLE_PR_WRITE=true` and branch/token conditions are satisfied
-- `DeploymentAgent` can now execute an explicit deploy contract with optional preflight, health check, rollback, and deployment artifacts when the corresponding env gates are set
+- `DeploymentAgent` can now execute an explicit deploy contract with optional approval, build, preflight, health check, rollback, and deployment artifacts when the corresponding env gates are set
 - Runtime integration should converge on a registry/loader that reads `.claude/agents/*.md` metadata and dispatches to explicit handlers in `scripts/automation`
 
 ### State Flow
