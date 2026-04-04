@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-04-05T01:08:00+09:00",
+  "generated_at": "2026-04-05T17:40:00+09:00",
   "query": "Miyabi parity implementation",
   "repo": "judgesystem",
   "quality_score": 0,
@@ -22,17 +22,17 @@
     {
       "id": "review-loop-parity",
       "title": "Evolve review from configured one-shot checks to an iterative review loop with explicit handoff and escalation",
-      "status": "in_progress"
+      "status": "completed"
     },
     {
       "id": "test-agent-runtime",
       "title": "Introduce an independent TestAgent runtime instead of keeping test execution absorbed inside ReviewAgent",
-      "status": "pending"
+      "status": "completed"
     },
     {
       "id": "water-spider-runtime",
       "title": "Add a repo-local Water Spider continuity layer without importing tmux or multi-machine infrastructure wholesale",
-      "status": "pending"
+      "status": "in_progress"
     },
     {
       "id": "omega-understanding-plan",

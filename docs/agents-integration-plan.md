@@ -198,7 +198,7 @@ repo 構造や package 境界をそのまま `judgesystem` に持ち込む対象
 重要な判断:
 
 - Miyabi の **7 coding agents** を、そのまま `judgesystem` に 7 class として再現しない
-- とくに `TestAgent` は、現行 `judgesystem` では独立 agent よりも `ReviewAgent` が実行する review/test capability に吸収する
+- とくに `TestAgent` は、この文書を書いた時点では `ReviewAgent` の review/test capability に吸収していたが、現行 parity target と current runtime は `docs/miyabi-parity-plan.md` を正本として独立 runtime へ移行済みである
 - 逆に、`PRAgent` の remote PR 作成や `CodeGenAgent` の実コード生成のように、full autonomy に直結する能力は capability binding として明示実装する
 
 ### 2.8 full autonomy を開けるときの前提
@@ -400,7 +400,7 @@ repo runtime の必須依存ではなく「override / local install 後の optio
 | Coordinator / orchestration | `packages/coding-agents/coordinator/*`, `packages/cli/scripts/parallel-executor.ts` | `scripts/automation/decomposition/*`, `scripts/automation/orchestration/*`, `scripts/automation/adapters/agents-parallel-exec.ts` | 維持。planning substrate と execution substrate の中核にする |
 | Issue analysis / state sync | `IssueAgent` + label state machine + webhook routing | `scripts/automation/agents/handlers/issue.ts`, `scripts/automation/state/*`, `scripts/automation/adapters/webhook-router.ts` | 維持。state machine と event routing を repo-local runtime として育てる |
 | Code generation | `CodeGenAgent` が実コード生成・テスト生成・ドキュメント生成を行う | `scripts/automation/agents/handlers/codegen.ts` は implementation brief を必ず生成し、`AUTOMATION_ENABLE_CODEGEN_WRITE=true` と `AUTOMATION_CODEGEN_COMMAND` がある場合だけ delegated writer command を repo root で実行する。`AUTOMATION_CODEGEN_ALLOWED_PATHS`, `AUTOMATION_CODEGEN_REQUIRE_CHANGES`, `AUTOMATION_CODEGEN_POSTCHECK_COMMAND` が設定されていれば stronger write contract と codegen summary artifact まで実行する | external-model や remote push を含むさらに強い codegen 契約を必要に応じて追加する |
-| Test execution | Miyabi では `TestAgent` と codegen/review 周辺で別能力として存在する | 独立 agent なし。`ReviewAgent` が `typecheck` / `test` を実行 | 現計画では独立 `TestAgent` を追加せず、review/test capability へ吸収したまま固定する |
+| Test execution | Miyabi では `TestAgent` と codegen/review 周辺で別能力として存在する | current parity runtime では独立 `TestAgent` が test / coverage artifact を生成し、`ReviewAgent` はその handoff を受け取る | parity target に合わせて `CodeGen -> Test -> Review -> PR` handoff を明示する |
 | Review / quality gate | `ReviewAgent` が scoring / comment / escalation を行う | `scripts/automation/agents/handlers/review.ts` は repo root で configured checks を実行し、score / retry / escalation を review artifact と execution report へ残す。`AUTOMATION_REVIEW_COVERAGE_THRESHOLD` / `AUTOMATION_REVIEW_COVERAGE_LABELS` が設定されていれば coverage gate を評価し、security summary と review-comment artifact も生成する | security / coverage policy と richer comment publish contract を必要に応じて追加する |
 | PR creation | `PRAgent` が GitHub に draft PR を作成し、labels / reviewers も扱う | `scripts/automation/agents/handlers/pr.ts` は local draft artifact を常に生成し、`AUTOMATION_ENABLE_PR_WRITE=true` の場合だけ remote draft PR を作成または更新する。`AUTOMATION_PR_REVIEWERS`, `AUTOMATION_PR_LABELS`, `AUTOMATION_PR_REQUIRE_MERGEABLE` が設定されていれば reviewer request / PR label sync / mergeability gate まで実行する | reviewer / label policy の高度化や mergeability contract の拡張条件を必要に応じて追加する |
 | Deployment | `DeploymentAgent` が build / test / deploy / health check / rollback を扱う | `scripts/automation/agents/handlers/deployment.ts` は env-gated deploy contract を実行し、provider / target metadata、approval gate、optional build / preflight / health check / rollback と deployment artifact を残す。`AUTOMATION_DEPLOY_USE_PROVIDER_PRESET=true` のときは repo-local `cloud-run/backend|frontend` に加え、`github-pages/dashboard|docs` preset を workflow-dispatch orchestration として解決できる | deploy policy の高度化や、Cloud Run / GitHub Pages 以外の provider 固有 orchestration を必要に応じて追加する |
@@ -753,7 +753,7 @@ GitNexus は次で分ける。
 - `PRAgent` は remote draft PR 作成と reviewer / label / mergeability 契約まで接続済みとし、reviewer / label policy や mergeability contract の拡張条件を決める
 - `DeploymentAgent` は deploy approval/provider-target metadata/build/preflight/healthcheck/rollback 契約まで接続済みとし、repo-local `cloud-run` と `github-pages` preset まで接続済みとして、それ以外の provider 固有 orchestration や deploy policy の拡張条件を決める
 - `workflow_dispatch` の planning / execute 切替と、label / comment trigger 時の explicit execute gate、protected deploy 用の dedicated execute workflow 分離、provider-dispatch に必要な Actions write permission は接続済みとし、Phase 9 では repo-local smoke と CI smoke を追加して運用 DoD を固める
-- Miyabi 由来の `TestAgent` は独立 runtime にせず、`ReviewAgent` の review/test capability に吸収したまま固定する
+- Miyabi 由来の `TestAgent` absorbed 判断は historical な phase 終了時点のものとし、current parity runtime は `docs/miyabi-parity-plan.md` に従って独立 `TestAgent` を持つ
 
 ### Phase 8: full autonomy の最小 slice を実装する
 
