@@ -9,3 +9,4 @@ Context-and-impact phase E appends audit entries here.
 - Added `label-state-bridge` and `github-label-sync` helpers to keep label parsing and GitHub label replacement separate.
 - Started Phase 3 by moving project status and webhook routing orchestration into `scripts/automation/adapters`.
 - Added a reusable retry helper in `scripts/automation/core/retry.ts` for adapter-level backoff behavior.
+- Moved KPI report, weekly report, and dashboard data entrypoint orchestration into reporting adapters.
