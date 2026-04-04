@@ -243,13 +243,19 @@ repo 構造や package 境界をそのまま `judgesystem` に持ち込む対象
 
 #### D. root dependency に sibling repo 前提が残っている
 
-`package.json` にはまだ次が残っている。
+`package.json` の root runtime dependency からは `miyabi` を外したが、
+sibling repo 前提が完全に消えたわけではない。
 
-- `miyabi: file:../Miyabi/packages/cli`
 - `agent-skill-bus: file:../agent-skill-bus`
 
+また、`.claude/mcp-servers/miyabi-integration.js` は
+optional bridge として `node_modules/.bin/miyabi` を優先し、
+無ければ `../Miyabi/packages/cli` を probe する形へ整理した。
+つまり `../Miyabi` は repo runtime の必須依存ではなくなったが、
+Claude 面の外部 bridge 候補としては残っている。
+
 さらに `pipeline:*` script や `scripts/context-impact/*.sh` も sibling repo を呼ぶ。
-このため、現時点では「Miyabi 元ディレクトリを runtime 前提にしない」はまだ未達成である。
+このため、現時点では「外部 sibling 依存の完全整理」はまだ未達成である。
 
 #### E. AGENTS / CLAUDE / 周辺 skill の GitNexus 記述にズレがある
 
@@ -580,7 +586,7 @@ GitNexus は次で分ける。
 
 作業:
 
-- `package.json` の `miyabi` dependency の整理
+- `package.json` の `miyabi` dependency を root runtime から外す
 - `.claude/mcp-servers/miyabi-integration.js` の扱いを決める
 - `.claude/commands/miyabi-*.md` の扱いを決める
 - `agent-skill-bus` と `context-and-impact` を bridge のまま残すか、最小 vendor するかを決める

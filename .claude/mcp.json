@@ -6,7 +6,7 @@
         ".claude/mcp-servers/miyabi-integration.js"
       ],
       "disabled": false,
-      "description": "Miyabi CLI統合 - プロジェクト作成、Agent実行、自動化機能"
+      "description": "Miyabi CLI統合 (optional external bridge) - プロジェクト作成、Agent実行、自動化機能"
     },
     "github": {
       "command": "npx",

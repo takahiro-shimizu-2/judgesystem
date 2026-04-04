@@ -3,7 +3,11 @@
   "version": "0.1.0",
   "private": true,
   "description": "Bid Eligibility Judgment System",
-  "workspaces": ["packages/backend", "packages/frontend", "packages/shared"],
+  "workspaces": [
+    "packages/backend",
+    "packages/frontend",
+    "packages/shared"
+  ],
   "scripts": {
     "pipeline:l1": "bash ../context-and-impact/src/cli/l1-keyword-search.sh",
     "pipeline:quality": "python3 ../context-and-impact/src/quality/ensemble_judge.py",
@@ -29,7 +33,6 @@
     "@modelcontextprotocol/sdk": "^1.20.0",
     "@octokit/graphql": "^9.0.3",
     "@octokit/rest": "^22.0.1",
-    "agent-skill-bus": "file:../agent-skill-bus",
-    "miyabi": "file:../Miyabi/packages/cli"
+    "agent-skill-bus": "file:../agent-skill-bus"
   }
 }
