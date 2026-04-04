@@ -26,7 +26,8 @@ Current runtime status:
 1. **Issue Analysis / Task Decomposition** → available inside repo
 2. **DAG / execution planning** → available inside repo
 3. **Execution report / artifacts** → available inside repo
-4. **Code generation / review / PR / deploy handlers** → not uniformly wired yet; treat as capability-specific, not guaranteed
+4. **Issue / codegen / review / PR / deploy handlers** → connected in a safe, capability-specific way
+5. **Remote PR creation / external-model code writing / deploy side effects** → still gated or optional, not guaranteed
 
 ### Core Behavior
 
@@ -103,19 +104,19 @@ python -m cli.entry         # Run judgment engine
 
 | Agent | Role | Authority |
 |-------|------|-----------|
-| CoordinatorAgent | Task decomposition, DAG building | Orchestrator |
-| CodeGenAgent | Code generation (Claude Sonnet 4) | Executor |
-| ReviewAgent | Code quality (80+ score required) | Executor |
-| IssueAgent | Issue analysis, 53-label classification | Analyst |
-| PRAgent | Pull Request creation (Conventional Commits) | Executor |
-| DeploymentAgent | CI/CD automation | Executor |
+| CoordinatorAgent | Task decomposition, DAG building, plan/report orchestration | Orchestrator |
+| CodeGenAgent | Implementation brief generation and future codegen binding | Executor |
+| ReviewAgent | Local validation checks and review summary | Executor |
+| IssueAgent | Issue analysis and analyzing-state sync | Analyst |
+| PRAgent | Local draft PR artifact generation | Executor |
+| DeploymentAgent | Env-gated deployment command execution | Executor |
 
 Agent specifications: `.claude/agents/`
 
 ### Runtime Reality
 
 - `scripts/automation/decomposition/*` and `scripts/automation/orchestration/*` provide a planning-first substrate
-- `npm run agents:parallel:exec` currently builds plans and reports; it is not yet proof that codegen/review/pr/deploy handlers are fully connected
+- `npm run agents:parallel:exec` now connects safe handlers for issue/codegen/review/pr/deploy while keeping stronger side effects gated
 - Runtime integration should converge on a registry/loader that reads `.claude/agents/*.md` metadata and dispatches to explicit handlers in `scripts/automation`
 
 ### State Flow
@@ -124,7 +125,7 @@ pending → analyzing → implementing → reviewing → done
 ```
 
 ### Quality Gate (Auto-Loop Pattern)
-Review scoring remains a target behavior. Do not claim a score or auto-retry loop actually ran unless the connected runtime handler produced that result.
+Review scoring remains optional. Do not claim a fixed score, coverage result, or auto-retry loop unless the connected runtime handler produced that result.
 
 ## Label System (53 Labels)
 
@@ -139,7 +140,7 @@ Review scoring remains a target behavior. Do not claim a score or auto-retry loo
 - **TypeScript**: Strict mode, CommonJS (backend), ESM (frontend)
 - **Python**: Python 3.12, type hints, SQLAlchemy
 - **Commits**: Conventional Commits format
-- **Quality**: 80+ score from ReviewAgent
+- **Quality**: trust the checks that actually ran (`typecheck`, `test`, or explicit additional commands), not an assumed fixed score
 
 ## Key Configuration
 
