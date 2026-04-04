@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-04-04T19:45:00+09:00",
+  "generated_at": "2026-04-04T20:02:00+09:00",
   "query": "Miyabi absorption architecture reassessment",
   "repo": "judgesystem",
   "quality_score": 0,
@@ -32,6 +32,11 @@
     {
       "id": "handler-wiring",
       "title": "Implement the safe Phase 3 handler slice: issue/review runtime hooks, local PR artifact generation, deployment opt-in gate, and generic fallback routing",
+      "status": "completed"
+    },
+    {
+      "id": "workflow-report-alignment",
+      "title": "Align autonomous-agent workflow comments and job summary with real execution report artifacts",
       "status": "completed"
     },
     {

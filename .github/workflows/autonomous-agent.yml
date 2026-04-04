@@ -114,17 +114,31 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         continue-on-error: true
 
-      - name: Record execution outcome
-        id: outcome
+      - name: Summarize execution artifacts
+        id: summarize
         if: always()
         run: |
-          if [ "${{ steps.execute.outcome }}" = "success" ]; then
-            echo "status=success" >> $GITHUB_OUTPUT
-            echo "summary=Planning artifacts generated successfully" >> $GITHUB_OUTPUT
-          else
-            echo "status=failure" >> $GITHUB_OUTPUT
-            echo "summary=Planning runtime failed" >> $GITHUB_OUTPUT
-          fi
+          npx tsx scripts/autonomous-agent-summary.ts \
+            --issue "${{ needs.check-trigger.outputs.issue_number }}" \
+            --root "$GITHUB_WORKSPACE" \
+            --status "${{ steps.execute.outcome == 'success' && 'success' || 'failure' }}" \
+            --triggered-by "${{ github.actor }}" \
+            --run-url "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+            --out-md "$RUNNER_TEMP/autonomous-agent-comment.md" \
+            --out-json "$RUNNER_TEMP/autonomous-agent-summary.json"
+
+          echo "comment_path=$RUNNER_TEMP/autonomous-agent-comment.md" >> $GITHUB_OUTPUT
+          echo "summary_json_path=$RUNNER_TEMP/autonomous-agent-summary.json" >> $GITHUB_OUTPUT
+
+          node <<'NODE' >> "$GITHUB_OUTPUT"
+          const fs = require('fs');
+          const summary = JSON.parse(fs.readFileSync(process.env.SUMMARY_JSON_PATH, 'utf8'));
+          console.log(`status=${summary.status}`);
+          console.log(`execution_mode=${summary.executionMode}`);
+          console.log(`failed_tasks=${summary.totals.failed}`);
+          NODE
+        env:
+          SUMMARY_JSON_PATH: ${{ runner.temp }}/autonomous-agent-summary.json
 
       - name: Upload execution logs
         if: always()
@@ -136,74 +150,29 @@ jobs:
             .ai/parallel-reports/
           retention-days: 30
 
-      - name: Comment on Issue (Planning Complete)
-        if: steps.outcome.outputs.status == 'success'
+      - name: Publish workflow summary
+        if: always()
+        run: cat "${{ steps.summarize.outputs.comment_path }}" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Comment on Issue
+        if: always()
         uses: actions/github-script@v7
+        env:
+          COMMENT_PATH: ${{ steps.summarize.outputs.comment_path }}
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
+            const fs = require('fs');
+            const body = fs.readFileSync(process.env.COMMENT_PATH, 'utf8');
             github.rest.issues.createComment({
               issue_number: ${{ needs.check-trigger.outputs.issue_number }},
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body: `## ✅ Autonomous Planning Complete
-
-            **Status**: Planning artifacts generated
-            **Run ID**: ${{ github.run_id }}
-            **Triggered by**: ${{ github.actor }}
-
-            ### What ran
-
-            - ✅ Issue context was fetched
-            - ✅ Task decomposition and DAG planning ran
-            - ✅ Execution plan and report artifacts were generated
-            - ℹ️ No pull request was created because this workflow currently runs in planning mode
-
-            ### Next Steps
-
-            1. Download the workflow artifacts for the generated plan and report
-            2. Review the planned tasks, warnings, and worktree assignments
-            3. Implement or connect the required runtime handlers before enabling auto-PR behavior
-
-            [View Run Logs →](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
-
-            ---
-
-            🤖 Executed by the judgesystem planning runtime`
-            })
-
-      - name: Comment on Issue (Failure)
-        if: steps.outcome.outputs.status == 'failure'
-        uses: actions/github-script@v7
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          script: |
-            github.rest.issues.createComment({
-              issue_number: ${{ needs.check-trigger.outputs.issue_number }},
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: `## ❌ Autonomous Agent Execution Failed
-
-            **Status**: Failed
-            **Run ID**: ${{ github.run_id }}
-
-            ### Error
-
-            The agent execution encountered an error. Please check the logs for details.
-
-            ### Escalation
-
-            This issue has been escalated to @${{ github.repository_owner }} for review.
-
-            [View Logs →](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
-
-            ---
-
-            🤖 Autonomous planning runtime`
+              body
             })
 
       - name: Add escalation label on failure
-        if: steps.outcome.outputs.status == 'failure'
+        if: steps.summarize.outputs.status == 'failure'
         uses: actions/github-script@v7
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}

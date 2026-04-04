@@ -1,0 +1,289 @@
+import * as fs from 'fs';
+import * as path from 'path';
+
+import { truncateText } from '../core/utils.js';
+import type { ExecutionReport } from '../orchestration/task-executor.js';
+
+type WorkflowExecutionStatus = 'success' | 'failure';
+
+interface SummaryCliArgs {
+  issueNumber: number;
+  rootDir: string;
+  runUrl: string;
+  triggeredBy: string;
+  workflowStatus: WorkflowExecutionStatus;
+  outMarkdownPath: string;
+  outJsonPath: string;
+}
+
+interface StoredExecutionPlan {
+  sessionId: string;
+  createdAt: string;
+  issue: {
+    number: number;
+    title: string;
+  };
+  strategy: 'llm' | 'heuristic';
+  concurrency: number;
+  dryRun: boolean;
+  warnings: string[];
+}
+
+interface ExecutionArtifactSummary {
+  status: WorkflowExecutionStatus;
+  issueNumber: number;
+  executionMode: ExecutionReport['executionMode'] | 'unknown';
+  sessionId?: string;
+  reportPath?: string;
+  planPath?: string;
+  totals: {
+    total: number;
+    completed: number;
+    skipped: number;
+    planned: number;
+    failed: number;
+  };
+  warnings: string[];
+  markdown: string;
+}
+
+export async function runAutonomousAgentSummaryCli(argv = process.argv) {
+  const args = parseArgs(argv);
+  const summary = buildExecutionArtifactSummary(args);
+
+  fs.writeFileSync(args.outMarkdownPath, `${summary.markdown}\n`, 'utf8');
+  fs.writeFileSync(args.outJsonPath, JSON.stringify(summary, null, 2), 'utf8');
+
+  console.log(JSON.stringify(summary, null, 2));
+}
+
+export function buildExecutionArtifactSummary(args: SummaryCliArgs): ExecutionArtifactSummary {
+  const latestReport = findLatestExecutionReport(args.rootDir, args.issueNumber);
+  const linkedPlan = latestReport ? findExecutionPlan(args.rootDir, latestReport.report.sessionId) : undefined;
+  const effectiveStatus = deriveEffectiveStatus(args.workflowStatus, latestReport?.report);
+  const markdown = buildIssueCommentMarkdown({
+    ...args,
+    status: effectiveStatus,
+    report: latestReport?.report,
+    plan: linkedPlan?.plan,
+  });
+
+  return {
+    status: effectiveStatus,
+    issueNumber: args.issueNumber,
+    executionMode: latestReport?.report.executionMode ?? 'unknown',
+    sessionId: latestReport?.report.sessionId,
+    reportPath: latestReport?.path,
+    planPath: linkedPlan?.path,
+    totals: latestReport
+      ? {
+          total: latestReport.report.summary.total,
+          completed: latestReport.report.summary.completed,
+          skipped: latestReport.report.summary.skipped,
+          planned: latestReport.report.summary.planned,
+          failed: latestReport.report.summary.failed,
+        }
+      : {
+          total: 0,
+          completed: 0,
+          skipped: 0,
+          planned: 0,
+          failed: 0,
+        },
+    warnings: latestReport?.report.warnings ?? [],
+    markdown,
+  };
+}
+
+function buildIssueCommentMarkdown(params: {
+  issueNumber: number;
+  runUrl: string;
+  triggeredBy: string;
+  status: WorkflowExecutionStatus;
+  report?: ExecutionReport;
+  plan?: StoredExecutionPlan;
+}) {
+  if (!params.report) {
+    return `## ${params.status === 'success' ? '⚠️' : '❌'} Autonomous Agent Summary Unavailable
+
+**Status**: ${params.status}
+**Issue**: #${params.issueNumber}
+**Triggered by**: ${params.triggeredBy}
+
+The workflow finished, but no execution report artifact was found under \`.ai/parallel-reports/\`.
+
+[View Run Logs →](${params.runUrl})
+`;
+  }
+
+  const modeLabel = params.report.executionMode === 'planning' ? 'Planning' : 'Execution';
+  const headingIcon = params.status === 'success' ? '✅' : '❌';
+  const planNotes =
+    params.plan && params.plan.strategy
+      ? `- Strategy: \`${params.plan.strategy}\`\n- Concurrency: ${params.plan.concurrency}\n`
+      : '';
+
+  return `## ${headingIcon} Autonomous ${modeLabel} Report
+
+**Status**: ${params.status}
+**Issue**: #${params.issueNumber}
+**Triggered by**: ${params.triggeredBy}
+**Execution Mode**: ${modeLabel}
+
+### Summary
+
+| Metric | Value |
+| --- | --- |
+| Tasks | ${params.report.summary.total} |
+| Completed | ${params.report.summary.completed} |
+| Skipped | ${params.report.summary.skipped} |
+| Planned | ${params.report.summary.planned} |
+| Failed | ${params.report.summary.failed} |
+| DAG Levels | ${params.report.graph.levels} |
+| DAG Edges | ${params.report.graph.edges} |
+
+### Task Snapshot
+
+${renderTaskSection('Completed', params.report, 'completed')}
+
+${renderTaskSection('Skipped', params.report, 'skipped')}
+
+${renderTaskSection('Planned', params.report, 'planned')}
+
+${renderTaskSection('Failed', params.report, 'failed')}
+
+### Execution Notes
+
+${planNotes}${renderWarnings(params.report.warnings)}
+
+[View Run Logs →](${params.runUrl})
+`;
+}
+
+function renderTaskSection(
+  label: string,
+  report: ExecutionReport,
+  status: 'completed' | 'skipped' | 'planned' | 'failed',
+) {
+  const tasks = report.tasks.filter((task) => task.status === status);
+  if (tasks.length === 0) {
+    return `#### ${label}\n\n_None_`;
+  }
+
+  return `#### ${label}\n\n${tasks
+    .slice(0, 5)
+    .map(
+      (task) =>
+        `- \`${task.agentType}\` ${task.title}${task.notes ? ` — ${truncateText(task.notes, 160)}` : ''}${
+          task.error ? ` — ${truncateText(task.error, 160)}` : ''
+        }`,
+    )
+    .join('\n')}`;
+}
+
+function renderWarnings(warnings: string[]) {
+  if (warnings.length === 0) {
+    return '- No workflow-level warnings were recorded.';
+  }
+
+  return warnings.map((warning) => `- ${warning}`).join('\n');
+}
+
+function deriveEffectiveStatus(workflowStatus: WorkflowExecutionStatus, report?: ExecutionReport): WorkflowExecutionStatus {
+  if (workflowStatus === 'failure') {
+    return 'failure';
+  }
+
+  if (!report) {
+    return 'failure';
+  }
+
+  return report.summary.failed > 0 ? 'failure' : 'success';
+}
+
+function findLatestExecutionReport(rootDir: string, issueNumber: number) {
+  const reportsDir = path.join(rootDir, '.ai', 'parallel-reports');
+  if (!fs.existsSync(reportsDir)) {
+    return undefined;
+  }
+
+  const reports = fs
+    .readdirSync(reportsDir)
+    .filter((file) => file.startsWith('agents-parallel-') && file.endsWith('.json'))
+    .map((file) => path.join(reportsDir, file))
+    .map((filePath) => ({
+      path: filePath,
+      report: JSON.parse(fs.readFileSync(filePath, 'utf8')) as ExecutionReport,
+      mtimeMs: fs.statSync(filePath).mtimeMs,
+    }))
+    .filter((entry) => entry.report.issueNumber === issueNumber)
+    .sort((left, right) => right.mtimeMs - left.mtimeMs);
+
+  return reports[0];
+}
+
+function findExecutionPlan(rootDir: string, sessionId: string) {
+  const planPath = path.join(rootDir, '.ai', 'parallel-reports', `execution-plan-${sessionId}.json`);
+  if (!fs.existsSync(planPath)) {
+    return undefined;
+  }
+
+  return {
+    path: planPath,
+    plan: JSON.parse(fs.readFileSync(planPath, 'utf8')) as StoredExecutionPlan,
+  };
+}
+
+function parseArgs(argv: string[]): SummaryCliArgs {
+  const issueNumber = parseNumberFlag(argv, '--issue');
+  const rootDir = parseStringFlag(argv, '--root') || process.cwd();
+  const runUrl = parseStringFlag(argv, '--run-url');
+  const triggeredBy = parseStringFlag(argv, '--triggered-by') || 'unknown';
+  const workflowStatus = (parseStringFlag(argv, '--status') || 'failure') as WorkflowExecutionStatus;
+  const outMarkdownPath = parseStringFlag(argv, '--out-md');
+  const outJsonPath = parseStringFlag(argv, '--out-json');
+
+  if (!issueNumber) {
+    throw new Error('--issue <number> is required');
+  }
+  if (!runUrl) {
+    throw new Error('--run-url <url> is required');
+  }
+  if (!outMarkdownPath || !outJsonPath) {
+    throw new Error('--out-md <path> and --out-json <path> are required');
+  }
+
+  return {
+    issueNumber,
+    rootDir,
+    runUrl,
+    triggeredBy,
+    workflowStatus: workflowStatus === 'success' ? 'success' : 'failure',
+    outMarkdownPath,
+    outJsonPath,
+  };
+}
+
+function parseStringFlag(argv: string[], flag: string) {
+  const inline = argv.find((value) => value.startsWith(`${flag}=`));
+  if (inline) {
+    return inline.slice(flag.length + 1);
+  }
+
+  const index = argv.findIndex((value) => value === flag);
+  if (index >= 0 && index + 1 < argv.length) {
+    return argv[index + 1];
+  }
+
+  return null;
+}
+
+function parseNumberFlag(argv: string[], flag: string) {
+  const value = parseStringFlag(argv, flag);
+  if (!value) {
+    return null;
+  }
+
+  const parsed = parseInt(value, 10);
+  return Number.isFinite(parsed) ? parsed : null;
+}
