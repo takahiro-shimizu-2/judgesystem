@@ -4,6 +4,19 @@ import { colors, fontSizes } from '../../constants/styles';
 import { getApiUrl } from '../../config/api';
 import type { CompanyBranchOption } from '../../types';
 
+/** API /api/evaluations/company-options が返す個別アイテムの型 */
+interface CompanyOptionApiItem {
+  officeNo?: string | number | null;
+  companyNo?: string | number | null;
+  companyName?: string | null;
+  branchName?: string | null;
+}
+
+/** APIレスポンスの個別アイテムかどうかを判定する型ガード */
+function isCompanyOptionApiItem(value: unknown): value is CompanyOptionApiItem {
+  return typeof value === 'object' && value !== null && 'companyName' in value;
+}
+
 export interface CompanyBranchSelectProps {
   value: string | null;
   valueLabel?: string | null;
@@ -83,15 +96,21 @@ export function CompanyBranchSelect({
           return;
         }
         if (Array.isArray(data)) {
-          const normalized = data
-            .map((item: Record<string, unknown>) => ({
-              officeId: item.officeNo ? String(item.officeNo) : null,
-              companyId: String(item.companyNo ?? ''),
-              companyName: String(item.companyName ?? ''),
-              branchName: String(item.branchName ?? ''),
-            }))
-            .filter((option) => option.officeId);
-          setOptions(normalized as CompanyBranchOption[]);
+          const normalized: CompanyBranchOption[] = data
+            .filter(isCompanyOptionApiItem)
+            .reduce<CompanyBranchOption[]>((acc, item) => {
+              const officeId = item.officeNo ? String(item.officeNo) : null;
+              if (officeId) {
+                acc.push({
+                  officeId,
+                  companyId: String(item.companyNo ?? ''),
+                  companyName: String(item.companyName ?? ''),
+                  branchName: String(item.branchName ?? ''),
+                });
+              }
+              return acc;
+            }, []);
+          setOptions(normalized);
         } else {
           setOptions([]);
         }
