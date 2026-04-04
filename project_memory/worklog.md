@@ -4,6 +4,17 @@ Context-and-impact phase E appends audit entries here.
 
 ## 2026-04-04
 
+- Re-opened the Miyabi absorption effort because the user wants full autonomy rather than only the safe handler substrate.
+- Reset the workflow to a strict research order: official contracts -> external origin systems -> judgesystem current state -> absorption mapping -> plan rewrite -> implementation.
+- Confirmed again that Claude-side `.claude/agents/*.md` and `.claude/commands/*.md` are definition surfaces, while repo-local runtime must still live under `scripts/automation/*`.
+- Re-read `../Miyabi` as a class-based full-autonomy system with 7 coding agents, CLI, SDK, workflow suite, and additional ecosystem surfaces that should not be copied wholesale into `judgesystem`.
+- Re-read `../gitnexus-stable-ops` as a GitNexus stability wrapper rather than the GitNexus product itself, and `../context-and-impact` as an OSS-core pre-execution pipeline rather than a Miyabi submodule.
+- Re-read `../agent-skill-bus` to confirm it is an external skill-health/runtime bus, not part of Miyabi's repo-local agent runtime.
+- Confirmed from the Claude Code docs that `.claude/commands/*` still works but the current recommendation is skill-oriented, and that Claude-side agent/command surfaces remain definition layers rather than generic Node runtime implementations.
+- Confirmed from GitHub Actions docs that `issues`, `issue_comment`, and `workflow_dispatch` are valid trigger surfaces for the autonomous workflow and that explicit `permissions` keys narrow all unspecified scopes to `none`.
+- Updated `docs/agents-integration-plan.md` to add a fixed research procedure, a capability classification model, the `TestAgent` absorption decision, and new full-autonomy phases after the previously completed safe-runtime work.
+- Reopened `project_memory/tasks.json` so the current phase is tracked as research gate and replanning work rather than appearing falsely complete.
+
 - Started Phase 2 by moving label state machine logic into `scripts/automation/state`.
 - Kept `scripts/label-state-machine.ts` as the stable CLI entrypoint for workflows and npm scripts.
 - Added `label-state-bridge` and `github-label-sync` helpers to keep label parsing and GitHub label replacement separate.
