@@ -1,6 +1,11 @@
 #coding: utf-8
 """
 Gemini プロンプト定数を提供する Mixin。
+
+NOTE: プロンプト中の入札方式 (BidType) の列挙値は
+packages/engine/domain/constants.py の BID_TYPE_* 定数と対応している。
+プロンプトは自然言語テキストのためリテラル埋め込みだが、
+定数側を変更した場合はプロンプトも手動で更新すること。
 """
 
 

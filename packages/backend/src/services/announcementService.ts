@@ -1,5 +1,6 @@
 import { AnnouncementRepository } from "../repositories";
 import { AnnouncementFilterParams, PaginatedResponse } from "../types";
+import { DEFAULT_PAGE_SIZE } from "../constants";
 import type {
   AnnouncementListItem,
   AnnouncementDetail,
@@ -22,7 +23,7 @@ export class AnnouncementService {
     const { data, total } = await this.repository.findWithFilters(filters);
 
     const page = filters.page || 0;
-    const pageSize = filters.pageSize || 25;
+    const pageSize = filters.pageSize || DEFAULT_PAGE_SIZE;
 
     return {
       data,

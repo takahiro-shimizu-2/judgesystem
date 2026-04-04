@@ -34,7 +34,19 @@ from packages.engine.domain.master import (
     file_exists_gcs_or_local,
     get_pages,
 )
-from packages.engine.domain.constants import ERA_OFFSETS
+from packages.engine.domain.constants import (
+    ERA_OFFSETS,
+    BID_TYPE_OPEN_COMPETITIVE,
+    BID_TYPE_PLANNING_COMPETITION,
+    BID_TYPE_DESIGNATED_COMPETITIVE,
+    BID_TYPE_DOCUMENT_REQUEST,
+    BID_TYPE_OPINION_REQUEST,
+    BID_TYPE_NEGOTIATED_CONTRACT,
+    BID_TYPE_OPEN_COUNTER,
+    BID_TYPE_UNKNOWN,
+    BID_TYPE_PREFERRED_DESIGNATION,
+    BID_TYPE_OTHER,
+)
 
 # UI が期待するカテゴリ体系に合わせるための定数
 GOODS_SERVICE_SEGMENTS = {
@@ -89,7 +101,7 @@ for raw_value, detail_value in _CONSTRUCTION_CATEGORY_BASE.items():
 
 BID_TYPE_RULES = [
     {
-        "canonical": "open_counter",
+        "canonical": BID_TYPE_OPEN_COUNTER,
         "keywords": [
             "オープンカウンター",
             "open counter",
@@ -102,35 +114,35 @@ BID_TYPE_RULES = [
         ],
     },
     {
-        "canonical": "open_competitive",
+        "canonical": BID_TYPE_OPEN_COMPETITIVE,
         "keywords": ["一般競争", "一般競争入札", "general competitive", "general competition"],
     },
     {
-        "canonical": "planning_competition",
+        "canonical": BID_TYPE_PLANNING_COMPETITION,
         "keywords": ["企画競争", "プロポーザル", "公募型プロポーザル", "proposal"],
     },
     {
-        "canonical": "designated_competitive",
+        "canonical": BID_TYPE_DESIGNATED_COMPETITIVE,
         "keywords": ["指名競争", "指名入札", "designated competitive"],
     },
     {
-        "canonical": "document_request",
+        "canonical": BID_TYPE_DOCUMENT_REQUEST,
         "keywords": ["資料提供招請", "document request"],
     },
     {
-        "canonical": "opinion_request",
+        "canonical": BID_TYPE_OPINION_REQUEST,
         "keywords": ["意見招請", "opinion request"],
     },
     {
-        "canonical": "preferred_designation",
+        "canonical": BID_TYPE_PREFERRED_DESIGNATION,
         "keywords": ["希望制指名", "preferred designation"],
     },
     {
-        "canonical": "negotiated_contract",
+        "canonical": BID_TYPE_NEGOTIATED_CONTRACT,
         "keywords": ["随意契約", "negotiated contract"],
     },
     {
-        "canonical": "other",
+        "canonical": BID_TYPE_OTHER,
         "keywords": ["その他"],
     },
 ]
@@ -1490,7 +1502,7 @@ class OcrProcessingMixin:
                         "fax": self._select_best_value([d["fax"] for d in docs_data]),
                         "mail": self._select_best_value([d["mail"] for d in docs_data]),
                         "publishDate": self._select_best_value([d["publishdate"] for d in docs_data]),
-                        "bidType": bidType_effective or "unknown",
+                        "bidType": bidType_effective or BID_TYPE_UNKNOWN,
                         "category": category_ocr,
                         "category_segment": category_segment,
                         "category_detail": category_detail,

@@ -2,6 +2,7 @@ import { PoolClient } from "pg";
 import { pool, TABLES, schemaPrefix } from "../config/database";
 import { escapeLikePattern } from "../utils/sql";
 import { BaseFilterParams } from "../types";
+import { DEFAULT_PAGE_SIZE } from "../constants";
 import type {
   PartnerListSummary,
   PartnerDetail,
@@ -133,7 +134,7 @@ export class PartnerRepository {
     filters: PartnerFilterParams
   ): Promise<{ data: PartnerListSummary[]; total: number }> {
     const page = filters.page || 0;
-    const pageSize = filters.pageSize || 25;
+    const pageSize = filters.pageSize || DEFAULT_PAGE_SIZE;
     const offset = page * pageSize;
 
     const conditions: string[] = ["COALESCE(is_active, true)"];

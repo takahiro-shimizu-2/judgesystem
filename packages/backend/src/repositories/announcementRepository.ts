@@ -1,6 +1,7 @@
 import { PoolClient } from "pg";
 import { pool, TABLES, schemaPrefix } from "../config/database";
 import { AnnouncementFilterParams, SortOption } from "../types";
+import { DEFAULT_PAGE_SIZE } from "../constants";
 import type {
   AnnouncementListItem,
   AnnouncementDetail,
@@ -55,7 +56,7 @@ export class AnnouncementRepository {
 
       // Get paginated data
       const page = filters.page || 0;
-      const pageSize = filters.pageSize || 25;
+      const pageSize = filters.pageSize || DEFAULT_PAGE_SIZE;
       const offset = page * pageSize;
 
       // 一覧表示に必要な最小限のフィールドのみ取得

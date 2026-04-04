@@ -1,5 +1,6 @@
 import { PartnerRepository, PartnerInput, PartnerFilterParams } from "../repositories/partnerRepository";
 import { PaginatedResponse } from "../types";
+import { DEFAULT_PAGE_SIZE } from "../constants";
 import type { PartnerListSummary, PartnerDetail } from "../types/partner";
 
 export class PartnerService {
@@ -15,7 +16,7 @@ export class PartnerService {
   async getList(filters: PartnerFilterParams): Promise<PaginatedResponse<PartnerListSummary>> {
     const { data, total } = await this.repository.findWithFilters(filters);
     const page = filters.page || 0;
-    const pageSize = filters.pageSize || 25;
+    const pageSize = filters.pageSize || DEFAULT_PAGE_SIZE;
     return { data, total, page, pageSize };
   }
 
