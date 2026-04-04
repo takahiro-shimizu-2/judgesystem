@@ -41,7 +41,7 @@ export async function runAgentsParallelExecCli(argv = process.argv, env = proces
   console.log(`   Repository: ${context.owner}/${context.repo}`);
   console.log(`   Issue Count: ${issues.length}`);
   console.log(`   Concurrency: ${args.concurrency}`);
-  console.log(`   Dry Run: ${args.dryRun ? 'Yes' : 'No (planning mode until task runners are added)'}`);
+  console.log(`   Dry Run: ${args.dryRun ? 'Yes' : 'No (registry handlers and fallback routing enabled)'}`);
 
   let hasFailures = false;
 
@@ -55,7 +55,10 @@ export async function runAgentsParallelExecCli(argv = process.argv, env = proces
       const report = result.report;
 
       console.log(
-        `✅ Issue #${issue.number} planned: ${report.graph.nodes} tasks, ${report.graph.edges} edges, ${report.graph.levels} levels`,
+        `✅ Issue #${issue.number} ${report.executionMode === 'planning' ? 'planned' : 'executed'}: ${report.graph.nodes} tasks, ${report.graph.edges} edges, ${report.graph.levels} levels`,
+      );
+      console.log(
+        `   Summary: completed=${report.summary.completed}, planned=${report.summary.planned}, skipped=${report.summary.skipped}, failed=${report.summary.failed}`,
       );
       console.log(`   Report: ${result.artifactPaths.reportPath}`);
       console.log(`   Plan:   ${result.artifactPaths.planPath}`);

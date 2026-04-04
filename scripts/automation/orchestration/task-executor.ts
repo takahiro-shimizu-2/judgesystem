@@ -1,5 +1,7 @@
 import type { AutomationLogger } from '../core/logger.js';
 import type { DecomposedTask } from '../decomposition/llm-decomposer.js';
+import { executeTaskWithAgent } from '../agents/capability-router.js';
+import type { AutomationAgentHandlerResult } from '../agents/handler-contract.js';
 import type { AgentRegistry } from '../agents/registry.js';
 import { describeAgentForTask } from '../agents/registry.js';
 import type { WorktreeAssignment } from './worktree-coordinator.js';
@@ -53,8 +55,10 @@ export interface ExecutionReport {
 export interface TaskExecutionContext {
   sessionId: string;
   issueNumber: number;
+  rootDir: string;
   dryRun: boolean;
   logger: AutomationLogger;
+  env: NodeJS.ProcessEnv;
   worktrees: Map<string, WorktreeAssignment>;
   agentRegistry?: AgentRegistry;
 }
@@ -90,6 +94,8 @@ export class TaskExecutor {
       warnings: string[];
       edges: number;
       logger: AutomationLogger;
+      rootDir: string;
+      env: NodeJS.ProcessEnv;
       worktrees: Map<string, WorktreeAssignment>;
       agentRegistry?: AgentRegistry;
     },
@@ -101,8 +107,10 @@ export class TaskExecutor {
     const context: TaskExecutionContext = {
       sessionId: params.sessionId,
       issueNumber: params.issueNumber,
+      rootDir: params.rootDir,
       dryRun: this.dryRun,
       logger: params.logger,
+      env: params.env,
       worktrees: params.worktrees,
       agentRegistry: params.agentRegistry,
     };
@@ -130,7 +138,7 @@ export class TaskExecutor {
       sessionId: params.sessionId,
       issueNumber: params.issueNumber,
       deviceIdentifier: this.deviceIdentifier,
-      executionMode: this.dryRun || !runner ? 'planning' : 'execute',
+      executionMode: this.dryRun ? 'planning' : 'execute',
       startTime,
       endTime,
       totalDurationMs: endTime - startTime,
@@ -183,7 +191,7 @@ export class TaskExecutor {
     const startedAt = Date.now();
     const worktree = context.worktrees.get(task.id);
 
-    if (!runner || context.dryRun) {
+    if (context.dryRun) {
       const agentNote = describeAgentForTask(task, context.agentRegistry);
       return {
         taskId: task.id,
@@ -193,9 +201,7 @@ export class TaskExecutor {
         startedAt,
         endedAt: Date.now(),
         durationMs: Date.now() - startedAt,
-        notes: [context.dryRun
-          ? 'Dry-run mode: execution was planned but not performed.'
-          : 'Planning mode: no task runner is configured yet.', agentNote]
+        notes: ['Dry-run mode: execution was planned but not performed.', agentNote]
           .filter(Boolean)
           .join(' '),
         worktreePath: worktree?.worktreePath,
@@ -203,7 +209,7 @@ export class TaskExecutor {
     }
 
     try {
-      const outcome = await runner(task, context);
+      const outcome = await this.runTask(task, context, runner);
       const endedAt = Date.now();
 
       return {
@@ -232,5 +238,20 @@ export class TaskExecutor {
         worktreePath: worktree?.worktreePath,
       };
     }
+  }
+
+  private runTask(
+    task: DecomposedTask,
+    context: TaskExecutionContext,
+    runner?: TaskExecutionRunner,
+  ): Promise<TaskExecutionOutcome | AutomationAgentHandlerResult> {
+    if (runner) {
+      return runner(task, context);
+    }
+
+    return executeTaskWithAgent(task, {
+      ...context,
+      worktree: context.worktrees.get(task.id),
+    });
   }
 }
