@@ -1,7 +1,13 @@
 {
-  "generated_at": null,
-  "query": "",
+  "generated_at": "2026-04-04T06:54:00+09:00",
+  "query": "Phase 2 state/label delegation",
   "repo": "judgesystem",
   "quality_score": 0,
-  "tasks": []
+  "tasks": [
+    {
+      "id": "phase2-state-delegation",
+      "title": "Move label-state-machine runtime under scripts/automation/state",
+      "status": "in_progress"
+    }
+  ]
 }
