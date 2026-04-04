@@ -19,7 +19,7 @@ PR に相当するタイトル・本文・リンク情報をまとめる。
 - `scripts/automation/agents/handlers/pr.ts` に接続済み
 - branch 名と task 情報から local markdown artifact を生成する
 - `AUTOMATION_ENABLE_PR_WRITE=true` かつ token / branch / base の前提がそろうと remote draft PR を作成または更新する
-- reviewer 自動割り当てや PR label 同期までは現時点では保証しない
+- `AUTOMATION_PR_REVIEWERS`, `AUTOMATION_PR_LABELS`, `AUTOMATION_PR_REQUIRE_MERGEABLE` が設定されていれば reviewer request / PR label sync / mergeability gate まで実行する
 
 ## Claude 側で期待すること
 
@@ -27,6 +27,7 @@ PR に相当するタイトル・本文・リンク情報をまとめる。
 - Issue との紐付けを明示する
 - 実際に存在する review / plan / execution 情報だけを本文へ載せる
 - 未実行の test や未接続 capability を成功扱いで書かない
+- reviewer / label / mergeability の gate が閉じているなら、そのままを contract として扱う
 
 ## 入れてよい内容
 
@@ -41,6 +42,7 @@ PR に相当するタイトル・本文・リンク情報をまとめる。
 - draft PR artifact が local に生成される
 - title / body / linked issue が再利用できる形で残る
 - remote PR を作成できた場合は、その番号と URL が report に残る
+- reviewer request / label sync / mergeability gate を実行した場合は、その結果が report に残る
 - remote PR を作成できなかった場合も、その理由が明確に分かる
 
 ## エスカレーション
