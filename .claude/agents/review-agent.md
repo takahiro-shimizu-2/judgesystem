@@ -13,6 +13,8 @@ escalation: TechLead (品質問題)、CISO (重大セキュリティ問題)
 その結果を execution report に残す。
 現在の runtime は repo root で configured checks を実行し、
 その結果から score / retry / escalation を判定して review artifact を残す。
+`judgesystem` では Miyabi 由来の `TestAgent` を独立させず、
+この Agent が review/test capability を兼務する。
 
 ## 現在の runtime contract
 

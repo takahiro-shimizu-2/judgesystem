@@ -160,6 +160,12 @@ npm run pipeline:plan:init -- "Issue #123 summary" M
 npx gitnexus query "keyword" --repo judgesystem
 ```
 
+autonomy surface 自体を触った変更なら最後に:
+
+```bash
+npm run automation:smoke
+```
+
 ## トラブルシューティング
 
 ### Issue を取れない
