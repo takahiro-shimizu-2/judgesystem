@@ -53,6 +53,11 @@ Context-and-impact phase E appends audit entries here.
 - Extended `scripts/automation/agents/handlers/codegen.ts` so `CodeGenAgent` now writes a codegen summary artifact and can enforce a stronger write contract via changed-file allowlists, require-changes, and an optional post-check command after the delegated writer runs.
 - Passed `AUTOMATION_CODEGEN_ALLOWED_PATHS`, `AUTOMATION_CODEGEN_REQUIRE_CHANGES`, and `AUTOMATION_CODEGEN_POSTCHECK_COMMAND` through the autonomous workflows so execute-mode runs can open the stronger write contract intentionally.
 - Updated Claude/runtime docs and the plan so CodeGenAgent is no longer described as a bare delegated writer; it now has a repo-local stronger write contract while external-model / remote push behavior remains future work.
+- Extended `scripts/automation/agents/handlers/deployment.ts` again so `DeploymentAgent` now supports a second repo-local provider preset: `github-pages`, implemented as a workflow-dispatch orchestration that can wait for the provider workflow run and record run metadata in deployment artifacts.
+- Kept the deployment runtime under `scripts/automation/*` and avoided inventing a separate app package; the new Pages path reuses the existing `.github/workflows/deploy-pages.yml` surface instead of moving automation under `packages/*`.
+- Updated `.github/workflows/autonomous-agent.yml` and `.github/workflows/autonomous-deploy-execute.yml` to pass GitHub Pages env overrides into the runtime and to grant `actions: write`, which is required for provider workflow dispatch from the repo-local deploy contract.
+- Updated `AGENTS.md`, `CLAUDE.md`, `.claude/agents/deployment-agent.md`, `.claude/commands/deploy.md`, `.claude/commands/agent-run.md`, and `docs/agents-integration-plan.md` so the deployment/provider story is truthful again: `cloud-run` and `github-pages` are connected presets, while other providers remain future work.
+- Reframed `project_memory/tasks.json` around the deployment provider phase and explicitly reopened the remaining post-phase items as `phase9-dod` and `test-agent-decision`, so the plan does not appear fully closed while those policy decisions still remain.
 
 - Started Phase 2 by moving label state machine logic into `scripts/automation/state`.
 - Kept `scripts/label-state-machine.ts` as the stable CLI entrypoint for workflows and npm scripts.

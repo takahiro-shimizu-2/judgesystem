@@ -128,6 +128,11 @@ AUTOMATION_CLOUD_RUN_PG_SSLMODE="disable"
 AUTOMATION_CLOUD_RUN_PG_SCHEMA="public"
 AUTOMATION_CLOUD_RUN_ENABLE_CONTACT_DELETE="false"
 AUTOMATION_CLOUD_RUN_DRY_RUN=true
+AUTOMATION_GITHUB_PAGES_ENABLED=true
+AUTOMATION_GITHUB_PAGES_WORKFLOW="deploy-pages.yml"
+AUTOMATION_GITHUB_PAGES_WAIT_FOR_RUN=true
+AUTOMATION_GITHUB_PAGES_RUN_TIMEOUT_MS=900000
+AUTOMATION_GITHUB_PAGES_POLL_INTERVAL_MS=5000
 ```
 
 補足:
@@ -137,7 +142,7 @@ AUTOMATION_CLOUD_RUN_DRY_RUN=true
 - `PRAgent` は `AUTOMATION_ENABLE_PR_WRITE=true` のとき、必要なら reviewer request / label sync / mergeability gate まで実行できる
 - `CodeGenAgent` は explicit writer command に加えて、changed-file allowlist / require-changes / post-check を持つ stronger write contract を実行できる
 - `ReviewAgent` は security summary / coverage gate / review-comment artifact を、実際に走った check 出力からだけ生成する
-- `DeploymentAgent` は explicit `AUTOMATION_DEPLOY_COMMAND` だけでなく、`AUTOMATION_DEPLOY_USE_PROVIDER_PRESET=true` のときは repo-local `cloud-run` preset も解決できる
+- `DeploymentAgent` は explicit `AUTOMATION_DEPLOY_COMMAND` だけでなく、`AUTOMATION_DEPLOY_USE_PROVIDER_PRESET=true` のときは repo-local `cloud-run` と `github-pages` preset を解決できる
 
 GitHub Actions 側の gate に使う repo variable:
 

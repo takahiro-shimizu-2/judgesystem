@@ -35,6 +35,7 @@ jobs:
     environment: ${{ inputs.github_environment }}
 
     permissions:
+      actions: write
       issues: write
       contents: read
       pull-requests: write
@@ -70,11 +71,15 @@ jobs:
             exit 0
           fi
 
-          if [ "$AUTOMATION_DEPLOY_USE_PROVIDER_PRESET" = "true" ] && [ "$AUTOMATION_DEPLOY_PROVIDER" = "cloud-run" ] && [ -n "$DEPLOY_TARGET" ]; then
-            exit 0
+          if [ "$AUTOMATION_DEPLOY_USE_PROVIDER_PRESET" = "true" ] && [ -n "$DEPLOY_TARGET" ]; then
+            case "$AUTOMATION_DEPLOY_PROVIDER" in
+              cloud-run|github-pages)
+                exit 0
+                ;;
+            esac
           fi
 
-          echo "::error::Set AUTOMATION_DEPLOY_COMMAND or enable AUTOMATION_DEPLOY_USE_PROVIDER_PRESET=true with AUTOMATION_DEPLOY_PROVIDER=cloud-run and a deploy target."
+          echo "::error::Set AUTOMATION_DEPLOY_COMMAND or enable AUTOMATION_DEPLOY_USE_PROVIDER_PRESET=true with a supported provider preset (cloud-run or github-pages) and a deploy target."
           exit 1
       - name: Execute autonomous deploy runtime
         id: execute
@@ -139,6 +144,12 @@ jobs:
           AUTOMATION_CLOUD_RUN_PG_SSLMODE: ${{ vars.AUTOMATION_CLOUD_RUN_PG_SSLMODE }}
           AUTOMATION_CLOUD_RUN_PG_SCHEMA: ${{ vars.AUTOMATION_CLOUD_RUN_PG_SCHEMA }}
           AUTOMATION_CLOUD_RUN_ENABLE_CONTACT_DELETE: ${{ vars.AUTOMATION_CLOUD_RUN_ENABLE_CONTACT_DELETE }}
+          AUTOMATION_GITHUB_PAGES_ENABLED: ${{ vars.GITHUB_PAGES_ENABLED }}
+          AUTOMATION_GITHUB_PAGES_WORKFLOW: ${{ vars.AUTOMATION_GITHUB_PAGES_WORKFLOW }}
+          AUTOMATION_GITHUB_PAGES_REF: ${{ vars.AUTOMATION_GITHUB_PAGES_REF }}
+          AUTOMATION_GITHUB_PAGES_WAIT_FOR_RUN: ${{ vars.AUTOMATION_GITHUB_PAGES_WAIT_FOR_RUN }}
+          AUTOMATION_GITHUB_PAGES_RUN_TIMEOUT_MS: ${{ vars.AUTOMATION_GITHUB_PAGES_RUN_TIMEOUT_MS }}
+          AUTOMATION_GITHUB_PAGES_POLL_INTERVAL_MS: ${{ vars.AUTOMATION_GITHUB_PAGES_POLL_INTERVAL_MS }}
         continue-on-error: true
 
       - name: Summarize execution artifacts

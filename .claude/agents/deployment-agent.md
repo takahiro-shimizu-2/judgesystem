@@ -26,15 +26,17 @@ repo-local deploy contract を実行する。
 - `.ai/parallel-reports/` に markdown/json の deployment artifact を残す
 - token がある場合は `agent:deployment` の同期を試みる
 - gate が無い場合は `skipped` を返す
-- repo-local preset として `cloud-run/backend|frontend` を解決できる
-- provider 固有の orchestration は基本 command-driven だが、approval / provider / target metadata は repo runtime で保持する
+- repo-local preset として `cloud-run/backend|frontend` と `github-pages/dashboard|docs` を解決できる
+- `github-pages` preset は `deploy-pages.yml` を `workflow_dispatch` で起動し、既定では完了まで待って artifact に workflow run 情報を残す
+- `github-pages` preset は `AUTOMATION_GITHUB_PAGES_ENABLED=true` を要求し、Pages が未設定の skip workflow を成功 deploy と誤認しない
+- provider 固有の orchestration は基本 command-driven だが、approval / provider / target metadata と workflow-dispatch 型 preset の実行結果は repo runtime で保持する
 
 ## Claude 側で期待すること
 
 - 本当に deploy が必要かを見極める
 - 実行条件、health check、rollback 観点を事前に明示する
 - protected environment なら approval を明示する
-- 実際に与えられた command 以外の deploy 能力を前提にしない
+- 実際に与えられた command か、接続済み preset 以外の deploy 能力を前提にしない
 - skip した場合は、その理由を report に残す
 
 ## 実行前の確認

@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-04-05T00:45:00+09:00",
-  "query": "CodeGen stronger write contract rollout",
+  "generated_at": "2026-04-04T23:28:08+09:00",
+  "query": "Deployment provider orchestration phase",
   "repo": "judgesystem",
   "quality_score": 0,
   "tasks": [
@@ -73,6 +73,21 @@
       "id": "codegen-write-contract",
       "title": "Extend CodeGenAgent with allowlisted changed-file enforcement, require-changes, post-check execution, and codegen summary artifacts",
       "status": "completed"
+    },
+    {
+      "id": "deployment-provider-phase",
+      "title": "Extend DeploymentAgent with a repo-local github-pages preset, workflow-dispatch orchestration, and aligned Actions permissions/env gates",
+      "status": "completed"
+    },
+    {
+      "id": "phase9-dod",
+      "title": "Consolidate full-autonomy operational DoD, smoke tests, artifact ownership, and remaining workflow/permission cleanup",
+      "status": "pending"
+    },
+    {
+      "id": "test-agent-decision",
+      "title": "Decide whether TestAgent remains absorbed into ReviewAgent or becomes an explicit runtime capability",
+      "status": "pending"
     }
   ]
 }
