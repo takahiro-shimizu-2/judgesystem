@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-04-05T17:40:00+09:00",
+  "generated_at": "2026-04-05T19:15:00+09:00",
   "query": "Miyabi parity implementation",
   "repo": "judgesystem",
   "quality_score": 0,
@@ -32,12 +32,12 @@
     {
       "id": "water-spider-runtime",
       "title": "Add a repo-local Water Spider continuity layer without importing tmux or multi-machine infrastructure wholesale",
-      "status": "in_progress"
+      "status": "completed"
     },
     {
       "id": "omega-understanding-plan",
       "title": "Stage Omega absorption by adding intent/understanding and strategic-plan layers ahead of the current decomposition runtime",
-      "status": "pending"
+      "status": "in_progress"
     },
     {
       "id": "omega-integration-learning",
