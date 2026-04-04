@@ -30,6 +30,9 @@ Context-and-impact phase E appends audit entries here.
 - Fixed the review execution contract so `.ai/worktrees/...` stays a staging/artifact area while actual review commands run from the real repository root unless `AUTOMATION_REVIEW_CWD` overrides it.
 - Updated `.claude/agents/review-agent.md`, `.claude/commands/agent-run.md`, `AGENTS.md`, `CLAUDE.md`, `.github/workflows/autonomous-agent.yml`, and `docs/agents-integration-plan.md` so the ReviewAgent capability and env gates match the runtime truthfully.
 - Verified the review-loop slice with `npm run typecheck`, `python3` YAML parsing, `npx tsx scripts/agents-parallel-exec.ts --help`, a success smoke run that passed with an optional retried failure at score 60/100, and a failure smoke run that escalated to `CISO` and surfaced the review artifact paths.
+- Reworked `scripts/automation/agents/handlers/deployment.ts` so `DeploymentAgent` now runs an explicit deploy contract in the repo root: optional preflight, required deploy command, optional healthcheck retries, optional rollback, deployment artifacts, and best-effort `agent:deployment` sync.
+- Updated `.claude/agents/deployment-agent.md`, `.claude/commands/agent-run.md`, `.claude/commands/deploy.md`, `AGENTS.md`, `CLAUDE.md`, `.github/workflows/autonomous-agent.yml`, and `docs/agents-integration-plan.md` so the deployment contract and env gates are described truthfully instead of as a bare command gate.
+- Verified the deployment-contract slice with `npm run typecheck`, `python3` YAML parsing, `npx tsx scripts/agents-parallel-exec.ts --help`, a success smoke run with preflight/deploy/healthcheck artifact generation, and a failure smoke run with healthcheck retries plus rollback execution and surfaced artifact paths.
 
 - Started Phase 2 by moving label state machine logic into `scripts/automation/state`.
 - Kept `scripts/label-state-machine.ts` as the stable CLI entrypoint for workflows and npm scripts.

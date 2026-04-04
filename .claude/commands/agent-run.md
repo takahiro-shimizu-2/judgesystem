@@ -19,7 +19,7 @@ IssueAgent      → label/state sync (token がある場合)
 CodeGenAgent    → implementation brief artifact + optional code-writing command
 ReviewAgent     → repo-root configured checks + score/retry/escalation artifact
 PRAgent         → local draft PR artifact + optional remote draft PR
-DeploymentAgent → env-gated command only
+DeploymentAgent → preflight + deploy + optional healthcheck/rollback contract
 ```
 
 以下はまだ前提にしないこと:
@@ -79,6 +79,9 @@ AUTOMATION_REVIEW_MAX_RETRIES=1
 AUTOMATION_REVIEW_CHECKS_JSON='[{"label":"typecheck","command":"npm","args":["run","typecheck"]},{"label":"tests","command":"npm","args":["test"]}]'
 AUTOMATION_ENABLE_DEPLOY=true
 AUTOMATION_DEPLOY_COMMAND="npm run deploy:staging"
+AUTOMATION_DEPLOY_PREFLIGHT_COMMAND="npm run typecheck"
+AUTOMATION_DEPLOY_HEALTHCHECK_COMMAND="curl -fsS https://example.com/health"
+AUTOMATION_DEPLOY_ROLLBACK_COMMAND="npm run deploy:rollback"
 ```
 
 補足:

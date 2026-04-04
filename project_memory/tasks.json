@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-04-04T21:12:06+09:00",
-  "query": "Full autonomy review-loop rollout",
+  "generated_at": "2026-04-04T21:19:06+09:00",
+  "query": "Full autonomy deployment-contract rollout",
   "repo": "judgesystem",
   "quality_score": 0,
   "tasks": [
@@ -22,6 +22,11 @@
     {
       "id": "review-loop-contract",
       "title": "Strengthen ReviewAgent with repo-root execution, score/retry/escalation artifacts, and workflow-aligned env gates",
+      "status": "completed"
+    },
+    {
+      "id": "deployment-contract",
+      "title": "Extend DeploymentAgent from a command gate to a deploy contract with preflight, healthcheck, rollback, artifacts, and workflow env gates",
       "status": "completed"
     },
     {
