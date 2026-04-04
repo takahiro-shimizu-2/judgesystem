@@ -89,6 +89,11 @@ GH_TOKEN=ghp_xxx
 REPOSITORY=owner/repo
 DEVICE_IDENTIFIER=local-runner
 AUTOMATION_ENABLE_PR_WRITE=true
+AUTOMATION_PR_REVIEWERS="takahiro-shimizu-2"
+AUTOMATION_PR_LABELS="agent:pr ready-for-review"
+AUTOMATION_PR_REQUIRE_MERGEABLE=true
+AUTOMATION_PR_MERGEABILITY_RETRIES=5
+AUTOMATION_PR_MERGEABILITY_DELAY_MS=1000
 AUTOMATION_ENABLE_CODEGEN_WRITE=true
 AUTOMATION_CODEGEN_COMMAND="npm run agent:codegen"
 AUTOMATION_REVIEW_MIN_SCORE=100
@@ -124,6 +129,7 @@ AUTOMATION_CLOUD_RUN_DRY_RUN=true
 
 - `GITHUB_TOKEN` が無くても dry-run や local artifact 生成は可能
 - `ANTHROPIC_API_KEY` は現行 repo-local handler の必須条件ではない
+- `PRAgent` は `AUTOMATION_ENABLE_PR_WRITE=true` のとき、必要なら reviewer request / label sync / mergeability gate まで実行できる
 - `DeploymentAgent` は explicit `AUTOMATION_DEPLOY_COMMAND` だけでなく、`AUTOMATION_DEPLOY_USE_PROVIDER_PRESET=true` のときは repo-local `cloud-run` preset も解決できる
 
 GitHub Actions 側の gate に使う repo variable:

@@ -44,6 +44,9 @@ Context-and-impact phase E appends audit entries here.
 - Added `scripts/automation/deploy/cloud-run.sh` plus `npm run deploy:cloud-run:backend|frontend` so `DeploymentAgent` can resolve a repo-local Cloud Run preset instead of requiring a bespoke deploy command for the common backend/frontend paths.
 - Extended both autonomous workflows so `AUTOMATION_DEPLOY_USE_PROVIDER_PRESET=true` and the Cloud Run env set are passed into the runtime, and protected deploy validation now accepts the Cloud Run preset path in addition to an explicit `AUTOMATION_DEPLOY_COMMAND`.
 - Updated deploy/runtime docs, agent definitions, and the plan so Cloud Run is now the first repo-local provider preset, while other providers remain explicit-command-driven.
+- Extended `scripts/automation/agents/handlers/pr.ts` so `PRAgent` can keep the local draft artifact as source of truth, then optionally request reviewers, sync PR labels, and enforce a mergeability gate after remote draft PR creation/update.
+- Passed `AUTOMATION_PR_REVIEWERS`, `AUTOMATION_PR_LABELS`, `AUTOMATION_PR_REQUIRE_MERGEABLE`, and mergeability polling envs through the autonomous workflows so GitHub-side execute runs can use the richer PR contract.
+- Updated Claude/runtime docs and the plan so `PRAgent` is no longer described as draft-PR-only; reviewer/label/mergeability are now connected opt-in contracts.
 
 - Started Phase 2 by moving label state machine logic into `scripts/automation/state`.
 - Kept `scripts/label-state-machine.ts` as the stable CLI entrypoint for workflows and npm scripts.
