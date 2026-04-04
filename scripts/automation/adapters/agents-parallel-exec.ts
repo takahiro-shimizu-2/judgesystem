@@ -33,6 +33,7 @@ export async function runAgentsParallelExecCli(argv = process.argv, env = proces
     concurrency: args.concurrency,
     dryRun: args.dryRun,
     useWorktree: env.USE_WORKTREE === 'true',
+    autoCleanupWorktrees: env.AUTOMATION_WORKTREE_AUTOCLEANUP === 'true',
     logLevel: args.logLevel,
     deviceIdentifier: env.DEVICE_IDENTIFIER || 'local-runner',
   });
