@@ -20,6 +20,7 @@ description: Deployment command bridge - env-gated deploy 実行の案内
 - 必要なら `AUTOMATION_DEPLOY_PREFLIGHT_COMMAND`
 - 必要なら `AUTOMATION_DEPLOY_HEALTHCHECK_COMMAND`
 - 必要なら `AUTOMATION_DEPLOY_ROLLBACK_COMMAND`
+- `github-pages` preset を使う場合は `AUTOMATION_GITHUB_PAGES_ENABLED=true`
 
 この解決条件が満たされなければ `DeploymentAgent` は `skipped` を返す。
 
@@ -70,6 +71,17 @@ Cloud Run preset の wrapper 単体確認:
 npm run deploy:cloud-run:backend
 ```
 
+GitHub Pages preset を使う例:
+
+```bash
+export AUTOMATION_ENABLE_DEPLOY=true
+export AUTOMATION_DEPLOY_PROVIDER="github-pages"
+export AUTOMATION_DEPLOY_TARGET="dashboard"
+export AUTOMATION_DEPLOY_USE_PROVIDER_PRESET=true
+export AUTOMATION_GITHUB_PAGES_ENABLED=true
+export AUTOMATION_GITHUB_PAGES_WAIT_FOR_RUN=true
+```
+
 GitHub Environment approval を使う protected deploy なら、
 Actions の dedicated workflow も使える:
 
@@ -88,7 +100,8 @@ gh workflow run autonomous-deploy-execute.yml \
 - secret や cloud provider の自動設定
 
 approval / provider / target metadata は contract に残せるが、
-`cloud-run` だけは repo-local preset があるものの、それ以外の provider 固有 orchestration 自体は引き続き command-driven である。
+repo-local preset は `cloud-run` と `github-pages` まで接続済みで、それ以外の provider 固有 orchestration 自体は引き続き command-driven である。
+`github-pages` preset は `deploy-pages.yml` を `workflow_dispatch` するため、`GITHUB_TOKEN` と `actions:write` が必要で、Pages が未設定の repo では使えない。
 GitHub Environment approval を使いたい場合は、
 generic `autonomous-agent.yml` ではなく `autonomous-deploy-execute.yml` を使う。
 

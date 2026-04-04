@@ -120,7 +120,7 @@ Agent specifications: `.claude/agents/`
 - `CodeGenAgent` can now invoke an explicit repo-root code-writing command when `AUTOMATION_ENABLE_CODEGEN_WRITE=true` and `AUTOMATION_CODEGEN_COMMAND` are set, and it can enforce allowlists, require-changes, and post-check contracts while writing a codegen summary artifact
 - `ReviewAgent` now runs repo-root configured checks, writes review artifacts plus a review-comment artifact, and can enforce coverage/security contracts only when the executed checks produced those signals
 - `PRAgent` can now open or update a remote draft PR when `AUTOMATION_ENABLE_PR_WRITE=true` and branch/token conditions are satisfied, and it can optionally request reviewers, sync PR labels, and enforce a mergeability gate
-- `DeploymentAgent` can now execute an explicit deploy contract with optional approval, build, preflight, health check, rollback, and deployment artifacts when the corresponding env gates are set, and it can resolve a repo-local `cloud-run` preset when `AUTOMATION_DEPLOY_USE_PROVIDER_PRESET=true`
+- `DeploymentAgent` can now execute an explicit deploy contract with optional approval, build, preflight, health check, rollback, and deployment artifacts when the corresponding env gates are set, and it can resolve repo-local `cloud-run` and `github-pages` presets when `AUTOMATION_DEPLOY_USE_PROVIDER_PRESET=true`
 - protected deploys can also use the dedicated `autonomous-deploy-execute.yml` workflow so GitHub Environment approvals and DeploymentAgent approval metadata stay aligned
 - Runtime integration should converge on a registry/loader that reads `.claude/agents/*.md` metadata and dispatches to explicit handlers in `scripts/automation`
 
