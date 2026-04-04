@@ -32,12 +32,12 @@
     {
       "id": "full-autonomy-first-slice",
       "title": "Choose and implement the first full-autonomy capability slice only after the rewritten plan is accepted",
-      "status": "in_progress"
+      "status": "completed"
     },
     {
       "id": "github-check-alignment",
       "title": "Validate push/PR Actions, permissions, and failure paths while implementing the first full-autonomy slice",
-      "status": "pending"
+      "status": "completed"
     }
   ]
 }
