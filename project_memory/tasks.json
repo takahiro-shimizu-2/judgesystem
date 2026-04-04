@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-04-05T00:25:00+09:00",
+  "generated_at": "2026-04-05T00:45:00+09:00",
   "query": "Miyabi absorption architecture reassessment",
   "repo": "judgesystem",
   "quality_score": 0,
@@ -42,7 +42,7 @@
     {
       "id": "external-bridge-cleanup",
       "title": "Clarify or reduce sibling-repo dependencies for miyabi, context-and-impact, and agent-skill-bus",
-      "status": "in_progress"
+      "status": "completed"
     },
     {
       "id": "local-estack-contract",

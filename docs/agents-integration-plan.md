@@ -267,8 +267,11 @@ Claude 面の外部 bridge 候補としては残っている。
 `AGENT_SKILL_BUS_BIN` / `AGENT_SKILL_BUS_ROOT` override を優先し、
 次に local install、最後に `../agent-skill-bus` を probe する形へ整理できる。
 
-さらに `pipeline:*` script や `scripts/context-impact/*.sh` も sibling repo を呼ぶ。
-このため、現時点では「外部 sibling 依存の完全整理」はまだ未達成である。
+さらに `pipeline:*` script や `scripts/context-impact/*.sh` も
+`CONTEXT_AND_IMPACT_ROOT` を優先し、最後に `../context-and-impact` を fallback として参照する。
+
+したがって現時点では、sibling 参照は残っているが、
+repo runtime の必須依存ではなく「override / local install 後の optional fallback」へ縮減できている。
 
 #### E. AGENTS / CLAUDE / 周辺 skill の GitNexus 記述にズレがある
 
@@ -642,6 +645,7 @@ GitNexus は次で分ける。
 - `agents:parallel:exec` は registry + handler もしくは planning-only のどちらかを明示できる
 - `.github/workflows/*` は実際に行ったことだけを報告する
 - `AGENTS.md` / `CLAUDE.md` / 計画書が、実際に使える GitNexus / context-and-impact / runtime 構成と矛盾しない
+- sibling repo 参照が残る場合でも、それが override / local install の後ろにある optional fallback であると明文化されている
 - `context-and-impact` と `agent-skill-bus` を外部 bridge として残すなら、その前提が明文化されている
 
 ## 10. 調査ソース
