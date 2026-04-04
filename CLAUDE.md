@@ -117,7 +117,7 @@ Agent specifications: `.claude/agents/`
 
 - `scripts/automation/decomposition/*` and `scripts/automation/orchestration/*` provide a planning-first substrate
 - `npm run agents:parallel:exec` now connects safe handlers for issue/codegen/review/pr/deploy while keeping stronger side effects gated
-- `CodeGenAgent` can now invoke an explicit repo-root code-writing command when `AUTOMATION_ENABLE_CODEGEN_WRITE=true` and `AUTOMATION_CODEGEN_COMMAND` are set
+- `CodeGenAgent` can now invoke an explicit repo-root code-writing command when `AUTOMATION_ENABLE_CODEGEN_WRITE=true` and `AUTOMATION_CODEGEN_COMMAND` are set, and it can enforce allowlists, require-changes, and post-check contracts while writing a codegen summary artifact
 - `ReviewAgent` now runs repo-root configured checks, writes review artifacts plus a review-comment artifact, and can enforce coverage/security contracts only when the executed checks produced those signals
 - `PRAgent` can now open or update a remote draft PR when `AUTOMATION_ENABLE_PR_WRITE=true` and branch/token conditions are satisfied, and it can optionally request reviewers, sync PR labels, and enforce a mergeability gate
 - `DeploymentAgent` can now execute an explicit deploy contract with optional approval, build, preflight, health check, rollback, and deployment artifacts when the corresponding env gates are set, and it can resolve a repo-local `cloud-run` preset when `AUTOMATION_DEPLOY_USE_PROVIDER_PRESET=true`

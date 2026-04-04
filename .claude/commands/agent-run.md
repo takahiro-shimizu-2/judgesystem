@@ -96,6 +96,9 @@ AUTOMATION_PR_MERGEABILITY_RETRIES=5
 AUTOMATION_PR_MERGEABILITY_DELAY_MS=1000
 AUTOMATION_ENABLE_CODEGEN_WRITE=true
 AUTOMATION_CODEGEN_COMMAND="npm run agent:codegen"
+AUTOMATION_CODEGEN_ALLOWED_PATHS="packages/backend src"
+AUTOMATION_CODEGEN_REQUIRE_CHANGES=true
+AUTOMATION_CODEGEN_POSTCHECK_COMMAND="npm run typecheck"
 AUTOMATION_REVIEW_MIN_SCORE=100
 AUTOMATION_REVIEW_MAX_RETRIES=1
 AUTOMATION_REVIEW_CHECKS_JSON='[{"label":"typecheck","command":"npm","args":["run","typecheck"]},{"label":"tests","command":"npm","args":["test"]},{"label":"security","command":"bash","args":["-lc","npm audit --omit=dev"],"severity":"security","weight":20,"required":false},{"label":"coverage","command":"bash","args":["-lc","npm run test:coverage"],"weight":20,"required":false}]'
@@ -132,6 +135,7 @@ AUTOMATION_CLOUD_RUN_DRY_RUN=true
 - `GITHUB_TOKEN` が無くても dry-run や local artifact 生成は可能
 - `ANTHROPIC_API_KEY` は現行 repo-local handler の必須条件ではない
 - `PRAgent` は `AUTOMATION_ENABLE_PR_WRITE=true` のとき、必要なら reviewer request / label sync / mergeability gate まで実行できる
+- `CodeGenAgent` は explicit writer command に加えて、changed-file allowlist / require-changes / post-check を持つ stronger write contract を実行できる
 - `ReviewAgent` は security summary / coverage gate / review-comment artifact を、実際に走った check 出力からだけ生成する
 - `DeploymentAgent` は explicit `AUTOMATION_DEPLOY_COMMAND` だけでなく、`AUTOMATION_DEPLOY_USE_PROVIDER_PRESET=true` のときは repo-local `cloud-run` preset も解決できる
 
