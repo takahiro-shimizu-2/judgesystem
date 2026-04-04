@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-04-04T23:20:00+09:00",
+  "generated_at": "2026-04-05T00:05:00+09:00",
   "query": "Miyabi absorption architecture reassessment",
   "repo": "judgesystem",
   "quality_score": 0,
@@ -72,6 +72,11 @@
     {
       "id": "agent-skill-bus-overrides",
       "title": "Add AGENT_SKILL_BUS_BIN / AGENT_SKILL_BUS_ROOT override support so dashboard and record wrappers do not require a sibling checkout",
+      "status": "completed"
+    },
+    {
+      "id": "claude-agent-contract-alignment",
+      "title": "Rewrite .claude/agents definitions so their summaries and instructions match the connected safe handler contracts instead of historical full-autonomy claims",
       "status": "completed"
     }
   ]

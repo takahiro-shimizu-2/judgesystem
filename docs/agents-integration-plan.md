@@ -45,8 +45,11 @@ Claude Code はそれらを「Claude が読む定義」として扱う。
 - `.claude/agents/*.md` は 6 agent の frontmatter と実行方針を持っている
 - `.claude/settings.json` では `PreToolUse` / `PostToolUse` hook が定義されている
 - `.claude/commands/*.md` には `miyabi` CLI を前提にした command が残っている
+- `.claude/agents/*.md` の一部には、過去の自動 codegen / scoring / remote PR / deploy 前提が残っている
 
 このため、`.claude/agents` を runtime 実装そのものと見なす設計は不適切である。
+さらに、runtime は `.claude/agents` の要約を registry / brief に使うため、
+agent 定義そのものの truthfulness も重要である。
 
 ### 2.2 Codex の現実
 
@@ -509,6 +512,7 @@ GitNexus は次で分ける。
 - `agents:parallel:exec` を planning/orchestration substrate と位置づけ直す
 - `autonomous-agent.yml` の過剰な claim を棚卸しする
 - GitNexus / `context-and-impact` / sibling repo 依存を一覧化する
+- `.claude/agents/*.md` に残る古い自動化前提を、実際の handler contract に合わせて修正する
 
 ### Phase 1: 既存 substrate を活かす前提で contract を修正
 
