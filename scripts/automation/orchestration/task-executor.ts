@@ -60,6 +60,7 @@ export interface TaskExecutionContext {
   logger: AutomationLogger;
   env: NodeJS.ProcessEnv;
   worktrees: Map<string, WorktreeAssignment>;
+  worktree?: WorktreeAssignment;
   agentRegistry?: AgentRegistry;
 }
 
@@ -104,6 +105,7 @@ export class TaskExecutor {
     const startTime = Date.now();
     const taskMap = new Map(params.tasks.map((task) => [task.id, task]));
     const records: TaskExecutionRecord[] = [];
+    const dependencyStatuses = new Map<string, TaskExecutionStatus>();
     const context: TaskExecutionContext = {
       sessionId: params.sessionId,
       issueNumber: params.issueNumber,
@@ -124,8 +126,11 @@ export class TaskExecutor {
       );
 
       const levelTasks = level.map((taskId) => taskMap.get(taskId)).filter((task): task is DecomposedTask => Boolean(task));
-      const levelRecords = await this.executeLevel(levelTasks, context, runner);
+      const levelRecords = await this.executeLevel(levelTasks, context, dependencyStatuses, runner);
       records.push(...levelRecords);
+      for (const record of levelRecords) {
+        dependencyStatuses.set(record.taskId, record.status);
+      }
     }
 
     const endTime = Date.now();
@@ -163,6 +168,7 @@ export class TaskExecutor {
   private async executeLevel(
     tasks: DecomposedTask[],
     context: TaskExecutionContext,
+    dependencyStatuses: Map<string, TaskExecutionStatus>,
     runner?: TaskExecutionRunner,
   ) {
     const results: TaskExecutionRecord[] = [];
@@ -172,7 +178,7 @@ export class TaskExecutor {
       while (cursor < tasks.length) {
         const task = tasks[cursor];
         cursor += 1;
-        results.push(await this.executeTask(task, context, runner));
+        results.push(await this.executeTask(task, context, dependencyStatuses, runner));
       }
     };
 
@@ -186,10 +192,15 @@ export class TaskExecutor {
   private async executeTask(
     task: DecomposedTask,
     context: TaskExecutionContext,
+    dependencyStatuses: Map<string, TaskExecutionStatus>,
     runner?: TaskExecutionRunner,
   ): Promise<TaskExecutionRecord> {
     const startedAt = Date.now();
     const worktree = context.worktrees.get(task.id);
+    const failedDependencies = task.dependencies.filter((dependencyId) => {
+      const status = dependencyStatuses.get(dependencyId);
+      return status === 'failed' || status === 'skipped';
+    });
 
     if (context.dryRun) {
       const agentNote = describeAgentForTask(task, context.agentRegistry);
@@ -204,6 +215,21 @@ export class TaskExecutor {
         notes: ['Dry-run mode: execution was planned but not performed.', agentNote]
           .filter(Boolean)
           .join(' '),
+        worktreePath: worktree?.worktreePath,
+      };
+    }
+
+    if (failedDependencies.length > 0) {
+      const endedAt = Date.now();
+      return {
+        taskId: task.id,
+        title: task.title,
+        agentType: task.agent,
+        status: 'skipped',
+        startedAt,
+        endedAt,
+        durationMs: endedAt - startedAt,
+        notes: `Skipped because dependency task(s) did not complete successfully: ${failedDependencies.join(', ')}.`,
         worktreePath: worktree?.worktreePath,
       };
     }
@@ -246,7 +272,10 @@ export class TaskExecutor {
     runner?: TaskExecutionRunner,
   ): Promise<TaskExecutionOutcome | AutomationAgentHandlerResult> {
     if (runner) {
-      return runner(task, context);
+      return runner(task, {
+        ...context,
+        worktree: context.worktrees.get(task.id),
+      });
     }
 
     return executeTaskWithAgent(task, {

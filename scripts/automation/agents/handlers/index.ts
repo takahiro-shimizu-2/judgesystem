@@ -5,6 +5,7 @@ import { createDeploymentAgentHandler } from './deployment.js';
 import { createIssueAgentHandler } from './issue.js';
 import { createPrAgentHandler } from './pr.js';
 import { createReviewAgentHandler } from './review.js';
+import { createTestAgentHandler } from './test.js';
 
 export interface DefaultAgentHandlerOptions {
   rootDir?: string;
@@ -20,6 +21,7 @@ export function buildDefaultAgentHandlers(
   return {
     IssueAgent: createIssueAgentHandler({ rootDir, env }),
     CodeGenAgent: createCodeGenAgentHandler({ rootDir, env }),
+    TestAgent: createTestAgentHandler({ rootDir, env }),
     ReviewAgent: createReviewAgentHandler({ rootDir, env }),
     PRAgent: createPrAgentHandler({ rootDir, env }),
     DeploymentAgent: createDeploymentAgentHandler({ rootDir, env }),

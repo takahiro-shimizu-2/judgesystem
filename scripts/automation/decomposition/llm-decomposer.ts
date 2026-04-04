@@ -4,6 +4,7 @@ export type AutomationAgentName =
   | 'CoordinatorAgent'
   | 'IssueAgent'
   | 'CodeGenAgent'
+  | 'TestAgent'
   | 'ReviewAgent'
   | 'PRAgent'
   | 'DeploymentAgent';
@@ -72,7 +73,7 @@ const AGENT_RULES: Array<{
   { type: 'review', agent: 'ReviewAgent', keywords: ['review', 'audit', 'verify', 'quality', 'lint', 'security', 'レビュー', '検証'] },
   { type: 'release', agent: 'PRAgent', keywords: ['pull request', 'pr ', 'draft pr', 'release note', 'changelog', 'pr作成', 'プルリク'] },
   { type: 'analysis', agent: 'IssueAgent', keywords: ['analyze', 'analysis', 'investigate', 'research', 'triage', '調査', '分析'] },
-  { type: 'test', agent: 'CodeGenAgent', keywords: ['test', 'spec', 'coverage', 'e2e', 'integration', 'unit', 'テスト'] },
+  { type: 'test', agent: 'TestAgent', keywords: ['test', 'spec', 'coverage', 'e2e', 'integration', 'unit', 'テスト'] },
   { type: 'docs', agent: 'CodeGenAgent', keywords: ['doc', 'documentation', 'readme', 'guide', 'ドキュメント', '説明'] },
   { type: 'refactor', agent: 'CodeGenAgent', keywords: ['refactor', 'cleanup', 'optimize', 'improve', '整理', '改善'] },
   { type: 'bug', agent: 'CodeGenAgent', keywords: ['bug', 'fix', 'error', 'issue', 'broken', '修正', '不具合'] },

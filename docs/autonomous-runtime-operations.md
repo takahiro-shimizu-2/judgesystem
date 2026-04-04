@@ -11,7 +11,7 @@
 
 この文書は、現在の repo-local runtime に対する smoke 導線、
 artifact 運用責務、
-そして `TestAgent` の最終判断を固定する。
+そして quality/test/review parity の運用判断を固定する。
 
 ## 2. Smoke Test
 
@@ -25,12 +25,15 @@ npm run automation:smoke
 
 - `npm run typecheck`
 - `npx tsx scripts/agents-parallel-exec.ts --help`
+- `quality-pipeline` parity smoke
+- `TestAgent` contract smoke
 - `ReviewAgent` contract smoke
 - `PRAgent` remote-PR contract smoke
 - `DeploymentAgent` `github-pages` preset smoke
 
-review / PR / deploy の smoke は
+quality / test / review / PR / deploy の smoke は
 `scripts/automation/smoke/handler-contracts.ts`
+と `scripts/automation/smoke/quality-pipeline.ts`
 で行い、外部副作用は fake Octokit と temp git repo で閉じる。
 
 ## 3. CI
@@ -42,6 +45,8 @@ push / PR 時には `.github/workflows/ci.yml` の `automation-smoke` job が
 次が継続確認される。
 
 - runtime entrypoint が壊れていない
+- `CodeGen -> Test -> Review -> PR` handoff と shared worktree contract が壊れていない
+- `TestAgent` contract が壊れていない
 - review loop contract が壊れていない
 - remote draft PR contract が壊れていない
 - provider-dispatch deploy contract が壊れていない
@@ -66,26 +71,23 @@ push / PR 時には `.github/workflows/ci.yml` の `automation-smoke` job が
 `.ai/*` は「実行結果」であり、
 役割を混ぜない。
 
-## 5. TestAgent Decision
+## 5. Quality Runtime Decision
 
-`judgesystem` では、Miyabi 由来の `TestAgent` を
-**独立 runtime としては追加しない**。
+`judgesystem` では、Miyabi parity の判断に従って
+`TestAgent` を **独立 runtime として追加する**。
 
 最終判断:
 
-- `ReviewAgent` が review/test capability を兼務する
-- `typecheck`, `test`, `coverage`, `security` は
-  `AUTOMATION_REVIEW_CHECKS_JSON` と coverage/security contract で扱う
-- したがって、現在の `judgesystem` における test 実行責務は
-  `ReviewAgent` に吸収済みとみなす
+- `TestAgent` が test / coverage / integration handoff を担う
+- `ReviewAgent` は review / score / review loop / escalation を担う
+- quality pipeline は `CodeGen -> Test -> Review -> PR` を基本 handoff とする
+- review は `TestAgent` artifact を読み、必要なら `AUTOMATION_REVIEW_FIX_COMMAND` つき loop を回す
 
-将来 `TestAgent` を分離する条件:
+`ReviewAgent` に test 実行責務を戻さない理由:
 
-- 長時間の integration / E2E / benchmark を review ループから分離したい
-- authority / escalation / workflow が review と明確に別れる
-- state label と artifact も別運用にしたい
-
-上記が無い限り、独立 `TestAgent` は追加しない。
+- authority / escalation / state / artifact を review と分離したい
+- coverage gate と review gate を別 failure surface として追いたい
+- `CodeGen` 後の shared worktree handoff を明示したい
 
 ## 6. この計画で残さないこと
 

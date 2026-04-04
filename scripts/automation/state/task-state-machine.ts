@@ -2,6 +2,7 @@ export type State =
   | 'pending'
   | 'analyzing'
   | 'implementing'
+  | 'testing'
   | 'reviewing'
   | 'done'
   | 'blocked'
@@ -11,6 +12,7 @@ export type State =
 export type AgentType =
   | 'coordinator'
   | 'codegen'
+  | 'test'
   | 'review'
   | 'issue'
   | 'pr'
@@ -60,8 +62,26 @@ export const STATE_TRANSITIONS: StateTransition[] = [
   },
   {
     from: 'implementing',
+    to: 'testing',
+    trigger: 'Implementation complete',
+    action: 'Start automated test execution',
+  },
+  {
+    from: 'implementing',
     to: 'reviewing',
     trigger: 'Pull request created',
+    action: 'Start review',
+  },
+  {
+    from: 'testing',
+    to: 'implementing',
+    trigger: 'Test remediation requested',
+    action: 'Return to implementation',
+  },
+  {
+    from: 'testing',
+    to: 'reviewing',
+    trigger: 'Tests passed',
     action: 'Start review',
   },
   {
@@ -113,10 +133,22 @@ export const STATE_TRANSITIONS: StateTransition[] = [
     action: 'Record failure',
   },
   {
+    from: 'testing',
+    to: 'failed',
+    trigger: 'Test execution failed',
+    action: 'Record failure',
+  },
+  {
     from: 'reviewing',
     to: 'failed',
     trigger: 'Review execution failed',
     action: 'Record failure',
+  },
+  {
+    from: 'testing',
+    to: 'blocked',
+    trigger: 'Critical test failure',
+    action: 'Escalate blocker',
   },
   {
     from: 'reviewing',
@@ -148,6 +180,7 @@ const STATE_LABELS: Record<State, string> = {
   pending: '📥 state:pending',
   analyzing: '🔍 state:analyzing',
   implementing: '🏗️ state:implementing',
+  testing: '🧪 state:testing',
   reviewing: '👀 state:reviewing',
   done: '✅ state:done',
   blocked: '🚫 state:blocked',
@@ -164,6 +197,7 @@ export function extractState(labels: string[]): State | null {
   if (stateLabel.includes('pending')) return 'pending';
   if (stateLabel.includes('analyzing')) return 'analyzing';
   if (stateLabel.includes('implementing')) return 'implementing';
+  if (stateLabel.includes('testing')) return 'testing';
   if (stateLabel.includes('reviewing')) return 'reviewing';
   if (stateLabel.includes('done')) return 'done';
   if (stateLabel.includes('blocked')) return 'blocked';
@@ -180,6 +214,7 @@ export function extractAgent(labels: string[]): AgentType | null {
 
   if (agentLabel.includes('coordinator')) return 'coordinator';
   if (agentLabel.includes('codegen')) return 'codegen';
+  if (agentLabel.includes('test')) return 'test';
   if (agentLabel.includes('review')) return 'review';
   if (agentLabel.includes('issue')) return 'issue';
   if (agentLabel.includes('pr')) return 'pr';

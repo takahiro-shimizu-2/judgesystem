@@ -46,9 +46,11 @@ export function validateTaskDecomposition(decomposition: TaskDecomposition): Dec
     errors.push('Task decomposition produced zero tasks.');
   }
 
+  const augmentedTasks = errors.length === 0 ? appendQualityPipelineTasks(tasks, warnings) : tasks;
+
   return {
     valid: errors.length === 0,
-    tasks,
+    tasks: augmentedTasks,
     warnings,
     errors,
   };
@@ -68,4 +70,110 @@ function findDuplicates(values: string[]) {
   }
 
   return [...duplicates];
+}
+
+function appendQualityPipelineTasks(tasks: DecomposedTask[], warnings: string[]) {
+  const augmented = [...tasks];
+  const knownIds = new Set(tasks.map((task) => task.id));
+
+  for (const task of tasks) {
+    if (task.agent !== 'CodeGenAgent') {
+      continue;
+    }
+
+    const testTask = findGeneratedDependent(augmented, task.id, 'TestAgent');
+    const ensuredTestTask =
+      testTask ||
+      createPipelineTask({
+        knownIds,
+        sourceTask: task,
+        suffix: 'test',
+        type: 'test',
+        agent: 'TestAgent',
+        title: `Run tests for ${task.title}`,
+        estimatedMinutes: 20,
+      });
+    if (!testTask) {
+      augmented.push(ensuredTestTask);
+      warnings.push(`Added synthetic TestAgent handoff ${ensuredTestTask.id} for ${task.id}.`);
+    }
+
+    const reviewTask = findGeneratedDependent(augmented, ensuredTestTask.id, 'ReviewAgent');
+    const ensuredReviewTask =
+      reviewTask ||
+      createPipelineTask({
+        knownIds,
+        sourceTask: task,
+        suffix: 'review',
+        type: 'review',
+        agent: 'ReviewAgent',
+        title: `Review ${task.title}`,
+        estimatedMinutes: 15,
+        dependencyId: ensuredTestTask.id,
+      });
+    if (!reviewTask) {
+      augmented.push(ensuredReviewTask);
+      warnings.push(`Added synthetic ReviewAgent handoff ${ensuredReviewTask.id} for ${task.id}.`);
+    }
+
+    const prTask = findGeneratedDependent(augmented, ensuredReviewTask.id, 'PRAgent');
+    if (!prTask) {
+      const ensuredPrTask = createPipelineTask({
+        knownIds,
+        sourceTask: task,
+        suffix: 'pr',
+        type: 'release',
+        agent: 'PRAgent',
+        title: `Prepare PR for ${task.title}`,
+        estimatedMinutes: 10,
+        dependencyId: ensuredReviewTask.id,
+      });
+      augmented.push(ensuredPrTask);
+      warnings.push(`Added synthetic PRAgent handoff ${ensuredPrTask.id} for ${task.id}.`);
+    }
+  }
+
+  return augmented;
+}
+
+function findGeneratedDependent(
+  tasks: DecomposedTask[],
+  dependencyId: string,
+  agent: DecomposedTask['agent'],
+) {
+  return tasks.find((task) => task.agent === agent && task.dependencies.includes(dependencyId));
+}
+
+function createPipelineTask(params: {
+  knownIds: Set<string>;
+  sourceTask: DecomposedTask;
+  suffix: 'test' | 'review' | 'pr';
+  type: DecomposedTask['type'];
+  agent: DecomposedTask['agent'];
+  title: string;
+  estimatedMinutes: number;
+  dependencyId?: string;
+}): DecomposedTask {
+  const dependencyId = params.dependencyId || params.sourceTask.id;
+  const baseId = `${params.sourceTask.id}-${params.suffix}`;
+  let candidateId = baseId;
+  let counter = 2;
+  while (params.knownIds.has(candidateId)) {
+    candidateId = `${baseId}-${counter}`;
+    counter += 1;
+  }
+  params.knownIds.add(candidateId);
+
+  return {
+    id: candidateId,
+    issueNumber: params.sourceTask.issueNumber,
+    title: params.title,
+    type: params.type,
+    agent: params.agent,
+    estimatedMinutes: params.estimatedMinutes,
+    priority: params.sourceTask.priority,
+    dependencies: [dependencyId],
+    rawText: params.title,
+    source: 'fallback',
+  };
 }
