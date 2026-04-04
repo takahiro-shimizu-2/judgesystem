@@ -5,13 +5,13 @@ description: "Use when the user asks about GitNexus itself — available tools, 
 
 # GitNexus Guide
 
-Quick reference for all GitNexus MCP tools, resources, and the knowledge graph schema.
+Quick reference for the GitNexus surfaces that are actually available in this repo: the local CLI plus the limited agent-graph MCP wrappers.
 
 ## Always Start Here
 
 For any task involving code understanding, debugging, impact analysis, or refactoring:
 
-1. **Read `gitnexus://repo/{name}/context`** — codebase overview + check index freshness
+1. **Run `npx gitnexus status`** — check index freshness
 2. **Match your task to a skill below** and **read that skill file**
 3. **Follow the skill's workflow and checklist**
 
@@ -35,10 +35,9 @@ For any task involving code understanding, debugging, impact analysis, or refact
 | `query`          | Process-grouped code intelligence — execution flows related to a concept |
 | `context`        | 360-degree symbol view — categorized refs, processes it participates in  |
 | `impact`         | Symbol blast radius — what breaks at depth 1/2/3 with confidence         |
-| `detect_changes` | Git-diff impact — what do your current changes affect                    |
-| `rename`         | Multi-file coordinated rename with confidence-tagged edits               |
+| `scope`          | Git diff + status — what do your current changes affect                  |
 | `cypher`         | Raw graph queries (read `gitnexus://repo/{name}/schema` first)           |
-| `list_repos`     | Discover indexed repos                                                   |
+| `agent_context`  | Agent/task routing context from the stable-ops MCP                       |
 
 ## Resources Reference
 

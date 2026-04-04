@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-04-04T21:10:00+09:00",
+  "generated_at": "2026-04-04T21:28:00+09:00",
   "query": "Miyabi absorption architecture reassessment",
   "repo": "judgesystem",
   "quality_score": 0,
@@ -52,6 +52,11 @@
     {
       "id": "miyabi-command-alignment",
       "title": "Rewrite .claude/commands/miyabi-* as optional external bridge surfaces with truthful repo-local alternatives",
+      "status": "completed"
+    },
+    {
+      "id": "gitnexus-contract-alignment",
+      "title": "Align AGENTS.md, CLAUDE.md, and GitNexus skills with the actual local CLI and agent-graph MCP surfaces",
       "status": "completed"
     }
   ]

@@ -33,3 +33,4 @@ Context-and-impact phase E appends audit entries here.
 - Added repo-local wrappers for `pipeline:l1`, `pipeline:quality`, and `pipeline:classify` that probe `CONTEXT_AND_IMPACT_ROOT` first and otherwise fall back to `../context-and-impact`.
 - Rewrote `scripts/context-impact/record-run.sh` to bridge directly to `agent-skill-bus`, keeping `context-and-impact` as an explicit search/quality/classify bridge instead of a mandatory hop for skill-bus recording.
 - Rewrote `.claude/commands/miyabi-*.md` so they are explicitly documented as optional external bridge surfaces, with repo-local equivalents called out where `judgesystem` already has its own runtime entrypoints.
+- Aligned `AGENTS.md`, `CLAUDE.md`, and the main GitNexus skill files with the GitNexus surfaces that are actually available here: CLI `analyze/status/query/context/impact/cypher` plus the limited `gitnexus_agent_*` MCP wrappers, without claiming unsupported `detect_changes` or `rename` commands.

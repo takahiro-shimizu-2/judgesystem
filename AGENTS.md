@@ -27,48 +27,55 @@
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
 
-This project is indexed by GitNexus as **judgesystem** (3938 symbols, 8348 relationships, 244 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
+This project is indexed by GitNexus as **judgesystem** (3938 symbols, 8348 relationships, 244 execution flows). Use the GitNexus CLI plus the limited agent-graph MCP wrappers that are actually available in this repo.
+
+Current surfaces in this environment:
+
+- CLI: `npx gitnexus analyze`, `status`, `query`, `context`, `impact`, `cypher`
+- Agent Graph MCP: `gitnexus_agent_context`, `gitnexus_agent_status`, `gitnexus_agent_list`
+- Not available in the current local CLI: `detect_changes`, `rename`
 
 > If any GitNexus tool warns the index is stale, run `npx gitnexus analyze` in terminal first.
 
 ## Always Do
 
-- **MUST run impact analysis before editing any symbol.** Before modifying a function, class, or method, run `gitnexus_impact({target: "symbolName", direction: "upstream"})` and report the blast radius (direct callers, affected processes, risk level) to the user.
-- **MUST verify scope before committing.** Prefer `gitnexus_detect_changes()` when available. In this repo's current CLI, use `git diff --stat`, `git status --short`, and targeted `gitnexus impact/context` checks when `detect_changes` is unavailable.
+- **MUST run impact analysis before editing any symbol.** Before modifying a function, class, or method, run `npx gitnexus impact "<symbolName>" --repo judgesystem --direction upstream` and report the blast radius to the user.
+- **MUST verify scope before committing.** In this repo's current CLI, use `git diff --stat`, `git status --short`, and targeted `npx gitnexus impact/context` checks.
 - **MUST warn the user** if impact analysis returns HIGH or CRITICAL risk before proceeding with edits.
-- When exploring unfamiliar code, use `gitnexus_query({query: "concept"})` to find execution flows instead of grepping. It returns process-grouped results ranked by relevance.
-- When you need full context on a specific symbol — callers, callees, which execution flows it participates in — use `gitnexus_context({name: "symbolName"})`.
+- When exploring unfamiliar code, use `npx gitnexus query "concept" --repo judgesystem` to find execution flows instead of grepping.
+- When you need full context on a specific symbol — callers, callees, which execution flows it participates in — use `npx gitnexus context "<symbolName>" --repo judgesystem`.
+- Use `gitnexus_agent_context/status/list` for agent-graph or task-routing context only, not as a replacement for symbol blast-radius analysis.
 
 ## When Debugging
 
-1. `gitnexus_query({query: "<error or symptom>"})` — find execution flows related to the issue
-2. `gitnexus_context({name: "<suspect function>"})` — see all callers, callees, and process participation
-3. `READ gitnexus://repo/judgesystem/process/{processName}` — trace the full execution flow step by step
-4. For regressions: if `gitnexus_detect_changes` is unavailable, compare `git diff --stat origin/main...HEAD` and run focused `gitnexus impact` on touched symbols
+1. `npx gitnexus query "<error or symptom>" --repo judgesystem` — find related execution flows
+2. `npx gitnexus context "<suspect function>" --repo judgesystem` — see callers, callees, and process participation
+3. `npx gitnexus cypher "MATCH ..."` — use custom traces if the standard views are ambiguous
+4. For regressions: compare `git diff --stat origin/develop...HEAD` and run focused `npx gitnexus impact/context` on touched symbols
 
 ## When Refactoring
 
-- **Renaming**: MUST use `gitnexus_rename({symbol_name: "old", new_name: "new", dry_run: true})` first. Review the preview — graph edits are safe, text_search edits need manual review. Then run with `dry_run: false`.
-- **Extracting/Splitting**: MUST run `gitnexus_context({name: "target"})` to see all incoming/outgoing refs, then `gitnexus_impact({target: "target", direction: "upstream"})` to find all external callers before moving code.
-- After any refactor: verify changed scope with `git diff --stat`, `git status --short`, and the relevant `gitnexus impact/context` checks.
+- **Renaming**: The current local CLI does not expose `rename`. Use `npx gitnexus context`, `impact`, and `query` to enumerate callers and dynamic references, then edit manually.
+- **Extracting/Splitting**: Run `npx gitnexus context "<target>" --repo judgesystem` to see refs, then `npx gitnexus impact "<target>" --repo judgesystem --direction upstream` before moving code.
+- After any refactor: verify changed scope with `git diff --stat`, `git status --short`, and the relevant `npx gitnexus impact/context` checks.
 
 ## Never Do
 
-- NEVER edit a function, class, or method without first running `gitnexus_impact` on it.
+- NEVER edit a function, class, or method without first running `npx gitnexus impact` on it.
 - NEVER ignore HIGH or CRITICAL risk warnings from impact analysis.
-- NEVER rename symbols with find-and-replace — use `gitnexus_rename` which understands the call graph.
-- NEVER commit changes without checking affected scope, even if `gitnexus_detect_changes` is unavailable in the local CLI.
+- NEVER rely on `gitnexus_rename` or `gitnexus_detect_changes` being available locally unless you have verified that build of GitNexus supports them.
+- NEVER commit changes without checking affected scope with the local fallback flow.
 
 ## Tools Quick Reference
 
 | Tool | When to use | Command |
 |------|-------------|---------|
-| `query` | Find code by concept | `gitnexus_query({query: "auth validation"})` |
-| `context` | 360-degree view of one symbol | `gitnexus_context({name: "validateUser"})` |
-| `impact` | Blast radius before editing | `gitnexus_impact({target: "X", direction: "upstream"})` |
-| `detect_changes` | Pre-commit scope check | `gitnexus_detect_changes({scope: "staged"})` when available; otherwise `git diff --stat` + `git status --short` |
-| `rename` | Safe multi-file rename | `gitnexus_rename({symbol_name: "old", new_name: "new", dry_run: true})` |
-| `cypher` | Custom graph queries | `gitnexus_cypher({query: "MATCH ..."})` |
+| `query` | Find code by concept | `npx gitnexus query "auth validation" --repo judgesystem` |
+| `context` | 360-degree view of one symbol | `npx gitnexus context "validateUser" --repo judgesystem` |
+| `impact` | Blast radius before editing | `npx gitnexus impact "X" --repo judgesystem --direction upstream` |
+| `scope` | Pre-commit scope check | `git diff --stat` + `git status --short` + focused `npx gitnexus context/impact` |
+| `cypher` | Custom graph queries | `npx gitnexus cypher "MATCH ..." --repo judgesystem` |
+| `agent-graph` | Agent/task routing context | `gitnexus_agent_context`, `gitnexus_agent_status`, `gitnexus_agent_list` |
 
 ## Impact Risk Levels
 
@@ -90,9 +97,9 @@ This project is indexed by GitNexus as **judgesystem** (3938 symbols, 8348 relat
 ## Self-Check Before Finishing
 
 Before completing any code modification task, verify:
-1. `gitnexus_impact` was run for all modified symbols
+1. `npx gitnexus impact` was run for all modified symbols
 2. No HIGH/CRITICAL risk warnings were ignored
-3. Changed scope was verified with `gitnexus_detect_changes()` or the local fallback flow
+3. Changed scope was verified with `git diff --stat`, `git status --short`, and focused `npx gitnexus context/impact`
 4. All d=1 (WILL BREAK) dependents were updated
 
 ## Keeping the Index Fresh
