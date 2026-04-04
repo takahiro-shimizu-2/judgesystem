@@ -1,5 +1,5 @@
 import { useParams, useNavigate, useLocation } from "react-router-dom";
-import { Box, Button, Alert, Typography, Paper, Tabs, Tab } from "@mui/material";
+import { Box, Button, Alert, Typography, Paper, Tabs, Tab, Snackbar } from "@mui/material";
 import {
   ArrowBack as ArrowBackIcon,
   Gavel as GavelIcon,
@@ -10,7 +10,7 @@ import {
   ArrowForward as ArrowForwardIcon,
   CheckCircle as CheckCircleIcon,
 } from "@mui/icons-material";
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect, useRef, type SyntheticEvent } from "react";
 import { getApiUrl } from "../config/api";
 
 import {
@@ -206,6 +206,18 @@ export default function BidDetailPage() {
   const partnersRequestIdRef = useRef(0);
   const similarCasesAbortRef = useRef<AbortController | null>(null);
 
+  // Snackbar通知
+  const [snackbar, setSnackbar] = useState<{
+    open: boolean;
+    message: string;
+    severity: 'success' | 'error';
+  }>({ open: false, message: '', severity: 'error' });
+
+  const handleSnackbarClose = useCallback((_event?: SyntheticEvent | Event, reason?: string) => {
+    if (reason === 'clickaway') return;
+    setSnackbar((prev) => ({ ...prev, open: false }));
+  }, []);
+
   // 評価データ取得
   useEffect(() => {
     if (!id) {
@@ -355,7 +367,12 @@ export default function BidDetailPage() {
     if (!evaluation) return;
     const success = await updateEvaluationAssignee(evaluation.evaluationNo, stepId, staffId);
     if (!success) {
-      alert('担当者の更新に失敗しました。時間をおいて再度お試しください。');
+      console.error('Failed to update assignee:', { stepId, staffId });
+      setSnackbar({
+        open: true,
+        message: '担当者の更新に失敗しました。時間をおいて再度お試しください。',
+        severity: 'error',
+      });
       return;
     }
     setStepAssignees((prev) => {
@@ -903,6 +920,22 @@ export default function BidDetailPage() {
 
       <FloatingBackButton onClick={handleBack} />
       <ScrollToTopButton />
+
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={6000}
+        onClose={handleSnackbarClose}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert
+          onClose={handleSnackbarClose}
+          severity={snackbar.severity}
+          variant="filled"
+          sx={{ width: '100%' }}
+        >
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
     </Box>
   );
 }

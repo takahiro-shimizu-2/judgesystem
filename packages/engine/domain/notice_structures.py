@@ -15,6 +15,8 @@ from dataclasses import dataclass, field
 from datetime import date
 from typing import Dict, List, Optional
 
+from packages.engine.domain.constants import ERA_OFFSETS
+
 DEFAULT_FIELD_RULES = {
     "title_labels": ["工事名", "業務名", "件名", "案件名", "調達件名", "業務件名", "委託業務名", "物件名"],
     "announced_at_labels": ["公告日", "公示日", "掲載日", "公開日", "発注日"],
@@ -222,10 +224,8 @@ def parse_japanese_date(text: Optional[str]) -> Optional[date]:
         year = int(match.group(1))
         month = int(match.group(2))
         day = int(match.group(3))
-        if era_kind == "reiwa":
-            year += 2018
-        elif era_kind == "heisei":
-            year += 1988
+        if era_kind in ERA_OFFSETS:
+            year += ERA_OFFSETS[era_kind]
         try:
             return date(year, month, day)
         except ValueError:
@@ -234,7 +234,7 @@ def parse_japanese_date(text: Optional[str]) -> Optional[date]:
     compact = re.search(r"^(?:令和|R|Ｒ)\s*(\d{1,2})\.(\d{1,2})\.(\d{1,2})$", value)
     if compact:
         try:
-            return date(int(compact.group(1)) + 2018, int(compact.group(2)), int(compact.group(3)))
+            return date(int(compact.group(1)) + ERA_OFFSETS["reiwa"], int(compact.group(2)), int(compact.group(3)))
         except ValueError:
             return None
 
@@ -245,7 +245,7 @@ def parse_japanese_date(text: Optional[str]) -> Optional[date]:
             month = int(shorthand.group(2))
             day = int(shorthand.group(3))
             if 1 <= year <= 31:
-                return date(year + 2018, month, day)
+                return date(year + ERA_OFFSETS["reiwa"], month, day)
         except ValueError:
             return None
     return None

@@ -28,15 +28,16 @@ export type { OrdererCategory } from '../types/orderer';
 // 企業
 export {
   fetchCompanyList,
-  getCompanyPriority,
 } from './companies';
 export type { CompanyWithDetails } from './companies';
 
 // 協力会社
 export {
   fetchPartnerList,
-  allCategories,
 } from './partners';
+
+// 協力会社種別（定数は constants/ から re-export）
+export { allPartnerCategories as allCategories } from '../constants/partnerCategories';
 export type {
   PartnerListParams,
   PartnerListRow,

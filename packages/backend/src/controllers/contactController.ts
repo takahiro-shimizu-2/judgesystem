@@ -112,7 +112,8 @@ export class ContactController {
   delete = async (req: Request, res: Response): Promise<void> => {
     if ((process.env.ENABLE_CONTACT_DELETE ?? "false").toLowerCase() !== "true") {
       res.status(403).json({
-        error: "Contact deletion is currently disabled",
+        error: "Forbidden",
+        message: "Contact deletion is currently disabled",
       });
       return;
     }

@@ -102,7 +102,3 @@ export async function deleteCompanyRecord(id: string): Promise<boolean> {
     return false;
   }
 }
-
-export const getCompanyPriority = (): CompanyPriority => {
-  return 5;
-};

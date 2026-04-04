@@ -49,6 +49,8 @@ ReviewAgent（品質チェック）
     ↓
 PRAgent（Draft PR作成） ※PR本文に Closes #{N} を含める
     ↓
+【CI確認】gh pr checks {PR番号} でCI結果を確認。失敗時は修正してから次へ進む
+    ↓
 CIが自動で implementing → reviewing に遷移（PR作成イベント）
     ↓
 次のIssueへ（maxIssues到達まで繰り返し）

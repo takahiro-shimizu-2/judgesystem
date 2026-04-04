@@ -11,6 +11,7 @@ export * from './datagrid';
 export * from './icons';
 export * from './memoTags';
 export * from './partnerStatus';
+export * from './partnerCategories';
 export * from './announcementStatus';
 export * from './ordererCategory';
 export * from './emailTemplates';

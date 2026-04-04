@@ -14,6 +14,8 @@ import {
   AccordionSummary,
   AccordionDetails,
   IconButton,
+  Snackbar,
+  Alert,
 } from '@mui/material';
 import {
   Phone as PhoneIcon,
@@ -808,6 +810,14 @@ export default function OrdererDetailPage() {
     }
   }, [rightPanelOpen, toggleRightPanel]);
 
+  // 削除処理の状態管理
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [snackbar, setSnackbar] = useState<{
+    open: boolean;
+    message: string;
+    severity: 'success' | 'error';
+  }>({ open: false, message: '', severity: 'error' });
+
   // 発注者データを遅延取得
   const [orderer, setOrderer] = useState<Orderer | undefined>(undefined);
   const [ordererLoading, setOrdererLoading] = useState(true);
@@ -1034,10 +1044,24 @@ export default function OrdererDetailPage() {
               </IconButton>
               <IconButton
                 size="small"
+                disabled={isDeleting}
                 onClick={async () => {
                   if (!window.confirm(`「${orderer.name}」を削除しますか？`)) return;
-                  const success = await deleteOrdererRecord(orderer.id);
-                  if (success) { navigate('/orderers'); } else { alert('削除に失敗しました。'); }
+                  setIsDeleting(true);
+                  try {
+                    const success = await deleteOrdererRecord(orderer.id);
+                    if (success) {
+                      navigate('/orderers');
+                    } else {
+                      console.error('Failed to delete orderer:', orderer.id);
+                      setSnackbar({ open: true, message: '削除に失敗しました。時間をおいて再度お試しください。', severity: 'error' });
+                    }
+                  } catch (err) {
+                    console.error('Failed to delete orderer:', err);
+                    setSnackbar({ open: true, message: '削除に失敗しました。時間をおいて再度お試しください。', severity: 'error' });
+                  } finally {
+                    setIsDeleting(false);
+                  }
                 }}
                 sx={{ color: colors.text.light, '&:hover': { color: colors.accent.red, backgroundColor: `${colors.accent.red}15` } }}
               >
@@ -1235,6 +1259,22 @@ export default function OrdererDetailPage() {
       </Box>
       <FloatingBackButton onClick={() => navigate('/orderers')} />
       <ScrollToTopButton />
+
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={6000}
+        onClose={() => setSnackbar((prev) => ({ ...prev, open: false }))}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert
+          onClose={() => setSnackbar((prev) => ({ ...prev, open: false }))}
+          severity={snackbar.severity}
+          variant="filled"
+          sx={{ width: '100%' }}
+        >
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
     </Box>
   );
 }

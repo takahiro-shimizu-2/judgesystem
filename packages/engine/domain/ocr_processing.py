@@ -34,6 +34,7 @@ from packages.engine.domain.master import (
     file_exists_gcs_or_local,
     get_pages,
 )
+from packages.engine.domain.constants import ERA_OFFSETS
 
 # UI が期待するカテゴリ体系に合わせるための定数
 GOODS_SERVICE_SEGMENTS = {
@@ -1798,7 +1799,7 @@ class OcrProcessingMixin:
 
                 m = re.search(r"令和(\d+)年(\d+)月(\d+)日", datestr)
                 if m:
-                    return f"{int(m.group(1))+2018:04}-{int(m.group(2)):02}-{int(m.group(3)):02}"
+                    return f"{int(m.group(1))+ERA_OFFSETS['reiwa']:04}-{int(m.group(2)):02}-{int(m.group(3)):02}"
 
                 m = re.search(r"(\d{4})年(\d+)月(\d+)日", datestr)
                 if m:
@@ -1808,17 +1809,17 @@ class OcrProcessingMixin:
                 if m:
                     year = int(m.group(1))
                     if year < 100:
-                        return f"{year+2018:04}-{int(m.group(2)):02}-{int(m.group(3)):02}"
+                        return f"{year+ERA_OFFSETS['reiwa']:04}-{int(m.group(2)):02}-{int(m.group(3)):02}"
                     else:
                         return f"{year}-{int(m.group(2)):02}-{int(m.group(3)):02}"
 
                 m = re.search(r"R(\d+)\.(\d{1,2})\.(\d{1,2})", datestr)
                 if m:
-                    return f"{int(m.group(1))+2018:04}-{int(m.group(2)):02}-{int(m.group(3)):02}"
+                    return f"{int(m.group(1))+ERA_OFFSETS['reiwa']:04}-{int(m.group(2)):02}-{int(m.group(3)):02}"
 
                 m = re.search(r"\b(\d+)\.(\d{1,2})\.(\d{1,2})\b", datestr)
                 if m:
-                    return f"{int(m.group(1))+2018:04}-{int(m.group(2)):02}-{int(m.group(3)):02}"
+                    return f"{int(m.group(1))+ERA_OFFSETS['reiwa']:04}-{int(m.group(2)):02}-{int(m.group(3)):02}"
 
                 m = re.search(r"(\d{4})/(\d{1,2})/(\d{1,2})", datestr)
                 if m:

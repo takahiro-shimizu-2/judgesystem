@@ -3,6 +3,25 @@ import { EvaluationService } from "../services";
 import { FilterParams, SortOption } from "../types";
 import { logger } from "../utils/logger";
 
+/**
+ * Allowed sort field names for evaluations.
+ * Must match the fieldMap keys in EvaluationRepository.buildOrderByClause.
+ */
+const VALID_SORT_FIELDS = new Set([
+  "evaluationNo",
+  "status",
+  "workStatus",
+  "priority",
+  "title",
+  "company",
+  "organization",
+  "category",
+  "bidType",
+  "deadline",
+  "evaluatedAt",
+  "prefecture",
+]);
+
 const VALID_PARTNER_STATUSES = new Set([
   "not_called",
   "waiting_documents",
@@ -43,6 +62,17 @@ export class EvaluationController {
 
       const page = pageNum;
       const pageSize = pageSizeNum;
+
+      // Validate sort field names
+      const sortFieldsRaw = this.parseArrayParam(req.query.sortField);
+      const invalidSortFields = sortFieldsRaw.filter((f) => f && !VALID_SORT_FIELDS.has(f));
+      if (invalidSortFields.length > 0) {
+        res.status(400).json({
+          error: "Bad Request",
+          message: `Invalid sortField: ${invalidSortFields.join(", ")}`,
+        });
+        return;
+      }
 
       const filters = this.buildFilterParams(req, page, pageSize);
 

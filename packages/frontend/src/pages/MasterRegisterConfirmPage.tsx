@@ -1,6 +1,6 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { Box, Paper, Typography, Button, Chip } from '@mui/material';
+import { Box, Paper, Typography, Button, Chip, Snackbar, Alert } from '@mui/material';
 import { ArrowBackIcon, CheckIcon, BusinessIcon, OrdererIcon, PersonIcon } from '../constants/icons';
 import {
   PartnerConfirmView,
@@ -15,6 +15,7 @@ import type { StaffFormData } from '../hooks/useStaffForm';
 import { useStaffDirectory } from '../contexts/StaffContext';
 import { createOrdererRecord, updateOrdererRecord } from '../data/orderers';
 import { createPartnerRecord, updatePartnerRecord } from '../data/partners';
+import type { PartnerUpdateData } from '../data/partners';
 
 type FormType = 'partner' | 'orderer' | 'staff';
 
@@ -23,6 +24,40 @@ interface ConfirmPageState {
   formType: FormType;
   editMode?: boolean;
   entityId?: string;
+}
+
+const VALID_FORM_TYPES: readonly FormType[] = ['partner', 'orderer', 'staff'] as const;
+
+/** location.state が ConfirmPageState の構造を持つかランタイムで検証する */
+function isConfirmPageState(value: unknown): value is ConfirmPageState {
+  if (typeof value !== 'object' || value === null) return false;
+  const obj = value as Record<string, unknown>;
+  if (typeof obj.formData !== 'object' || obj.formData === null) return false;
+  if (typeof obj.formType !== 'string') return false;
+  if (!VALID_FORM_TYPES.includes(obj.formType as FormType)) return false;
+  return true;
+}
+
+/** PartnerFormData を API 更新用の PartnerUpdateData に変換する */
+function toPartnerUpdateData(formData: PartnerFormData): PartnerUpdateData {
+  return {
+    name: formData.name,
+    postalCode: formData.postalCode,
+    address: formData.address,
+    phone: formData.phone,
+    fax: formData.fax,
+    email: formData.email,
+    url: formData.url,
+    representative: formData.representative,
+    established: formData.established,
+    capital: formData.capital,
+    employeeCount: formData.employeeCount,
+    categories: formData.categories,
+    branches: formData.branches,
+    surveyCount: formData.surveyCount,
+    resultCount: formData.resultCount,
+    rating: formData.rating,
+  };
 }
 
 const formTypeConfig: Record<FormType, { label: string; icon: React.ReactElement; tabIndex: number }> = {
@@ -34,8 +69,17 @@ const formTypeConfig: Record<FormType, { label: string; icon: React.ReactElement
 export default function MasterRegisterConfirmPage() {
   const location = useLocation();
   const navigate = useNavigate();
-  const state = location.state as ConfirmPageState | null;
+  const state: ConfirmPageState | null = isConfirmPageState(location.state)
+    ? location.state
+    : null;
   const { createStaff: createStaffEntry, updateStaff: updateStaffEntry } = useStaffDirectory();
+
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [snackbar, setSnackbar] = useState<{
+    open: boolean;
+    message: string;
+    severity: 'success' | 'error';
+  }>({ open: false, message: '', severity: 'success' });
 
   // stateがない場合は登録ページにリダイレクト
   useEffect(() => {
@@ -64,12 +108,15 @@ export default function MasterRegisterConfirmPage() {
   };
 
   const handleSubmit = async () => {
+    if (isSubmitting) return;
+
     const redirectPath = {
       partner: '/partners',
       orderer: '/orderers',
       staff: '/staff',
     }[formType];
 
+    setIsSubmitting(true);
     try {
       if (formType === 'staff') {
         if (editMode && entityId) {
@@ -94,7 +141,7 @@ export default function MasterRegisterConfirmPage() {
       } else if (formType === 'partner') {
         const partnerData = formData as PartnerFormData;
         if (editMode && entityId) {
-          const updated = await updatePartnerRecord(entityId, partnerData as unknown as Record<string, unknown>);
+          const updated = await updatePartnerRecord(entityId, toPartnerUpdateData(partnerData));
           if (!updated) throw new Error('Failed to update partner');
         } else {
           const created = await createPartnerRecord({
@@ -105,11 +152,23 @@ export default function MasterRegisterConfirmPage() {
         }
       }
 
-      alert(editMode ? '更新が完了しました' : '登録が完了しました');
-      navigate(redirectPath);
+      setSnackbar({
+        open: true,
+        message: editMode ? '更新が完了しました' : '登録が完了しました',
+        severity: 'success',
+      });
+      // 成功Snackbarを短時間表示してからナビゲート
+      setTimeout(() => navigate(redirectPath), 1000);
     } catch (error) {
       console.error('Failed to submit registration:', error);
-      alert(editMode ? '更新に失敗しました。時間をおいて再度お試しください。' : '登録に失敗しました。時間をおいて再度お試しください。');
+      setSnackbar({
+        open: true,
+        message: editMode
+          ? '更新に失敗しました。時間をおいて再度お試しください。'
+          : '登録に失敗しました。時間をおいて再度お試しください。',
+        severity: 'error',
+      });
+      setIsSubmitting(false);
     }
   };
 
@@ -178,15 +237,32 @@ export default function MasterRegisterConfirmPage() {
               </Button>
               <Button
                 onClick={handleSubmit}
+                disabled={isSubmitting}
                 startIcon={<CheckIcon />}
                 sx={formSubmitButtonStyles}
               >
-                {editMode ? '更新する' : '登録する'}
+                {isSubmitting ? '処理中...' : editMode ? '更新する' : '登録する'}
               </Button>
             </Box>
           </Box>
         </Paper>
       </Box>
+
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={snackbar.severity === 'error' ? 6000 : 3000}
+        onClose={() => setSnackbar((prev) => ({ ...prev, open: false }))}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert
+          onClose={() => setSnackbar((prev) => ({ ...prev, open: false }))}
+          severity={snackbar.severity}
+          variant="filled"
+          sx={{ width: '100%' }}
+        >
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
     </Box>
   );
 }

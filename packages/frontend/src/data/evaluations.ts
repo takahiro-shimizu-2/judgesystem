@@ -392,16 +392,7 @@ export const updatePartnerCandidate = async (
   partnerId: string,
   updates: PartnerCandidateUpdatePayload
 ): Promise<Partner | null> => {
-  const body: any = { ...updates };
-  if (updates.partnerName !== undefined) {
-    body.partnerName = updates.partnerName;
-  }
-  if (updates.status !== undefined) {
-    body.status = updates.status;
-  }
-  if (updates.surveyApproved !== undefined) {
-    body.surveyApproved = updates.surveyApproved;
-  }
+  const body: PartnerCandidateUpdatePayload = { ...updates };
   try {
     const response = await fetch(
       getApiUrl(`/api/evaluations/${evaluationNo}/partners/${partnerId}`),

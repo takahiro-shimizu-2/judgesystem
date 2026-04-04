@@ -6,6 +6,8 @@ from datetime import datetime, timezone, timedelta
 import math
 import pytz
 
+from packages.engine.domain.constants import ERA_OFFSETS
+
 #######################################
 # 実績要件の判定を行う
 # ※requirementType === "実績要件"の場合。
@@ -118,7 +120,7 @@ def extractExperienceConditions(text):
     # if yearMatch = text.match(/平成\s*(\d+)\s*年度以降/):
     if yearMatch := re.search(r"平成\s*(\d+)\s*年度以降", text):
         heisei = int(yearMatch[1])
-        fiscalYear = 1988 + heisei
+        fiscalYear = ERA_OFFSETS["heisei"] + heisei
         conditions["yearFrom"] = fiscalYear
         #conditions["fiscalYearFrom"] = new Date(fiscalYear, 3, 1); # 4月1日開始
         conditions["fiscalYearFrom"] = pd.Timestamp(year=fiscalYear, month=4, day=1)
@@ -127,8 +129,8 @@ def extractExperienceConditions(text):
     # elif yearMatch = text.match(/令和\s*(\d+)\s*年度以降/):
     elif yearMatch := re.search(r"令和\s*(\d+)\s*年度以降", text):
         reiwa = int(yearMatch[1])
-        # const fiscalYear = (reiwa === 1) ? 2019 : (2018 + reiwa)
-        fiscalYear = 2018 + reiwa
+        # const fiscalYear = (reiwa === 1) ? 2019 : (ERA_OFFSETS["reiwa"] + reiwa)
+        fiscalYear = ERA_OFFSETS["reiwa"] + reiwa
         conditions["yearFrom"] = fiscalYear
         if reiwa == 1:
             # 令和元年度は5月1日開始
