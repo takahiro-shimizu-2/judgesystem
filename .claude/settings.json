@@ -13,6 +13,18 @@
     "deny": []
   },
   "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "PROJECT_ROOT=$(git rev-parse --show-toplevel) && bash \"$PROJECT_ROOT/.claude/hooks/gitnexus-reindex.sh\"",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
     "PreToolUse": [
       {
         "matcher": "Edit",
