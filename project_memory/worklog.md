@@ -29,3 +29,6 @@ Context-and-impact phase E appends audit entries here.
 - Removed `miyabi` from the root runtime dependency set in `package.json` and kept the Claude-side Miyabi bridge as an optional external surface instead of a mandatory repo dependency.
 - Updated `.claude/mcp-servers/miyabi-integration.js` so it prefers a local `node_modules/.bin/miyabi` binary, then optionally probes `../Miyabi/packages/cli`, and otherwise fails with an explicit optional-bridge message.
 - Added `scripts/context-impact/pipeline-dashboard.sh` and removed `agent-skill-bus` from root runtime dependencies so the dashboard pipeline also behaves as an optional external bridge.
+- Vendored the lightweight E:Stack core into `scripts/context-impact/estack-plan.sh` and `scripts/context-impact/estack-enforcer.sh` so plan lifecycle and hook enforcement no longer depend on the sibling `context-and-impact` checkout.
+- Added repo-local wrappers for `pipeline:l1`, `pipeline:quality`, and `pipeline:classify` that probe `CONTEXT_AND_IMPACT_ROOT` first and otherwise fall back to `../context-and-impact`.
+- Rewrote `scripts/context-impact/record-run.sh` to bridge directly to `agent-skill-bus`, keeping `context-and-impact` as an explicit search/quality/classify bridge instead of a mandatory hop for skill-bus recording.

@@ -17,6 +17,10 @@ execution plan と context pipeline を起動する。
 5. `npm run pipeline:classify -- --task "<task summary>"`
 6. `bash scripts/context-impact/record-run.sh "<task summary>" success 0.8`
 
+`pipeline:l1`, `pipeline:quality`, `pipeline:classify` は repo-local wrapper を経由して
+`CONTEXT_AND_IMPACT_ROOT` または `../context-and-impact` を参照する。
+`plan-init/status/clean` と `estack-enforcer` はこの repo に vendor 済みである。
+
 ## Skip Conditions
 
 以下だけを触る作業では pipeline を skip してよい:
