@@ -24,6 +24,4 @@ export const allPartnerCategories = [
   '維持管理計画', 'アセットマネジメント', 'LCC分析', 'VE提案',
   '積算', '原価管理', '工程管理', '品質管理', '安全管理', '環境管理',
   'ISO9001', 'ISO14001', 'ISO45001', 'COHSMS', 'エコアクション21',
-] as const;
-
-export type PartnerCategory = typeof allPartnerCategories[number];
+];
