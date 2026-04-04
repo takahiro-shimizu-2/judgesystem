@@ -19,7 +19,7 @@
 Issue / CodeGen / Review / PR / Deploy の safe handler は接続済みである。
 ただし、CodeGen の code-writing command、remote PR 作成、PR reviewer/label/mergeability contract、deploy の強い副作用は gate 付きであり、
 外部 model による product code 自動生成や remote branch push までは依然として未保証である。
-Review は repo root で configured checks を実行し、実際に得られた score / retry / escalation だけを report すること。
+Review は repo root で configured checks を実行し、実際に得られた score / retry / escalation / coverage / security summary だけを report すること。
 Deploy は approval / build / preflight / healthcheck / rollback command を明示した contract がある場合だけそこまで実行し、無い能力は成功扱いにしないこと。`AUTOMATION_DEPLOY_USE_PROVIDER_PRESET=true` のときだけ repo-local `cloud-run` preset を使ってよい。protected deploy は `autonomous-deploy-execute.yml` の GitHub Environment approval 経路を優先すること。
 
 - Issue 分析 → タスク分解 → コード生成 → レビュー → PR 作成 → デプロイ

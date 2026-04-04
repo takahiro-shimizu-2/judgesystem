@@ -53,6 +53,39 @@ interface ReviewEscalation {
   reason?: string;
 }
 
+interface ReviewCoverageSummary {
+  required: boolean;
+  threshold?: number;
+  actual?: number;
+  sourceLabel?: string;
+  passed?: boolean;
+  note: string;
+}
+
+interface ReviewSecuritySummary {
+  totalChecks: number;
+  passedChecks: string[];
+  failedChecks: string[];
+  note: string;
+}
+
+interface ReviewArtifactPayload {
+  issueNumber: number;
+  sessionId: string;
+  taskId: string;
+  taskTitle: string;
+  score: number;
+  minScore: number;
+  maxRetries: number;
+  reviewCwd: string;
+  worktreePath?: string;
+  escalation: ReviewEscalation;
+  coverage?: ReviewCoverageSummary;
+  security: ReviewSecuritySummary;
+  checks: ReviewCheckResult[];
+  generatedAt: string;
+}
+
 const DEFAULT_REVIEW_CHECKS: ResolvedReviewCheck[] = [
   {
     label: 'typecheck',
@@ -97,7 +130,9 @@ export function createReviewAgentHandler(options: ReviewAgentHandlerFactoryOptio
         }),
       );
       const score = calculateQualityScore(results);
-      const escalation = determineEscalation(results, score, minScore);
+      const coverage = resolveCoverageSummary(results, context.env);
+      const security = summarizeSecurityResults(results);
+      const escalation = determineEscalation(results, score, minScore, coverage);
       const artifact = writeReviewArtifacts({
         rootDir,
         reviewCwd,
@@ -111,6 +146,8 @@ export function createReviewAgentHandler(options: ReviewAgentHandlerFactoryOptio
         maxRetries,
         results,
         escalation,
+        coverage,
+        security,
       });
 
       const syncNote = await syncIssueState({
@@ -122,6 +159,7 @@ export function createReviewAgentHandler(options: ReviewAgentHandlerFactoryOptio
 
       const failedChecks = results.filter((result) => !result.passed);
       const requiredFailures = failedChecks.filter((result) => result.required);
+      const coverageGateFailed = coverage?.required && coverage.passed !== true;
       const notes = [
         `${definition.name} ran ${results.length} configured checks in ${describeReviewCwd(
           rootDir,
@@ -132,7 +170,12 @@ export function createReviewAgentHandler(options: ReviewAgentHandlerFactoryOptio
           ? `Task staging area remains ${relativeOrSelf(rootDir, context.worktree.worktreePath)}.`
           : '',
         `Quality score: ${score}/100 (threshold: ${minScore}, retries: ${maxRetries}).`,
-        `Review artifacts were written to ${relativeOrSelf(rootDir, artifact.markdownPath)} and ${relativeOrSelf(rootDir, artifact.jsonPath)}.`,
+        coverage?.note,
+        security.note,
+        `Review artifacts were written to ${relativeOrSelf(rootDir, artifact.markdownPath)}, ${relativeOrSelf(
+          rootDir,
+          artifact.jsonPath,
+        )}, and ${relativeOrSelf(rootDir, artifact.commentPath)}.`,
         ...results.map((result) => formatCheckSummary(result)),
         escalation.required
           ? `Escalation recommended: ${escalation.target} (${escalation.reason}).`
@@ -140,15 +183,16 @@ export function createReviewAgentHandler(options: ReviewAgentHandlerFactoryOptio
         syncNote,
       ].filter(Boolean);
 
-      if (requiredFailures.length > 0 || score < minScore) {
+      if (requiredFailures.length > 0 || score < minScore || coverageGateFailed) {
         throw new Error(
           [
             `Review gate failed with score ${score}/100 (threshold: ${minScore}).`,
+            coverageGateFailed ? coverage?.note : '',
             ...failedChecks.map((result) => formatCheckSummary(result)),
             escalation.required && escalation.target && escalation.reason
               ? `Escalation: ${escalation.target} (${escalation.reason}).`
               : '',
-            `Artifacts: ${artifact.markdownPath}, ${artifact.jsonPath}`,
+            `Artifacts: ${artifact.markdownPath}, ${artifact.jsonPath}, ${artifact.commentPath}`,
           ]
             .filter(Boolean)
             .join(' '),
@@ -164,6 +208,8 @@ export function createReviewAgentHandler(options: ReviewAgentHandlerFactoryOptio
           maxRetries,
           checks: results,
           escalation,
+          coverage,
+          security,
           artifact,
         },
       };
@@ -313,6 +359,7 @@ function determineEscalation(
   results: ReviewCheckResult[],
   score: number,
   minScore: number,
+  coverage?: ReviewCoverageSummary,
 ): ReviewEscalation {
   const securityFailures = results.filter((result) => !result.passed && result.severity === 'security');
   if (securityFailures.length > 0) {
@@ -329,6 +376,14 @@ function determineEscalation(
       required: true,
       target: 'TechLead',
       reason: `Required review checks failed: ${requiredFailures.map((result) => result.label).join(', ')}`,
+    };
+  }
+
+  if (coverage?.required && coverage.passed === false) {
+    return {
+      required: true,
+      target: 'TechLead',
+      reason: coverage.note,
     };
   }
 
@@ -356,12 +411,15 @@ function writeReviewArtifacts(params: {
   maxRetries: number;
   results: ReviewCheckResult[];
   escalation: ReviewEscalation;
+  coverage?: ReviewCoverageSummary;
+  security: ReviewSecuritySummary;
 }) {
   const reportsDir = ensureDirectory(path.join(params.rootDir, '.ai', 'parallel-reports'));
   const baseName = `review-summary-${params.sessionId}-${slugify(params.taskId)}`;
   const markdownPath = path.join(reportsDir, `${baseName}.md`);
   const jsonPath = path.join(reportsDir, `${baseName}.json`);
-  const payload = {
+  const commentPath = path.join(reportsDir, `review-comment-${params.sessionId}-${slugify(params.taskId)}.md`);
+  const payload: ReviewArtifactPayload = {
     issueNumber: params.issueNumber,
     sessionId: params.sessionId,
     taskId: params.taskId,
@@ -372,33 +430,24 @@ function writeReviewArtifacts(params: {
     reviewCwd: params.reviewCwd,
     worktreePath: params.worktreePath,
     escalation: params.escalation,
+    coverage: params.coverage,
+    security: params.security,
     checks: params.results,
     generatedAt: new Date().toISOString(),
   };
 
   fs.writeFileSync(jsonPath, JSON.stringify(payload, null, 2), 'utf8');
   fs.writeFileSync(markdownPath, buildReviewMarkdown(payload), 'utf8');
+  fs.writeFileSync(commentPath, buildReviewCommentMarkdown(payload), 'utf8');
 
   return {
     markdownPath,
     jsonPath,
+    commentPath,
   };
 }
 
-function buildReviewMarkdown(payload: {
-  issueNumber: number;
-  sessionId: string;
-  taskId: string;
-  taskTitle: string;
-  score: number;
-  minScore: number;
-  maxRetries: number;
-  reviewCwd: string;
-  worktreePath?: string;
-  escalation: ReviewEscalation;
-  checks: ReviewCheckResult[];
-  generatedAt: string;
-}) {
+function buildReviewMarkdown(payload: ReviewArtifactPayload) {
   return `# Review Summary
 
 ## Task
@@ -419,6 +468,22 @@ ${payload.worktreePath ? `- Staging area: ${payload.worktreePath}` : ''}
 ${payload.escalation.target ? `- Target: ${payload.escalation.target}` : ''}
 ${payload.escalation.reason ? `- Reason: ${payload.escalation.reason}` : ''}
 
+## Coverage
+${payload.coverage ? `- Required: ${payload.coverage.required ? 'yes' : 'no'}
+- Threshold: ${payload.coverage.threshold ?? 'n/a'}
+- Actual: ${payload.coverage.actual ?? 'n/a'}
+- Source: ${payload.coverage.sourceLabel || 'n/a'}
+- Passed: ${
+  payload.coverage.passed === undefined ? 'n/a' : payload.coverage.passed ? 'yes' : 'no'
+}
+- Note: ${payload.coverage.note}` : '- Coverage contract not configured.'}
+
+## Security
+- Total security checks: ${payload.security.totalChecks}
+- Passed checks: ${payload.security.passedChecks.length > 0 ? payload.security.passedChecks.join(', ') : 'none'}
+- Failed checks: ${payload.security.failedChecks.length > 0 ? payload.security.failedChecks.join(', ') : 'none'}
+- Note: ${payload.security.note}
+
 ## Checks
 ${payload.checks
   .map(
@@ -432,6 +497,132 @@ ${payload.checks
 ## Generated
 - ${payload.generatedAt}
 `;
+}
+
+function buildReviewCommentMarkdown(payload: ReviewArtifactPayload) {
+  const failedChecks = payload.checks.filter((result) => !result.passed);
+  return `## Review Gate
+- Score: ${payload.score}/100 (threshold: ${payload.minScore}/100)
+${payload.coverage ? `- Coverage: ${payload.coverage.actual ?? 'n/a'}${payload.coverage.actual !== undefined ? '%' : ''} (threshold: ${
+    payload.coverage.threshold ?? 'n/a'
+  }${payload.coverage.threshold !== undefined ? '%' : ''})` : ''}
+- Security checks: ${payload.security.failedChecks.length > 0 ? `${payload.security.failedChecks.length} failed` : 'all passed or not configured'}
+- Escalation: ${
+    payload.escalation.required ? `${payload.escalation.target} (${payload.escalation.reason})` : 'none'
+  }
+
+## Check Results
+${payload.checks.map((result) => `- ${result.label}: ${result.passed ? 'passed' : 'failed'} — ${result.summary}`).join('\n')}
+
+${failedChecks.length > 0 ? `## Fix Next\n${failedChecks.map((result) => `- ${result.label}`).join('\n')}\n` : ''}`;
+}
+
+function summarizeSecurityResults(results: ReviewCheckResult[]): ReviewSecuritySummary {
+  const securityChecks = results.filter((result) => result.severity === 'security');
+  const passedChecks = securityChecks.filter((result) => result.passed).map((result) => result.label);
+  const failedChecks = securityChecks.filter((result) => !result.passed).map((result) => result.label);
+
+  return {
+    totalChecks: securityChecks.length,
+    passedChecks,
+    failedChecks,
+    note:
+      securityChecks.length === 0
+        ? 'No security-specific review checks were configured.'
+        : failedChecks.length > 0
+          ? `Security review checks failed: ${failedChecks.join(', ')}.`
+          : `All configured security review checks passed: ${passedChecks.join(', ')}.`,
+  };
+}
+
+function resolveCoverageSummary(results: ReviewCheckResult[], env: NodeJS.ProcessEnv): ReviewCoverageSummary | undefined {
+  const threshold = resolveCoverageThreshold(env);
+  const labels = resolveCoverageLabels(env);
+  const candidates = results.filter((result) => {
+    if (labels.length > 0) {
+      return labels.includes(result.label);
+    }
+
+    return result.label.toLowerCase().includes('coverage');
+  });
+
+  const match = candidates
+    .map((candidate) => ({ candidate, coverage: extractCoveragePercent(candidate.summary) }))
+    .find((entry) => entry.coverage !== undefined);
+
+  if (!match && threshold === undefined && candidates.length === 0) {
+    return undefined;
+  }
+
+  if (!match && threshold !== undefined) {
+    return {
+      required: true,
+      threshold,
+      passed: false,
+      note: `Coverage gate failed because no coverage percentage could be extracted from the configured review checks (threshold: ${threshold}%).`,
+    };
+  }
+
+  if (!match) {
+    return {
+      required: false,
+      note: 'Coverage-related checks were configured, but no coverage percentage could be extracted from their output.',
+    };
+  }
+
+  if (match.coverage === undefined) {
+    return {
+      required: threshold !== undefined,
+      threshold,
+      passed: threshold === undefined ? undefined : false,
+      sourceLabel: match.candidate.label,
+      note:
+        threshold === undefined
+          ? `Coverage-related check ${match.candidate.label} ran, but no coverage percentage could be extracted from its output.`
+          : `Coverage gate failed because ${match.candidate.label} did not produce a parseable coverage percentage (threshold: ${threshold}%).`,
+    };
+  }
+
+  const actualCoverage = match.coverage;
+  const passed = threshold === undefined ? undefined : actualCoverage >= threshold;
+  return {
+    required: threshold !== undefined,
+    threshold,
+    actual: actualCoverage,
+    sourceLabel: match.candidate.label,
+    passed,
+    note:
+      threshold === undefined
+        ? `Observed coverage ${actualCoverage}% from ${match.candidate.label}.`
+        : passed
+          ? `Coverage gate passed: ${actualCoverage}% from ${match.candidate.label} (threshold: ${threshold}%).`
+          : `Coverage gate failed: ${actualCoverage}% from ${match.candidate.label} (threshold: ${threshold}%).`,
+  };
+}
+
+function extractCoveragePercent(summary: string) {
+  const matches = [...summary.matchAll(/(\d+(?:\.\d+)?)\s*%/g)];
+  if (matches.length === 0) {
+    return undefined;
+  }
+
+  return Number.parseFloat(matches[matches.length - 1][1]);
+}
+
+function resolveCoverageThreshold(env: NodeJS.ProcessEnv) {
+  const parsed = Number.parseFloat(env.AUTOMATION_REVIEW_COVERAGE_THRESHOLD || '');
+  if (Number.isNaN(parsed)) {
+    return undefined;
+  }
+
+  return Math.max(0, Math.min(100, parsed));
+}
+
+function resolveCoverageLabels(env: NodeJS.ProcessEnv) {
+  return (env.AUTOMATION_REVIEW_COVERAGE_LABELS || '')
+    .split(/[\s,]+/)
+    .map((value) => value.trim())
+    .filter(Boolean);
 }
 
 async function syncIssueState(params: {

@@ -47,6 +47,9 @@ Context-and-impact phase E appends audit entries here.
 - Extended `scripts/automation/agents/handlers/pr.ts` so `PRAgent` can keep the local draft artifact as source of truth, then optionally request reviewers, sync PR labels, and enforce a mergeability gate after remote draft PR creation/update.
 - Passed `AUTOMATION_PR_REVIEWERS`, `AUTOMATION_PR_LABELS`, `AUTOMATION_PR_REQUIRE_MERGEABLE`, and mergeability polling envs through the autonomous workflows so GitHub-side execute runs can use the richer PR contract.
 - Updated Claude/runtime docs and the plan so `PRAgent` is no longer described as draft-PR-only; reviewer/label/mergeability are now connected opt-in contracts.
+- Extended `scripts/automation/agents/handlers/review.ts` so `ReviewAgent` can derive a security summary, evaluate an optional coverage gate from executed check output, and emit a paste-ready review-comment artifact alongside the existing markdown/json review artifacts.
+- Passed `AUTOMATION_REVIEW_COVERAGE_THRESHOLD` and `AUTOMATION_REVIEW_COVERAGE_LABELS` through the autonomous workflows so execute-mode runs can open the richer review contract without changing the runtime home away from `scripts/automation/*`.
+- Updated Claude/runtime docs and the plan so ReviewAgent is no longer described as score-only; security/coverage/comment are connected contracts, while actual publish policy remains a future expansion.
 
 - Started Phase 2 by moving label state machine logic into `scripts/automation/state`.
 - Kept `scripts/label-state-machine.ts` as the stable CLI entrypoint for workflows and npm scripts.

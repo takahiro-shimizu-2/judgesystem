@@ -395,7 +395,7 @@ repo runtime の必須依存ではなく「override / local install 後の optio
 | Issue analysis / state sync | `IssueAgent` + label state machine + webhook routing | `scripts/automation/agents/handlers/issue.ts`, `scripts/automation/state/*`, `scripts/automation/adapters/webhook-router.ts` | 維持。state machine と event routing を repo-local runtime として育てる |
 | Code generation | `CodeGenAgent` が実コード生成・テスト生成・ドキュメント生成を行う | `scripts/automation/agents/handlers/codegen.ts` は implementation brief を必ず生成し、`AUTOMATION_ENABLE_CODEGEN_WRITE=true` と `AUTOMATION_CODEGEN_COMMAND` がある場合だけ delegated writer command を repo root で実行する | delegated writer binding を基盤にしつつ、必要なら external-model / stronger write contract へ拡張する |
 | Test execution | Miyabi では `TestAgent` と codegen/review 周辺で別能力として存在する | 独立 agent なし。`ReviewAgent` が `typecheck` / `test` を実行 | 当面は review/test capability に吸収する。必要になれば独立 capability として切り出す |
-| Review / quality gate | `ReviewAgent` が scoring / comment / escalation を行う | `scripts/automation/agents/handlers/review.ts` は repo root で configured checks を実行し、score / retry / escalation を review artifact と execution report へ残す | security / coverage / richer comment 契約を必要に応じて追加する |
+| Review / quality gate | `ReviewAgent` が scoring / comment / escalation を行う | `scripts/automation/agents/handlers/review.ts` は repo root で configured checks を実行し、score / retry / escalation を review artifact と execution report へ残す。`AUTOMATION_REVIEW_COVERAGE_THRESHOLD` / `AUTOMATION_REVIEW_COVERAGE_LABELS` が設定されていれば coverage gate を評価し、security summary と review-comment artifact も生成する | security / coverage policy と richer comment publish contract を必要に応じて追加する |
 | PR creation | `PRAgent` が GitHub に draft PR を作成し、labels / reviewers も扱う | `scripts/automation/agents/handlers/pr.ts` は local draft artifact を常に生成し、`AUTOMATION_ENABLE_PR_WRITE=true` の場合だけ remote draft PR を作成または更新する。`AUTOMATION_PR_REVIEWERS`, `AUTOMATION_PR_LABELS`, `AUTOMATION_PR_REQUIRE_MERGEABLE` が設定されていれば reviewer request / PR label sync / mergeability gate まで実行する | reviewer / label policy の高度化や mergeability contract の拡張条件を必要に応じて追加する |
 | Deployment | `DeploymentAgent` が build / test / deploy / health check / rollback を扱う | `scripts/automation/agents/handlers/deployment.ts` は env-gated deploy contract を実行し、provider / target metadata、approval gate、optional build / preflight / health check / rollback と deployment artifact を残す。`AUTOMATION_DEPLOY_USE_PROVIDER_PRESET=true` のときは repo-local `cloud-run/backend|frontend` preset を解決できる | Cloud Run 以外の provider 固有 orchestration や高度な deploy policy を必要に応じて追加する |
 | Workflow execution | `.github/workflows/autonomous-agent.yml` が execute mode で動く | `autonomous-agent.yml` は `workflow_dispatch` で planning / execute を明示切替し、issue/comment trigger は planning を既定に保つ。`AUTONOMOUS_AGENT_LABEL_EXECUTE_ENABLED` / `AUTONOMOUS_AGENT_COMMENT_EXECUTE_ENABLED` repo variable が開いている場合だけ event-triggered execute を許可し、実行した capability だけを summary/comment へ出す。protected deploy 用には `autonomous-deploy-execute.yml` を分離し、GitHub Environment approval と `DeploymentAgent` approval metadata をそろえて扱い、Cloud Run preset 用 env も runtime に通す | provider-specific orchestration の高度化を必要に応じて追加する |
@@ -743,7 +743,7 @@ GitNexus は次で分ける。
 作業:
 
 - `CodeGenAgent` は delegated writer binding まで接続済みとし、必要なら external-model / stronger write contract への昇格条件を決める
-- `ReviewAgent` は score / retry / escalation 契約まで接続済みとし、security/coverage/comment contract の拡張条件を決める
+- `ReviewAgent` は score / retry / escalation に加えて security summary / coverage gate / review-comment artifact 契約まで接続済みとし、security / coverage policy と richer comment publish contract の拡張条件を決める
 - `PRAgent` は remote draft PR 作成と reviewer / label / mergeability 契約まで接続済みとし、reviewer / label policy や mergeability contract の拡張条件を決める
 - `DeploymentAgent` は deploy approval/provider-target metadata/build/preflight/healthcheck/rollback 契約まで接続済みとし、repo-local `cloud-run` preset まで接続済みとして、それ以外の provider 固有 orchestration や GitHub Environment approval 連携の拡張条件を決める
 - `workflow_dispatch` の planning / execute 切替と、label / comment trigger 時の explicit execute gate、protected deploy 用の dedicated execute workflow 分離は接続済みとし、必要なら provider-specific orchestration の高度化を決める
@@ -797,7 +797,7 @@ full autonomy をどの capability から開けるかを計画書どおりに進
 `autonomous-agent.yml` の planning/execute 切替、および
 issue/comment trigger での explicit execute gate を先に完了させた。
 次の capability 候補としていた `CodeGenAgent` の delegated writer binding も接続済みである。
-残る重点は、provider 固有の高度な orchestration、review capability の高度化、codegen の stronger write contract、そして remaining capability の運用 DoD 固めである。
+残る重点は、provider 固有の高度な orchestration、review comment publish policy や security/coverage policy の高度化、codegen の stronger write contract、そして remaining capability の運用 DoD 固めである。
 
 ## 9. 改訂版 Definition of Done
 
