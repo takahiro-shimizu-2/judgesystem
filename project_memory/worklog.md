@@ -36,6 +36,9 @@ Context-and-impact phase E appends audit entries here.
 - Hardened `.github/workflows/autonomous-agent.yml` trigger detection by parsing `GITHUB_EVENT_PATH` in Python instead of interpolating raw issue/comment text into shell, which keeps comment-trigger handling stable even with quotes or multiline bodies.
 - Kept issue/comment events planning-first by default while adding explicit execute gates via the repository variables `AUTONOMOUS_AGENT_LABEL_EXECUTE_ENABLED` and `AUTONOMOUS_AGENT_COMMENT_EXECUTE_ENABLED`.
 - Updated `.github/workflows/webhook-handler.yml`, `.claude/commands/create-issue.md`, `.claude/commands/agent-run.md`, `docs/agents-integration-plan.md`, and `project_memory/tasks.json` so the repo now consistently documents that `/agent execute` and `🤖agent-execute` express intent, while actual execute mode only opens when the workflow gate is enabled.
+- Extended `scripts/automation/agents/handlers/deployment.ts` so DeploymentAgent now records provider/target metadata, optional build steps, and an explicit approval gate before deploy runs, while still keeping provider-specific orchestration command-driven.
+- Fixed `.github/workflows/autonomous-agent.yml` to pass the actual deploy env gates (`AUTOMATION_ENABLE_DEPLOY`, `AUTOMATION_DEPLOY_COMMAND`, provider/target/approval vars) into the runtime; previously the workflow only forwarded secondary deploy settings and could not truly open the deploy path.
+- Updated `.claude/agents/deployment-agent.md`, `.claude/commands/deploy.md`, `.claude/commands/agent-run.md`, `AGENTS.md`, `CLAUDE.md`, `docs/agents-integration-plan.md`, and `project_memory/tasks.json` so approval/build/provider-target deployment behavior is documented truthfully.
 
 - Started Phase 2 by moving label state machine logic into `scripts/automation/state`.
 - Kept `scripts/label-state-machine.ts` as the stable CLI entrypoint for workflows and npm scripts.

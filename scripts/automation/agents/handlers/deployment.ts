@@ -13,7 +13,7 @@ interface DeploymentAgentHandlerFactoryOptions {
 }
 
 interface DeploymentStepResult {
-  name: 'preflight' | 'deploy' | 'healthcheck' | 'rollback';
+  name: 'approval' | 'preflight' | 'build' | 'deploy' | 'healthcheck' | 'rollback';
   command?: string;
   passed: boolean;
   skipped?: boolean;
@@ -22,13 +22,27 @@ interface DeploymentStepResult {
   attemptsUsed: number;
 }
 
+interface DeploymentApprovalDetails {
+  policy: 'auto' | 'required' | 'disabled';
+  required: boolean;
+  approved: boolean;
+  approvedBy?: string;
+  source?: string;
+  reason?: string;
+  allowedApprovers: string[];
+  summary: string;
+}
+
 interface DeploymentArtifactPayload {
   issueNumber: number;
   sessionId: string;
   taskId: string;
   taskTitle: string;
+  provider: string;
+  target: string;
   environment: string;
   workingDirectory: string;
+  approval: DeploymentApprovalDetails;
   steps: DeploymentStepResult[];
   rollbackAttempted: boolean;
   generatedAt: string;
@@ -36,6 +50,7 @@ interface DeploymentArtifactPayload {
 
 const DEFAULT_HEALTHCHECK_RETRIES = 0;
 const DEFAULT_HEALTHCHECK_DELAY_MS = 5_000;
+const PROTECTED_ENVIRONMENT_NAMES = new Set(['prod', 'production', 'live']);
 
 export function createDeploymentAgentHandler(options: DeploymentAgentHandlerFactoryOptions): AgentHandlerBinding {
   return {
@@ -57,12 +72,21 @@ export function createDeploymentAgentHandler(options: DeploymentAgentHandlerFact
 
       const rootDir = context.rootDir || options.rootDir;
       const environment = env.AUTOMATION_DEPLOY_ENVIRONMENT || 'unspecified';
+      const provider = (env.AUTOMATION_DEPLOY_PROVIDER || 'custom').trim() || 'custom';
+      const target = (env.AUTOMATION_DEPLOY_TARGET || environment).trim() || 'unspecified';
       const workingDirectory = resolveDeploymentWorkingDirectory(rootDir, env);
       const preflightCommand = env.AUTOMATION_DEPLOY_PREFLIGHT_COMMAND;
+      const buildCommand = env.AUTOMATION_DEPLOY_BUILD_COMMAND;
       const healthcheckCommand = env.AUTOMATION_DEPLOY_HEALTHCHECK_COMMAND;
       const rollbackCommand = env.AUTOMATION_DEPLOY_ROLLBACK_COMMAND;
       const healthcheckRetries = resolveHealthcheckRetries(env);
       const healthcheckDelayMs = resolveHealthcheckDelayMs(env);
+      const approval = resolveDeploymentApproval({
+        env,
+        environment,
+        provider,
+        target,
+      });
       const steps: DeploymentStepResult[] = [];
       let rollbackAttempted = false;
 
@@ -83,13 +107,87 @@ export function createDeploymentAgentHandler(options: DeploymentAgentHandlerFact
             sessionId: context.sessionId,
             taskId: task.id,
             taskTitle: task.title,
+            provider,
+            target,
             environment,
             workingDirectory,
+            approval: approval.details,
             steps,
             rollbackAttempted,
           });
           throw new Error(
             `Deployment preflight failed (${environment}): ${formatStepSummary(preflightResult)} Artifacts: ${artifact.markdownPath}, ${artifact.jsonPath}`,
+          );
+        }
+      }
+
+      steps.push(approval.step);
+      if (!approval.details.approved) {
+        const artifact = writeDeploymentArtifacts({
+          rootDir,
+          issueNumber: context.issueNumber,
+          sessionId: context.sessionId,
+          taskId: task.id,
+          taskTitle: task.title,
+          provider,
+          target,
+          environment,
+          workingDirectory,
+          approval: approval.details,
+          steps,
+          rollbackAttempted,
+        });
+
+        return {
+          status: 'skipped',
+          notes: [
+            `${definition.name} did not deploy ${provider}/${target} to ${environment} because the approval gate was not satisfied.`,
+            approval.details.summary,
+            `Deployment artifacts were written to ${relativeOrSelf(rootDir, artifact.markdownPath)} and ${relativeOrSelf(
+              rootDir,
+              artifact.jsonPath,
+            )}.`,
+          ].join(' '),
+          output: {
+            provider,
+            target,
+            environment,
+            workingDirectory,
+            approval: approval.details,
+            steps,
+            rollbackAttempted,
+            artifact,
+          },
+        };
+      }
+
+      const buildResult = buildCommand
+        ? runDeploymentCommand({
+            name: 'build',
+            command: buildCommand,
+            cwd: workingDirectory,
+            env,
+          })
+        : undefined;
+      if (buildResult) {
+        steps.push(buildResult);
+        if (!buildResult.passed) {
+          const artifact = writeDeploymentArtifacts({
+            rootDir,
+            issueNumber: context.issueNumber,
+            sessionId: context.sessionId,
+            taskId: task.id,
+            taskTitle: task.title,
+            provider,
+            target,
+            environment,
+            workingDirectory,
+            approval: approval.details,
+            steps,
+            rollbackAttempted,
+          });
+          throw new Error(
+            `Deployment build failed (${environment}): ${formatStepSummary(buildResult)} Artifacts: ${artifact.markdownPath}, ${artifact.jsonPath}`,
           );
         }
       }
@@ -129,8 +227,11 @@ export function createDeploymentAgentHandler(options: DeploymentAgentHandlerFact
           sessionId: context.sessionId,
           taskId: task.id,
           taskTitle: task.title,
+          provider,
+          target,
           environment,
           workingDirectory,
+          approval: approval.details,
           steps,
           rollbackAttempted,
         });
@@ -181,8 +282,11 @@ export function createDeploymentAgentHandler(options: DeploymentAgentHandlerFact
             sessionId: context.sessionId,
             taskId: task.id,
             taskTitle: task.title,
+            provider,
+            target,
             environment,
             workingDirectory,
+            approval: approval.details,
             steps,
             rollbackAttempted,
           });
@@ -207,8 +311,11 @@ export function createDeploymentAgentHandler(options: DeploymentAgentHandlerFact
         sessionId: context.sessionId,
         taskId: task.id,
         taskTitle: task.title,
+        provider,
+        target,
         environment,
         workingDirectory,
+        approval: approval.details,
         steps,
         rollbackAttempted,
       });
@@ -216,12 +323,14 @@ export function createDeploymentAgentHandler(options: DeploymentAgentHandlerFact
       return {
         status: 'completed',
         notes: [
-          `${definition.name} completed deployment contract for ${environment} in ${describeWorkingDirectory(
+          `${definition.name} completed deployment contract for ${provider}/${target} in ${environment} at ${describeWorkingDirectory(
             rootDir,
             workingDirectory,
             env,
           )}.`,
+          approval.details.summary,
           preflightResult ? formatStepSummary(preflightResult) : 'No preflight command was configured.',
+          buildResult ? formatStepSummary(buildResult) : 'No build command was configured.',
           formatStepSummary(deployResult),
           healthcheckResult
             ? formatStepSummary(healthcheckResult)
@@ -236,13 +345,74 @@ export function createDeploymentAgentHandler(options: DeploymentAgentHandlerFact
           )}.`,
         ].join(' '),
         output: {
+          provider,
+          target,
           environment,
           workingDirectory,
+          approval: approval.details,
           steps,
           rollbackAttempted,
           artifact,
         },
       };
+    },
+  };
+}
+
+function resolveDeploymentApproval(params: {
+  env: NodeJS.ProcessEnv;
+  environment: string;
+  provider: string;
+  target: string;
+}) {
+  const policy = resolveApprovalPolicy(params.env.AUTOMATION_DEPLOY_REQUIRE_APPROVAL);
+  const required = policy === 'required' || (policy === 'auto' && isProtectedEnvironment(params.environment));
+  const approvedBy = (params.env.AUTOMATION_DEPLOY_APPROVED_BY || '').trim();
+  const source = (params.env.AUTOMATION_DEPLOY_APPROVAL_SOURCE || '').trim();
+  const reason = (params.env.AUTOMATION_DEPLOY_APPROVAL_REASON || '').trim();
+  const allowedApprovers = parseListEnv(params.env.AUTOMATION_DEPLOY_ALLOWED_APPROVERS);
+  const approved =
+    !required ||
+    (!!approvedBy &&
+      (allowedApprovers.length === 0 ||
+        allowedApprovers.some((candidate) => candidate.toLowerCase() === approvedBy.toLowerCase())));
+
+  const summary = !required
+    ? `Approval was not required for ${params.environment} (${params.provider}/${params.target}) under policy=${policy}.`
+    : approved
+      ? `Approval granted by ${approvedBy}${
+          source ? ` via ${source}` : ''
+        }${reason ? ` (${reason})` : ''}${
+          allowedApprovers.length > 0 ? ' against the configured approver allowlist.' : ' with no approver allowlist configured.'
+        }`
+      : `Approval is required for ${params.environment} (${params.provider}/${params.target}) but was not satisfied.${
+          approvedBy
+            ? allowedApprovers.length > 0
+              ? ` ${approvedBy} is not in AUTOMATION_DEPLOY_ALLOWED_APPROVERS.`
+              : ''
+            : ' Set AUTOMATION_DEPLOY_APPROVED_BY or run from an actor that the workflow passes through.'
+        }`;
+
+  const details: DeploymentApprovalDetails = {
+    policy,
+    required,
+    approved,
+    approvedBy: approvedBy || undefined,
+    source: source || undefined,
+    reason: reason || undefined,
+    allowedApprovers,
+    summary,
+  };
+
+  return {
+    details,
+    step: {
+      name: 'approval' as const,
+      passed: approved,
+      skipped: !required,
+      exitCode: approved ? 0 : null,
+      summary,
+      attemptsUsed: 1,
     },
   };
 }
@@ -373,8 +543,11 @@ function writeDeploymentArtifacts(params: {
   sessionId: string;
   taskId: string;
   taskTitle: string;
+  provider: string;
+  target: string;
   environment: string;
   workingDirectory: string;
+  approval: DeploymentApprovalDetails;
   steps: DeploymentStepResult[];
   rollbackAttempted: boolean;
 }) {
@@ -387,8 +560,11 @@ function writeDeploymentArtifacts(params: {
     sessionId: params.sessionId,
     taskId: params.taskId,
     taskTitle: params.taskTitle,
+    provider: params.provider,
+    target: params.target,
     environment: params.environment,
     workingDirectory: params.workingDirectory,
+    approval: params.approval,
     steps: params.steps,
     rollbackAttempted: params.rollbackAttempted,
     generatedAt: new Date().toISOString(),
@@ -413,9 +589,21 @@ function buildDeploymentMarkdown(payload: DeploymentArtifactPayload) {
 - Title: ${payload.taskTitle}
 
 ## Contract
+- Provider: ${payload.provider}
+- Target: ${payload.target}
 - Environment: ${payload.environment}
 - Working directory: ${payload.workingDirectory}
 - Rollback attempted: ${payload.rollbackAttempted ? 'yes' : 'no'}
+
+## Approval
+- Policy: ${payload.approval.policy}
+- Required: ${payload.approval.required ? 'yes' : 'no'}
+- Approved: ${payload.approval.approved ? 'yes' : 'no'}
+- Approved by: ${payload.approval.approvedBy || 'n/a'}
+- Source: ${payload.approval.source || 'n/a'}
+- Reason: ${payload.approval.reason || 'n/a'}
+- Allowed approvers: ${payload.approval.allowedApprovers.length > 0 ? payload.approval.allowedApprovers.join(', ') : 'n/a'}
+- Summary: ${payload.approval.summary}
 
 ## Steps
 ${payload.steps
@@ -484,4 +672,28 @@ function relativeOrSelf(rootDir: string, targetPath: string) {
 
 function resolveGitHubToken(env: NodeJS.ProcessEnv) {
   return env.GITHUB_TOKEN || env.GH_PROJECT_TOKEN || env.GH_TOKEN || null;
+}
+
+function resolveApprovalPolicy(rawValue?: string): DeploymentApprovalDetails['policy'] {
+  const normalized = (rawValue || 'auto').trim().toLowerCase();
+  if (['true', 'required', 'always'].includes(normalized)) {
+    return 'required';
+  }
+  if (['false', 'disabled', 'never'].includes(normalized)) {
+    return 'disabled';
+  }
+
+  return 'auto';
+}
+
+function isProtectedEnvironment(environment: string) {
+  const normalized = environment.trim().toLowerCase();
+  return PROTECTED_ENVIRONMENT_NAMES.has(normalized);
+}
+
+function parseListEnv(rawValue?: string) {
+  return (rawValue || '')
+    .split(/[\s,]+/)
+    .map((item) => item.trim())
+    .filter(Boolean);
 }

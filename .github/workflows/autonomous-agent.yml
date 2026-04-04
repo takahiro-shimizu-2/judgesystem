@@ -19,6 +19,10 @@ on:
         options:
           - planning
           - execute
+      deploy_approval_reason:
+        description: 'Optional approval note for protected deployment execution'
+        required: false
+        type: string
 
 env:
   NODE_VERSION: '20'
@@ -198,7 +202,17 @@ jobs:
           AUTOMATION_REVIEW_MIN_SCORE: ${{ vars.AUTOMATION_REVIEW_MIN_SCORE }}
           AUTOMATION_REVIEW_MAX_RETRIES: ${{ vars.AUTOMATION_REVIEW_MAX_RETRIES }}
           AUTOMATION_REVIEW_CHECKS_JSON: ${{ vars.AUTOMATION_REVIEW_CHECKS_JSON }}
+          AUTOMATION_ENABLE_DEPLOY: ${{ vars.AUTOMATION_ENABLE_DEPLOY }}
+          AUTOMATION_DEPLOY_COMMAND: ${{ vars.AUTOMATION_DEPLOY_COMMAND }}
+          AUTOMATION_DEPLOY_BUILD_COMMAND: ${{ vars.AUTOMATION_DEPLOY_BUILD_COMMAND }}
+          AUTOMATION_DEPLOY_PROVIDER: ${{ vars.AUTOMATION_DEPLOY_PROVIDER }}
+          AUTOMATION_DEPLOY_TARGET: ${{ vars.AUTOMATION_DEPLOY_TARGET }}
           AUTOMATION_DEPLOY_ENVIRONMENT: ${{ vars.AUTOMATION_DEPLOY_ENVIRONMENT }}
+          AUTOMATION_DEPLOY_REQUIRE_APPROVAL: ${{ vars.AUTOMATION_DEPLOY_REQUIRE_APPROVAL }}
+          AUTOMATION_DEPLOY_ALLOWED_APPROVERS: ${{ vars.AUTOMATION_DEPLOY_ALLOWED_APPROVERS }}
+          AUTOMATION_DEPLOY_APPROVED_BY: ${{ github.actor }}
+          AUTOMATION_DEPLOY_APPROVAL_SOURCE: ${{ needs.check-trigger.outputs.trigger_source }}
+          AUTOMATION_DEPLOY_APPROVAL_REASON: ${{ github.event.inputs.deploy_approval_reason || needs.check-trigger.outputs.trigger_note }}
           AUTOMATION_DEPLOY_PREFLIGHT_COMMAND: ${{ vars.AUTOMATION_DEPLOY_PREFLIGHT_COMMAND }}
           AUTOMATION_DEPLOY_HEALTHCHECK_COMMAND: ${{ vars.AUTOMATION_DEPLOY_HEALTHCHECK_COMMAND }}
           AUTOMATION_DEPLOY_HEALTHCHECK_RETRIES: ${{ vars.AUTOMATION_DEPLOY_HEALTHCHECK_RETRIES }}

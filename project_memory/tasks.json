@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-04-04T22:08:00+09:00",
-  "query": "Full autonomy event execute gate rollout",
+  "generated_at": "2026-04-04T22:46:00+09:00",
+  "query": "Full autonomy deployment approval rollout",
   "repo": "judgesystem",
   "quality_score": 0,
   "tasks": [
@@ -42,6 +42,11 @@
     {
       "id": "event-execute-gate",
       "title": "Keep issue/comment triggers planning-first by default while allowing explicit execute only behind repository-variable gates",
+      "status": "completed"
+    },
+    {
+      "id": "deployment-approval-gate",
+      "title": "Add deployment approval/provider-target metadata and make workflow execution pass the actual deploy env gates through to DeploymentAgent",
       "status": "completed"
     }
   ]
