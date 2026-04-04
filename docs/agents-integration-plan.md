@@ -119,9 +119,9 @@ AGENTS / CLAUDE / 周辺 skill 群に書かれている「GitNexus の理想 API
 
 `judgesystem` 側の現状:
 
-- root `package.json` の `pipeline:*` script は `../context-and-impact` を直接呼ぶ
-- `scripts/context-impact/*.sh` は repo-local wrapper だが、中身は sibling repo 委譲
-- `record-run.sh` も `../context-and-impact/src/skill-bus/record-run.sh` を呼んでいる
+- `pipeline:l1` / `pipeline:quality` / `pipeline:classify` は repo-local wrapper から `CONTEXT_AND_IMPACT_ROOT` または `../context-and-impact` を参照する
+- `plan-init/status/clean` と `estack-enforcer` は repo-local vendor に切り出した
+- `record-run.sh` は `context-and-impact` を経由せず、`agent-skill-bus` へ直接 bridge する
 - `pipeline:dashboard` は `agent-skill-bus` bridge を要求する
 
 ここは非常に重要で、
@@ -451,14 +451,20 @@ registry + handler router を呼ぶ実装へ寄せる。
 #### Option B: judgesystem へ最小限 vendor する
 
 - `plan-init/status/clean`
+- `estack-enforcer`
 - `record-run`
 - 必要最小限の quality / classify wrapper
 
 のみを repo 内へ取り込む。
 
-現時点では Option A を default とする。
-理由は、`context-and-impact` が Miyabi ではなく別の OSS Core であり、
-ここを同時に完全吸収すると計画が肥大化するためである。
+現時点では hybrid とする。
+
+- `plan-init/status/clean` と `estack-enforcer` は vendor 済み
+- `record-run` は `agent-skill-bus` への direct bridge に切り替えた
+- `l1/quality/classify` は wrapper 越しの外部 bridge として残す
+
+理由は、E:Stack gating は repo 契約の中核なので local に持つ価値が高い一方、
+search / quality / classify は `context-and-impact` 側の OSS Core として独立性を保つ方が筋が良いためである。
 
 ### 6.3 GitNexus の使い方も contract 化する
 

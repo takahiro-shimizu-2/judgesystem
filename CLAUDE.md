@@ -169,7 +169,9 @@ Notes:
 - `.claude/commands/` still works in Claude Code, but the official recommendation has moved toward skills
 - Several `miyabi-*` command surfaces still exist as optional external bridge surfaces
 - The Miyabi MCP bridge now prefers a local `node_modules/.bin/miyabi` binary and otherwise probes `../Miyabi/packages/cli`; it is no longer a required repo runtime dependency
-- `npm run pipeline:dashboard` also behaves as an optional bridge: it prefers a local `agent-skill-bus` binary and otherwise probes `../agent-skill-bus`
+- `npm run pipeline:dashboard` and `npm run pipeline:record` now use repo-local wrappers that prefer a local `agent-skill-bus` binary and otherwise probe `../agent-skill-bus`
+- `npm run pipeline:l1`, `pipeline:quality`, and `pipeline:classify` now use repo-local wrappers that probe `CONTEXT_AND_IMPACT_ROOT` first and otherwise fall back to `../context-and-impact`
+- `npm run pipeline:plan:init|status|clean` and the E:Stack enforcer hook are vendored locally under `scripts/context-impact/`
 
 ## Context-and-Impact Pipeline
 
@@ -196,6 +198,8 @@ npm run pipeline:plan:status
 npm run pipeline:plan:clean
 npm run pipeline:record -- "Fix eligibility lookup" success 0.9
 ```
+
+Set `CONTEXT_AND_IMPACT_ROOT=/path/to/context-and-impact` when the sibling repository is not located at `../context-and-impact`.
 
 ### Skip Conditions
 

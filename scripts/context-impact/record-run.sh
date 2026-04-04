@@ -6,11 +6,22 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 TASK="${1:?Usage: record-run.sh \"task\" [success|fail|partial] [score]}"
 RESULT="${2:-success}"
 SCORE="${3:-0.8}"
+# shellcheck source=/dev/null
+. "$SCRIPT_DIR/common.sh"
 
 cd "$PROJECT_ROOT"
-exec bash "$PROJECT_ROOT/../context-and-impact/src/skill-bus/record-run.sh" \
-  judgesystem \
-  context-and-impact \
-  "$TASK" \
-  "$RESULT" \
-  "$SCORE"
+
+echo "=== Agent Skill Bus: 実行結果記録 ==="
+echo "  エージェント: judgesystem"
+echo "  スキル    : context-and-impact"
+echo "  タスク    : $TASK"
+echo "  結果      : $RESULT"
+echo "  スコア    : $SCORE"
+echo ""
+
+exec_agent_skill_bus record-run \
+  --agent judgesystem \
+  --skill context-and-impact \
+  --task "$TASK" \
+  --result "$RESULT" \
+  --score "$SCORE"
