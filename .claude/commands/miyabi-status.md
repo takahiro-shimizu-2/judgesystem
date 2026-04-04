@@ -1,10 +1,18 @@
 ---
-description: Miyabiプロジェクトステータス確認
+description: Miyabiプロジェクトステータス確認（外部bridge）
 ---
 
-# Miyabiプロジェクトステータス
+# Miyabiプロジェクトステータス（外部bridge）
 
-プロジェクトのMiyabi統合状態、GitHub Issues、Actionsの状態を確認します。
+Miyabi 側の project status を確認するための optional external bridge です。
+repo-local の状態確認とは別物なので、`judgesystem` では次の代替も併用します。
+
+## judgesystem での代替入口
+
+- `npm run pipeline:plan:status`
+- `gh pr checks <PR番号>`
+- `gh issue list`
+- `.ai/parallel-reports/*` と workflow summary
 
 ## MCPツール
 

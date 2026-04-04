@@ -241,6 +241,9 @@ repo 構造や package 境界をそのまま `judgesystem` に持ち込む対象
 少なくとも現段階では「Claude 面の外部 bridge」であり、
 `judgesystem` の local runtime 完結とは別問題である。
 
+現時点では、`miyabi-*.md` は external bridge surface であることと、
+repo-local 等価入口が別にあることを明記する方向で truthfulness を回復する。
+
 #### D. root dependency に sibling repo 前提が残っている
 
 `package.json` の root runtime dependency からは `miyabi` を外したが、
