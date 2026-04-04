@@ -60,3 +60,4 @@ output/
 .gitnexus
 .node_modules_ready
 packages/frontend/.vite/
+data/dump/

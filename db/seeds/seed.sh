@@ -113,7 +113,7 @@ load_data "$MASTER_DIR/partners_qualifications_orderers.txt" \
   'partners_qualifications_orderers(partner_id, "ordererName")'
 
 load_data "$MASTER_DIR/partners_qualifications_orderer_items.txt" \
-  'partners_qualifications_orderer_items(partner_id, "ordererName", category, region, value, grade, points)'
+  'partners_qualifications_orderer_items(partner_id, "ordererName", category, region, value, grade)'
 
 load_data "$MASTER_DIR/partners_past_projects.txt" \
   'partners_past_projects(partner_id, "evaluationId", "announcementId", "announcementNo", "announcementTitle", "branchName", "workStatus", "evaluationStatus", priority, "bidType", category, prefecture, "publishDate", deadline, "evaluatedAt", organization)'
