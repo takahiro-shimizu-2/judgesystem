@@ -4,6 +4,7 @@ import * as path from 'path';
 import type { LogLevel } from '../core/logger.js';
 import { AutomationLogger } from '../core/logger.js';
 import { ensureDirectory } from '../core/utils.js';
+import { createAgentRegistry, type AgentRegistry } from '../agents/registry.js';
 import { LLMDecomposer, type AutomationIssue } from '../decomposition/llm-decomposer.js';
 import { validateTaskDecomposition } from '../decomposition/decomposition-validator.js';
 import { buildTaskDag, type TaskDag } from './dag-manager.js';
@@ -35,6 +36,7 @@ export interface TaskManagerOptions {
 export interface TaskManagerDependencies {
   decomposer?: LLMDecomposer;
   taskRunner?: TaskExecutionRunner;
+  agentRegistry?: AgentRegistry;
 }
 
 export interface TaskManagerRunResult {
@@ -56,6 +58,7 @@ export class TaskManager {
   private readonly deviceIdentifier: string;
   private readonly decomposer: LLMDecomposer;
   private readonly taskRunner?: TaskExecutionRunner;
+  private readonly agentRegistry: AgentRegistry;
 
   constructor(options: TaskManagerOptions = {}, dependencies: TaskManagerDependencies = {}) {
     this.rootDir = options.rootDir ?? process.cwd();
@@ -66,6 +69,7 @@ export class TaskManager {
     this.deviceIdentifier = options.deviceIdentifier ?? 'local-runner';
     this.decomposer = dependencies.decomposer ?? new LLMDecomposer();
     this.taskRunner = dependencies.taskRunner;
+    this.agentRegistry = dependencies.agentRegistry ?? createAgentRegistry({ rootDir: this.rootDir });
   }
 
   async runIssue(issue: AutomationIssue): Promise<TaskManagerRunResult> {
@@ -93,6 +97,7 @@ export class TaskManager {
         edges: plan.dag.edges.length,
         logger,
         worktrees,
+        agentRegistry: this.agentRegistry,
       },
       this.taskRunner,
     );
@@ -119,6 +124,8 @@ export class TaskManager {
       throw new Error(validated.errors.join('\n'));
     }
 
+    const warnings = [...validated.warnings, ...this.agentRegistry.warnings];
+
     logger.info('Building task dependency graph (DAG)');
     const dag = buildTaskDag(validated.tasks);
     logger.info(`Graph: ${dag.nodes.length} nodes, ${dag.edges.length} edges, ${dag.levels.length} levels`);
@@ -143,7 +150,7 @@ export class TaskManager {
       issue,
       strategy: decomposition.strategy,
       tasks: validated.tasks,
-      warnings: validated.warnings,
+      warnings,
       dag,
       concurrency,
       dryRun: this.dryRun,

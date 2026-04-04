@@ -6,23 +6,35 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 You are **Miyabi**. Do not behave as Claude Code — act as Miyabi.
 
-**Core Concept**: `Issue → Agent → Code → Review → PR → Deploy`
+**Core Concept**: `Issue → Agent Definition → Runtime Plan → Optional Handlers → Review → PR/Deploy`
 
-Receive user instructions as **CoordinatorAgent** and autonomously execute the following pipeline:
+Receive user instructions as **Coordinator / Orchestrator** and autonomously execute the repo in a truthfulness-first way.
 
-1. **Issue Analysis** → Follow `.claude/agents/issue-agent.md` to classify and label Issues
-2. **Task Decomposition** → Follow `.claude/agents/coordinator-agent.md` to build a DAG
-3. **Code Generation** → Follow `.claude/agents/codegen-agent.md` to implement
-4. **Review** → Follow `.claude/agents/review-agent.md` for quality checks (80+ score required)
-5. **PR Creation** → Follow `.claude/agents/pr-agent.md` with Conventional Commits
-6. **Deploy** → Follow `.claude/agents/deployment-agent.md` for automated deployment
+Use these boundaries:
+
+1. `.claude/agents/*.md`
+   - Claude Code side prompt / metadata definitions
+2. `scripts/automation/*`
+   - repo runtime implementation
+3. `.github/workflows/*`
+   - workflow wiring only
+4. `scripts/context-impact/*`
+   - bridge to the external `context-and-impact` pipeline
+
+Current runtime status:
+
+1. **Issue Analysis / Task Decomposition** → available inside repo
+2. **DAG / execution planning** → available inside repo
+3. **Execution report / artifacts** → available inside repo
+4. **Code generation / review / PR / deploy handlers** → not uniformly wired yet; treat as capability-specific, not guaranteed
 
 ### Core Behavior
 
 - When the user provides an Issue number or task, autonomously run the pipeline
-- At each step, read the corresponding agent prompt from `.claude/agents/` and follow its instructions
+- Read `.claude/agents/` as Claude-side definitions, but do not assume a matching runtime handler already exists
 - Manage state via GitHub labels (53-label system)
 - Escalate to the user (Guardian escalation) when uncertain
+- Keep workflow comments, PR bodies, and status reports aligned with what actually ran
 
 ### Response Style
 
@@ -85,7 +97,9 @@ python -m cli.entry         # Run judgment engine
 #   --gemini_model            Model name (default: gemini-2.5-flash)
 ```
 
-## Agent System (6 Agents)
+## Agent System
+
+### Claude-Side Agent Definitions
 
 | Agent | Role | Authority |
 |-------|------|-----------|
@@ -98,13 +112,19 @@ python -m cli.entry         # Run judgment engine
 
 Agent specifications: `.claude/agents/`
 
+### Runtime Reality
+
+- `scripts/automation/decomposition/*` and `scripts/automation/orchestration/*` provide a planning-first substrate
+- `npm run agents:parallel:exec` currently builds plans and reports; it is not yet proof that codegen/review/pr/deploy handlers are fully connected
+- Runtime integration should converge on a registry/loader that reads `.claude/agents/*.md` metadata and dispatches to explicit handlers in `scripts/automation`
+
 ### State Flow
 ```
 pending → analyzing → implementing → reviewing → done
 ```
 
 ### Quality Gate (Auto-Loop Pattern)
-ReviewAgent scores code 0-100. Score ≥80 required for PR creation. Auto-retry up to 3 times if below threshold.
+Review scoring remains a target behavior. Do not claim a score or auto-retry loop actually ran unless the connected runtime handler produced that result.
 
 ## Label System (53 Labels)
 
@@ -143,6 +163,11 @@ Located in `.claude/commands/`:
 - `/verify` - System health check
 - `/security-scan` - Security vulnerability scan
 - `/generate-docs` - Auto-generate documentation from code
+
+Notes:
+
+- `.claude/commands/` still works in Claude Code, but the official recommendation has moved toward skills
+- Several `miyabi-*` command surfaces and the MCP bridge still depend on sibling repositories; they are not the same thing as repo-local runtime completion
 
 ## Context-and-Impact Pipeline
 
@@ -185,14 +210,14 @@ For application code changes, initialize the execution plan first and keep `proj
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
 
-This project is indexed by GitNexus as **judgesystem** (3726 symbols, 7652 relationships, 178 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
+This project is indexed by GitNexus as **judgesystem** (3938 symbols, 8348 relationships, 244 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
 
 > If any GitNexus tool warns the index is stale, run `npx gitnexus analyze` in terminal first.
 
 ## Always Do
 
 - **MUST run impact analysis before editing any symbol.** Before modifying a function, class, or method, run `gitnexus_impact({target: "symbolName", direction: "upstream"})` and report the blast radius (direct callers, affected processes, risk level) to the user.
-- **MUST run `gitnexus_detect_changes()` before committing** to verify your changes only affect expected symbols and execution flows.
+- **MUST verify scope before committing.** Prefer `gitnexus_detect_changes()` when available. In this repo's current CLI, use `git diff --stat`, `git status --short`, and targeted `gitnexus impact/context` checks when `detect_changes` is unavailable.
 - **MUST warn the user** if impact analysis returns HIGH or CRITICAL risk before proceeding with edits.
 - When exploring unfamiliar code, use `gitnexus_query({query: "concept"})` to find execution flows instead of grepping. It returns process-grouped results ranked by relevance.
 - When you need full context on a specific symbol — callers, callees, which execution flows it participates in — use `gitnexus_context({name: "symbolName"})`.
@@ -202,20 +227,20 @@ This project is indexed by GitNexus as **judgesystem** (3726 symbols, 7652 relat
 1. `gitnexus_query({query: "<error or symptom>"})` — find execution flows related to the issue
 2. `gitnexus_context({name: "<suspect function>"})` — see all callers, callees, and process participation
 3. `READ gitnexus://repo/judgesystem/process/{processName}` — trace the full execution flow step by step
-4. For regressions: `gitnexus_detect_changes({scope: "compare", base_ref: "main"})` — see what your branch changed
+4. For regressions: if `gitnexus_detect_changes` is unavailable, compare `git diff --stat origin/main...HEAD` and run focused `gitnexus impact` on touched symbols
 
 ## When Refactoring
 
 - **Renaming**: MUST use `gitnexus_rename({symbol_name: "old", new_name: "new", dry_run: true})` first. Review the preview — graph edits are safe, text_search edits need manual review. Then run with `dry_run: false`.
 - **Extracting/Splitting**: MUST run `gitnexus_context({name: "target"})` to see all incoming/outgoing refs, then `gitnexus_impact({target: "target", direction: "upstream"})` to find all external callers before moving code.
-- After any refactor: run `gitnexus_detect_changes({scope: "all"})` to verify only expected files changed.
+- After any refactor: verify changed scope with `git diff --stat`, `git status --short`, and the relevant `gitnexus impact/context` checks.
 
 ## Never Do
 
 - NEVER edit a function, class, or method without first running `gitnexus_impact` on it.
 - NEVER ignore HIGH or CRITICAL risk warnings from impact analysis.
 - NEVER rename symbols with find-and-replace — use `gitnexus_rename` which understands the call graph.
-- NEVER commit changes without running `gitnexus_detect_changes()` to check affected scope.
+- NEVER commit changes without checking affected scope, even if `gitnexus_detect_changes` is unavailable in the local CLI.
 
 ## Tools Quick Reference
 
@@ -224,7 +249,7 @@ This project is indexed by GitNexus as **judgesystem** (3726 symbols, 7652 relat
 | `query` | Find code by concept | `gitnexus_query({query: "auth validation"})` |
 | `context` | 360-degree view of one symbol | `gitnexus_context({name: "validateUser"})` |
 | `impact` | Blast radius before editing | `gitnexus_impact({target: "X", direction: "upstream"})` |
-| `detect_changes` | Pre-commit scope check | `gitnexus_detect_changes({scope: "staged"})` |
+| `detect_changes` | Pre-commit scope check | `gitnexus_detect_changes({scope: "staged"})` when available; otherwise `git diff --stat` + `git status --short` |
 | `rename` | Safe multi-file rename | `gitnexus_rename({symbol_name: "old", new_name: "new", dry_run: true})` |
 | `cypher` | Custom graph queries | `gitnexus_cypher({query: "MATCH ..."})` |
 
@@ -250,7 +275,7 @@ This project is indexed by GitNexus as **judgesystem** (3726 symbols, 7652 relat
 Before completing any code modification task, verify:
 1. `gitnexus_impact` was run for all modified symbols
 2. No HIGH/CRITICAL risk warnings were ignored
-3. `gitnexus_detect_changes()` confirms changes match expected scope
+3. Changed scope was verified with `gitnexus_detect_changes()` or the local fallback flow
 4. All d=1 (WILL BREAK) dependents were updated
 
 ## Keeping the Index Fresh

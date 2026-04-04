@@ -1,23 +1,43 @@
 {
-  "generated_at": "2026-04-04T17:05:00+09:00",
-  "query": "Phase 4 decomposition runtime",
+  "generated_at": "2026-04-04T19:05:00+09:00",
+  "query": "Miyabi absorption architecture reassessment",
   "repo": "judgesystem",
   "quality_score": 0,
   "tasks": [
     {
-      "id": "phase2-state-delegation",
-      "title": "Move label-state-machine runtime under scripts/automation/state",
+      "id": "architecture-research",
+      "title": "Research Claude, Codex, GitHub, GitNexus, context-and-impact, and Miyabi boundaries before further implementation",
       "status": "completed"
     },
     {
-      "id": "phase3-adapter-delegation",
-      "title": "Move project status and webhook routing runtime under scripts/automation/adapters",
+      "id": "plan-rewrite",
+      "title": "Rewrite docs/agents-integration-plan.md around registry/handler architecture and explicit external bridges",
       "status": "completed"
     },
     {
-      "id": "phase4-decomposition-runtime",
-      "title": "Add decomposition and orchestration runtime with agents:parallel:exec CLI",
-      "status": "in_progress"
+      "id": "remediation-inventory",
+      "title": "Document already-implemented substrate and required follow-up for workflows, docs, and external dependencies",
+      "status": "completed"
+    },
+    {
+      "id": "truthfulness-alignment",
+      "title": "Align AGENTS.md, CLAUDE.md, workflow claims, and runtime contracts with the revised architecture",
+      "status": "completed"
+    },
+    {
+      "id": "registry-loader",
+      "title": "Introduce a .claude/agents markdown loader and runtime registry before adding more agent behavior",
+      "status": "completed"
+    },
+    {
+      "id": "handler-wiring",
+      "title": "Connect explicit runtime handlers for issue/review/pr/deployment capabilities",
+      "status": "pending"
+    },
+    {
+      "id": "external-bridge-cleanup",
+      "title": "Clarify or reduce sibling-repo dependencies for miyabi, context-and-impact, and agent-skill-bus",
+      "status": "pending"
     }
   ]
 }

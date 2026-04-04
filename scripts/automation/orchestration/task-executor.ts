@@ -1,5 +1,7 @@
 import type { AutomationLogger } from '../core/logger.js';
 import type { DecomposedTask } from '../decomposition/llm-decomposer.js';
+import type { AgentRegistry } from '../agents/registry.js';
+import { describeAgentForTask } from '../agents/registry.js';
 import type { WorktreeAssignment } from './worktree-coordinator.js';
 
 export type TaskExecutionStatus = 'planned' | 'completed' | 'failed' | 'skipped';
@@ -54,6 +56,7 @@ export interface TaskExecutionContext {
   dryRun: boolean;
   logger: AutomationLogger;
   worktrees: Map<string, WorktreeAssignment>;
+  agentRegistry?: AgentRegistry;
 }
 
 export type TaskExecutionRunner = (
@@ -88,6 +91,7 @@ export class TaskExecutor {
       edges: number;
       logger: AutomationLogger;
       worktrees: Map<string, WorktreeAssignment>;
+      agentRegistry?: AgentRegistry;
     },
     runner?: TaskExecutionRunner,
   ): Promise<ExecutionReport> {
@@ -100,6 +104,7 @@ export class TaskExecutor {
       dryRun: this.dryRun,
       logger: params.logger,
       worktrees: params.worktrees,
+      agentRegistry: params.agentRegistry,
     };
 
     for (const [index, level] of params.levels.entries()) {
@@ -143,7 +148,7 @@ export class TaskExecutor {
         levels: params.levels.length,
       },
       tasks: records,
-      warnings: params.warnings,
+      warnings: [...new Set([...(params.agentRegistry?.warnings || []), ...params.warnings])],
     };
   }
 
@@ -179,6 +184,7 @@ export class TaskExecutor {
     const worktree = context.worktrees.get(task.id);
 
     if (!runner || context.dryRun) {
+      const agentNote = describeAgentForTask(task, context.agentRegistry);
       return {
         taskId: task.id,
         title: task.title,
@@ -187,9 +193,11 @@ export class TaskExecutor {
         startedAt,
         endedAt: Date.now(),
         durationMs: Date.now() - startedAt,
-        notes: context.dryRun
+        notes: [context.dryRun
           ? 'Dry-run mode: execution was planned but not performed.'
-          : 'Planning mode: no task runner is configured yet.',
+          : 'Planning mode: no task runner is configured yet.', agentNote]
+          .filter(Boolean)
+          .join(' '),
         worktreePath: worktree?.worktreePath,
       };
     }
