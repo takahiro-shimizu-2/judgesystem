@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 
-import { execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
@@ -13,16 +13,51 @@ const server = new Server(
   { capabilities: { tools: {} } },
 );
 
-function run(command) {
+function resolveMiyabiCli(cwd = process.cwd()) {
+  const localBinary = join(cwd, "node_modules", ".bin", "miyabi");
+  if (existsSync(localBinary)) {
+    return {
+      command: localBinary,
+      prefixArgs: [],
+      source: "node_modules/.bin/miyabi",
+    };
+  }
+
+  const siblingCliDir = resolve(cwd, "..", "Miyabi", "packages", "cli");
+  if (existsSync(join(siblingCliDir, "package.json"))) {
+    return {
+      command: "npx",
+      prefixArgs: ["--prefix", siblingCliDir, "miyabi"],
+      source: "../Miyabi/packages/cli",
+    };
+  }
+
+  return null;
+}
+
+function run(args) {
+  const cli = resolveMiyabiCli();
+  if (!cli) {
+    return {
+      success: false,
+      error:
+        "Miyabi CLI is not installed locally. This MCP bridge is optional; install Miyabi in node_modules or place the sibling repo at ../Miyabi/packages/cli.",
+      stdout: "",
+      stderr: "",
+      source: "unavailable",
+    };
+  }
+
   try {
     return {
       success: true,
-      output: execSync(`npx miyabi ${command}`, {
+      output: execFileSync(cli.command, [...cli.prefixArgs, ...args], {
         cwd: process.cwd(),
         encoding: "utf-8",
         stdio: "pipe",
         maxBuffer: 10 * 1024 * 1024,
       }),
+      source: cli.source,
     };
   } catch (error) {
     return {
@@ -30,6 +65,7 @@ function run(command) {
       error: error.message,
       stdout: error.stdout?.toString() || "",
       stderr: error.stderr?.toString() || "",
+      source: cli.source,
     };
   }
 }
@@ -39,6 +75,7 @@ function projectStatus() {
   const packagePath = join(cwd, "package.json");
   const hasClaude = existsSync(join(cwd, ".claude"));
   const hasMiyabi = existsSync(join(cwd, ".miyabi.yml"));
+  const miyabiCli = resolveMiyabiCli(cwd);
 
   let packageInfo = null;
   if (existsSync(packagePath)) {
@@ -55,6 +92,7 @@ function projectStatus() {
     workingDirectory: cwd,
     hasClaude,
     hasMiyabi,
+    miyabiCliSource: miyabiCli?.source || null,
     packageInfo,
   };
 }
@@ -65,8 +103,8 @@ function textResult(ok, successText, failureText, result) {
       {
         type: "text",
         text: ok
-          ? `${successText}\n\n${result.output}`
-          : `${failureText}\n\nエラー: ${result.error}\n\n${result.stderr || result.stdout}`,
+          ? `${successText}\n\n実行元: ${result.source}\n\n${result.output}`
+          : `${failureText}\n\n実行元: ${result.source}\n\nエラー: ${result.error}\n\n${result.stderr || result.stdout}`,
       },
     ],
     isError: !ok,
@@ -172,50 +210,60 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   switch (name) {
     case "miyabi__init": {
       const flags = [args.private ? "--private" : "", args.skipInstall ? "--skip-install" : ""].filter(Boolean);
-      const result = run(`init ${args.projectName} ${flags.join(" ")}`.trim());
+      const result = run(["init", args.projectName, ...flags]);
       return textResult(result.success, `✅ プロジェクト "${args.projectName}" を作成しました`, "❌ プロジェクト作成に失敗しました", result);
     }
     case "miyabi__install": {
-      const result = run(`install ${args.dryRun ? "--dry-run" : ""}`.trim());
+      const result = run(["install", ...(args.dryRun ? ["--dry-run"] : [])]);
       return textResult(result.success, "✅ Miyabi をインストールしました", "❌ インストールに失敗しました", result);
     }
     case "miyabi__status": {
-      const result = run(`status ${args.watch ? "--watch" : ""}`.trim());
+      const result = run(["status", ...(args.watch ? ["--watch"] : [])]);
       return textResult(result.success, "📊 Miyabi ステータス", "❌ ステータス取得に失敗しました", result);
     }
     case "miyabi__agent_run": {
-      const issuesFlag = args.issueNumber
-        ? `--issue ${args.issueNumber}`
+      const issueArgs = args.issueNumber
+        ? ["--issue", String(args.issueNumber)]
         : Array.isArray(args.issueNumbers) && args.issueNumbers.length > 0
-          ? `--issues ${args.issueNumbers.join(",")}`
-          : "";
+          ? ["--issues", args.issueNumbers.join(",")]
+          : [];
       const flags = [
         "agent run",
-        issuesFlag,
-        args.concurrency ? `--concurrency ${args.concurrency}` : "",
-        args.dryRun ? "--dry-run" : "",
-      ].filter(Boolean);
-      const result = run(flags.join(" "));
+        ...issueArgs,
+        ...(args.concurrency ? ["--concurrency", String(args.concurrency)] : []),
+        ...(args.dryRun ? ["--dry-run"] : []),
+      ]
+        .flatMap((value) => value.split(" "))
+        .filter(Boolean);
+      const result = run(flags);
       return textResult(result.success, "🤖 Agent 実行完了", "❌ Agent 実行に失敗しました", result);
     }
     case "miyabi__auto": {
-      const flags = ["auto", args.maxIssues ? `--max-issues ${args.maxIssues}` : "", args.interval ? `--interval ${args.interval}` : ""].filter(Boolean);
-      const result = run(flags.join(" "));
+      const flags = [
+        "auto",
+        ...(args.maxIssues ? ["--max-issues", String(args.maxIssues)] : []),
+        ...(args.interval ? ["--interval", String(args.interval)] : []),
+      ];
+      const result = run(flags);
       return textResult(result.success, "🕷 Miyabi auto 起動", "❌ auto 起動に失敗しました", result);
     }
     case "miyabi__todos": {
-      const flags = ["todos", args.path ? `--path ${args.path}` : "", args.autoCreate ? "--auto-create" : ""].filter(Boolean);
-      const result = run(flags.join(" "));
+      const flags = [
+        "todos",
+        ...(args.path ? ["--path", args.path] : []),
+        ...(args.autoCreate ? ["--auto-create"] : []),
+      ];
+      const result = run(flags);
       return textResult(result.success, "📝 TODO スキャン完了", "❌ TODO スキャンに失敗しました", result);
     }
     case "miyabi__config": {
-      let command = "config";
+      const flags = ["config"];
       if (args.action === "get" && args.key) {
-        command += ` --get ${args.key}`;
+        flags.push("--get", args.key);
       } else if (args.action === "set" && args.key && args.value) {
-        command += ` --set ${args.key}=${args.value}`;
+        flags.push("--set", `${args.key}=${args.value}`);
       }
-      const result = run(command);
+      const result = run(flags);
       return textResult(result.success, "⚙️ Miyabi 設定", "❌ 設定操作に失敗しました", result);
     }
     case "miyabi__get_status": {
@@ -227,6 +275,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         `作業ディレクトリ: ${status.workingDirectory}`,
         `Miyabi 統合: ${status.hasMiyabi ? "✅ あり" : "❌ なし"}`,
         `Claude Code 統合: ${status.hasClaude ? "✅ あり" : "❌ なし"}`,
+        `Miyabi CLI: ${status.miyabiCliSource || "未検出 (optional bridge)"}`,
         pkg ? `パッケージ: ${pkg.name}@${pkg.version}` : "package.json: なし",
         pkg ? `依存関係: ${Object.keys(pkg.dependencies).length}個` : "",
         pkg ? `開発依存: ${Object.keys(pkg.devDependencies).length}個` : "",

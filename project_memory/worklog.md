@@ -26,3 +26,5 @@ Context-and-impact phase E appends audit entries here.
 - Wired `TaskExecutor` and `TaskManager` to pass runtime context (`rootDir`, `env`, `worktree`) into the registry-based handler flow instead of treating every non-custom run as planning-only.
 - Added `scripts/automation/adapters/autonomous-agent-summary.ts` and `scripts/autonomous-agent-summary.ts` so the autonomous-agent workflow can summarize the latest execution report and matching execution plan artifact.
 - Updated `.github/workflows/autonomous-agent.yml` to publish a report-based job summary and issue comment instead of relying on fixed planning-only prose, while still leaving the workflow in dry-run mode.
+- Removed `miyabi` from the root runtime dependency set in `package.json` and kept the Claude-side Miyabi bridge as an optional external surface instead of a mandatory repo dependency.
+- Updated `.claude/mcp-servers/miyabi-integration.js` so it prefers a local `node_modules/.bin/miyabi` binary, then optionally probes `../Miyabi/packages/cli`, and otherwise fails with an explicit optional-bridge message.
