@@ -12,6 +12,9 @@ description: Deployment command bridge - env-gated deploy 実行の案内
 
 - `AUTOMATION_ENABLE_DEPLOY=true`
 - `AUTOMATION_DEPLOY_COMMAND` が設定されている
+- 必要なら `AUTOMATION_DEPLOY_PREFLIGHT_COMMAND`
+- 必要なら `AUTOMATION_DEPLOY_HEALTHCHECK_COMMAND`
+- 必要なら `AUTOMATION_DEPLOY_ROLLBACK_COMMAND`
 
 この 2 つが無ければ `DeploymentAgent` は `skipped` を返す。
 
@@ -26,6 +29,9 @@ description: Deployment command bridge - env-gated deploy 実行の案内
 ```bash
 export AUTOMATION_ENABLE_DEPLOY=true
 export AUTOMATION_DEPLOY_COMMAND="npm run deploy:staging"
+export AUTOMATION_DEPLOY_PREFLIGHT_COMMAND="npm run typecheck"
+export AUTOMATION_DEPLOY_HEALTHCHECK_COMMAND="curl -fsS https://example.com/health"
+export AUTOMATION_DEPLOY_ROLLBACK_COMMAND="npm run deploy:rollback"
 ```
 
 そのうえで autonomous runtime から対象 Issue を処理する:
@@ -37,20 +43,21 @@ npm run agents:parallel:exec -- --issue 123
 ## このコマンドが保証しないこと
 
 - Firebase 固定の deploy
-- health check / rollback の自動化
 - production 承認フロー
 - secret や cloud provider の自動設定
 
-それらが必要なら、deploy command の中身や workflow を別途整備する。
+health check / rollback 自体は command を与えれば実行できるが、
+provider 固有の高度な orchestration まではこの contract だけでは保証しない。
 
 ## 失敗時の見方
 
 - execution report の `failed` task
+- `.ai/parallel-reports/deployment-summary-*.md`
 - `.ai/logs/YYYY-MM-DD.md`
 - deploy command の標準出力 / 標準エラー要約
 
 ## 推奨
 
 deploy を本当に自動化したい場合でも、
-まずは `AUTOMATION_DEPLOY_COMMAND` を明示した safe command gate から始め、
-成功条件と rollback 方針を command 側で固めてから広げる。
+まずは `AUTOMATION_DEPLOY_COMMAND` を明示した safe contract から始め、
+preflight / health / rollback の command を段階的に追加していく。

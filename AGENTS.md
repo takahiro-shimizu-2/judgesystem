@@ -20,6 +20,7 @@ Issue / CodeGen / Review / PR / Deploy の safe handler は接続済みである
 ただし、CodeGen の code-writing command、remote PR 作成、deploy の強い副作用は gate 付きであり、
 外部 model による product code 自動生成や remote branch push までは依然として未保証である。
 Review は repo root で configured checks を実行し、実際に得られた score / retry / escalation だけを report すること。
+Deploy は preflight / healthcheck / rollback command を明示した contract がある場合だけそこまで実行し、無い能力は成功扱いにしないこと。
 
 - Issue 分析 → タスク分解 → コード生成 → レビュー → PR 作成 → デプロイ
 - GitHub ラベル（53ラベル体系）でステートを管理

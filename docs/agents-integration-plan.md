@@ -397,7 +397,7 @@ repo runtime の必須依存ではなく「override / local install 後の optio
 | Test execution | Miyabi では `TestAgent` と codegen/review 周辺で別能力として存在する | 独立 agent なし。`ReviewAgent` が `typecheck` / `test` を実行 | 当面は review/test capability に吸収する。必要になれば独立 capability として切り出す |
 | Review / quality gate | `ReviewAgent` が scoring / comment / escalation を行う | `scripts/automation/agents/handlers/review.ts` は repo root で configured checks を実行し、score / retry / escalation を review artifact と execution report へ残す | security / coverage / richer comment 契約を必要に応じて追加する |
 | PR creation | `PRAgent` が GitHub に draft PR を作成し、labels / reviewers も扱う | `scripts/automation/agents/handlers/pr.ts` は local draft artifact を常に生成し、`AUTOMATION_ENABLE_PR_WRITE=true` の場合だけ remote draft PR を作成または更新する | reviewer / label / mergeability など周辺 contract を段階追加する |
-| Deployment | `DeploymentAgent` が build / test / deploy / health check / rollback を扱う | `scripts/automation/agents/handlers/deployment.ts` は env-gated command 実行のみ | deploy contract を拡張し、preflight / health / rollback を段階導入する |
+| Deployment | `DeploymentAgent` が build / test / deploy / health check / rollback を扱う | `scripts/automation/agents/handlers/deployment.ts` は env-gated deploy contract を実行し、必要なら preflight / health check / rollback と deployment artifact を残す | approval / provider-specific orchestration など周辺 contract を段階追加する |
 | Workflow execution | `.github/workflows/autonomous-agent.yml` が execute mode で動く | `autonomous-agent.yml` は `workflow_dispatch` で planning / execute を明示切替し、実行した capability だけを summary/comment へ出す | issue/comment trigger 時の gate や dedicated execute workflow 分離を必要に応じて追加する |
 | Projects V2 / reporting | `packages/github-projects`, KPI / dashboard scripts | `scripts/automation/github/*`, `scripts/automation/reporting/*` | すでに repo-local runtime 化済み。維持して活かす |
 | Context pipeline | `context-and-impact` とその wrapper | `scripts/context-impact/*` bridge + local vendor 部分 | repo-local vendor と external bridge の hybrid を維持する |
@@ -517,6 +517,7 @@ Phase 3 の最初の実装スライスは、次の安全境界で入れる。
 - `deployment.ts`
   - デフォルトでは deploy しない
   - 明示 env flag と command が与えられた場合のみ実行する
+  - 後続では preflight / health / rollback / artifact を追加する
 - `CodeGenAgent`
   - `.claude/agents/codegen-agent.md` の metadata をもとに
     `.ai/worktrees/...` 配下へ implementation brief を生成する
@@ -688,6 +689,7 @@ GitNexus は次で分ける。
 - `ReviewAgent` は repo-root check 実行結果を report に残せる
 - `PRAgent` は local artifact を生成できる
 - `DeploymentAgent` は opt-in gate なしでは skip する
+- `DeploymentAgent` は deploy contract の結果を report に残せる
 
 補足:
 
@@ -743,7 +745,7 @@ GitNexus は次で分ける。
 - `CodeGenAgent` は delegated writer binding まで接続済みとし、必要なら external-model / stronger write contract への昇格条件を決める
 - `ReviewAgent` は score / retry / escalation 契約まで接続済みとし、security/coverage/comment contract の拡張条件を決める
 - `PRAgent` は remote draft PR 作成契約まで接続済みとし、reviewer / label / mergeability 契約の拡張条件を決める
-- `DeploymentAgent` の deploy/rollback/approval 契約を決める
+- `DeploymentAgent` は deploy/preflight/healthcheck/rollback 契約まで接続済みとし、approval/provider-specific orchestration の拡張条件を決める
 - `workflow_dispatch` の planning / execute 切替は接続済みとして、label / comment trigger 時の execute gate をどう扱うか決める
 - Miyabi 由来の `TestAgent` を独立 runtime にするか、review/test capability に吸収するかを明記する
 
@@ -794,7 +796,7 @@ full autonomy をどの capability から開けるかを計画書どおりに進
 初手としては、`PRAgent` の remote draft PR 作成と
 `autonomous-agent.yml` の planning/execute 切替を先に完了させた。
 次の capability 候補としていた `CodeGenAgent` の delegated writer binding も接続済みである。
-残る重点は、review loop の richer contract と deployment contract の拡張である。
+残る重点は、deployment approval/provider-specific orchestration と、remaining capability の運用 DoD 固めである。
 
 ## 9. 改訂版 Definition of Done
 
