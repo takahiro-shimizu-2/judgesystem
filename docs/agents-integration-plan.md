@@ -398,7 +398,7 @@ repo runtime の必須依存ではなく「override / local install 後の optio
 | Review / quality gate | `ReviewAgent` が scoring / comment / escalation を行う | `scripts/automation/agents/handlers/review.ts` は repo root で configured checks を実行し、score / retry / escalation を review artifact と execution report へ残す | security / coverage / richer comment 契約を必要に応じて追加する |
 | PR creation | `PRAgent` が GitHub に draft PR を作成し、labels / reviewers も扱う | `scripts/automation/agents/handlers/pr.ts` は local draft artifact を常に生成し、`AUTOMATION_ENABLE_PR_WRITE=true` の場合だけ remote draft PR を作成または更新する | reviewer / label / mergeability など周辺 contract を段階追加する |
 | Deployment | `DeploymentAgent` が build / test / deploy / health check / rollback を扱う | `scripts/automation/agents/handlers/deployment.ts` は env-gated deploy contract を実行し、provider / target metadata、approval gate、optional build / preflight / health check / rollback と deployment artifact を残す | provider 固有の高度な orchestration や GitHub Environment approval 連携を必要に応じて追加する |
-| Workflow execution | `.github/workflows/autonomous-agent.yml` が execute mode で動く | `autonomous-agent.yml` は `workflow_dispatch` で planning / execute を明示切替し、issue/comment trigger は planning を既定に保つ。`AUTONOMOUS_AGENT_LABEL_EXECUTE_ENABLED` / `AUTONOMOUS_AGENT_COMMENT_EXECUTE_ENABLED` repo variable が開いている場合だけ event-triggered execute を許可し、実行した capability だけを summary/comment へ出す | dedicated execute workflow 分離や provider-specific approval flow を必要に応じて追加する |
+| Workflow execution | `.github/workflows/autonomous-agent.yml` が execute mode で動く | `autonomous-agent.yml` は `workflow_dispatch` で planning / execute を明示切替し、issue/comment trigger は planning を既定に保つ。`AUTONOMOUS_AGENT_LABEL_EXECUTE_ENABLED` / `AUTONOMOUS_AGENT_COMMENT_EXECUTE_ENABLED` repo variable が開いている場合だけ event-triggered execute を許可し、実行した capability だけを summary/comment へ出す。protected deploy 用には `autonomous-deploy-execute.yml` を分離し、GitHub Environment approval と `DeploymentAgent` approval metadata をそろえて扱う | provider-specific orchestration の高度化を必要に応じて追加する |
 | Projects V2 / reporting | `packages/github-projects`, KPI / dashboard scripts | `scripts/automation/github/*`, `scripts/automation/reporting/*` | すでに repo-local runtime 化済み。維持して活かす |
 | Context pipeline | `context-and-impact` とその wrapper | `scripts/context-impact/*` bridge + local vendor 部分 | repo-local vendor と external bridge の hybrid を維持する |
 | GitNexus stable ops | `gitnexus-stable-ops` wrapper / Agent Graph | current CLI + `gitnexus_agent_*` MCP + optional sibling wrapper | symbol analysis は local CLI、agent graph は wrapper/MCP として分離記載する |
@@ -746,7 +746,7 @@ GitNexus は次で分ける。
 - `ReviewAgent` は score / retry / escalation 契約まで接続済みとし、security/coverage/comment contract の拡張条件を決める
 - `PRAgent` は remote draft PR 作成契約まで接続済みとし、reviewer / label / mergeability 契約の拡張条件を決める
 - `DeploymentAgent` は deploy approval/provider-target metadata/build/preflight/healthcheck/rollback 契約まで接続済みとし、provider 固有の高度な orchestration や GitHub Environment approval 連携の拡張条件を決める
-- `workflow_dispatch` の planning / execute 切替と、label / comment trigger 時の explicit execute gate は接続済みとし、必要なら dedicated execute workflow 分離を決める
+- `workflow_dispatch` の planning / execute 切替と、label / comment trigger 時の explicit execute gate、protected deploy 用の dedicated execute workflow 分離は接続済みとし、必要なら provider-specific orchestration の高度化を決める
 - Miyabi 由来の `TestAgent` を独立 runtime にするか、review/test capability に吸収するかを明記する
 
 ### Phase 8: full autonomy の最小 slice を実装する
@@ -797,7 +797,7 @@ full autonomy をどの capability から開けるかを計画書どおりに進
 `autonomous-agent.yml` の planning/execute 切替、および
 issue/comment trigger での explicit execute gate を先に完了させた。
 次の capability 候補としていた `CodeGenAgent` の delegated writer binding も接続済みである。
-残る重点は、provider 固有の高度な orchestration や GitHub Environment approval 連携、および remaining capability の運用 DoD 固めである。
+残る重点は、provider 固有の高度な orchestration と remaining capability の運用 DoD 固めである。
 
 ## 9. 改訂版 Definition of Done
 
