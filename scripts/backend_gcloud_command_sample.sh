@@ -243,7 +243,7 @@ deploy_cmd=(
   gcloud run deploy $IMAGE_NAME
   --image $LOCATION-docker.pkg.dev/$PROJECT_ID/$REPO_NAME/$IMAGE_NAME:$TAG_NAME
   --region $LOCATION
-  --allow-unauthenticated
+  --no-allow-unauthenticated
 )
 
 # 接続タイプに応じて設定を追加
