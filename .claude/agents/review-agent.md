@@ -20,9 +20,11 @@ escalation: TechLead (品質問題)、CISO (重大セキュリティ問題)
 - 既定では repo root で `npm run typecheck` と `npm test` を実行する
 - `AUTOMATION_REVIEW_CHECKS_JSON` があれば review command 群を明示上書きできる
 - `AUTOMATION_REVIEW_MAX_RETRIES` と `AUTOMATION_REVIEW_MIN_SCORE` で retry と gate threshold を調整できる
-- `.ai/parallel-reports/` に markdown/json の review artifact を残す
+- `AUTOMATION_REVIEW_COVERAGE_THRESHOLD` と `AUTOMATION_REVIEW_COVERAGE_LABELS` があれば coverage gate を追加できる
+- `.ai/parallel-reports/` に markdown/json の review artifact と review-comment artifact を残す
 - `GITHUB_TOKEN` 系 credential がある場合は review 成否にかかわらず `agent:review` / `state:reviewing` の同期を試みる
 - 固定の 80 点スコア、ESLint / npm audit / coverage の常時実行は現時点では前提にしない
+- security check の成否と coverage gate の結果は、実際に実行した check 出力からだけ summary 化する
 
 ## Claude 側で期待すること
 
@@ -31,6 +33,7 @@ escalation: TechLead (品質問題)、CISO (重大セキュリティ問題)
 - 実装者が次に直すべき点を report へ要約する
 - セキュリティや設計懸念があれば escalation path を示す
 - score や retry が実際に発生した場合だけ、その結果を truthfully に扱う
+- coverage や security summary も、実際に実行した check 出力からだけ扱う
 
 ## 実装前後の確認
 
@@ -45,6 +48,7 @@ escalation: TechLead (品質問題)、CISO (重大セキュリティ問題)
 
 - configured local checks が完了する
 - pass / fail と出力要約が report / review artifact に残る
+- security summary / coverage gate / review-comment artifact が contract に応じて残る
 - token がある場合は reviewing への state sync を試みる
 - gate failure 時は score / threshold / escalation / artifact path が明示される
 - 未実行の check や未接続 capability を成功扱いで書かない
