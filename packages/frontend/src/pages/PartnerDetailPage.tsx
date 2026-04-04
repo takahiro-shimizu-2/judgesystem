@@ -16,6 +16,8 @@ import {
   AccordionSummary,
   AccordionDetails,
   IconButton,
+  Snackbar,
+  Alert,
 } from '@mui/material';
 import {
   Phone as PhoneIcon,
@@ -924,6 +926,14 @@ export default function PartnerDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // 削除処理の状態管理
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [snackbar, setSnackbar] = useState<{
+    open: boolean;
+    message: string;
+    severity: 'success' | 'error';
+  }>({ open: false, message: '', severity: 'error' });
+
   // 詳細ページのパスを保存（一覧に戻った時のページ復元用）
   useEffect(() => {
     try {
@@ -1175,10 +1185,24 @@ export default function PartnerDetailPage() {
               </IconButton>
               <IconButton
                 size="small"
+                disabled={isDeleting}
                 onClick={async () => {
                   if (!window.confirm(`「${safePartner.name}」を削除しますか？`)) return;
-                  const success = await deletePartnerRecord(safePartner.id);
-                  if (success) { navigate('/partners'); } else { alert('削除に失敗しました。'); }
+                  setIsDeleting(true);
+                  try {
+                    const success = await deletePartnerRecord(safePartner.id);
+                    if (success) {
+                      navigate('/partners');
+                    } else {
+                      console.error('Failed to delete partner:', safePartner.id);
+                      setSnackbar({ open: true, message: '削除に失敗しました。時間をおいて再度お試しください。', severity: 'error' });
+                    }
+                  } catch (err) {
+                    console.error('Failed to delete partner:', err);
+                    setSnackbar({ open: true, message: '削除に失敗しました。時間をおいて再度お試しください。', severity: 'error' });
+                  } finally {
+                    setIsDeleting(false);
+                  }
                 }}
                 sx={{ color: colors.text.light, '&:hover': { color: colors.accent.red, backgroundColor: `${colors.accent.red}15` } }}
               >
@@ -1567,6 +1591,22 @@ export default function PartnerDetailPage() {
       </Box>
       <FloatingBackButton onClick={() => navigate('/partners')} />
       <ScrollToTopButton />
+
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={6000}
+        onClose={() => setSnackbar((prev) => ({ ...prev, open: false }))}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert
+          onClose={() => setSnackbar((prev) => ({ ...prev, open: false }))}
+          severity={snackbar.severity}
+          variant="filled"
+          sx={{ width: '100%' }}
+        >
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
     </Box>
   );
 }
