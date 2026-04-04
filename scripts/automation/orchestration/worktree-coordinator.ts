@@ -50,23 +50,30 @@ export class WorktreeCoordinator {
     }
 
     const baseRef = this.resolveBaseRef();
+    const planned = new Map<string, WorktreeAssignment>();
+    const assignments = tasks.map<WorktreeAssignment>((task) => {
+      const sharedAssignment = this.findSharedPipelineAssignment(task, planned);
+      const branchName = sharedAssignment?.branchName || `agent/issue-${issueNumber}/${task.id}-${slugify(task.title)}`;
+      const worktreePath = sharedAssignment?.worktreePath || path.join(issueRoot, task.id);
 
-    return tasks.map<WorktreeAssignment>((task) => {
-      const worktreePath = path.join(issueRoot, task.id);
       if (this.createDirectories && !this.useWorktree) {
         ensureDirectory(worktreePath);
       }
 
-      return {
+      const assignment: WorktreeAssignment = {
         taskId: task.id,
         issueNumber,
-        branchName: `agent/issue-${issueNumber}/${task.id}-${slugify(task.title)}`,
+        branchName,
         worktreePath,
         mode: this.useWorktree ? 'git-worktree' : 'reuse-current-tree',
         baseRef,
         lifecycle: 'planned',
       };
+      planned.set(task.id, assignment);
+      return assignment;
     });
+
+    return assignments;
   }
 
   materializeAssignments(assignments: WorktreeAssignment[]): WorktreeAssignment[] {
@@ -88,12 +95,20 @@ export class WorktreeCoordinator {
       return assignments;
     }
 
+    const removedPaths = new Set<string>();
     return assignments.map<WorktreeAssignment>((assignment) => {
       if (assignment.mode !== 'git-worktree') {
         return assignment;
       }
 
       const absolutePath = path.resolve(assignment.worktreePath);
+      if (removedPaths.has(absolutePath)) {
+        return {
+          ...assignment,
+          lifecycle: 'cleaned',
+        };
+      }
+
       if (!fs.existsSync(absolutePath)) {
         return assignment;
       }
@@ -102,6 +117,7 @@ export class WorktreeCoordinator {
         cwd: this.rootDir,
         stdio: 'ignore',
       });
+      removedPaths.add(absolutePath);
 
       return {
         ...assignment,
@@ -167,6 +183,21 @@ export class WorktreeCoordinator {
   private resolveBaseRef() {
     const branch = this.runGit(['branch', '--show-current']);
     return branch || 'HEAD';
+  }
+
+  private findSharedPipelineAssignment(task: DecomposedTask, assignments: Map<string, WorktreeAssignment>) {
+    if (!['TestAgent', 'ReviewAgent', 'PRAgent'].includes(task.agent)) {
+      return undefined;
+    }
+
+    for (const dependencyId of task.dependencies) {
+      const dependencyAssignment = assignments.get(dependencyId);
+      if (dependencyAssignment) {
+        return dependencyAssignment;
+      }
+    }
+
+    return undefined;
   }
 
   private localBranchExists(branchName: string) {

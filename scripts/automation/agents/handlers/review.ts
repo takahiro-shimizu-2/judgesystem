@@ -53,18 +53,30 @@ interface ReviewEscalation {
   reason?: string;
 }
 
-interface ReviewCoverageSummary {
-  required: boolean;
-  threshold?: number;
-  actual?: number;
-  sourceLabel?: string;
-  passed?: boolean;
-  note: string;
-}
-
 interface ReviewSecuritySummary {
   totalChecks: number;
   passedChecks: string[];
+  failedChecks: string[];
+  note: string;
+}
+
+interface ReviewLoopAttempt {
+  iteration: number;
+  passed: boolean;
+  score: number;
+  failedChecks: string[];
+  appliedFixCommand: boolean;
+  note: string;
+}
+
+interface ReviewTestHandoffSummary {
+  required: boolean;
+  found: boolean;
+  artifactPath?: string;
+  taskId?: string;
+  taskTitle?: string;
+  passed?: boolean;
+  coverage?: number;
   failedChecks: string[];
   note: string;
 }
@@ -80,10 +92,31 @@ interface ReviewArtifactPayload {
   reviewCwd: string;
   worktreePath?: string;
   escalation: ReviewEscalation;
-  coverage?: ReviewCoverageSummary;
+  testHandoff: ReviewTestHandoffSummary;
   security: ReviewSecuritySummary;
   checks: ReviewCheckResult[];
+  loop: {
+    maxIterations: number;
+    fixCommandConfigured: boolean;
+    attempts: ReviewLoopAttempt[];
+  };
   generatedAt: string;
+}
+
+interface TestArtifactPayload {
+  taskId: string;
+  taskTitle: string;
+  coverage?: {
+    actual?: number;
+    passed?: boolean;
+  };
+  checks?: Array<{
+    label: string;
+    passed: boolean;
+  }>;
+  summary?: {
+    requiredFailures?: number;
+  };
 }
 
 const DEFAULT_REVIEW_CHECKS: ResolvedReviewCheck[] = [
@@ -91,15 +124,7 @@ const DEFAULT_REVIEW_CHECKS: ResolvedReviewCheck[] = [
     label: 'typecheck',
     command: 'npm',
     args: ['run', 'typecheck'],
-    weight: 60,
-    required: true,
-    severity: 'quality',
-  },
-  {
-    label: 'tests',
-    command: 'npm',
-    args: ['test'],
-    weight: 40,
+    weight: 100,
     required: true,
     severity: 'quality',
   },
@@ -107,32 +132,82 @@ const DEFAULT_REVIEW_CHECKS: ResolvedReviewCheck[] = [
 
 const DEFAULT_REVIEW_MIN_SCORE = 100;
 const DEFAULT_REVIEW_MAX_RETRIES = 0;
+const DEFAULT_REVIEW_LOOP_MAX_ITERATIONS = 1;
 
 export function createReviewAgentHandler(options: ReviewAgentHandlerFactoryOptions): AgentHandlerBinding {
   return {
-    id: 'review-local-checks',
+    id: 'review-quality-loop',
     mode: 'connected',
     description:
-      'Runs repo-local validation commands, records score/retry/escalation artifacts, and optionally syncs the issue into reviewing.',
+      'Runs repo-local review commands, consumes TestAgent artifacts as an explicit handoff, and can iterate with an optional fix command before escalating.',
     execute: async ({ task, definition, context }) => {
       const rootDir = context.rootDir || options.rootDir;
-      const reviewCwd = resolveReviewWorkingDirectory(rootDir, context.env);
+      const reviewCwd = resolveReviewWorkingDirectory(rootDir, context.env, context.worktree?.worktreePath);
       const checks = resolveReviewChecks(context.env);
       const maxRetries = resolveReviewMaxRetries(context.env);
       const minScore = resolveReviewMinScore(context.env);
-      const results = checks.map((check) =>
-        runReviewCheckWithRetries({
-          check,
-          cwd: reviewCwd,
-          env: context.env,
-          maxRetries,
-          logRetry: (message) => context.logger.warn(message),
-        }),
-      );
-      const score = calculateQualityScore(results);
-      const coverage = resolveCoverageSummary(results, context.env);
-      const security = summarizeSecurityResults(results);
-      const escalation = determineEscalation(results, score, minScore, coverage);
+      const maxIterations = resolveReviewLoopMaxIterations(context.env);
+      const fixCommand = resolveReviewFixCommand(context.env);
+      const testHandoff = resolveTestHandoff({
+        rootDir,
+        sessionId: context.sessionId,
+        dependencyIds: task.dependencies,
+        env: context.env,
+      });
+
+      let results: ReviewCheckResult[] = [];
+      let score = 0;
+      let security = summarizeSecurityResults(results);
+      let escalation: ReviewEscalation = { required: false };
+      const attempts: ReviewLoopAttempt[] = [];
+      const loopLimit = Math.max(1, maxIterations);
+
+      for (let iteration = 1; iteration <= loopLimit; iteration += 1) {
+        results = checks.map((check) =>
+          runReviewCheckWithRetries({
+            check,
+            cwd: reviewCwd,
+            env: context.env,
+            maxRetries,
+            logRetry: (message) => context.logger.warn(message),
+          }),
+        );
+        score = calculateQualityScore(results);
+        security = summarizeSecurityResults(results);
+        escalation = determineEscalation({
+          results,
+          score,
+          minScore,
+          testHandoff,
+        });
+
+        const failedChecks = results.filter((result) => !result.passed).map((result) => result.label);
+        const passed = reviewGatePassed(results, score, minScore, testHandoff);
+        const canRetry = !passed && iteration < loopLimit && Boolean(fixCommand);
+        attempts.push({
+          iteration,
+          passed,
+          score,
+          failedChecks,
+          appliedFixCommand: false,
+          note: passed
+            ? `Review gate passed on iteration ${iteration}.`
+            : `Review gate failed on iteration ${iteration} with ${failedChecks.length} failed review checks.`,
+        });
+
+        if (passed) {
+          break;
+        }
+
+        if (!canRetry || !fixCommand) {
+          break;
+        }
+
+        const fixSummary = applyReviewFixCommand(fixCommand, reviewCwd, context.env);
+        attempts[attempts.length - 1].appliedFixCommand = true;
+        attempts[attempts.length - 1].note = `${attempts[attempts.length - 1].note} Applied fix command: ${fixSummary}`;
+      }
+
       const artifact = writeReviewArtifacts({
         rootDir,
         reviewCwd,
@@ -146,8 +221,13 @@ export function createReviewAgentHandler(options: ReviewAgentHandlerFactoryOptio
         maxRetries,
         results,
         escalation,
-        coverage,
         security,
+        testHandoff,
+        loop: {
+          maxIterations: loopLimit,
+          fixCommandConfigured: Boolean(fixCommand),
+          attempts,
+        },
       });
 
       const syncNote = await syncIssueState({
@@ -159,18 +239,18 @@ export function createReviewAgentHandler(options: ReviewAgentHandlerFactoryOptio
 
       const failedChecks = results.filter((result) => !result.passed);
       const requiredFailures = failedChecks.filter((result) => result.required);
-      const coverageGateFailed = coverage?.required && coverage.passed !== true;
+
       const notes = [
-        `${definition.name} ran ${results.length} configured checks in ${describeReviewCwd(
+        `${definition.name} ran ${results.length} configured review checks in ${describeReviewCwd(
           rootDir,
           reviewCwd,
           context.env,
         )}.`,
         context.worktree?.worktreePath
-          ? `Task staging area remains ${relativeOrSelf(rootDir, context.worktree.worktreePath)}.`
+          ? `Pipeline worktree: ${relativeOrSelf(rootDir, context.worktree.worktreePath)}.`
           : '',
-        `Quality score: ${score}/100 (threshold: ${minScore}, retries: ${maxRetries}).`,
-        coverage?.note,
+        `Quality score: ${score}/100 (threshold: ${minScore}, retries: ${maxRetries}, review iterations: ${attempts.length}/${loopLimit}).`,
+        testHandoff.note,
         security.note,
         `Review artifacts were written to ${relativeOrSelf(rootDir, artifact.markdownPath)}, ${relativeOrSelf(
           rootDir,
@@ -183,11 +263,11 @@ export function createReviewAgentHandler(options: ReviewAgentHandlerFactoryOptio
         syncNote,
       ].filter(Boolean);
 
-      if (requiredFailures.length > 0 || score < minScore || coverageGateFailed) {
+      if (requiredFailures.length > 0 || score < minScore || testHandoff.passed === false) {
         throw new Error(
           [
             `Review gate failed with score ${score}/100 (threshold: ${minScore}).`,
-            coverageGateFailed ? coverage?.note : '',
+            testHandoff.note,
             ...failedChecks.map((result) => formatCheckSummary(result)),
             escalation.required && escalation.target && escalation.reason
               ? `Escalation: ${escalation.target} (${escalation.reason}).`
@@ -208,8 +288,13 @@ export function createReviewAgentHandler(options: ReviewAgentHandlerFactoryOptio
           maxRetries,
           checks: results,
           escalation,
-          coverage,
           security,
+          testHandoff,
+          loop: {
+            maxIterations: loopLimit,
+            attempts,
+            fixCommandConfigured: Boolean(fixCommand),
+          },
           artifact,
         },
       };
@@ -246,13 +331,17 @@ function resolveReviewChecks(env: NodeJS.ProcessEnv): ResolvedReviewCheck[] {
   });
 }
 
-function resolveReviewWorkingDirectory(rootDir: string, env: NodeJS.ProcessEnv) {
+function resolveReviewWorkingDirectory(rootDir: string, env: NodeJS.ProcessEnv, worktreePath?: string) {
   const configured = env.AUTOMATION_REVIEW_CWD;
-  if (!configured) {
-    return rootDir;
+  if (configured) {
+    return path.isAbsolute(configured) ? configured : path.resolve(rootDir, configured);
   }
 
-  return path.isAbsolute(configured) ? configured : path.resolve(rootDir, configured);
+  if (worktreePath) {
+    return worktreePath;
+  }
+
+  return rootDir;
 }
 
 function resolveReviewMinScore(env: NodeJS.ProcessEnv) {
@@ -271,6 +360,20 @@ function resolveReviewMaxRetries(env: NodeJS.ProcessEnv) {
   }
 
   return Math.max(0, Math.min(5, parsed));
+}
+
+function resolveReviewLoopMaxIterations(env: NodeJS.ProcessEnv) {
+  const parsed = Number.parseInt(env.AUTOMATION_REVIEW_LOOP_MAX_ITERATIONS || '', 10);
+  if (Number.isNaN(parsed)) {
+    return DEFAULT_REVIEW_LOOP_MAX_ITERATIONS;
+  }
+
+  return Math.max(1, Math.min(10, parsed));
+}
+
+function resolveReviewFixCommand(env: NodeJS.ProcessEnv) {
+  const value = (env.AUTOMATION_REVIEW_FIX_COMMAND || '').trim();
+  return value.length > 0 ? value : undefined;
 }
 
 function runReviewCheckWithRetries(params: {
@@ -355,13 +458,13 @@ function calculateQualityScore(results: ReviewCheckResult[]) {
   return Math.round((passedWeight / totalWeight) * 100);
 }
 
-function determineEscalation(
-  results: ReviewCheckResult[],
-  score: number,
-  minScore: number,
-  coverage?: ReviewCoverageSummary,
-): ReviewEscalation {
-  const securityFailures = results.filter((result) => !result.passed && result.severity === 'security');
+function determineEscalation(params: {
+  results: ReviewCheckResult[];
+  score: number;
+  minScore: number;
+  testHandoff: ReviewTestHandoffSummary;
+}): ReviewEscalation {
+  const securityFailures = params.results.filter((result) => !result.passed && result.severity === 'security');
   if (securityFailures.length > 0) {
     return {
       required: true,
@@ -370,7 +473,7 @@ function determineEscalation(
     };
   }
 
-  const requiredFailures = results.filter((result) => !result.passed && result.required);
+  const requiredFailures = params.results.filter((result) => !result.passed && result.required);
   if (requiredFailures.length > 0) {
     return {
       required: true,
@@ -379,23 +482,147 @@ function determineEscalation(
     };
   }
 
-  if (coverage?.required && coverage.passed === false) {
+  if (params.testHandoff.passed === false) {
     return {
       required: true,
       target: 'TechLead',
-      reason: coverage.note,
+      reason: params.testHandoff.note,
     };
   }
 
-  if (score < minScore) {
+  if (params.score < params.minScore) {
     return {
       required: true,
       target: 'TechLead',
-      reason: `Quality score ${score}/100 is below the configured threshold ${minScore}/100.`,
+      reason: `Quality score ${params.score}/100 is below the configured threshold ${params.minScore}/100.`,
     };
   }
 
   return { required: false };
+}
+
+function resolveTestHandoff(params: {
+  rootDir: string;
+  sessionId: string;
+  dependencyIds: string[];
+  env: NodeJS.ProcessEnv;
+}): ReviewTestHandoffSummary {
+  const required = resolveRequireTestHandoff(params.dependencyIds, params.env);
+  const reportsDir = path.join(params.rootDir, '.ai', 'parallel-reports');
+
+  if (!fs.existsSync(reportsDir)) {
+    return {
+      required,
+      found: false,
+      passed: required ? false : undefined,
+      failedChecks: [],
+      note: required
+        ? 'Review gate expected a prior TestAgent artifact, but .ai/parallel-reports does not exist yet.'
+        : 'No TestAgent artifact was found for this review task.',
+    };
+  }
+
+  const candidates = fs
+    .readdirSync(reportsDir)
+    .filter((entry) => entry.startsWith(`test-summary-${params.sessionId}-`) && entry.endsWith('.json'))
+    .map((entry) => path.join(reportsDir, entry))
+    .sort((left, right) => fs.statSync(right).mtimeMs - fs.statSync(left).mtimeMs);
+
+  const artifactPath = candidates[0];
+  if (!artifactPath) {
+    return {
+      required,
+      found: false,
+      passed: required ? false : undefined,
+      failedChecks: [],
+      note: required
+        ? 'Review gate expected a prior TestAgent artifact, but none was found for this session.'
+        : 'No TestAgent artifact was found for this review task.',
+    };
+  }
+
+  const payload = JSON.parse(fs.readFileSync(artifactPath, 'utf8')) as TestArtifactPayload;
+  const failedChecks = (payload.checks || []).filter((check) => check.passed === false).map((check) => check.label);
+  const coveragePassed = payload.coverage?.passed;
+  const requiredFailures = payload.summary?.requiredFailures ?? 0;
+  const passed = required ? requiredFailures === 0 && coveragePassed !== false : undefined;
+
+  return {
+    required,
+    found: true,
+    artifactPath,
+    taskId: payload.taskId,
+    taskTitle: payload.taskTitle,
+    passed,
+    coverage: payload.coverage?.actual,
+    failedChecks,
+    note:
+      passed === false
+        ? `TestAgent handoff failed in ${path.basename(artifactPath)}: ${
+            failedChecks.length > 0 ? failedChecks.join(', ') : 'coverage gate'
+          }.`
+        : `Consumed TestAgent artifact ${path.basename(artifactPath)}${
+            payload.coverage?.actual !== undefined ? ` (coverage ${payload.coverage.actual}%)` : ''
+          }.`,
+  };
+}
+
+function resolveRequireTestHandoff(dependencyIds: string[], env: NodeJS.ProcessEnv) {
+  const configured = (env.AUTOMATION_REVIEW_REQUIRE_TEST_ARTIFACT || '').trim().toLowerCase();
+  if (['true', '1', 'yes', 'required', 'always'].includes(configured)) {
+    return true;
+  }
+
+  if (['false', '0', 'no', 'never'].includes(configured)) {
+    return false;
+  }
+
+  return dependencyIds.some((dependencyId) => dependencyId.endsWith('-test') || dependencyId.includes('quality-test'));
+}
+
+function reviewGatePassed(
+  results: ReviewCheckResult[],
+  score: number,
+  minScore: number,
+  testHandoff: ReviewTestHandoffSummary,
+) {
+  const requiredFailures = results.filter((result) => !result.passed && result.required);
+  if (requiredFailures.length > 0) {
+    return false;
+  }
+
+  if (score < minScore) {
+    return false;
+  }
+
+  if (testHandoff.passed === false) {
+    return false;
+  }
+
+  return true;
+}
+
+function applyReviewFixCommand(command: string, cwd: string, env: NodeJS.ProcessEnv) {
+  const result = spawnSync('bash', ['-lc', command], {
+    cwd,
+    env,
+    encoding: 'utf8',
+    timeout: 5 * 60 * 1000,
+  });
+  const summary = truncateText(
+    [result.stdout, result.stderr]
+      .filter(Boolean)
+      .join('\n')
+      .trim()
+      .replace(/\s+/g, ' '),
+    240,
+  );
+
+  if (result.status !== 0) {
+    return `fix command exited with ${result.status}: ${summary || 'no output'}`;
+  }
+
+  return summary || 'fix command completed successfully';
 }
 
 function writeReviewArtifacts(params: {
@@ -411,8 +638,9 @@ function writeReviewArtifacts(params: {
   maxRetries: number;
   results: ReviewCheckResult[];
   escalation: ReviewEscalation;
-  coverage?: ReviewCoverageSummary;
   security: ReviewSecuritySummary;
+  testHandoff: ReviewTestHandoffSummary;
+  loop: ReviewArtifactPayload['loop'];
 }) {
   const reportsDir = ensureDirectory(path.join(params.rootDir, '.ai', 'parallel-reports'));
   const baseName = `review-summary-${params.sessionId}-${slugify(params.taskId)}`;
@@ -430,9 +658,10 @@ function writeReviewArtifacts(params: {
     reviewCwd: params.reviewCwd,
     worktreePath: params.worktreePath,
     escalation: params.escalation,
-    coverage: params.coverage,
+    testHandoff: params.testHandoff,
     security: params.security,
     checks: params.results,
+    loop: params.loop,
     generatedAt: new Date().toISOString(),
   };
 
@@ -461,22 +690,33 @@ function buildReviewMarkdown(payload: ReviewArtifactPayload) {
 - Threshold: ${payload.minScore}/100
 - Max retries: ${payload.maxRetries}
 - Review cwd: ${payload.reviewCwd}
-${payload.worktreePath ? `- Staging area: ${payload.worktreePath}` : ''}
+${payload.worktreePath ? `- Pipeline worktree: ${payload.worktreePath}` : ''}
+
+## Test Handoff
+- Required: ${payload.testHandoff.required ? 'yes' : 'no'}
+- Found: ${payload.testHandoff.found ? 'yes' : 'no'}
+${payload.testHandoff.artifactPath ? `- Artifact: ${payload.testHandoff.artifactPath}` : ''}
+${payload.testHandoff.taskId ? `- Source task: ${payload.testHandoff.taskId}` : ''}
+${payload.testHandoff.coverage !== undefined ? `- Coverage: ${payload.testHandoff.coverage}%` : ''}
+- Passed: ${payload.testHandoff.passed === undefined ? 'n/a' : payload.testHandoff.passed ? 'yes' : 'no'}
+- Note: ${payload.testHandoff.note}
+
+## Review Loop
+- Max iterations: ${payload.loop.maxIterations}
+- Fix command configured: ${payload.loop.fixCommandConfigured ? 'yes' : 'no'}
+${payload.loop.attempts
+  .map(
+    (attempt) =>
+      `- Iteration ${attempt.iteration}: ${attempt.passed ? 'passed' : 'failed'} (score ${attempt.score}/100, fix command ${
+        attempt.appliedFixCommand ? 'applied' : 'not applied'
+      }) — ${attempt.note}`,
+  )
+  .join('\n')}
 
 ## Escalation
 - Required: ${payload.escalation.required ? 'yes' : 'no'}
 ${payload.escalation.target ? `- Target: ${payload.escalation.target}` : ''}
 ${payload.escalation.reason ? `- Reason: ${payload.escalation.reason}` : ''}
-
-## Coverage
-${payload.coverage ? `- Required: ${payload.coverage.required ? 'yes' : 'no'}
-- Threshold: ${payload.coverage.threshold ?? 'n/a'}
-- Actual: ${payload.coverage.actual ?? 'n/a'}
-- Source: ${payload.coverage.sourceLabel || 'n/a'}
-- Passed: ${
-  payload.coverage.passed === undefined ? 'n/a' : payload.coverage.passed ? 'yes' : 'no'
-}
-- Note: ${payload.coverage.note}` : '- Coverage contract not configured.'}
 
 ## Security
 - Total security checks: ${payload.security.totalChecks}
@@ -503,13 +743,18 @@ function buildReviewCommentMarkdown(payload: ReviewArtifactPayload) {
   const failedChecks = payload.checks.filter((result) => !result.passed);
   return `## Review Gate
 - Score: ${payload.score}/100 (threshold: ${payload.minScore}/100)
-${payload.coverage ? `- Coverage: ${payload.coverage.actual ?? 'n/a'}${payload.coverage.actual !== undefined ? '%' : ''} (threshold: ${
-    payload.coverage.threshold ?? 'n/a'
-  }${payload.coverage.threshold !== undefined ? '%' : ''})` : ''}
+- Test handoff: ${
+    payload.testHandoff.passed === undefined ? 'not required' : payload.testHandoff.passed ? 'passed' : 'failed'
+  }
 - Security checks: ${payload.security.failedChecks.length > 0 ? `${payload.security.failedChecks.length} failed` : 'all passed or not configured'}
 - Escalation: ${
     payload.escalation.required ? `${payload.escalation.target} (${payload.escalation.reason})` : 'none'
   }
+
+## Review Loop
+${payload.loop.attempts
+  .map((attempt) => `- Iteration ${attempt.iteration}: ${attempt.passed ? 'passed' : 'failed'} — ${attempt.note}`)
+  .join('\n')}
 
 ## Check Results
 ${payload.checks.map((result) => `- ${result.label}: ${result.passed ? 'passed' : 'failed'} — ${result.summary}`).join('\n')}
@@ -533,96 +778,6 @@ function summarizeSecurityResults(results: ReviewCheckResult[]): ReviewSecurityS
           ? `Security review checks failed: ${failedChecks.join(', ')}.`
           : `All configured security review checks passed: ${passedChecks.join(', ')}.`,
   };
-}
-
-function resolveCoverageSummary(results: ReviewCheckResult[], env: NodeJS.ProcessEnv): ReviewCoverageSummary | undefined {
-  const threshold = resolveCoverageThreshold(env);
-  const labels = resolveCoverageLabels(env);
-  const candidates = results.filter((result) => {
-    if (labels.length > 0) {
-      return labels.includes(result.label);
-    }
-
-    return result.label.toLowerCase().includes('coverage');
-  });
-
-  const match = candidates
-    .map((candidate) => ({ candidate, coverage: extractCoveragePercent(candidate.summary) }))
-    .find((entry) => entry.coverage !== undefined);
-
-  if (!match && threshold === undefined && candidates.length === 0) {
-    return undefined;
-  }
-
-  if (!match && threshold !== undefined) {
-    return {
-      required: true,
-      threshold,
-      passed: false,
-      note: `Coverage gate failed because no coverage percentage could be extracted from the configured review checks (threshold: ${threshold}%).`,
-    };
-  }
-
-  if (!match) {
-    return {
-      required: false,
-      note: 'Coverage-related checks were configured, but no coverage percentage could be extracted from their output.',
-    };
-  }
-
-  if (match.coverage === undefined) {
-    return {
-      required: threshold !== undefined,
-      threshold,
-      passed: threshold === undefined ? undefined : false,
-      sourceLabel: match.candidate.label,
-      note:
-        threshold === undefined
-          ? `Coverage-related check ${match.candidate.label} ran, but no coverage percentage could be extracted from its output.`
-          : `Coverage gate failed because ${match.candidate.label} did not produce a parseable coverage percentage (threshold: ${threshold}%).`,
-    };
-  }
-
-  const actualCoverage = match.coverage;
-  const passed = threshold === undefined ? undefined : actualCoverage >= threshold;
-  return {
-    required: threshold !== undefined,
-    threshold,
-    actual: actualCoverage,
-    sourceLabel: match.candidate.label,
-    passed,
-    note:
-      threshold === undefined
-        ? `Observed coverage ${actualCoverage}% from ${match.candidate.label}.`
-        : passed
-          ? `Coverage gate passed: ${actualCoverage}% from ${match.candidate.label} (threshold: ${threshold}%).`
-          : `Coverage gate failed: ${actualCoverage}% from ${match.candidate.label} (threshold: ${threshold}%).`,
-  };
-}
-
-function extractCoveragePercent(summary: string) {
-  const matches = [...summary.matchAll(/(\d+(?:\.\d+)?)\s*%/g)];
-  if (matches.length === 0) {
-    return undefined;
-  }
-
-  return Number.parseFloat(matches[matches.length - 1][1]);
-}
-
-function resolveCoverageThreshold(env: NodeJS.ProcessEnv) {
-  const parsed = Number.parseFloat(env.AUTOMATION_REVIEW_COVERAGE_THRESHOLD || '');
-  if (Number.isNaN(parsed)) {
-    return undefined;
-  }
-
-  return Math.max(0, Math.min(100, parsed));
-}
-
-function resolveCoverageLabels(env: NodeJS.ProcessEnv) {
-  return (env.AUTOMATION_REVIEW_COVERAGE_LABELS || '')
-    .split(/[\s,]+/)
-    .map((value) => value.trim())
-    .filter(Boolean);
 }
 
 async function syncIssueState(params: {
@@ -673,11 +828,11 @@ function relativeOrSelf(rootDir: string, targetPath: string) {
 }
 
 function describeReviewCwd(rootDir: string, reviewCwd: string, env: NodeJS.ProcessEnv) {
-  if (!env.AUTOMATION_REVIEW_CWD) {
-    return 'repo root';
+  if (env.AUTOMATION_REVIEW_CWD) {
+    return path.resolve(rootDir) === path.resolve(reviewCwd) ? '.' : relativeOrSelf(rootDir, reviewCwd);
   }
 
-  return path.resolve(rootDir) === path.resolve(reviewCwd) ? '.' : relativeOrSelf(rootDir, reviewCwd);
+  return path.resolve(rootDir) === path.resolve(reviewCwd) ? 'repo root' : relativeOrSelf(rootDir, reviewCwd);
 }
 
 function resolveGitHubToken(env: NodeJS.ProcessEnv) {

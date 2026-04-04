@@ -41,7 +41,8 @@ export function createPrAgentHandler(options: PrAgentHandlerFactoryOptions): Age
       'Prepares a local draft PR artifact and can open or update a remote draft PR with optional reviewer, label, and mergeability contracts.',
     execute: async ({ task, definition, context }) => {
       const rootDir = context.rootDir || options.rootDir;
-      const branch = runGit(['branch', '--show-current'], rootDir) || 'detached-head';
+      const branchCwd = context.worktree?.worktreePath || rootDir;
+      const branch = runGit(['branch', '--show-current'], branchCwd) || 'detached-head';
       const reportsDir = ensureDirectory(path.join(rootDir, '.ai', 'parallel-reports'));
       const fileName = `pr-draft-${context.sessionId}-${slugify(task.id)}.md`;
       const artifactPath = path.join(reportsDir, fileName);
@@ -57,6 +58,7 @@ export function createPrAgentHandler(options: PrAgentHandlerFactoryOptions): Age
         title,
         branch,
         baseBranch,
+        branchCwd,
         issueNumber: context.issueNumber,
         taskId: task.id,
         taskTitle: task.title,
@@ -78,6 +80,7 @@ export function createPrAgentHandler(options: PrAgentHandlerFactoryOptions): Age
           headBranch: branch,
           title,
           body,
+          branchCwd,
           requestedReviewers,
           requestedLabels,
           requireMergeable,
@@ -100,6 +103,7 @@ export function createPrAgentHandler(options: PrAgentHandlerFactoryOptions): Age
         output: {
           artifactPath,
           branch,
+          branchCwd,
           baseBranch,
           title,
           prNumber: remotePrResult.prNumber,
@@ -117,6 +121,7 @@ function buildDraftPrBody(params: {
   title: string;
   branch: string;
   baseBranch: string;
+  branchCwd: string;
   issueNumber: number;
   taskId: string;
   taskTitle: string;
@@ -132,6 +137,9 @@ ${params.title}
 
 ## Branch
 ${params.branch}
+
+## Branch Working Tree
+${params.branchCwd}
 
 ## Base Branch
 ${params.baseBranch}
@@ -159,6 +167,7 @@ async function maybeCreateRemotePr(params: {
   repository: { owner: string; repo: string };
   baseBranch: string;
   headBranch: string;
+  branchCwd: string;
   title: string;
   body: string;
   requestedReviewers: string[];
@@ -223,7 +232,7 @@ async function maybeCreateRemotePr(params: {
     };
   }
 
-  if (!branchExistsOnOrigin(params.headBranch, params.rootDir)) {
+  if (!branchExistsOnOrigin(params.headBranch, params.branchCwd)) {
     return {
       note: `Remote PR creation was skipped because origin/${params.headBranch} does not exist yet. Push the branch first or let another handler publish it.`,
       prNumber: undefined,

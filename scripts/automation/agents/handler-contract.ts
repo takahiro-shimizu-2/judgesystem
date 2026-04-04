@@ -6,6 +6,7 @@ export const AUTOMATION_AGENT_NAMES = [
   'CoordinatorAgent',
   'IssueAgent',
   'CodeGenAgent',
+  'TestAgent',
   'ReviewAgent',
   'PRAgent',
   'DeploymentAgent',

@@ -7,6 +7,7 @@ import { AutomationLogger } from '../core/logger.js';
 import { createDeploymentAgentHandler } from '../agents/handlers/deployment.js';
 import { createPrAgentHandler } from '../agents/handlers/pr.js';
 import { createReviewAgentHandler } from '../agents/handlers/review.js';
+import { createTestAgentHandler } from '../agents/handlers/test.js';
 
 type SmokeStatus = 'passed' | 'failed';
 
@@ -29,6 +30,7 @@ async function main() {
   const reports: SmokeReport[] = [];
 
   try {
+    reports.push(await runTestSmoke());
     reports.push(await runReviewSmoke());
     reports.push(await runPrSmoke());
     reports.push(await runDeploymentSmoke());
@@ -95,18 +97,68 @@ function assert(condition: unknown, message: string): asserts condition {
 
 async function runReviewSmoke(): Promise<SmokeReport> {
   const repo = createRepo('judgesystem-review-smoke');
+  const testHandler = createTestAgentHandler({ rootDir: repo.rootDir, env: {} });
   const handler = createReviewAgentHandler({ rootDir: repo.rootDir, env: {} });
+
+  await testHandler.execute({
+    task: {
+      id: 'quality-smoke-test',
+      issueNumber: 101,
+      title: 'Test smoke',
+      type: 'test',
+      agent: 'TestAgent',
+      estimatedMinutes: 10,
+      priority: 'medium',
+      dependencies: [],
+      rawText: 'Test smoke',
+      source: 'fallback',
+    },
+    definition: {
+      name: 'TestAgent',
+      slug: 'test-agent',
+      description: 'test',
+      summary: 'test',
+      instructions: 'test',
+      sourcePath: '.claude/agents/test-agent.md',
+    },
+    context: {
+      sessionId: 'quality-smoke-session',
+      issueNumber: 101,
+      rootDir: repo.rootDir,
+      dryRun: false,
+      logger,
+      env: {
+        AUTOMATION_TEST_COVERAGE_THRESHOLD: '85',
+        AUTOMATION_TEST_COVERAGE_LABELS: 'coverage',
+        AUTOMATION_TEST_CHECKS_JSON: JSON.stringify([
+          {
+            label: 'tests',
+            command: 'bash',
+            args: ['-lc', 'echo tests ok'],
+            required: true,
+          },
+          {
+            label: 'coverage',
+            command: 'bash',
+            args: ['-lc', 'echo total coverage 92%'],
+            required: true,
+            severity: 'coverage',
+          },
+        ]),
+      },
+    },
+  });
 
   const result = await handler.execute({
     task: {
-      id: 'review-smoke',
+      id: 'quality-smoke-review',
       issueNumber: 101,
       title: 'Review smoke',
       type: 'review',
       agent: 'ReviewAgent',
       estimatedMinutes: 10,
       priority: 'medium',
-      dependencies: [],
+      dependencies: ['quality-smoke-test'],
       rawText: 'Review smoke',
       source: 'fallback',
     },
@@ -119,7 +171,7 @@ async function runReviewSmoke(): Promise<SmokeReport> {
       sourcePath: '.claude/agents/review-agent.md',
     },
     context: {
-      sessionId: 'review-smoke-session',
+      sessionId: 'quality-smoke-session',
       issueNumber: 101,
       rootDir: repo.rootDir,
       dryRun: false,
@@ -127,21 +179,14 @@ async function runReviewSmoke(): Promise<SmokeReport> {
       env: {
         AUTOMATION_REVIEW_MIN_SCORE: '90',
         AUTOMATION_REVIEW_MAX_RETRIES: '0',
-        AUTOMATION_REVIEW_COVERAGE_THRESHOLD: '85',
-        AUTOMATION_REVIEW_COVERAGE_LABELS: 'coverage',
+        AUTOMATION_REVIEW_LOOP_MAX_ITERATIONS: '2',
+        AUTOMATION_REVIEW_FIX_COMMAND: 'touch review-pass',
         AUTOMATION_REVIEW_CHECKS_JSON: JSON.stringify([
           {
             label: 'typecheck',
             command: 'bash',
-            args: ['-lc', 'echo typecheck ok'],
-            weight: 40,
-            required: true,
-          },
-          {
-            label: 'coverage',
-            command: 'bash',
-            args: ['-lc', 'echo total coverage 92%'],
-            weight: 40,
+            args: ['-lc', 'if [ -f review-pass ]; then echo typecheck ok; else echo missing review-pass >&2; exit 1; fi'],
+            weight: 80,
             required: true,
           },
           {
@@ -159,16 +204,19 @@ async function runReviewSmoke(): Promise<SmokeReport> {
 
   const output = result.output as {
     score: number;
-    coverage?: { actual?: number; passed?: boolean };
+    testHandoff?: { coverage?: number; passed?: boolean };
     security: { totalChecks: number };
+    loop: { attempts: Array<{ iteration: number; appliedFixCommand: boolean }> };
     artifact: { markdownPath: string; jsonPath: string; commentPath: string };
   };
 
   assert(result.status === 'completed', 'Review smoke did not complete.');
   assert(output.score === 100, `Expected review score 100, got ${output.score}.`);
-  assert(output.coverage?.actual === 92, `Expected coverage 92, got ${output.coverage?.actual}.`);
-  assert(output.coverage?.passed === true, 'Expected coverage gate to pass.');
+  assert(output.testHandoff?.coverage === 92, `Expected test handoff coverage 92, got ${output.testHandoff?.coverage}.`);
+  assert(output.testHandoff?.passed === true, 'Expected test handoff to pass.');
   assert(output.security.totalChecks === 1, `Expected one security check, got ${output.security.totalChecks}.`);
+  assert(output.loop.attempts.length === 2, `Expected two review loop attempts, got ${output.loop.attempts.length}.`);
+  assert(output.loop.attempts[0]?.appliedFixCommand === true, 'Expected first review attempt to apply the fix command.');
   assert(existsSync(output.artifact.markdownPath), 'Review markdown artifact was not created.');
   assert(existsSync(output.artifact.jsonPath), 'Review JSON artifact was not created.');
   assert(existsSync(output.artifact.commentPath), 'Review comment artifact was not created.');
@@ -178,6 +226,85 @@ async function runReviewSmoke(): Promise<SmokeReport> {
     status: 'passed',
     notes: [
       `score=${output.score}`,
+      `test-handoff=${output.testHandoff?.coverage}%`,
+      `iterations=${output.loop.attempts.length}`,
+      `artifacts=${path.basename(output.artifact.markdownPath)}, ${path.basename(output.artifact.commentPath)}`,
+    ],
+  };
+}
+
+async function runTestSmoke(): Promise<SmokeReport> {
+  const repo = createRepo('judgesystem-test-smoke');
+  const handler = createTestAgentHandler({ rootDir: repo.rootDir, env: {} });
+
+  const result = await handler.execute({
+    task: {
+      id: 'test-smoke-test',
+      issueNumber: 111,
+      title: 'Test smoke',
+      type: 'test',
+      agent: 'TestAgent',
+      estimatedMinutes: 10,
+      priority: 'medium',
+      dependencies: [],
+      rawText: 'Test smoke',
+      source: 'fallback',
+    },
+    definition: {
+      name: 'TestAgent',
+      slug: 'test-agent',
+      description: 'test',
+      summary: 'test',
+      instructions: 'test',
+      sourcePath: '.claude/agents/test-agent.md',
+    },
+    context: {
+      sessionId: 'test-smoke-session',
+      issueNumber: 111,
+      rootDir: repo.rootDir,
+      dryRun: false,
+      logger,
+      env: {
+        AUTOMATION_TEST_COVERAGE_THRESHOLD: '85',
+        AUTOMATION_TEST_COVERAGE_LABELS: 'coverage',
+        AUTOMATION_TEST_CHECKS_JSON: JSON.stringify([
+          {
+            label: 'tests',
+            command: 'bash',
+            args: ['-lc', 'echo tests ok'],
+            required: true,
+          },
+          {
+            label: 'coverage',
+            command: 'bash',
+            args: ['-lc', 'echo total coverage 92%'],
+            required: true,
+            severity: 'coverage',
+          },
+        ]),
+      },
+    },
+  });
+
+  const output = result.output as {
+    coverage?: { actual?: number; passed?: boolean };
+    summary: { failed: number; requiredFailures: number };
+    artifact: { markdownPath: string; jsonPath: string; commentPath: string };
+  };
+
+  assert(result.status === 'completed', 'Test smoke did not complete.');
+  assert(output.coverage?.actual === 92, `Expected coverage 92, got ${output.coverage?.actual}.`);
+  assert(output.coverage?.passed === true, 'Expected coverage gate to pass.');
+  assert(output.summary.failed === 0, `Expected zero failed checks, got ${output.summary.failed}.`);
+  assert(output.summary.requiredFailures === 0, `Expected zero required failures, got ${output.summary.requiredFailures}.`);
+  assert(existsSync(output.artifact.markdownPath), 'Test markdown artifact was not created.');
+  assert(existsSync(output.artifact.jsonPath), 'Test JSON artifact was not created.');
+  assert(existsSync(output.artifact.commentPath), 'Test comment artifact was not created.');
+
+  return {
+    name: 'test-contract',
+    status: 'passed',
+    notes: [
       `coverage=${output.coverage?.actual}%`,
       `artifacts=${path.basename(output.artifact.markdownPath)}, ${path.basename(output.artifact.commentPath)}`,
     ],
