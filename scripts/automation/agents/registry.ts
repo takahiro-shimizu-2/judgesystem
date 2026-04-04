@@ -4,6 +4,7 @@ import {
   type AgentHandlerBinding,
   type RegisteredAutomationAgent,
 } from './handler-contract.js';
+import { buildDefaultAgentHandlers } from './handlers/index.js';
 import { loadClaudeAgentDefinitions } from './markdown-loader.js';
 
 export interface AgentRegistry {
@@ -15,17 +16,22 @@ export interface AgentRegistry {
 export interface AgentRegistryOptions {
   rootDir?: string;
   handlers?: Partial<Record<AutomationAgentName, AgentHandlerBinding>>;
+  useBuiltInHandlers?: boolean;
 }
 
 export function createAgentRegistry(options: AgentRegistryOptions = {}): AgentRegistry {
   const loadResult = loadClaudeAgentDefinitions(options.rootDir);
   const warnings = [...loadResult.warnings];
   const agents = new Map<AutomationAgentName, RegisteredAutomationAgent>();
+  const handlerBindings = {
+    ...(options.useBuiltInHandlers === false ? {} : buildDefaultAgentHandlers({ rootDir: options.rootDir })),
+    ...(options.handlers || {}),
+  };
 
   for (const definition of loadResult.agents) {
     agents.set(definition.name, {
       ...definition,
-      handler: options.handlers?.[definition.name],
+      handler: handlerBindings[definition.name],
     });
   }
 

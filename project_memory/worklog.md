@@ -21,3 +21,6 @@ Context-and-impact phase E appends audit entries here.
 - Added `scripts/automation/agents/markdown-loader.ts`, `scripts/automation/agents/registry.ts`, and `scripts/automation/agents/handler-contract.ts` to load `.claude/agents/*.md` as runtime metadata.
 - Connected the registry to `TaskManager` and `TaskExecutor`, so dry-run reports now say which Claude-side agent definition was matched and whether a runtime handler is still missing.
 - Fixed PR CI drift by gating `.github/workflows/deploy-pages.yml` behind an explicit `GITHUB_PAGES_ENABLED=true` repository variable so feature-branch pushes do not fail when Pages is not configured yet.
+- Clarified Phase 3 in `docs/agents-integration-plan.md` before further implementation: `IssueAgent` uses label/state sync, `ReviewAgent` runs local checks, `PRAgent` starts with local draft artifacts, `DeploymentAgent` stays opt-in, and `CodeGenAgent` remains fallback-only for now.
+- Added `scripts/automation/agents/capability-router.ts`, `scripts/automation/agents/fallback/generic-agent.ts`, and `scripts/automation/agents/handlers/*` so non-dry-run execution can route through explicit handlers or truthfully remain planning-only.
+- Wired `TaskExecutor` and `TaskManager` to pass runtime context (`rootDir`, `env`, `worktree`) into the registry-based handler flow instead of treating every non-custom run as planning-only.

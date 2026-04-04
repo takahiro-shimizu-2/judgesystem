@@ -96,6 +96,8 @@ export class TaskManager {
         warnings: plan.warnings,
         edges: plan.dag.edges.length,
         logger,
+        rootDir: this.rootDir,
+        env: process.env,
         worktrees,
         agentRegistry: this.agentRegistry,
       },

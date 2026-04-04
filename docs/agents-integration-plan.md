@@ -379,6 +379,31 @@ scripts/
 
 など、実際に repo / GitHub に副作用を起こす責務を持つ。
 
+ただし `judgesystem` では、いきなり full automation を有効にしない。
+Phase 3 の最初の実装スライスは、次の安全境界で入れる。
+
+- `issue.ts`
+  - 既存の `scripts/automation/state/label-state-machine.ts` を使い、
+    `agent:issue` 付与と `state:analyzing` 遷移だけを行う
+  - `GITHUB_TOKEN` が無い場合は skip する
+- `review.ts`
+  - まずは repo-local の `npm run typecheck` と `npm test` を実行し、
+    結果を review summary として返す
+  - token がある場合のみ `agent:review` と `state:reviewing` を同期する
+- `pr.ts`
+  - 最初は GitHub 上の PR を直接作らず、
+    `.ai/parallel-reports/` に draft PR 用 markdown artifact を生成する
+  - remote PR 作成は明示 opt-in gate を設けてから有効化する
+- `deployment.ts`
+  - デフォルトでは deploy しない
+  - 明示 env flag と command が与えられた場合のみ実行する
+- `CodeGenAgent`
+  - この Phase 3 では handler を持たせず、generic fallback で planning-only に残す
+
+つまり、
+Phase 3 は「危険な副作用を伴う full autonomy を解禁する段階」ではなく、
+既存の state/reporting/runtime substrate と安全に接続できる最小 handler を入れる段階である。
+
 #### `scripts/automation/orchestration/*`
 
 - decomposition
@@ -508,6 +533,15 @@ GitNexus は次で分ける。
 - deployment trigger handler
 - handler 未実装時の generic fallback
 
+この Phase 3 の最初の受け入れ条件は、次で固定する。
+
+- `capability-router.ts` が registry を見て handler または fallback へ分岐できる
+- `IssueAgent` は label/state machine を介して analyzing へ遷移できる
+- `ReviewAgent` は local check 実行結果を report に残せる
+- `PRAgent` は local artifact を生成できる
+- `DeploymentAgent` は opt-in gate なしでは skip する
+- `CodeGenAgent` は planning-only のまま truthfully 報告される
+
 補足:
 
 - `CodeGenAgent` も「即 class を作る」より、まずは generic executor + capability binding で扱う
@@ -558,6 +592,9 @@ GitNexus は次で分ける。
 
 1. AGENTS / CLAUDE / workflow の表現を現実へ合わせる
 2. `.claude/agents` を読む registry / loader contract を作る
+3. `capability-router` と generic fallback を入れる
+4. safe handler slice として issue/review/pr/deployment を既存 substrate へ接続する
+5. その上で workflow 側の表示を必要な範囲だけ進化させる
 3. `TaskExecutor` が registry を介せる形へ寄せる
 4. 最小の handler だけを接続する
 5. `miyabi` 直呼び部分と `context-and-impact` bridge を整理する
