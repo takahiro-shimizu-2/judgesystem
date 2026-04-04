@@ -47,7 +47,7 @@ CodeGenAgent（コード生成）
     ↓
 ReviewAgent（品質チェック）
     ↓
-PRAgent（Draft PR作成） ※PR本文に Closes #{N} を含める
+PRAgent（Draft PR作成） ※PR本文に各Issueを1行ずつ「Closes #N」で記載（カンマ区切り不可）
     ↓
 【CI確認】gh pr checks {PR番号} でCI結果を確認。失敗時は修正してから次へ進む
     ↓
