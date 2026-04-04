@@ -16,11 +16,12 @@ description: "Use when the user asks how code works, wants to understand archite
 ## Workflow
 
 ```
-1. `npx gitnexus status`                                       → Check index freshness
-2. `npx gitnexus query "<what you want to understand>" --repo judgesystem`   → Find related execution flows
-3. `npx gitnexus context "<symbol>" --repo judgesystem`        → Deep dive on specific symbol
-4. `gitnexus_agent_context({query: "..."})`                    → Agent/task routing context when relevant
-5. Read source files for implementation details
+1. `npx gitnexus status`                                           → Check index freshness
+2. `READ gitnexus://repo/{name}/context`                           → Codebase overview when useful
+3. `npx gitnexus query "<what you want to understand>" --repo judgesystem` → Find related execution flows
+4. `npx gitnexus context "<symbol>" --repo judgesystem`            → Deep dive on specific symbol
+5. `READ gitnexus://repo/{name}/process/{name}`                    → Trace full execution flow
+6. `gitnexus_agent_context({query: "..."})`                        → Agent/task routing context when relevant
 ```
 
 > If step 2 says "Index is stale" → run `npx gitnexus analyze` in terminal.
@@ -29,9 +30,11 @@ description: "Use when the user asks how code works, wants to understand archite
 
 ```
 - [ ] `npx gitnexus status`
+- [ ] `READ gitnexus://repo/{name}/context` when you want the high-level overview
 - [ ] `npx gitnexus query` for the concept you want to understand
 - [ ] Review returned processes (execution flows)
 - [ ] `npx gitnexus context` on key symbols for callers/callees
+- [ ] READ process resource for full execution traces
 - [ ] Use `gitnexus_agent_context` only for agent/task routing questions
 - [ ] Read source files for implementation details
 ```
@@ -68,11 +71,13 @@ npx gitnexus context "validateUser" --repo judgesystem
 
 ```
 1. npx gitnexus status
-2. npx gitnexus query "payment processing" --repo judgesystem
+2. READ gitnexus://repo/judgesystem/context
+3. npx gitnexus query "payment processing" --repo judgesystem
    → CheckoutFlow: processPayment → validateCard → chargeStripe
    → RefundFlow: initiateRefund → calculateRefund → processRefund
-3. npx gitnexus context "processPayment" --repo judgesystem
+4. npx gitnexus context "processPayment" --repo judgesystem
    → Incoming: checkoutHandler, webhookHandler
    → Outgoing: validateCard, chargeStripe, saveTransaction
-4. Read src/payments/processor.ts for implementation details
+5. READ gitnexus://repo/judgesystem/process/CheckoutFlow
+6. Read src/payments/processor.ts for implementation details
 ```

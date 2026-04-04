@@ -33,7 +33,7 @@ Deploy は approval / build / preflight / healthcheck / rollback command を明�
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
 
-This project is indexed by GitNexus as **judgesystem** (3938 symbols, 8348 relationships, 244 execution flows). Use the GitNexus CLI plus the limited agent-graph MCP wrappers that are actually available in this repo.
+This project is indexed by GitNexus as **judgesystem** (4261 symbols, 9370 relationships, 300 execution flows). Use the GitNexus CLI plus the limited agent-graph MCP wrappers that are actually available in this repo.
 
 Current surfaces in this environment:
 
@@ -56,7 +56,7 @@ Current surfaces in this environment:
 
 1. `npx gitnexus query "<error or symptom>" --repo judgesystem` — find related execution flows
 2. `npx gitnexus context "<suspect function>" --repo judgesystem` — see callers, callees, and process participation
-3. `npx gitnexus cypher "MATCH ..."` — use custom traces if the standard views are ambiguous
+3. `READ gitnexus://repo/judgesystem/process/{processName}` or `npx gitnexus cypher "MATCH ..."` — trace the flow if the standard view is not enough
 4. For regressions: compare `git diff --stat origin/develop...HEAD` and run focused `npx gitnexus impact/context` on touched symbols
 
 ## When Refactoring

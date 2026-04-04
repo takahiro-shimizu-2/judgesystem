@@ -5,7 +5,7 @@ description: "Use when the user asks about GitNexus itself — available tools, 
 
 # GitNexus Guide
 
-Quick reference for the GitNexus surfaces that are actually available in this repo: the local CLI plus the limited agent-graph MCP wrappers.
+Quick reference for the GitNexus surfaces that are actually available in this repo: the local CLI, the GitNexus resources, and the limited agent-graph MCP wrappers.
 
 ## Always Start Here
 

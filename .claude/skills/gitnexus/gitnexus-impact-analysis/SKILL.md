@@ -19,8 +19,9 @@ description: "Use when the user wants to know what will break if they change som
 ```
 1. `npx gitnexus impact "X" --repo judgesystem --direction upstream` → What depends on this
 2. `npx gitnexus query "X" --repo judgesystem`                       → Check affected execution flows
-3. `git diff --stat` + `git status --short`                          → Map current git changes to affected scope
-4. Assess risk and report to user
+3. `READ gitnexus://repo/{name}/processes`                           → Trace affected flows when needed
+4. `git diff --stat` + `git status --short`                          → Map current git changes to affected scope
+5. Assess risk and report to user
 ```
 
 > If "Index is stale" → run `npx gitnexus analyze` in terminal.
@@ -31,6 +32,7 @@ description: "Use when the user wants to know what will break if they change som
 - [ ] `npx gitnexus impact "<target>" --repo judgesystem --direction upstream` to find dependents
 - [ ] Review d=1 items first (these WILL BREAK)
 - [ ] Use `npx gitnexus query "<target>" --repo judgesystem` to check affected execution flows
+- [ ] READ process resources when you need the full flow trace
 - [ ] `git diff --stat` and `git status --short` for pre-commit scope check
 - [ ] Assess risk level and report to user
 ```
