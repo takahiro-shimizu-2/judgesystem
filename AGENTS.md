@@ -21,6 +21,7 @@ Issue / CodeGen / Review / PR / Deploy の safe handler は接続済みである
 外部 model による product code 自動生成や remote branch push までは依然として未保証である。
 Review は repo root で configured checks を実行し、実際に得られた score / retry / escalation / coverage / security summary だけを report すること。
 Deploy は approval / build / preflight / healthcheck / rollback command を明示した contract がある場合だけそこまで実行し、無い能力は成功扱いにしないこと。`AUTOMATION_DEPLOY_USE_PROVIDER_PRESET=true` のときは repo-local `cloud-run` preset に加えて `github-pages` preset も使えるが、Pages は `AUTOMATION_GITHUB_PAGES_ENABLED=true` と Actions 書き込み権限が揃っている場合だけ truthfully 扱うこと。protected deploy は `autonomous-deploy-execute.yml` の GitHub Environment approval 経路を優先すること。
+`judgesystem` では Miyabi 由来の `TestAgent` は独立 runtime にせず、`ReviewAgent` の review/test capability に吸収したまま運用すること。autonomy surface を触ったら `npm run automation:smoke` を通してから PR に載せること。
 
 - Issue 分析 → タスク分解 → コード生成 → レビュー → PR 作成 → デプロイ
 - GitHub ラベル（53ラベル体系）でステートを管理

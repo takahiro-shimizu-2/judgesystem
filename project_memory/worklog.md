@@ -58,6 +58,10 @@ Context-and-impact phase E appends audit entries here.
 - Updated `.github/workflows/autonomous-agent.yml` and `.github/workflows/autonomous-deploy-execute.yml` to pass GitHub Pages env overrides into the runtime and to grant `actions: write`, which is required for provider workflow dispatch from the repo-local deploy contract.
 - Updated `AGENTS.md`, `CLAUDE.md`, `.claude/agents/deployment-agent.md`, `.claude/commands/deploy.md`, `.claude/commands/agent-run.md`, and `docs/agents-integration-plan.md` so the deployment/provider story is truthful again: `cloud-run` and `github-pages` are connected presets, while other providers remain future work.
 - Reframed `project_memory/tasks.json` around the deployment provider phase and explicitly reopened the remaining post-phase items as `phase9-dod` and `test-agent-decision`, so the plan does not appear fully closed while those policy decisions still remain.
+- Added a repo-local autonomy smoke entrypoint (`npm run automation:smoke`) that typechecks the scripts runtime, checks the autonomous CLI entrypoint, and exercises the review/pr/deploy handler contracts in temp repos with fake Octokit integrations.
+- Added `automation-smoke` to `.github/workflows/ci.yml` so push / PR checks now continuously verify the review loop, remote PR contract, and provider-dispatch deploy contract rather than relying on ad-hoc local smoke commands.
+- Added `docs/autonomous-runtime-operations.md` to fix the operational DoD in the repo itself: smoke command, artifact ownership, and the policy that `project_memory/*` is plan state while `.ai/*` remains per-run output.
+- Closed the `TestAgent` decision by fixing `judgesystem` to the absorbed model: no standalone `TestAgent` runtime is introduced, and `ReviewAgent` remains the owner of review/test capability unless a future plan introduces a truly separate authority/workflow boundary.
 
 - Started Phase 2 by moving label state machine logic into `scripts/automation/state`.
 - Kept `scripts/label-state-machine.ts` as the stable CLI entrypoint for workflows and npm scripts.

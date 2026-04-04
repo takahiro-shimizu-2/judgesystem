@@ -28,6 +28,7 @@ Current runtime status:
 3. **Execution report / artifacts** → available inside repo
 4. **Issue / codegen / review / PR / deploy handlers** → connected in a safe, capability-specific way
 5. **Remote PR creation / external-model code writing / deploy side effects** → still gated or optional, not guaranteed
+6. **Test execution** → remains part of `ReviewAgent`; there is no standalone `TestAgent` runtime in `judgesystem`
 
 ### Core Behavior
 
@@ -123,6 +124,7 @@ Agent specifications: `.claude/agents/`
 - `DeploymentAgent` can now execute an explicit deploy contract with optional approval, build, preflight, health check, rollback, and deployment artifacts when the corresponding env gates are set, and it can resolve repo-local `cloud-run` and `github-pages` presets when `AUTOMATION_DEPLOY_USE_PROVIDER_PRESET=true`
 - protected deploys can also use the dedicated `autonomous-deploy-execute.yml` workflow so GitHub Environment approvals and DeploymentAgent approval metadata stay aligned
 - Runtime integration should converge on a registry/loader that reads `.claude/agents/*.md` metadata and dispatches to explicit handlers in `scripts/automation`
+- `npm run automation:smoke` is the repo-local operational smoke entrypoint for the review/pr/deploy autonomy contracts
 
 ### State Flow
 ```
