@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-04-04T22:46:00+09:00",
-  "query": "Full autonomy deployment approval rollout",
+  "generated_at": "2026-04-04T23:03:00+09:00",
+  "query": "Protected deploy workflow rollout",
   "repo": "judgesystem",
   "quality_score": 0,
   "tasks": [
@@ -47,6 +47,11 @@
     {
       "id": "deployment-approval-gate",
       "title": "Add deployment approval/provider-target metadata and make workflow execution pass the actual deploy env gates through to DeploymentAgent",
+      "status": "completed"
+    },
+    {
+      "id": "protected-deploy-workflow",
+      "title": "Add a dedicated GitHub Environment-backed deploy execute workflow for protected deployments and align docs with that path",
       "status": "completed"
     }
   ]

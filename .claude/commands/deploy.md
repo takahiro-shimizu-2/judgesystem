@@ -51,6 +51,18 @@ export AUTOMATION_DEPLOY_ROLLBACK_COMMAND="npm run deploy:rollback"
 npm run agents:parallel:exec -- --issue 123
 ```
 
+GitHub Environment approval を使う protected deploy なら、
+Actions の dedicated workflow も使える:
+
+```bash
+gh workflow run autonomous-deploy-execute.yml \
+  -f issue_number=123 \
+  -f github_environment=production \
+  -f deploy_environment=production \
+  -f deploy_target=backend \
+  -f deploy_approval_reason='release approval'
+```
+
 ## このコマンドが保証しないこと
 
 - Firebase 固定の deploy
@@ -58,6 +70,8 @@ npm run agents:parallel:exec -- --issue 123
 
 approval / provider / target metadata は contract に残せるが、
 provider 固有の高度な orchestration 自体は引き続き command-driven である。
+GitHub Environment approval を使いたい場合は、
+generic `autonomous-agent.yml` ではなく `autonomous-deploy-execute.yml` を使う。
 
 ## 失敗時の見方
 

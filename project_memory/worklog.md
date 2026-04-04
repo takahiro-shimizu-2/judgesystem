@@ -39,6 +39,8 @@ Context-and-impact phase E appends audit entries here.
 - Extended `scripts/automation/agents/handlers/deployment.ts` so DeploymentAgent now records provider/target metadata, optional build steps, and an explicit approval gate before deploy runs, while still keeping provider-specific orchestration command-driven.
 - Fixed `.github/workflows/autonomous-agent.yml` to pass the actual deploy env gates (`AUTOMATION_ENABLE_DEPLOY`, `AUTOMATION_DEPLOY_COMMAND`, provider/target/approval vars) into the runtime; previously the workflow only forwarded secondary deploy settings and could not truly open the deploy path.
 - Updated `.claude/agents/deployment-agent.md`, `.claude/commands/deploy.md`, `.claude/commands/agent-run.md`, `AGENTS.md`, `CLAUDE.md`, `docs/agents-integration-plan.md`, and `project_memory/tasks.json` so approval/build/provider-target deployment behavior is documented truthfully.
+- Added `.github/workflows/autonomous-deploy-execute.yml` as a dedicated protected-deploy path that uses `workflow_dispatch` plus GitHub Environment approval while reusing the repo-local runtime and summary/comment publication flow.
+- Updated deploy/runtime docs and the plan so `autonomous-agent.yml` remains the generic planning/execute workflow, while protected deploys now prefer `autonomous-deploy-execute.yml` to keep GitHub Environment approval and DeploymentAgent approval metadata aligned.
 
 - Started Phase 2 by moving label state machine logic into `scripts/automation/state`.
 - Kept `scripts/label-state-machine.ts` as the stable CLI entrypoint for workflows and npm scripts.

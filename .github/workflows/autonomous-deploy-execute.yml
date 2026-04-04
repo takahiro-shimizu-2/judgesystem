@@ -1,0 +1,182 @@
+name: Autonomous Deploy Execute
+
+on:
+  workflow_dispatch:
+    inputs:
+      issue_number:
+        description: 'Issue number to process'
+        required: true
+        type: number
+      github_environment:
+        description: 'GitHub Environment name for approval / protection rules'
+        required: true
+        type: string
+      deploy_environment:
+        description: 'Deployment environment label passed into DeploymentAgent'
+        required: true
+        default: production
+        type: string
+      deploy_target:
+        description: 'Optional deploy target override'
+        required: false
+        type: string
+      deploy_approval_reason:
+        description: 'Optional approval note recorded in deployment artifacts'
+        required: false
+        type: string
+
+env:
+  NODE_VERSION: '20'
+
+jobs:
+  execute-deploy:
+    name: Execute Autonomous Deploy Contract
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.github_environment }}
+
+    permissions:
+      issues: write
+      contents: read
+      pull-requests: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run TypeScript compilation check
+        run: npm run typecheck
+
+      - name: Validate deploy contract inputs
+        env:
+          AUTOMATION_DEPLOY_COMMAND: ${{ vars.AUTOMATION_DEPLOY_COMMAND }}
+        run: |
+          if [ -z "$AUTOMATION_DEPLOY_COMMAND" ]; then
+            echo "::error::AUTOMATION_DEPLOY_COMMAND repository variable is required for autonomous deploy execution."
+            exit 1
+          fi
+
+      - name: Execute autonomous deploy runtime
+        id: execute
+        run: |
+          echo "🚀 Starting protected deploy runtime for Issue #${{ inputs.issue_number }}"
+          npm run agents:parallel:exec -- \
+            --issue "${{ inputs.issue_number }}" \
+            --concurrency 3 \
+            --log-level info
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          REPOSITORY: ${{ github.repository }}
+          AUTOMATION_ENABLE_PR_WRITE: ${{ vars.AUTOMATION_ENABLE_PR_WRITE }}
+          AUTOMATION_ENABLE_CODEGEN_WRITE: ${{ vars.AUTOMATION_ENABLE_CODEGEN_WRITE }}
+          AUTOMATION_CODEGEN_COMMAND: ${{ vars.AUTOMATION_CODEGEN_COMMAND }}
+          AUTOMATION_REVIEW_MIN_SCORE: ${{ vars.AUTOMATION_REVIEW_MIN_SCORE }}
+          AUTOMATION_REVIEW_MAX_RETRIES: ${{ vars.AUTOMATION_REVIEW_MAX_RETRIES }}
+          AUTOMATION_REVIEW_CHECKS_JSON: ${{ vars.AUTOMATION_REVIEW_CHECKS_JSON }}
+          AUTOMATION_ENABLE_DEPLOY: 'true'
+          AUTOMATION_DEPLOY_COMMAND: ${{ vars.AUTOMATION_DEPLOY_COMMAND }}
+          AUTOMATION_DEPLOY_BUILD_COMMAND: ${{ vars.AUTOMATION_DEPLOY_BUILD_COMMAND }}
+          AUTOMATION_DEPLOY_PROVIDER: ${{ vars.AUTOMATION_DEPLOY_PROVIDER }}
+          AUTOMATION_DEPLOY_TARGET: ${{ inputs.deploy_target || vars.AUTOMATION_DEPLOY_TARGET }}
+          AUTOMATION_DEPLOY_ENVIRONMENT: ${{ inputs.deploy_environment }}
+          AUTOMATION_DEPLOY_REQUIRE_APPROVAL: ${{ vars.AUTOMATION_DEPLOY_REQUIRE_APPROVAL || 'required' }}
+          AUTOMATION_DEPLOY_ALLOWED_APPROVERS: ${{ vars.AUTOMATION_DEPLOY_ALLOWED_APPROVERS }}
+          AUTOMATION_DEPLOY_APPROVED_BY: ${{ github.actor }}
+          AUTOMATION_DEPLOY_APPROVAL_SOURCE: github-environment:${{ inputs.github_environment }}
+          AUTOMATION_DEPLOY_APPROVAL_REASON: ${{ inputs.deploy_approval_reason || format('workflow_dispatch deploy for issue #{0}', inputs.issue_number) }}
+          AUTOMATION_DEPLOY_PREFLIGHT_COMMAND: ${{ vars.AUTOMATION_DEPLOY_PREFLIGHT_COMMAND }}
+          AUTOMATION_DEPLOY_HEALTHCHECK_COMMAND: ${{ vars.AUTOMATION_DEPLOY_HEALTHCHECK_COMMAND }}
+          AUTOMATION_DEPLOY_HEALTHCHECK_RETRIES: ${{ vars.AUTOMATION_DEPLOY_HEALTHCHECK_RETRIES }}
+          AUTOMATION_DEPLOY_HEALTHCHECK_DELAY_MS: ${{ vars.AUTOMATION_DEPLOY_HEALTHCHECK_DELAY_MS }}
+          AUTOMATION_DEPLOY_ROLLBACK_COMMAND: ${{ vars.AUTOMATION_DEPLOY_ROLLBACK_COMMAND }}
+        continue-on-error: true
+
+      - name: Summarize execution artifacts
+        id: summarize
+        if: always()
+        run: |
+          npx tsx scripts/autonomous-agent-summary.ts \
+            --issue "${{ inputs.issue_number }}" \
+            --root "$GITHUB_WORKSPACE" \
+            --status "${{ steps.execute.outcome == 'success' && 'success' || 'failure' }}" \
+            --triggered-by "${{ github.actor }}" \
+            --run-url "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+            --out-md "$RUNNER_TEMP/autonomous-agent-comment.md" \
+            --out-json "$RUNNER_TEMP/autonomous-agent-summary.json"
+
+          echo "comment_path=$RUNNER_TEMP/autonomous-agent-comment.md" >> $GITHUB_OUTPUT
+          echo "summary_json_path=$RUNNER_TEMP/autonomous-agent-summary.json" >> $GITHUB_OUTPUT
+
+          node <<'NODE' >> "$GITHUB_OUTPUT"
+          const fs = require('fs');
+          const summary = JSON.parse(fs.readFileSync(process.env.SUMMARY_JSON_PATH, 'utf8'));
+          console.log(`status=${summary.status}`);
+          console.log(`execution_mode=${summary.executionMode}`);
+          console.log(`failed_tasks=${summary.totals.failed}`);
+          NODE
+        env:
+          SUMMARY_JSON_PATH: ${{ runner.temp }}/autonomous-agent-summary.json
+
+      - name: Upload execution logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: autonomous-deploy-logs-${{ inputs.issue_number }}
+          path: |
+            .ai/logs/
+            .ai/parallel-reports/
+          retention-days: 30
+
+      - name: Publish workflow summary
+        if: always()
+        run: |
+          {
+            echo "- Trigger source: \`workflow_dispatch\`"
+            echo "- Execution mode: \`execute\`"
+            echo "- GitHub Environment: \`${{ inputs.github_environment }}\`"
+            echo "- Deploy environment: \`${{ inputs.deploy_environment }}\`"
+            echo "- Deploy target: \`${{ inputs.deploy_target || vars.AUTOMATION_DEPLOY_TARGET || 'unspecified' }}\`"
+            echo
+            cat "${{ steps.summarize.outputs.comment_path }}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Comment on Issue
+        if: always()
+        uses: actions/github-script@v7
+        env:
+          COMMENT_PATH: ${{ steps.summarize.outputs.comment_path }}
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+            const body = fs.readFileSync(process.env.COMMENT_PATH, 'utf8');
+            github.rest.issues.createComment({
+              issue_number: ${{ inputs.issue_number }},
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body
+            })
+
+      - name: Add escalation label on failure
+        if: steps.summarize.outputs.status == 'failure'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            github.rest.issues.addLabels({
+              issue_number: ${{ inputs.issue_number }},
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              labels: ['🚨escalated', '❌agent-failed']
+            })

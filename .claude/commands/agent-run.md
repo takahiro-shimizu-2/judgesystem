@@ -66,6 +66,9 @@ npm run agents:parallel:exec -- --help
   - `/agent ...` や `@miyabi` で workflow は起動する
   - `/agent execute` や `@miyabi ... execute` でも、デフォルトでは `planning`
   - `AUTONOMOUS_AGENT_COMMENT_EXECUTE_ENABLED=true` が repo variable にある場合だけ comment-triggered `execute` を開けられる
+- protected deploy
+  - GitHub Environment approval を使う deploy は `autonomous-deploy-execute.yml` を使う
+  - こちらは `workflow_dispatch` 専用で、`environment:` gate と `DeploymentAgent` の approval metadata をそろえて扱う
 
 つまり、Issue / comment は「意図の表明」、実際の `execute` は workflow gate が開いているときだけである。
 
