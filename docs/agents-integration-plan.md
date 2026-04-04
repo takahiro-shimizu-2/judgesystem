@@ -1,433 +1,616 @@
 # Miyabi 差分吸収計画書
 
 作成日: 2026-04-04
+最終更新: 2026-04-04
 
 ## 1. この計画の目的
 
-やりたいことは、Miyabi の元ディレクトリにだけ存在する機能を `judgesystem` にそのまま複製することではない。
-`judgesystem` 側でまだ吸収し切れていない差分を洗い出し、このリポジトリの構成と運用に合わせてローカル実装へ落とし切ることが目的である。
+やりたいことは、Miyabi の元ディレクトリにだけ存在する仕組みを `judgesystem` に雑に複製することではない。
+やるべきことは、`judgesystem` 側でまだ吸収し切れていない差分を洗い出し、
+この repo の責務分担に合わせて正しい場所へ取り込むことである。
 
-つまり方針は以下。
+今回の再設計で重視すること:
 
-- Miyabi を丸ごと移植するのではなく、必要な機能差分だけを `judgesystem` に吸収する
-- `judgesystem` の既存エントリポイントを壊さず、内部実装を段階的に置き換える
-- 最終的に、運用上必要な Agent / state / sync / reporting / routing は `judgesystem` 単独で完結させる
+- Claude Code 用の定義、Codex 用の定義、GitHub Actions の配線、repo 内 runtime を混ぜない
+- すでに `judgesystem` に入っている実装は、捨てる前提ではなく活かせるものを活かす
+- ただし、誤った前提で先に進めてしまった部分は、手当て対象として明示する
+- `judgesystem` が `../Miyabi` を runtime 前提にしない状態を最終目標にする
 
-## 2. 置き場所の前提整理
+## 2. 今回の調査で分かったこと
 
-今回いちばん重要なのは、差分吸収先をどこに置くかである。
+この計画は、`judgesystem` 内だけでなく、最低でも以下を確認したうえで組み直す。
 
-### 2.1 `.claude/` に置かない理由
+- Claude Code の公式仕様
+- Codex の公式仕様
+- GitHub Actions / reusable workflow / composite action の公式仕様
+- `judgesystem` 現在構成
+- `../Miyabi`
+- `../context-and-impact`
+- `../gitnexus-stable-ops`
 
-`.claude/` は Claude Code 専用の資産を置く場所である。
+### 2.1 Claude Code の現実
 
-- `.claude/agents/` は agent prompt 定義
-- `.claude/skills/` は skill 定義
-- `.claude/hooks/` は Claude 用 hook
-- `.claude/settings.json` は Claude の設定
+Claude Code の公式仕様上、`.claude/` は Claude Code の設定面である。
 
-ここに runtime 実装を置くと、GitHub Actions や `tsx scripts/*.ts` が使う通常の Node 実行コードまで Claude 固有ディレクトリに依存することになる。
-そのため、`.claude/` は runtime 実装の置き場にはしない。
+- `.claude/settings.json` は project settings
+- `.claude/agents/*.md` は subagent 定義
+- `.claude/commands/*.md` は custom command だが、公式には skill の方が推奨
+- hooks は `.claude/settings.json` や agent/skill frontmatter から設定される
 
-### 2.2 `packages/` に置かない理由
+重要なのは、`.claude/agents/*.md` がそのまま GitHub Actions や Node runtime の実装ではない、という点である。
+Claude Code はそれらを「Claude が読む定義」として扱う。
 
-この repo における `packages/` は、現状では次の意味合いが強い。
+`judgesystem` の現状:
 
-- `packages/backend`: Express API
-- `packages/frontend`: React UI
-- `packages/shared`: app 間共有の型・定数
-- `packages/engine`: 判定エンジン
+- `.claude/agents/*.md` は 6 agent の frontmatter と実行方針を持っている
+- `.claude/settings.json` では `PreToolUse` / `PostToolUse` hook が定義されている
+- `.claude/commands/*.md` には `miyabi` CLI を前提にした command が残っている
 
-ここに運用自動化の実装本体を置くと、
-「アプリ本体の runtime 機能なのか」「workflow 専用の自動化実装なのか」が分かりづらい。
-とくに `packages/agents` は `.claude/agents` と名称も衝突し、誤解を招きやすい。
+このため、`.claude/agents` を runtime 実装そのものと見なす設計は不適切である。
 
-### 2.3 最終的な吸収先
+### 2.2 Codex の現実
 
-今回の差分吸収先は `scripts/automation/` を中核にする。
+Codex の公式説明では、repo 内の `AGENTS.md` が Codex を案内するための主要な repo ルールである。
+また、Codex は task ごとに独立した実行環境で動き、リポジトリ内の指示やテストコマンドに従う前提である。
 
-理由:
+今回の判断に効く点:
 
-- 既存 workflow の入口はすでに `scripts/*.ts`
-- `scripts/lib/*` に共通実装を置く前例がすでにある
-- GitHub Actions から `npx tsx scripts/...` で直接呼べる
-- app runtime と Claude 専用資産のどちらにも寄りすぎない
+- Codex へ repo の作業ルールを伝える主軸は `AGENTS.md`
+- `.claude/agents/*.md` を Codex が runtime 定義として自動利用する前提は置けない
+- `.codex/` は Codex 固有の project-scoped 設定を置く場所になりうるが、共通 runtime の source of truth ではない
 
-## 3. 完了イメージ
+`../Miyabi/.codex/config.toml` でも、
+「root の `AGENTS.md` を主たる repo ルールとして使い、`.codex/config.toml` では Codex 固有挙動だけを補う」
+という整理が取られている。
 
-この計画の完了条件は以下。
+### 2.3 GitHub Actions / `.github` の現実
 
-1. `judgesystem` が Miyabi の元ディレクトリを runtime 前提にしない
-2. `scripts/` と `.github/workflows/` が呼ぶロジックの実体が `judgesystem` 内に揃う
-3. `scripts/automation/` が repo 自動化のローカル中核実装として機能する
-4. labels / Projects V2 / dashboard / webhook / task orchestration の実装が repo 内で一貫する
-5. app runtime (`packages/*`) と Claude 専用資産 (`.claude/*`) の責務が混ざらない
+GitHub Actions の公式仕様上、役割は次のように分かれる。
 
-## 4. いまの現実
+- `.github/workflows/*.yml`
+  - workflow のトリガーと job 配線
+- `.github/actions/*`
+  - composite action の置き場として推奨される
+- reusable workflow
+  - `.github/workflows/` 配下に置く
 
-### 4.1 judgesystem 側にはすでに受け皿がある
+つまり `.github` は GitHub に読ませる定義置き場であり、
+repo 内の TypeScript 実装本体の置き場ではない。
 
-`judgesystem` は単なる空箱ではなく、すでに以下のような形を持っている。
+したがって今回の自動化本体を `.github` に寄せるのではなく、
+`.github/workflows` はあくまで入口、
+実装本体は `scripts/automation` に置くのが自然である。
 
-- アプリ本体: `packages/backend`, `packages/frontend`, `packages/shared`, `packages/engine`
-- GitHub 自動化: `.github/workflows/`
-- 運用スクリプト: `scripts/`
-- Claude 専用資産: `.claude/`
+### 2.4 GitNexus の現実
 
-今後の作業は「新規に Agent システムを作る」よりも、
-「既存の judgesystem 運用資産へ Miyabi 由来の差分を正しく収める」ことが本質である。
+`judgesystem` では GitNexus を二重に見なければいけない。
 
-### 4.2 すでに部分的に取り込まれているもの
+1. vanilla の `gitnexus` CLI / index
+2. `../gitnexus-stable-ops` による stable wrapper / agent-graph 拡張
 
-Miyabi 由来の機能は、すでに断片的には `judgesystem` へ入っている。
+現環境の確認結果:
 
-| 領域 | judgesystem 側の現状 |
-|------|----------------------|
-| state 管理 | `scripts/label-state-machine.ts` |
-| Projects V2 | `scripts/lib/projects-v2.ts` |
-| Discussions | `scripts/lib/discussions.ts` |
-| dashboard 生成 | `scripts/generate-dashboard-data.ts` |
-| KPI 投稿 | `scripts/post-kpi-report.ts` |
-| weekly report | `scripts/generate-weekly-report.ts` |
-| webhook routing | `scripts/webhook-router.ts` |
-| project status 同期 | `scripts/update-project-status.ts` |
-| GitHub workflow 接続 | `.github/workflows/*.yml` |
-| Claude 側 agent 定義 | `.claude/agents/*.md` |
+- `npx gitnexus --version` は `1.5.3`
+- `npx gitnexus status` は正常に使える
+- `npx gitnexus impact` も使える
+- ただし `npx gitnexus detect-changes` は現在の CLI には存在しない
+- いま利用できている `gitnexus_agent_context` / `gitnexus_agent_status` / `gitnexus_agent_list` は、`../gitnexus-stable-ops` 側の Agent Graph MCP 由来である
 
-つまり問題は「何も無い」ことではなく、以下の状態にあること。
+つまり、
+AGENTS / CLAUDE / 周辺 skill 群に書かれている「GitNexus の理想 API」と、
+この repo でいま実際に使える GitNexus の機能にはズレがある。
 
-- Miyabi 由来の実装が `scripts/` に分散している
-- 共通実装の source of truth が `scripts/lib` と workflow inline script に分かれている
-- workflow ごとに参照パスや責務分担が揺れている
-- `.claude/agents` の prompt 定義と runtime 実装の境界が曖昧
+設計上の結論:
 
-### 4.3 いまのブランチで片付けるべき試作
+- GitNexus は重要な前提だが、計画書は「実際に使える CLI / wrapper / MCP」に合わせて書く
+- `detect_changes` を前提にする設計は一度外す
+- `impact` が不安定なケースは `gitnexus-stable-ops` の safe wrapper を考慮する
 
-現時点のブランチには、`packages/agents` を前提にした試作がすでに混ざっている。
+### 2.5 `context-and-impact` の現実
 
-- root `package.json` の workspace に `packages/agents` が追加されている
-- 一部 `scripts/*.ts` が `@judgesystem/agents/*` import を参照している
-- `packages/agents/` に build 済みの足場コードがある
+`context-and-impact` は補助スクリプトではなく、独立した前段パイプラインである。
 
-これは最終方針としては採用しない。
-したがって Phase 0 では、`scripts/automation` の土台づくりと同時に、この試作を解消する。
+所有している責務:
 
-## 5. 最終アーキテクチャ
+- `.ai/execution-plan.json` 初期化
+- `project_memory/tasks.json` / `project_memory/worklog.md` 運用
+- GitNexus / search / quality gate / classify / record-run の流れ
+- `agent-skill-bus` との接続
+
+`judgesystem` 側の現状:
+
+- root `package.json` の `pipeline:*` script は `../context-and-impact` を直接呼ぶ
+- `scripts/context-impact/*.sh` は repo-local wrapper だが、中身は sibling repo 委譲
+- `record-run.sh` も `../context-and-impact/src/skill-bus/record-run.sh` を呼んでいる
+- `pipeline:dashboard` は `agent-skill-bus` を直接要求する
+
+ここは非常に重要で、
+Miyabi 差分吸収とは別に、
+`judgesystem` の運用自動化が `context-and-impact` をどう位置づけるかを計画に含める必要がある。
+
+### 2.6 Miyabi 元ディレクトリの現実
+
+`../Miyabi` は単一 repo 完結の単純な構造ではない。
+
+- `packages/cli` に `miyabi` CLI がある
+- `.claude/` は Claude plugin / command / agent 資産として使われている
+- `.codex/` は Codex project config と subagent 設定を持つ
+- `docs/CODEX_MIYABI_INTEGRATION.md` では `miyabi-agent-sdk` と Codex repo を含む別 repo 群前提の連携が説明されている
+
+つまり Miyabi は「ふるまい」だけ見れば参考になるが、
+repo 構造や package 境界をそのまま `judgesystem` に持ち込む対象ではない。
+
+## 3. 境界をどう切るか
+
+調査結果を踏まえ、責務分担は次で固定する。
+
+| 層 | 置き場所 | 役割 | 今回の扱い |
+|----|----------|------|------------|
+| Claude Code 面 | `.claude/` | subagent / command / hook / MCP 設定 | 残す。Claude 用 source of truth |
+| Codex 面 | `AGENTS.md` と必要なら `.codex/` | Codex への repo 指示 | 残す。Codex 用 source of truth |
+| GitHub 面 | `.github/workflows/`, `.github/actions/` | trigger / workflow / reusable step | 残す。配線のみ |
+| Repo runtime | `scripts/automation/` | 実行ロジック本体 | ここを育てる |
+| CLI entrypoint | `scripts/*.ts` | workflow / npm script から呼ばれる入口 | 薄い adapter として維持 |
+| Context pipeline | `scripts/context-impact/*.sh` + `../context-and-impact` | 実行前の context / quality / audit | 重要な外部 bridge として明示 |
+| App runtime | `packages/*` | backend / frontend / shared / engine | 今回の自動化本体は置かない |
+
+### 3.1 今回やらないこと
+
+- `.claude/agents/*.md` を Node runtime 実装そのものと見なさない
+- 先に `CoordinatorAgent` / `CodeGenAgent` などの固定 class ファイルを量産しない
+- `.github` に TypeScript 実装本体を寄せない
+- `packages/*` に repo automation 本体を混ぜない
+- `GitNexus detect_changes` のような、現環境で未提供の API を前提に計画を組まない
+
+### 3.2 今回やること
+
+- `.claude/agents/*.md` を Claude 用 prompt / metadata の正本として活かす
+- runtime 側は `.claude/agents` を読む dynamic registry / loader として組む
+- 副作用を伴う処理は handler として明示実装する
+- handler がない agent は generic fallback で扱う
+
+## 4. judgesystem の現状把握
+
+### 4.1 すでに取り込まれているもの
+
+`judgesystem` は空箱ではない。すでに次が存在する。
+
+| 領域 | 現状 | 判断 |
+|------|------|------|
+| GitHub utility | `scripts/automation/github/*` | 維持してよい |
+| reporting | `scripts/automation/reporting/*` | 維持してよい |
+| label / state | `scripts/automation/state/*`, `scripts/automation/sync/*` | 維持してよい |
+| decomposition | `scripts/automation/decomposition/*` | 維持してよい |
+| orchestration | `scripts/automation/orchestration/*` | 維持してよいが contract を修正する |
+| adapter entrypoint | `scripts/automation/adapters/*` | 維持してよい |
+| CLI entrypoint | `scripts/*.ts` | 薄い入口として維持 |
+| workflow | `.github/workflows/*.yml` | 事実に合わせて見直す |
+| Claude agent 定義 | `.claude/agents/*.md` | source of truth 候補として活かす |
+
+### 4.2 すでに進めてしまっている実装と、その手当て
+
+今回とくに手当てが必要なのは次である。
+
+#### A. `agents:parallel:exec` は「planning substrate」まで進んでいる
+
+現在の実装:
+
+- `scripts/agents-parallel-exec.ts`
+- `scripts/automation/adapters/agents-parallel-exec.ts`
+- `scripts/automation/decomposition/*`
+- `scripts/automation/orchestration/*`
+
+これは無駄ではない。
+ただし意味づけを変える必要がある。
+
+変更前の誤解:
+
+- 6 agent の実体 class をこれからローカル実装する前提
+
+修正後の位置づけ:
+
+- Issue 分解
+- DAG 構築
+- 実行計画作成
+- 実行レポート作成
+
+を担う orchestration substrate として残す。
+
+#### B. workflow と docs が実装以上のことを言っている
+
+`autonomous-agent.yml` には、現状ではまだ成立していない表現がある。
+
+- CodeGenAgent が実装したことを前提とした PR テンプレート
+- ReviewAgent が 80 点以上を判定した体裁
+- tests generated / security scan passed などの断定
+
+現時点の `agents:parallel:exec` は planning-first であり、
+本当の codegen / review / pr / deployment handler までは未接続である。
+ここは計画上も実装上も truthfulness を回復する必要がある。
+
+#### C. `.claude` 側に `miyabi` 依存が残っている
+
+残っているもの:
+
+- `.claude/mcp-servers/miyabi-integration.js`
+- `.claude/mcp.json`
+- `.claude/commands/miyabi-*.md`
+- `.claude/settings.json` の `Bash(miyabi *)` allow
+
+これは Claude 用 surface として残すか、repo 内 runtime へ寄せるかを明確に決める必要がある。
+少なくとも現段階では「Claude 面の外部 bridge」であり、
+`judgesystem` の local runtime 完結とは別問題である。
+
+#### D. root dependency に sibling repo 前提が残っている
+
+`package.json` にはまだ次が残っている。
+
+- `miyabi: file:../Miyabi/packages/cli`
+- `agent-skill-bus: file:../agent-skill-bus`
+
+さらに `pipeline:*` script や `scripts/context-impact/*.sh` も sibling repo を呼ぶ。
+このため、現時点では「Miyabi 元ディレクトリを runtime 前提にしない」はまだ未達成である。
+
+#### E. AGENTS / CLAUDE / 周辺 skill の GitNexus 記述にズレがある
+
+現状のズレ:
+
+- `gitnexus_detect_changes()` 前提になっている
+- `gitnexus_query` / `gitnexus_context` / `gitnexus_impact` を MCP 直呼びする前提が強い
+- 実際のこの環境では `gitnexus-stable-ops` 由来の agent graph MCP と、vanilla CLI が混在している
+
+ここは docs と運用ルールを現実に寄せる必要がある。
+
+### 4.3 既存 substrate の blast radius
+
+すでに進めてしまった実装の主要 symbol は、現時点では LOW である。
+
+| Symbol | GitNexus 結果 | 含意 |
+|--------|---------------|------|
+| `runAgentsParallelExecCli` | LOW | `scripts/agents-parallel-exec.ts` からのみ直結 |
+| `TaskManager` | LOW | adapter からの利用に留まる |
+| `TaskExecutor` | LOW | `TaskManager` 経由の局所変更で済む |
+| `WebhookEventRouter` | LOW | webhook adapter と CLI 入口の範囲に収まる |
+
+したがって、
+いま必要なのは substrate の破棄ではなく、
+その上に載せる「agent 実装モデル」を fixed class 前提から registry / handler 前提へ直すことである。
+
+## 5. 改訂後の目標アーキテクチャ
 
 ### 5.1 基本方針
 
-責務分担は以下に固定する。
+`judgesystem` 側で持つべきものは次の 3 層である。
 
-- `.claude/`
-  - Claude Code 専用資産
-  - prompt / hook / skill / settings のみ
-- `scripts/`
-  - CLI 互換を維持する入口
-  - GitHub Actions から直接呼ばれるファイル
-- `scripts/automation/`
-  - repo 運用自動化の実装本体
-  - GitHub / state / routing / reporting / decomposition / orchestration / agent 実装を保持
-- `packages/shared`
-  - app 側と共有すべき型・定数のみ
-- `packages/backend`, `packages/frontend`, `packages/engine`
-  - 業務アプリ本体
+1. **Prompt / metadata の正本**
+   - `.claude/agents/*.md`
+2. **Repo 内 runtime**
+   - `scripts/automation/*`
+3. **必要なら外部 bridge**
+   - `scripts/context-impact/*.sh`
+   - 一部 `.claude/mcp-servers/*`
 
-### 5.2 目標ディレクトリ像
+### 5.2 agent 実装は fixed class ではなく registry / handler で組む
+
+新しい考え方は次である。
+
+- `.claude/agents/*.md` を走査する
+- frontmatter から `name`, `description`, `authority`, `escalation` を読む
+- markdown body から runtime brief に使う要約を抽出する
+- runtime はそれを registry に変換する
+- registry から handler を引ける agent だけ副作用つき実行を行う
+- handler が無いものは generic fallback に流す
+
+これにより、
+`.claude/agents` 側に定義が増えても、
+metadata の吸収は自動化できる。
+一方で、危険な副作用は handler が明示されない限り勝手には走らない。
+
+### 5.3 目標ディレクトリ像
 
 ```text
 .claude/
   agents/
+  commands/
   hooks/
-  skills/
+  mcp-servers/
   settings.json
 
 scripts/
-  tsconfig.json
+  agents-parallel-exec.ts
   label-state-machine.ts
   update-project-status.ts
   generate-dashboard-data.ts
   generate-weekly-report.ts
   post-kpi-report.ts
   webhook-router.ts
+  context-impact/
+    plan-init.sh
+    plan-status.sh
+    plan-clean.sh
+    record-run.sh
   automation/
     core/
-      retry.ts
-      logger.ts
-      utils.ts
     github/
-      projects-v2.ts
-      discussions.ts
-      github-client.ts
     state/
-      task-state-machine.ts
-      label-state-bridge.ts
-      label-state-machine.ts
     sync/
-      github-label-sync.ts
-      projects-v2-sync.ts
-      bidirectional-sync.ts
     reporting/
-      automation-reporting.ts
-      dashboard-reporting.ts
-      repository-metrics.ts
     decomposition/
-      llm-decomposer.ts
-      decomposition-validator.ts
-      prompt-templates.ts
     orchestration/
-      dag-manager.ts
-      task-executor.ts
-      worktree-coordinator.ts
-      task-manager.ts
     agents/
-      coordinator-agent.ts
-      issue-agent.ts
-      codegen-agent.ts
-      review-agent.ts
-      pr-agent.ts
-      deployment-agent.ts
+      registry.ts
+      markdown-loader.ts
+      handler-contract.ts
+      capability-router.ts
+      handlers/
+        issue.ts
+        review.ts
+        pr.ts
+        deployment.ts
+      fallback/
+        generic-agent.ts
     adapters/
-      webhook-router.ts
-      project-status.ts
 
-packages/
-  backend/
-  frontend/
-  shared/
-  engine/
+.github/
+  workflows/
+  actions/
 ```
 
-### 5.3 組み込み方
+### 5.4 重要な contract
 
-組み込み方は次の一本に揃える。
+#### `.claude/agents/*.md`
 
-1. `.github/workflows/*` は `scripts/*.ts` を起動する
-2. `scripts/*.ts` は薄い入口として引数処理と exit code だけを持つ
-3. 実体ロジックは `scripts/automation/*` から import する
-4. `.claude/agents/*.md` は Claude の意思決定手順を記述するが、runtime 依存にはしない
+- Claude Code が読む prompt / rule / escalation 定義
+- runtime 側の metadata source
+- ただし Node runtime が直接 import するコードではない
 
-### 5.4 技術的な組み込みルール
+#### `scripts/automation/agents/registry.ts`
 
-実装時の技術ルールも先に固定しておく。
+- `.claude/agents` を走査して registry を組み立てる
+- handler がある agent / ない agent を仕分ける
 
-- root `package.json` の workspace は `packages/backend`, `packages/frontend`, `packages/shared` を基本とし、automation 用 workspace は増やさない
-- runtime 実装は package alias ではなく `scripts/*.ts` から `./automation/...` の相対 import で参照する
-- GitHub Actions は引き続き `npx tsx scripts/<entry>.ts` を実行し、workflow 側の入口は変えない
-- `scripts/tsconfig.json` は script/automation 専用の型チェック単位として追加する
-- `scripts/lib/*` は段階的に `scripts/automation/*` へ移し、移行完了後に整理する
-- 既存の `packages/agents` 試作は採用しないため、Phase 0 で import と workspace 定義を解消する
+#### `scripts/automation/agents/handlers/*`
 
-## 6. 機能差分マトリクス
+- GitHub label 更新
+- issue comment
+- PR 作成
+- deploy 起動
+- review 結果反映
 
-| 機能 | Miyabi 側 | judgesystem 側 | 吸収方針 |
-|------|-----------|----------------|----------|
-| state / labels | task-manager + cli scripts | `scripts/label-state-machine.ts` のみ | `scripts/automation/state` に集約し、script は薄い CLI にする |
-| Projects V2 | task-manager / github utilities | `scripts/lib/projects-v2.ts` | `scripts/automation/github/projects-v2.ts` に昇格 |
-| Discussions | cli / github utility | `scripts/lib/discussions.ts` | `scripts/automation/github/discussions.ts` に昇格 |
-| KPI / dashboard | reporting scripts | `scripts/post-kpi-report.ts`, `scripts/generate-dashboard-data.ts`, `scripts/generate-weekly-report.ts` | reporting ロジックを `scripts/automation/reporting` に集約 |
-| webhook routing | cli scripts | `scripts/webhook-router.ts` | routing ルールを `scripts/automation/adapters` に集約 |
-| task decomposition | task-manager | なし | `scripts/automation/decomposition` に独立配置 |
-| DAG / execution | coding-agents + task-manager | なし | `scripts/automation/orchestration` に吸収 |
-| agent 実装 | miyabi-agent-sdk | `.claude/agents` は prompt のみ | 実装本体は `scripts/automation/agents` に吸収 |
-| GitHub label sync | task-manager | 断片的 | `scripts/automation/sync` へ統合 |
-| worktree 並行実行 | task-manager / coding-agents | なし | `scripts/automation/orchestration` に吸収 |
+など、実際に repo / GitHub に副作用を起こす責務を持つ。
 
-## 7. 設計原則
+#### `scripts/automation/orchestration/*`
 
-### 7.1 吸収であって複製ではない
+- decomposition
+- DAG
+- execution plan
+- worktree assignment
+- execution report
 
-Miyabi のパス構造や package 境界をそのまま再現しない。
-`judgesystem` に必要な責務単位へ再配置する。
+を担う共通 substrate として維持する。
 
-### 7.2 `.claude` は runtime 依存先にしない
+`TaskExecutor` は「固定 agent class を呼ぶ実装」ではなく、
+registry + handler router を呼ぶ実装へ寄せる。
 
-`.claude` は Claude 専用の設定・prompt・hook のみを持つ。
-GitHub Actions や通常の `tsx` script から `.claude` 配下のコードを runtime import しない。
+## 6. `context-and-impact` と GitNexus の扱い
 
-### 7.3 `packages/*` は app runtime と shared runtime に限定する
+### 6.1 `context-and-impact` は今回の計画に含める
 
-`packages/*` は backend / frontend / shared / engine のようなアプリ本体と共有 runtime のために使う。
-repo 運用自動化の実装本体はここへ混ぜない。
+理由:
 
-### 7.4 `scripts/*.ts` は入口、`scripts/automation/*` は本体
+- `project_memory/` 運用を持っている
+- `.ai/execution-plan.json` を持っている
+- GitNexus / quality / classify / record-run の前段パイプラインを持っている
+- `judgesystem` からすでに参照されている
 
-`scripts/*.ts` には最終的に再利用ロジックを残さない。
-再利用可能なロジックは `scripts/automation/*` に移し、script は引数解釈と exit code 制御だけを担う。
+したがって、
+今回の計画では `context-and-impact` を「無視する外部物」として扱わない。
+ただし、Miyabi 吸収と完全に同一の話でもないため、
+次の二択を明示する。
 
-### 7.5 app 共有が必要なものだけ `packages/shared` へ出す
+### 6.2 `context-and-impact` の選択肢
 
-自動化内部だけで使う型やロジックは `scripts/automation/*` に閉じ込める。
-frontend/backend も参照する定数や型だけを `packages/shared` に昇格する。
+#### Option A: 外部 bridge として明示維持
 
-## 8. 実装フェーズ
+- `scripts/context-impact/*.sh` を公式な bridge として残す
+- `package.json` の `pipeline:*` script も bridge として残す
+- `judgesystem` 単独完結の DoD からは切り分ける
+- 前提ツールと Node/Python version を文書化する
 
-### Phase 0: 配置方針の切り替え
+#### Option B: judgesystem へ最小限 vendor する
+
+- `plan-init/status/clean`
+- `record-run`
+- 必要最小限の quality / classify wrapper
+
+のみを repo 内へ取り込む。
+
+現時点では Option A を default とする。
+理由は、`context-and-impact` が Miyabi ではなく別の OSS Core であり、
+ここを同時に完全吸収すると計画が肥大化するためである。
+
+### 6.3 GitNexus の使い方も contract 化する
+
+GitNexus は次で分ける。
+
+- **vanilla CLI**
+  - `analyze`, `status`, `query`, `context`, `impact`, `cypher`
+- **stable wrapper**
+  - `../gitnexus-stable-ops/bin/gni`
+  - safe impact / agent graph / reindex hook
+- **agent graph MCP**
+  - `gitnexus_agent_context`
+  - `gitnexus_agent_status`
+  - `gitnexus_agent_list`
+
+計画書、AGENTS、CLAUDE では、
+今後は「どの GitNexus 面を使う話なのか」を混ぜずに書く。
+
+## 7. 改訂後の実装フェーズ
+
+### Phase 0: 調査結果の反映と truthfulness 回復
 
 目的:
 
-- `packages/agents` 前提をやめ、`scripts/automation` を正式な差分吸収先に切り替える
+- 計画書、AGENTS、CLAUDE、workflow の記述を現実へ合わせる
 
 作業:
 
-- 計画書を `scripts/automation` 前提に更新
-- `scripts/tsconfig.json` を追加して script automation 用の型チェック単位を作る
-- `scripts/automation/` の最小ディレクトリを作る
-- root `package.json` から `packages/agents` workspace を外す
-- `packages/agents/` 試作を段階的に廃止する
-- `@judgesystem/agents/*` import を `scripts/automation/*` 参照へ戻す方針を確定する
+- 本計画書を再設計版へ更新
+- 「`.claude/agents = runtime 実装`」という誤解を解く
+- `agents:parallel:exec` を planning/orchestration substrate と位置づけ直す
+- `autonomous-agent.yml` の過剰な claim を棚卸しする
+- GitNexus / `context-and-impact` / sibling repo 依存を一覧化する
+
+### Phase 1: 既存 substrate を活かす前提で contract を修正
+
+目的:
+
+- すでにある `scripts/automation` を活かしつつ、上位設計だけを直す
+
+作業:
+
+- `scripts/automation/decomposition/*` は維持
+- `scripts/automation/orchestration/*` は維持
+- `TaskExecutor` の将来 contract を fixed agent class 前提から registry/handler 前提へ修正
+- `scripts/lib/*` の shim 維持方針を整理
+
+### Phase 2: `.claude/agents` loader と registry を実装
+
+目的:
+
+- Claude 用 agent 定義を runtime から参照可能にする
+
+作業:
+
+- `scripts/automation/agents/markdown-loader.ts`
+- `scripts/automation/agents/registry.ts`
+- `scripts/automation/agents/handler-contract.ts`
+- frontmatter parser と body summarizer
+- `.claude/agents` 変更時の failure mode を定義
 
 成果物:
 
-- `npx tsc -p scripts/tsconfig.json --noEmit` の土台ができる
-- runtime の参照先が `packages/agents` ではなく `scripts/automation` に揃う準備が整う
+- runtime が `.claude/agents/*.md` を source of truth として読める
+- agent を増やしても metadata 反映のための手作業を最小化できる
 
-### Phase 1: GitHub 自動化の共通部を吸収
+### Phase 3: capability handler と generic fallback を実装
 
 目的:
 
-- 分散している GitHub utility を `scripts/automation` に集約する
+- 副作用付きの runtime 実行を、明示 handler 経由でのみ許可する
 
 作業:
 
-- `scripts/lib/projects-v2.ts` を `scripts/automation/github/projects-v2.ts` へ移す
-- `scripts/lib/discussions.ts` を `scripts/automation/github/discussions.ts` へ移す
-- `repository-metrics` / `automation-reporting` も責務に応じて `scripts/automation/reporting` へ寄せる
-
-成果物:
-
-- reporting / project / discussion 系が script 本体から分離される
-
-### Phase 2: state / label / sync を吸収
-
-目的:
-
-- label-state-machine 系を単独スクリプトから shared ロジックへ昇格する
-
-作業:
-
-- `scripts/automation/state/task-state-machine.ts`
-- `scripts/automation/state/label-state-bridge.ts`
-- `scripts/automation/state/label-state-machine.ts`
-- `scripts/automation/sync/github-label-sync.ts`
-
-切替方針:
-
-- `scripts/label-state-machine.ts` は CLI 互換を維持
-- 内部の `STATE_TRANSITIONS` とラベル操作は `scripts/automation` 側へ委譲
-
-### Phase 3: webhook / dashboard / project status の吸収
-
-目的:
-
-- workflow から見た自動化入口の内部実装を `scripts/automation` に統一する
-
-作業:
-
-- `scripts/webhook-router.ts` の routing ルールを package 化ではなく automation 化
-- `scripts/generate-dashboard-data.ts` の生成ロジックを `scripts/automation/reporting` へ移す
-- `scripts/update-project-status.ts` の project status 更新ロジックを `scripts/automation/adapters` へ移す
-- `scripts/post-kpi-report.ts` と `scripts/generate-weekly-report.ts` の posting ロジックを `scripts/automation/reporting` へ移す
-
-成果物:
-
-- workflow は従来の script を呼び続けても、実体ロジックは `scripts/automation` に一本化される
-
-### Phase 4: task decomposition / DAG / execution の吸収
-
-目的:
-
-- Miyabi 側にしか無い decomposition と orchestration を `judgesystem` へ持ち込む
-
-作業:
-
-- `llm-decomposer.ts`
-- `decomposition-validator.ts`
-- `prompt-templates.ts`
-- `dag-manager.ts`
-- `task-executor.ts`
-- `worktree-coordinator.ts`
-- `task-manager.ts`
-- 関連する型定義を `scripts/automation/*` 配下に整理
-
-注意点:
-
-- decomposition は `scripts/automation/decomposition` を独立責務として置く
-- DAG / executor / task-manager は `scripts/automation/orchestration` に置く
-- Claude の prompt 定義と混同しないよう、`.claude/agents` と `scripts/automation/agents` は役割を明記する
-
-### Phase 5: Agent 実装の吸収
-
-目的:
-
-- `.claude/agents/*.md` だけでなく、実装クラスとしてもローカルに持つ
-
-対象:
-
-- `CoordinatorAgent`
-- `IssueAgent`
-- `CodeGenAgent`
-- `ReviewAgent`
-- `PRAgent`
-- `DeploymentAgent`
+- issue / label / state handler
+- review result handler
+- pr handler
+- deployment trigger handler
+- handler 未実装時の generic fallback
 
 補足:
 
-- `.claude/agents` は prompt 定義として残す
-- runtime 実装は `scripts/automation/agents` に置く
+- `CodeGenAgent` も「即 class を作る」より、まずは generic executor + capability binding で扱う
+- handler がない agent は planning-only / comment-only / escalation-only に落とす
 
-### Phase 6: 切替と整理
+### Phase 4: workflow と runtime の事実を一致させる
 
 目的:
 
-- 分散した source of truth を一つに寄せる
+- GitHub Actions 側の表示と、実際の実行能力を一致させる
 
 作業:
 
-- `scripts/*` が `scripts/automation/*` のみを参照する形へ統一
-- workflow 内の古い参照パスや inline script を整理
-- `scripts/lib/*` の重複ロジックを削減または移設
-- docs を最終構成に合わせて更新
+- `autonomous-agent.yml` の PR body / issue comment を execution report ベースへ変更
+- 実際に codegen / review / test / pr が行われたときだけその結果を書く
+- 未実装の handler を前提にした成功文言を消す
 
-## 9. まず最初にやるべき最小スライス
+### Phase 5: `context-and-impact` / GitNexus の運用契約を固める
 
-差分吸収を最短で前進させるなら、最初の 1 週間分は以下がよい。
+目的:
 
-1. `scripts/tsconfig.json` を作る
-2. `scripts/automation/github/projects-v2.ts` と `scripts/automation/github/discussions.ts` を作る
-3. `scripts/post-kpi-report.ts` と `scripts/generate-dashboard-data.ts` を `scripts/automation` 経由へ切り替える
-4. `scripts/label-state-machine.ts` を `scripts/automation/state` 委譲にする
+- 実行前パイプラインと code intelligence の前提を安定化する
 
-この順なら、すでに `judgesystem` に存在する断片を束ねる作業から始められる。
-いきなり task decomposition や worktree 実行から始めるより、運用影響が見えやすく安全。
+作業:
 
-## 10. Definition of Done
+- `scripts/context-impact/*.sh` の bridge 契約を文書化
+- `pipeline:*` script の依存関係を整理
+- `GitNexus` は vanilla CLI / stable wrapper / agent graph MCP を文書上で区別
+- `gitnexus_detect_changes` 前提の記述を、現実に使えるフローへ置き換える
 
-以下を満たしたら「Miyabi 差分を judgesystem に吸収し切った」と言える。
+### Phase 6: 外部 sibling 依存の縮減
 
-- `scripts/automation/` が repo 自動化の source of truth になっている
-- `scripts/*.ts` の主要自動化ロジックが `scripts/automation/*` に委譲されている
-- `.github/workflows/` が存在しない Miyabi パスや仮想パスを参照しない
-- runtime で Miyabi 元ディレクトリを参照しない
-- `.claude/*` と runtime 実装の責務分担が明確
-- app runtime (`packages/*`) と運用自動化 (`scripts/automation/*`) の境界が文書化されている
+目的:
 
-## 11. 検証項目
+- `../Miyabi` 前提をなくし、必要なら他 sibling 依存も明確化・縮減する
 
-各フェーズで最低限確認すること。
+作業:
 
-- `npx tsc -p scripts/tsconfig.json --noEmit`
-- `npm run state:check -- --issue=<number>`
-- `npx tsx scripts/post-kpi-report.ts --dry-run`
-- `npx tsx scripts/generate-weekly-report.ts`
-- `npx tsx scripts/generate-dashboard-data.ts`
-- `npx tsx scripts/webhook-router.ts issue opened <number>`
+- `package.json` の `miyabi` dependency の整理
+- `.claude/mcp-servers/miyabi-integration.js` の扱いを決める
+- `.claude/commands/miyabi-*.md` の扱いを決める
+- `agent-skill-bus` と `context-and-impact` を bridge のまま残すか、最小 vendor するかを決める
 
-補足:
+## 8. まず着手すべき最小スライス
 
-- これらは `scripts/tsconfig.json` と `scripts/automation/` の最小構成ができてから有効になる
-- docs-only 変更の段階では、まだ失敗しても不自然ではない
+次にやるべき最小スライスは固定 agent class の追加ではない。
+まず以下の順で進める。
 
-## 12. メモ
+1. AGENTS / CLAUDE / workflow の表現を現実へ合わせる
+2. `.claude/agents` を読む registry / loader contract を作る
+3. `TaskExecutor` が registry を介せる形へ寄せる
+4. 最小の handler だけを接続する
+5. `miyabi` 直呼び部分と `context-and-impact` bridge を整理する
 
-今回の計画では、Miyabi は「参照元」であり「実行基盤」ではない。
-最終的に必要なのは、`judgesystem` 自身の repo 構造と運用に沿った形で、必要差分をローカル実装として持ち切ることである。
+この順で進めると、
+いまある実装を活かしながら、設計の歪みだけを先に直せる。
+
+## 9. 改訂版 Definition of Done
+
+以下を満たしたら、Miyabi 差分吸収は「筋の良い形で完了」と言える。
+
+- `judgesystem` が `../Miyabi` を runtime 前提にしない
+- `.claude/agents/*.md` は Claude 用定義として残り、runtime 側は loader 経由で参照する
+- `scripts/automation/*` が repo automation の実装本体になっている
+- `agents:parallel:exec` は registry + handler もしくは planning-only のどちらかを明示できる
+- `.github/workflows/*` は実際に行ったことだけを報告する
+- `AGENTS.md` / `CLAUDE.md` / 計画書が、実際に使える GitNexus / context-and-impact / runtime 構成と矛盾しない
+- `context-and-impact` と `agent-skill-bus` を外部 bridge として残すなら、その前提が明文化されている
+
+## 10. 調査ソース
+
+### 10.1 公式ドキュメント
+
+- Claude Code settings: https://code.claude.com/docs/en/settings
+- Claude Code hooks: https://code.claude.com/docs/en/hooks
+- Claude Code slash commands / skills: https://code.claude.com/docs/en/slash-commands
+- Codex introduction: https://openai.com/index/introducing-codex/
+- GitHub Actions overview: https://docs.github.com/en/actions/get-started/understand-github-actions
+- GitHub reusable workflows: https://docs.github.com/en/actions/how-tos/reuse-automations/reuse-workflows
+- GitHub composite actions: https://docs.github.com/en/actions/tutorials/create-actions/create-a-composite-action
+
+### 10.2 ローカル確認対象
+
+- `AGENTS.md`
+- `CLAUDE.md`
+- `.claude/settings.json`
+- `.claude/mcp.json`
+- `.claude/agents/*.md`
+- `.claude/mcp-servers/miyabi-integration.js`
+- `.github/workflows/autonomous-agent.yml`
+- `package.json`
+- `scripts/automation/*`
+- `scripts/context-impact/*`
+- `../Miyabi/*`
+- `../context-and-impact/*`
+- `../gitnexus-stable-ops/*`
+
+## 11. まとめ
+
+今回の結論は明確である。
+
+- `scripts/automation` は引き続き正しい吸収先
+- ただし agent 実装モデルは fixed class 前提ではなく registry / handler 前提へ修正する
+- `.claude/agents` は runtime 実装ではなく、Claude 用 prompt / metadata の正本として扱う
+- `context-and-impact` と GitNexus は「重要だが別面の契約」を持つため、明示的に計画へ組み込む
+- すでに進めた Phase 0-4 相当の実装は、破棄ではなく contract 修正と truthfulness 回復で活かす
