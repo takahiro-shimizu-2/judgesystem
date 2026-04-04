@@ -10,27 +10,21 @@ import {
   ArrowForward as ArrowForwardIcon,
   CheckCircle as CheckCircleIcon,
 } from "@mui/icons-material";
-import { useState, useCallback, useEffect, useRef, type SyntheticEvent } from "react";
+import { useState, useCallback, useEffect, type SyntheticEvent } from "react";
 import { getApiUrl } from "../config/api";
 
 import {
   bidTypeConfig,
   updateWorkStatus,
   updateEvaluationAssignee,
-  fetchPartnerCandidates,
-  createPartnerCandidate,
-  deletePartnerCandidate,
-  updatePartnerCandidate,
 } from "../data";
 import type {
   BidEvaluation,
-  Partner,
-  PartnerStatus,
-  PartnerCandidatePayload,
-  SimilarCase,
   StepAssignee,
   WorkStatus,
 } from "../types";
+import { useSimilarCases } from "../hooks/useSimilarCases";
+import { usePartnerAssignment } from "../hooks/usePartnerAssignment";
 import { priorityLabels, priorityColors } from "../constants/priority";
 import { WORKFLOW_STEP_CONFIG, WORKFLOW_STEP_IDS } from "../constants/workflow";
 import { pageStyles, colors, fontSizes, iconStyles, borderRadius } from "../constants/styles";
@@ -197,14 +191,6 @@ export default function BidDetailPage() {
   const [evaluation, setEvaluation] = useState<BidEvaluation | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [similarCases, setSimilarCases] = useState<SimilarCase[]>([]);
-  const [isSimilarCasesLoading, setIsSimilarCasesLoading] = useState(false);
-  const [similarCasesError, setSimilarCasesError] = useState<string | null>(null);
-  const [targetAnnouncementNo, setTargetAnnouncementNo] = useState<string | null>(null);
-  const [partners, setPartners] = useState<Partner[]>([]);
-  const [partnersLoading, setPartnersLoading] = useState(false);
-  const partnersRequestIdRef = useRef(0);
-  const similarCasesAbortRef = useRef<AbortController | null>(null);
 
   // Snackbar通知
   const [snackbar, setSnackbar] = useState<{
@@ -270,97 +256,23 @@ export default function BidDetailPage() {
     }
   }, [evaluation]);
 
-  const loadPartners = useCallback(async (targetEvaluationNo: string) => {
-    const requestId = ++partnersRequestIdRef.current;
-    setPartnersLoading(true);
-    try {
-      const list = await fetchPartnerCandidates(targetEvaluationNo);
-      if (partnersRequestIdRef.current === requestId) {
-        setPartners(list);
-      }
-    } catch (error) {
-      console.error("Failed to fetch partner candidates:", error);
-      if (partnersRequestIdRef.current === requestId) {
-        setPartners([]);
-      }
-    } finally {
-      if (partnersRequestIdRef.current === requestId) {
-        setPartnersLoading(false);
-      }
-    }
-  }, []);
+  // 類似案件フック
+  const {
+    similarCases,
+    isLoading: isSimilarCasesLoading,
+    error: similarCasesError,
+    retry: handleRetrySimilarCases,
+  } = useSimilarCases(evaluation?.announcement?.id);
 
-  useEffect(() => {
-    if (!evaluation?.evaluationNo) {
-      partnersRequestIdRef.current += 1;
-      setPartners([]);
-      setPartnersLoading(false);
-      return;
-    }
-    void loadPartners(evaluation.evaluationNo);
-  }, [evaluation?.evaluationNo, loadPartners]);
-
-  const fetchSimilarCases = useCallback(async (announcementNo: string) => {
-    if (!announcementNo) return;
-
-    // 前回のリクエストをキャンセル（レースコンディション防止）
-    similarCasesAbortRef.current?.abort();
-    const controller = new AbortController();
-    similarCasesAbortRef.current = controller;
-
-    setIsSimilarCasesLoading(true);
-    setSimilarCasesError(null);
-    try {
-      const response = await fetch(
-        getApiUrl(`/api/announcements/${announcementNo}/similar-cases`),
-        { signal: controller.signal }
-      );
-      if (!response.ok) {
-        throw new Error(`Failed to fetch similar cases: ${response.status}`);
-      }
-      const data = await response.json();
-      if (!controller.signal.aborted) {
-        setSimilarCases(data);
-      }
-    } catch (err) {
-      if (err instanceof DOMException && err.name === 'AbortError') {
-        return; // キャンセルされたリクエストは無視
-      }
-      console.error("Failed to fetch similar cases:", err);
-      if (!controller.signal.aborted) {
-        setSimilarCases([]);
-        setSimilarCasesError(err instanceof Error ? err.message : "Unknown error");
-      }
-    } finally {
-      if (!controller.signal.aborted) {
-        setIsSimilarCasesLoading(false);
-      }
-    }
-  }, []);
-
-  useEffect(() => {
-    const announcementId = evaluation?.announcement?.id;
-    if (!announcementId) {
-      similarCasesAbortRef.current?.abort();
-      setSimilarCases([]);
-      setTargetAnnouncementNo(null);
-      return;
-    }
-    const match = announcementId.match(/^ann-(\d+)$/);
-    const announcementNo = match ? match[1] : announcementId;
-    setTargetAnnouncementNo(announcementNo);
-    fetchSimilarCases(announcementNo);
-
-    return () => {
-      similarCasesAbortRef.current?.abort();
-    };
-  }, [evaluation?.announcement?.id, fetchSimilarCases]);
-
-  const handleRetrySimilarCases = useCallback(() => {
-    if (targetAnnouncementNo) {
-      fetchSimilarCases(targetAnnouncementNo);
-    }
-  }, [targetAnnouncementNo, fetchSimilarCases]);
+  // 協力会社フック
+  const {
+    partners,
+    isLoading: partnersLoading,
+    addPartner: handlePartnerAdd,
+    removePartner: handlePartnerRemove,
+    changePartnerStatus: handlePartnerStatusChange,
+    togglePartnerSurvey: handlePartnerSurveyToggle,
+  } = usePartnerAssignment(evaluation?.evaluationNo);
 
   // 担当者変更ハンドラ
   const handleAssigneeChange = useCallback(async (stepId: string, staffId: string) => {
@@ -393,52 +305,6 @@ export default function BidDetailPage() {
       ];
     });
   }, [evaluation]);
-
-  const handlePartnerAdd = useCallback(async (payload: PartnerCandidatePayload) => {
-    if (!evaluation) {
-      throw new Error("判定結果を読み込み中です。再度お試しください。");
-    }
-    const created = await createPartnerCandidate(evaluation.evaluationNo, payload);
-    if (!created) {
-      throw new Error("協力会社の追加に失敗しました。");
-    }
-    setPartners((prev) => [...prev, created]);
-  }, [evaluation]);
-
-  const handlePartnerRemove = useCallback(async (partnerId: string) => {
-    if (!evaluation) {
-      throw new Error("判定結果を読み込み中です。");
-    }
-    const success = await deletePartnerCandidate(evaluation.evaluationNo, partnerId);
-    if (!success) {
-      throw new Error("候補の削除に失敗しました。");
-    }
-    setPartners((prev) => prev.filter((p) => p.id !== partnerId));
-  }, [evaluation]);
-
-  const handlePartnerStatusChange = useCallback(async (partnerId: string, status: PartnerStatus) => {
-    if (!evaluation) {
-      throw new Error("判定結果を読み込み中です。");
-    }
-    setPartners((prev) => prev.map((p) => (p.id === partnerId ? { ...p, status } : p)));
-    const updated = await updatePartnerCandidate(evaluation.evaluationNo, partnerId, { status });
-    if (!updated) {
-      await loadPartners(evaluation.evaluationNo);
-      throw new Error("ステータスの更新に失敗しました。");
-    }
-  }, [evaluation, loadPartners]);
-
-  const handlePartnerSurveyToggle = useCallback(async (partnerId: string, nextValue: boolean) => {
-    if (!evaluation) {
-      throw new Error("判定結果を読み込み中です。");
-    }
-    setPartners((prev) => prev.map((p) => (p.id === partnerId ? { ...p, surveyApproved: nextValue } : p)));
-    const updated = await updatePartnerCandidate(evaluation.evaluationNo, partnerId, { surveyApproved: nextValue });
-    if (!updated) {
-      await loadPartners(evaluation.evaluationNo);
-      throw new Error("現地調査ステータスの更新に失敗しました。");
-    }
-  }, [evaluation, loadPartners]);
 
   const [mainViewTab, setMainViewTab] = useState<MainViewTab>("workflow");
 
