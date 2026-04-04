@@ -4,291 +4,63 @@ description: Miyabi Water Spider外部bridge
 
 # Miyabi Water Spider全自動モード（外部bridge）
 
-Water Spider Agent（水すまし）を起動するための optional external bridge です。
-`judgesystem` の repo-local runtime だけでこの全自動挙動が常に再現されるわけではありません。
+これは `judgesystem` の repo-local runtime ではなく、
+Miyabi CLI / MCP bridge が使える場合にだけ起動する optional external bridge です。
 
 ## judgesystem での位置づけ
 
-- `miyabi__auto` は local `miyabi` binary または外部 bridge が解決できる場合のみ利用可能
-- repo-local 側では Issue ごとの `agents:parallel:exec`、state machine、workflow が中心
-- CodeGen / Review / PR / Deploy は optional handler であり、未接続なら planning/reporting に留まる
+- repo-local の主経路は `npm run agents:parallel:exec`
+- `miyabi__auto` は `MIYABI_CLI` / `MIYABI_ROOT` / local install / sibling fallback が解決できる場合のみ使える
+- bridge 側で full automation が有効でも、repo-local 側に未接続 capability があれば plan / report で止まることがある
 
-## MCPツール
+## 使い方
 
-### `miyabi__auto`
-Water Spider全自動モードを起動
+### MCP
 
-**パラメータ**:
-- `maxIssues`: 最大処理Issue数（デフォルト: 5）
-- `interval`: ポーリング間隔（秒）（デフォルト: 60）
-
-**使用例**:
-```
-全自動モード起動（デフォルト設定）:
+```text
 miyabi__auto({})
-
-最大10 Issue、30秒間隔:
 miyabi__auto({ maxIssues: 10, interval: 30 })
 ```
 
-## bridge 利用時の想定フロー
-
-各Issue処理時、**必ず状態遷移コマンドを実行してからフェーズに進むこと**。
-
-```
-Water Spider Agent起動
-    ↓
-GitHub Issueポーリング（60秒ごと）
-    ↓
-未処理Issueを検出
-    ↓
-優先順位付け（緊急度・規模・種別）
-    ↓
-【状態遷移】npm run state:transition -- --issue={N} --to=analyzing --reason="CoordinatorAgent assigned"
-    ↓
-CoordinatorAgent起動（Issue分析・タスク分解）
-    ↓
-【状態遷移】npm run state:transition -- --issue={N} --to=implementing --reason="CodeGenAgent assigned"
-    ↓
-CodeGenAgent（コード生成）
-    ↓
-ReviewAgent（品質チェック）
-    ↓
-PRAgent（handler がある場合に artifact / PR 作成）
-    ↓
-【CI確認】gh pr checks {PR番号} でCI結果を確認。失敗時は修正してから次へ進む
-    ↓
-CIが自動で implementing → reviewing に遷移（PR作成イベント）
-    ↓
-次のIssueへ（maxIssues到達まで繰り返し）
-```
-
-### 状態遷移ルール（必須）
-
-遷移は以下の順序でのみ許可される。スキップ不可:
-
-```
-pending → analyzing → implementing → reviewing → done
-```
-
-- `pending → analyzing`: Issue着手時に実行
-- `analyzing → implementing`: コード生成開始時に実行
-- `implementing → reviewing`: PR作成時にCIが自動実行（手動不要）
-- `reviewing → done`: PRマージ時にCIが自動実行（手動不要）
-
-## 優先順位付けロジック
-
-Water Spiderは以下の順序でIssueを処理します:
-
-1. **緊急度が高い**: `緊急度-高`, `緊急度-即時` ラベル付き
-2. **セキュリティ関連**: `security`, `vulnerability` ラベル付き
-3. **ブロッカー**: `status:blocked` 以外で、依存関係が解決済み
-4. **規模が小さい**: `規模-小` ラベル付き（クイックウィン）
-5. **作成日時が古い**: FIFOで公平に処理
-
-## コマンドライン実行
-
-MCPツールの代わりにコマンドラインでも実行可能:
+### CLI
 
 ```bash
-# デフォルト設定で起動
 npx miyabi auto
-
-# 最大Issue数と間隔を指定
 npx miyabi auto --max-issues 10 --interval 30
-
-# 1回だけ実行（ポーリングなし）
-npx miyabi auto --max-issues 5 --interval 0
 ```
 
-## 環境変数
+## 期待値
 
-`.env` ファイルに以下を設定:
+この bridge を使っても、次を自動保証するわけではない。
+
+- product code 自動生成
+- remote PR 自動作成
+- deploy 自動完了
+- 固定スコアによる自動マージ判定
+
+## repo-local で代替できること
 
 ```bash
-GITHUB_TOKEN=ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-ANTHROPIC_API_KEY=sk-ant-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-REPOSITORY=owner/repo
-DEVICE_IDENTIFIER=MacBook Pro 16-inch
+npm run agents:parallel:exec -- --issue 123 --dry-run
+npm run agents:parallel:exec -- --issue 123
+npm run state:transition -- --issue=123 --to=analyzing --reason="manual handoff"
 ```
 
-## 停止方法
+## 利用条件
 
-### MCPツール経由
-Water Spiderはバックグラウンドで実行されないため、Claude Codeセッション終了時に自動停止します。
+- `GITHUB_TOKEN`
+- 必要なら `MIYABI_CLI` または `MIYABI_ROOT`
+- または local `miyabi` install / optional sibling checkout
 
-### CLI経由
-```bash
-# Ctrl+C で停止
-^C
-```
+## 実行後の確認
 
-### プログラム的停止
-```bash
-# maxIssues到達で自動停止
-npx miyabi auto --max-issues 3
+- `.ai/logs/`
+- `.ai/parallel-reports/`
+- Issue labels / state
+- 必要なら `gh pr checks <number>`
 
-# interval=0 で1回のみ実行
-npx miyabi auto --interval 0
-```
+## トラブル時
 
-## 前提条件
-
-Water Spider bridge を利用するための条件:
-
-✅ **環境**:
-- `GITHUB_TOKEN` が設定済み
-- `ANTHROPIC_API_KEY` が設定済み（CodeGenAgent用）
-- `REPOSITORY` が正しい形式（owner/repo）
-
-✅ **権限**:
-- GitHubトークンに `repo`, `workflow` 権限
-- リポジトリへの書き込み権限
-
-✅ **Issue**:
-- 未処理Issueが存在する
-- Issueがブロック状態でない（`status:blocked` ラベルなし）
-
-未接続 handler がある場合、repo-local runtime は plan / report を返して停止することがあります。
-
-## 処理結果の確認
-
-### GitHub上で確認
-```bash
-# 処理されたIssueを確認
-gh issue list --label "status:in-progress"
-
-# 作成されたPRを確認
-gh pr list --label "automated"
-
-# Projectsボードで進捗確認
-gh project list
-```
-
-### ログで確認
-```bash
-# 実行ログ確認
-cat .ai/logs/$(date +%Y-%m-%d).md
-
-# 詳細レポート確認
-cat .ai/parallel-reports/agents-parallel-*.json | jq
-```
-
-## エラーハンドリング
-
-### Issue処理失敗時
-Water Spiderは以下の場合にIssueをスキップして次へ進みます:
-
-- ❌ API呼び出し失敗（3回リトライ後）
-- ❌ 品質スコア不合格（<80点）
-- ❌ テスト実行失敗
-- ❌ エスカレーション条件に該当
-
-失敗したIssueには自動的にコメントが追加され、適切な担当者にエスカレーションされます。
-
-### レート制限
-GitHub API レート制限に達した場合:
-
-1. 自動的に待機（Retry-After ヘッダー参照）
-2. 指数バックオフで再試行
-3. 3回失敗後にエラー終了
-
-## 使用例
-
-### 例1: 一括処理（5件まで）
-
-```
-あなた: "全自動モードで未処理Issueを5件処理して"
-
-Claude: [miyabi__auto({ maxIssues: 5 }) を実行]
-
-Water Spider Agent起動
-✓ Issue #123を検出
-  → CoordinatorAgent起動
-  → CodeGenAgent: コード生成完了
-  → ReviewAgent: 品質スコア 85/100 ✅
-  → PRAgent: Draft PR #124作成
-
-✓ Issue #125を検出
-  → CoordinatorAgent起動
-  → ...
-
-完了: 5件のIssueを処理しました
-```
-
-### 例2: 継続監視モード
-
-```
-あなた: "30秒ごとにIssueをチェックして、最大10件処理"
-
-Claude: [miyabi__auto({ maxIssues: 10, interval: 30 }) を実行]
-
-Water Spider Agent起動（継続監視モード）
-[00:00] ポーリング中...
-[00:30] ポーリング中... Issue #130検出 → 処理開始
-[01:00] ポーリング中...
-[01:30] ポーリング中... Issue #131検出 → 処理開始
-...
-
-完了: 10件のIssueを処理しました（自動停止）
-```
-
-## トラブルシューティング
-
-### Water Spiderが起動しない
-```
-❌ Error: GITHUB_TOKEN is required
-
-解決策:
-1. .envファイルを確認
-2. GITHUB_TOKEN=ghp_... を追加
-```
-
-### Issueが処理されない
-```
-⚠️  No unprocessed issues found
-
-確認:
-1. gh issue list で未処理Issueがあるか確認
-2. status:blocked ラベルが付いていないか確認
-3. 依存関係が解決されているか確認
-```
-
-### API制限エラー
-```
-❌ GitHub API rate limit exceeded
-
-解決策:
-1. レート制限リセットまで待機（通常1時間）
-2. GitHub Apps トークンを使用（レート制限が緩い）
-3. --interval を長くする（例: 300秒）
-```
-
-## ベストプラクティス
-
-### 🎯 推奨設定
-
-**通常運用**:
-```bash
-npx miyabi auto --max-issues 10 --interval 60
-```
-
-**夜間バッチ処理**:
-```bash
-npx miyabi auto --max-issues 50 --interval 0
-```
-
-**テスト・検証**:
-```bash
-npx miyabi auto --max-issues 1 --interval 0 --dry-run
-```
-
-### ⚠️ 注意事項
-
-- **レート制限**: GitHub APIは1時間あたり5,000リクエスト制限があります
-- **並列実行**: 複数のWater Spiderを同時実行しないでください（競合の可能性）
-- **Draft PR**: 作成されるPRは全てDraftです。人間レビュー後にマージしてください
-
----
-
-💡 **ヒント**: Water Spiderは「水すまし」のように、表面をさっと移動しながらタスクを次々と処理します。
+- bridge が見つからないなら `MIYABI_CLI` / `MIYABI_ROOT` を確認
+- repo-local handler が未接続なら plan-only で止まることがある
+- 実際に行われた内容は execution report を見て判断する

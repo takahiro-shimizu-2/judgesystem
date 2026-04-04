@@ -1,206 +1,115 @@
 ---
-description: Autonomous Agent実行 - Issue自動処理パイプライン
+description: Autonomous Agent実行 - planning-first orchestration と safe handler 実行入口
 ---
 
 # Autonomous Agent実行
 
-GitHub IssueをAutonomous Agentシステムで自動処理します。
+`judgesystem` の repo-local autonomous runtime を実行する入口です。
+現在の `agents:parallel:exec` は、Issue を分解して DAG / execution plan / report を作り、
+接続済み handler があれば safe に実行します。
 
-## 実行フロー
+## 現在の実行モデル
 
+```text
+Issue取得
+  ↓
+CoordinatorAgent
+  ↓
+IssueAgent      → label/state sync (token がある場合)
+CodeGenAgent    → implementation brief artifact
+ReviewAgent     → npm run typecheck / npm test
+PRAgent         → local draft PR artifact
+DeploymentAgent → env-gated command only
 ```
-Issue作成/検出
-    ↓
-CoordinatorAgent（タスク分解・DAG構築）
-    ↓ 並行実行
-├─ IssueAgent（Issue分析・Label付与）
-├─ CodeGenAgent（コード生成）
-├─ ReviewAgent（品質チェック≥80点）
-└─ PRAgent（PR作成）
-    ↓
-Draft PR作成
-    ↓
-人間レビュー待ち
-```
 
-## コマンド
+以下はまだ前提にしないこと:
 
-### 単一Issue処理
+- external model による product code 自動生成
+- GitHub 上の remote PR 自動作成
+- deploy の常時実行
+- 固定の品質スコアや coverage を成功条件として断定すること
+
+## 実行コマンド
+
+### 単一Issue
 
 ```bash
 npm run agents:parallel:exec -- --issue 123
 ```
 
-### 複数Issue並行処理
+### 複数Issue
 
 ```bash
 npm run agents:parallel:exec -- --issues 123,124,125 --concurrency 3
 ```
 
-### Dry run（確認のみ、変更なし）
+### Dry run
 
 ```bash
 npm run agents:parallel:exec -- --issue 123 --dry-run
 ```
 
-### ヘルプ表示
+### ヘルプ
 
 ```bash
 npm run agents:parallel:exec -- --help
 ```
 
-## オプション
+## 主な出力
 
-| オプション | 説明 | デフォルト |
-|-----------|------|-----------|
-| `--issue <number>` | 単一Issue番号 | - |
-| `--issues <n1,n2,...>` | 複数Issue番号（カンマ区切り） | - |
-| `--concurrency <number>` | 並行実行数 | 2 |
-| `--dry-run` | 実行のみ（変更なし） | false |
-| `--log-level <level>` | ログレベル | info |
+- `.ai/parallel-reports/execution-plan-*.json`
+- `.ai/parallel-reports/agents-parallel-*.json`
+- `.ai/worktrees/issue-*/...`
+- `.ai/logs/YYYY-MM-DD.md`
 
 ## 環境変数
 
-必須環境変数（`.env`ファイル）:
+必須ではないが、あると connected handler が広がるもの:
 
 ```bash
-GITHUB_TOKEN=ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-ANTHROPIC_API_KEY=sk-ant-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+GITHUB_TOKEN=ghp_xxx
+GH_TOKEN=ghp_xxx
 REPOSITORY=owner/repo
-DEVICE_IDENTIFIER=MacBook Pro 16-inch
+DEVICE_IDENTIFIER=local-runner
+AUTOMATION_ENABLE_DEPLOY=true
+AUTOMATION_DEPLOY_COMMAND="npm run deploy:staging"
 ```
 
-## 成功条件
+補足:
 
-✅ **必須**:
-- Issue分析完了
-- コード生成成功
-- 品質スコア ≥80点
-- Draft PR作成
+- `GITHUB_TOKEN` が無くても dry-run や local artifact 生成は可能
+- `ANTHROPIC_API_KEY` は現行 repo-local handler の必須条件ではない
 
-✅ **品質**:
-- TypeScriptエラー 0件
-- ESLintエラー 0件
-- セキュリティスキャン合格
-- テストカバレッジ ≥80%
+## 実行前のおすすめ
 
-## エスカレーション
-
-以下の場合、自動エスカレーション:
-
-| 条件 | エスカレーション先 | 重要度 |
-|------|------------------|--------|
-| アーキテクチャ問題 | TechLead | Sev.2-High |
-| セキュリティ脆弱性 | CISO | Sev.1-Critical |
-| ビジネス優先度 | PO | Sev.3-Medium |
-| 循環依存検出 | TechLead | Sev.2-High |
-
-## 実行例
-
-### 例1: 単一Issue処理
+アプリコードに触る Issue なら先に:
 
 ```bash
-$ npm run agents:parallel:exec -- --issue 270
-
-🤖 Autonomous Operations - Parallel Executor
-
-✅ Configuration loaded
-   Device: MacBook Pro 16-inch
-   Repository: ShunsukeHayashi/Autonomous-Operations
-   Concurrency: 2
-
-✅ Fetched Issue #270: Add user authentication
-
-================================================================================
-🚀 Executing Issue #270: Add user authentication
-================================================================================
-
-[CoordinatorAgent] 🔍 Decomposing Issue #270
-[CoordinatorAgent]    Found 4 tasks
-[CoordinatorAgent] 🔗 Building task dependency graph (DAG)
-[CoordinatorAgent]    Graph: 4 nodes, 0 edges, 1 levels
-[CoordinatorAgent] ✅ No circular dependencies found
-
-[CodeGenAgent] 🧠 Generating code with Claude AI
-[CodeGenAgent]    Generated 3 files
-
-[ReviewAgent] 📊 Calculating quality score
-[ReviewAgent]    Score: 85/100 ✅
-
-[PRAgent] 🚀 Creating Pull Request
-[PRAgent] ✅ PR created: #271
-
-✅ Issue #270 completed successfully
-   Duration: 45,234ms
-```
-
-### 例2: Dry run
-
-```bash
-$ npm run agents:parallel:exec -- --issue 270 --dry-run
-
-🤖 Autonomous Operations - Parallel Executor
-   Dry Run: Yes (no changes will be made)
-
-[実行のみ、ファイル書き込みなし]
+npm run pipeline:plan:init -- "Issue #123 summary" M
+npx gitnexus query "keyword" --repo judgesystem
 ```
 
 ## トラブルシューティング
 
-### API Key エラー
+### Issue を取れない
+
+- Issue番号を確認する
+- `GITHUB_TOKEN` / `REPOSITORY` を確認する
+
+### handler が skip / planned になる
+
+- token や env gate が無い可能性がある
+- その task は未接続 capability かもしれない
+- report の `notes` と `warnings` を確認する
+
+### 実行結果を見る
 
 ```bash
-❌ Error: ANTHROPIC_API_KEY is required for CodeGenAgent
-
-解決策:
-1. .envファイルを確認
-2. ANTHROPIC_API_KEY=sk-ant-... を追加
-```
-
-### GitHub API エラー
-
-```bash
-❌ Failed to fetch issue #270: Not Found
-
-解決策:
-1. Issue番号が正しいか確認
-2. GITHUB_TOKEN権限を確認（repo, workflow）
-3. REPOSITORYが正しいか確認
-```
-
-### 品質スコア不合格
-
-```bash
-❌ Quality score: 75/100 (Failed)
-
-エスカレーション:
-→ TechLeadにエスカレーションされました
-→ Issue #270にコメントが追加されます
-```
-
-## ログ確認
-
-```bash
-# 実行ログ
 cat .ai/logs/$(date +%Y-%m-%d).md
-
-# 実行レポート
 cat .ai/parallel-reports/agents-parallel-*.json | jq
 ```
 
-## GitHub Actions連携
+## 期待値の置き方
 
-GitHub Actionsから自動実行される場合:
-
-```yaml
-- name: Execute CoordinatorAgent
-  run: |
-    npm run agents:parallel:exec -- \
-      --issue ${{ needs.check-trigger.outputs.issue_number }} \
-      --concurrency 3 \
-      --log-level info
-```
-
----
-
-実行後、Draft PRが作成されるので、人間がレビューして承認してください。
+このコマンドは「完全自動で codegen → review → PR → deploy を終える」ことを
+常には意味しない。今の主目的は、plan / report / safe handler を truthfully 動かすことにある。
