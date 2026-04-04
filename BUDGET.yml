@@ -1,0 +1,50 @@
+# Economic Governance Configuration
+# AGENTS.md v5.0 - Economic Governance Protocol準拠
+
+monthly_budget_usd: 500  # 月間予算 (USD)
+
+thresholds:
+  warning: 0.8      # 80%で警告通知
+  emergency: 1.5    # 150%で緊急停止
+
+# コスト内訳
+cost_breakdown:
+  anthropic_api:
+    budget: 400     # USD
+    model: claude-sonnet-4-20250514
+    estimated_tokens_per_month: 10000000  # 10M tokens
+
+  github_actions:
+    budget: 0       # Free tier (3000 minutes/month)
+    estimated_minutes_per_month: 2000
+
+  firebase:
+    budget: 100     # USD
+    hosting_bandwidth: 10  # GB
+    functions_invocations: 1000000
+
+# 経済的非常事態時のアクション
+emergency_actions:
+  disable_workflows:
+    - agent-runner.yml
+    - continuous-improvement.yml
+    - agent-onboarding.yml
+    # 経済的サーキットブレーカー自体は停止しない
+
+  notify_channels:
+    - github_issue: true
+    - slack: false  # オプション
+
+# コスト監視設定
+monitoring:
+  check_interval: hourly  # 1時間ごとにチェック
+  metrics_retention_days: 90
+
+# ワークフロー再開承認
+recovery_protocol:
+  requires_guardian_approval: true
+  approval_checklist:
+    - 根本原因特定完了
+    - BUDGET.yml更新完了
+    - 不要リソース削除完了
+    - 月次予算見直し完了
