@@ -395,7 +395,7 @@ repo runtime の必須依存ではなく「override / local install 後の optio
 | Issue analysis / state sync | `IssueAgent` + label state machine + webhook routing | `scripts/automation/agents/handlers/issue.ts`, `scripts/automation/state/*`, `scripts/automation/adapters/webhook-router.ts` | 維持。state machine と event routing を repo-local runtime として育てる |
 | Code generation | `CodeGenAgent` が実コード生成・テスト生成・ドキュメント生成を行う | `scripts/automation/agents/handlers/codegen.ts` は implementation brief を必ず生成し、`AUTOMATION_ENABLE_CODEGEN_WRITE=true` と `AUTOMATION_CODEGEN_COMMAND` がある場合だけ delegated writer command を repo root で実行する | delegated writer binding を基盤にしつつ、必要なら external-model / stronger write contract へ拡張する |
 | Test execution | Miyabi では `TestAgent` と codegen/review 周辺で別能力として存在する | 独立 agent なし。`ReviewAgent` が `typecheck` / `test` を実行 | 当面は review/test capability に吸収する。必要になれば独立 capability として切り出す |
-| Review / quality gate | `ReviewAgent` が scoring / comment / escalation を行う | `scripts/automation/agents/handlers/review.ts` は local checks を実行 | local checks を基盤に、score / retry / escalation を追加する |
+| Review / quality gate | `ReviewAgent` が scoring / comment / escalation を行う | `scripts/automation/agents/handlers/review.ts` は repo root で configured checks を実行し、score / retry / escalation を review artifact と execution report へ残す | security / coverage / richer comment 契約を必要に応じて追加する |
 | PR creation | `PRAgent` が GitHub に draft PR を作成し、labels / reviewers も扱う | `scripts/automation/agents/handlers/pr.ts` は local draft artifact を常に生成し、`AUTOMATION_ENABLE_PR_WRITE=true` の場合だけ remote draft PR を作成または更新する | reviewer / label / mergeability など周辺 contract を段階追加する |
 | Deployment | `DeploymentAgent` が build / test / deploy / health check / rollback を扱う | `scripts/automation/agents/handlers/deployment.ts` は env-gated command 実行のみ | deploy contract を拡張し、preflight / health / rollback を段階導入する |
 | Workflow execution | `.github/workflows/autonomous-agent.yml` が execute mode で動く | `autonomous-agent.yml` は `workflow_dispatch` で planning / execute を明示切替し、実行した capability だけを summary/comment へ出す | issue/comment trigger 時の gate や dedicated execute workflow 分離を必要に応じて追加する |
@@ -506,8 +506,9 @@ Phase 3 の最初の実装スライスは、次の安全境界で入れる。
     `agent:issue` 付与と `state:analyzing` 遷移だけを行う
   - `GITHUB_TOKEN` が無い場合は skip する
 - `review.ts`
-  - まずは repo-local の `npm run typecheck` と `npm test` を実行し、
+  - まずは repo root で repo-local の `npm run typecheck` と `npm test` を実行し、
     結果を review summary として返す
+  - 後続では score / retry / escalation / artifact を追加する
   - token がある場合のみ `agent:review` と `state:reviewing` を同期する
 - `pr.ts`
   - 最初は GitHub 上の PR を直接作らず、
@@ -684,7 +685,7 @@ GitNexus は次で分ける。
 - `capability-router.ts` が registry を見て handler または fallback へ分岐できる
 - `IssueAgent` は label/state machine を介して analyzing へ遷移できる
 - `CodeGenAgent` は local implementation brief artifact を生成し、必要なら implementing へ同期できる
-- `ReviewAgent` は local check 実行結果を report に残せる
+- `ReviewAgent` は repo-root check 実行結果を report に残せる
 - `PRAgent` は local artifact を生成できる
 - `DeploymentAgent` は opt-in gate なしでは skip する
 
@@ -740,7 +741,7 @@ GitNexus は次で分ける。
 作業:
 
 - `CodeGenAgent` は delegated writer binding まで接続済みとし、必要なら external-model / stronger write contract への昇格条件を決める
-- `ReviewAgent` の score / retry / escalation 契約をどう持つか決める
+- `ReviewAgent` は score / retry / escalation 契約まで接続済みとし、security/coverage/comment contract の拡張条件を決める
 - `PRAgent` は remote draft PR 作成契約まで接続済みとし、reviewer / label / mergeability 契約の拡張条件を決める
 - `DeploymentAgent` の deploy/rollback/approval 契約を決める
 - `workflow_dispatch` の planning / execute 切替は接続済みとして、label / comment trigger 時の execute gate をどう扱うか決める
@@ -793,7 +794,7 @@ full autonomy をどの capability から開けるかを計画書どおりに進
 初手としては、`PRAgent` の remote draft PR 作成と
 `autonomous-agent.yml` の planning/execute 切替を先に完了させた。
 次の capability 候補としていた `CodeGenAgent` の delegated writer binding も接続済みである。
-残る重点は、review loop の強化と deployment contract の拡張である。
+残る重点は、review loop の richer contract と deployment contract の拡張である。
 
 ## 9. 改訂版 Definition of Done
 

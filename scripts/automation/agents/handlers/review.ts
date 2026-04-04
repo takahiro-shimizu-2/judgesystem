@@ -1,6 +1,8 @@
+import * as fs from 'fs';
+import * as path from 'path';
 import { spawnSync } from 'child_process';
 
-import { truncateText } from '../../core/utils.js';
+import { ensureDirectory, slugify, truncateText } from '../../core/utils.js';
 import { resolveRepositoryContext } from '../../reporting/repository-metrics.js';
 import { LabelStateMachine } from '../../state/label-state-machine.js';
 import type { AgentHandlerBinding } from '../handler-contract.js';
@@ -10,71 +12,267 @@ interface ReviewAgentHandlerFactoryOptions {
   env: NodeJS.ProcessEnv;
 }
 
+type ReviewCheckSeverity = 'quality' | 'security';
+
 interface ReviewCheck {
   label: string;
   command: string;
   args: string[];
+  weight?: number;
+  required?: boolean;
+  severity?: ReviewCheckSeverity;
 }
 
-const DEFAULT_REVIEW_CHECKS: ReviewCheck[] = [
-  { label: 'typecheck', command: 'npm', args: ['run', 'typecheck'] },
-  { label: 'tests', command: 'npm', args: ['test'] },
+interface ResolvedReviewCheck {
+  label: string;
+  command: string;
+  args: string[];
+  weight: number;
+  required: boolean;
+  severity: ReviewCheckSeverity;
+}
+
+interface ReviewCheckAttempt {
+  attempt: number;
+  passed: boolean;
+  exitCode: number | null;
+  summary: string;
+}
+
+interface ReviewCheckResult extends ResolvedReviewCheck {
+  passed: boolean;
+  exitCode: number | null;
+  summary: string;
+  attemptsUsed: number;
+  attemptHistory: ReviewCheckAttempt[];
+}
+
+interface ReviewEscalation {
+  required: boolean;
+  target?: 'TechLead' | 'CISO';
+  reason?: string;
+}
+
+const DEFAULT_REVIEW_CHECKS: ResolvedReviewCheck[] = [
+  {
+    label: 'typecheck',
+    command: 'npm',
+    args: ['run', 'typecheck'],
+    weight: 60,
+    required: true,
+    severity: 'quality',
+  },
+  {
+    label: 'tests',
+    command: 'npm',
+    args: ['test'],
+    weight: 40,
+    required: true,
+    severity: 'quality',
+  },
 ];
+
+const DEFAULT_REVIEW_MIN_SCORE = 100;
+const DEFAULT_REVIEW_MAX_RETRIES = 0;
 
 export function createReviewAgentHandler(options: ReviewAgentHandlerFactoryOptions): AgentHandlerBinding {
   return {
     id: 'review-local-checks',
     mode: 'connected',
-    description: 'Runs repo-local validation commands and optionally syncs the issue into reviewing.',
+    description:
+      'Runs repo-local validation commands, records score/retry/escalation artifacts, and optionally syncs the issue into reviewing.',
     execute: async ({ task, definition, context }) => {
-      const cwd = context.worktree?.worktreePath || context.rootDir || options.rootDir;
-      const results = DEFAULT_REVIEW_CHECKS.map((check) => runReviewCheck(check, cwd, context.env));
-      const failures = results.filter((result) => !result.passed);
+      const rootDir = context.rootDir || options.rootDir;
+      const reviewCwd = resolveReviewWorkingDirectory(rootDir, context.env);
+      const checks = resolveReviewChecks(context.env);
+      const maxRetries = resolveReviewMaxRetries(context.env);
+      const minScore = resolveReviewMinScore(context.env);
+      const results = checks.map((check) =>
+        runReviewCheckWithRetries({
+          check,
+          cwd: reviewCwd,
+          env: context.env,
+          maxRetries,
+          logRetry: (message) => context.logger.warn(message),
+        }),
+      );
+      const score = calculateQualityScore(results);
+      const escalation = determineEscalation(results, score, minScore);
+      const artifact = writeReviewArtifacts({
+        rootDir,
+        reviewCwd,
+        worktreePath: context.worktree?.worktreePath,
+        issueNumber: context.issueNumber,
+        sessionId: context.sessionId,
+        taskId: task.id,
+        taskTitle: task.title,
+        score,
+        minScore,
+        maxRetries,
+        results,
+        escalation,
+      });
 
-      if (failures.length > 0) {
-        throw new Error(
-          failures
-            .map((failure) => `${failure.label} failed (${failure.exitCode ?? 'signal'}): ${failure.summary}`)
-            .join('\n'),
-        );
-      }
+      const syncNote = await syncIssueState({
+        env: context.env,
+        issueNumber: context.issueNumber,
+        taskId: task.id,
+        taskTitle: task.title,
+      });
 
-      const token = resolveGitHubToken(options.env);
-      if (token) {
-        const repository = resolveRepositoryContext(
-          options.env.GITHUB_REPOSITORY || options.env.REPOSITORY || process.env.GITHUB_REPOSITORY,
-        );
-        const stateMachine = new LabelStateMachine(token, repository.owner, repository.repo);
-        await stateMachine.assignAgent(context.issueNumber, 'review');
-        await stateMachine.transitionState(
-          context.issueNumber,
-          'reviewing',
-          `Triggered by ${task.id}: ${task.title}`,
-        );
-      }
-
+      const failedChecks = results.filter((result) => !result.passed);
+      const requiredFailures = failedChecks.filter((result) => result.required);
       const notes = [
-        `${definition.name} ran ${results.length} local checks in ${cwd}.`,
-        `Quality score: 100/100 based on configured local checks (${results.map((result) => result.label).join(', ')}).`,
-        ...results.map((result) => `${result.label}: ${result.summary}`),
-        token
-          ? `Issue #${context.issueNumber} labels were updated to agent:review and state:reviewing.`
-          : 'GitHub label sync was skipped because no token is available.',
-      ];
+        `${definition.name} ran ${results.length} configured checks in ${describeReviewCwd(
+          rootDir,
+          reviewCwd,
+          context.env,
+        )}.`,
+        context.worktree?.worktreePath
+          ? `Task staging area remains ${relativeOrSelf(rootDir, context.worktree.worktreePath)}.`
+          : '',
+        `Quality score: ${score}/100 (threshold: ${minScore}, retries: ${maxRetries}).`,
+        `Review artifacts were written to ${relativeOrSelf(rootDir, artifact.markdownPath)} and ${relativeOrSelf(rootDir, artifact.jsonPath)}.`,
+        ...results.map((result) => formatCheckSummary(result)),
+        escalation.required
+          ? `Escalation recommended: ${escalation.target} (${escalation.reason}).`
+          : 'No escalation was required by the configured review gate.',
+        syncNote,
+      ].filter(Boolean);
+
+      if (requiredFailures.length > 0 || score < minScore) {
+        throw new Error(
+          [
+            `Review gate failed with score ${score}/100 (threshold: ${minScore}).`,
+            ...failedChecks.map((result) => formatCheckSummary(result)),
+            escalation.required && escalation.target && escalation.reason
+              ? `Escalation: ${escalation.target} (${escalation.reason}).`
+              : '',
+            `Artifacts: ${artifact.markdownPath}, ${artifact.jsonPath}`,
+          ]
+            .filter(Boolean)
+            .join(' '),
+        );
+      }
 
       return {
         status: 'completed',
         notes: notes.join(' '),
         output: {
-          score: 100,
+          score,
+          minScore,
+          maxRetries,
           checks: results,
+          escalation,
+          artifact,
         },
       };
     },
   };
 }
 
-function runReviewCheck(check: ReviewCheck, cwd: string, env: NodeJS.ProcessEnv) {
+function resolveReviewChecks(env: NodeJS.ProcessEnv): ResolvedReviewCheck[] {
+  const configured = env.AUTOMATION_REVIEW_CHECKS_JSON;
+  if (!configured) {
+    return DEFAULT_REVIEW_CHECKS;
+  }
+
+  const parsed = JSON.parse(configured) as ReviewCheck[];
+  if (!Array.isArray(parsed) || parsed.length === 0) {
+    throw new Error('AUTOMATION_REVIEW_CHECKS_JSON must be a non-empty JSON array.');
+  }
+
+  return parsed.map((check, index) => {
+    if (!check?.label || !check.command || !Array.isArray(check.args)) {
+      throw new Error(
+        `AUTOMATION_REVIEW_CHECKS_JSON entry #${index + 1} must include label, command, and args[].`,
+      );
+    }
+
+    return {
+      label: check.label,
+      command: check.command,
+      args: check.args,
+      weight: Number.isFinite(check.weight) ? Math.max(0, Number(check.weight)) : 1,
+      required: check.required ?? true,
+      severity: check.severity === 'security' ? 'security' : 'quality',
+    };
+  });
+}
+
+function resolveReviewWorkingDirectory(rootDir: string, env: NodeJS.ProcessEnv) {
+  const configured = env.AUTOMATION_REVIEW_CWD;
+  if (!configured) {
+    return rootDir;
+  }
+
+  return path.isAbsolute(configured) ? configured : path.resolve(rootDir, configured);
+}
+
+function resolveReviewMinScore(env: NodeJS.ProcessEnv) {
+  const parsed = Number.parseInt(env.AUTOMATION_REVIEW_MIN_SCORE || '', 10);
+  if (Number.isNaN(parsed)) {
+    return DEFAULT_REVIEW_MIN_SCORE;
+  }
+
+  return Math.max(0, Math.min(100, parsed));
+}
+
+function resolveReviewMaxRetries(env: NodeJS.ProcessEnv) {
+  const parsed = Number.parseInt(env.AUTOMATION_REVIEW_MAX_RETRIES || '', 10);
+  if (Number.isNaN(parsed)) {
+    return DEFAULT_REVIEW_MAX_RETRIES;
+  }
+
+  return Math.max(0, Math.min(5, parsed));
+}
+
+function runReviewCheckWithRetries(params: {
+  check: ResolvedReviewCheck;
+  cwd: string;
+  env: NodeJS.ProcessEnv;
+  maxRetries: number;
+  logRetry?: (message: string) => void;
+}): ReviewCheckResult {
+  const attemptHistory: ReviewCheckAttempt[] = [];
+  const maxAttempts = Math.max(1, params.maxRetries + 1);
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    const attemptResult = runReviewCheckOnce(params.check, params.cwd, params.env, attempt);
+    attemptHistory.push(attemptResult);
+
+    if (attemptResult.passed || attempt === maxAttempts) {
+      return {
+        ...params.check,
+        passed: attemptResult.passed,
+        exitCode: attemptResult.exitCode,
+        summary: attemptResult.summary,
+        attemptsUsed: attemptHistory.length,
+        attemptHistory,
+      };
+    }
+
+    params.logRetry?.(
+      `Review check ${params.check.label} failed on attempt ${attempt}/${maxAttempts}. Retrying.`,
+    );
+  }
+
+  return {
+    ...params.check,
+    passed: false,
+    exitCode: null,
+    summary: 'Review check failed without producing a terminal attempt.',
+    attemptsUsed: attemptHistory.length,
+    attemptHistory,
+  };
+}
+
+function runReviewCheckOnce(
+  check: ResolvedReviewCheck,
+  cwd: string,
+  env: NodeJS.ProcessEnv,
+  attempt: number,
+): ReviewCheckAttempt {
   const result = spawnSync(check.command, check.args, {
     cwd,
     env,
@@ -91,11 +289,204 @@ function runReviewCheck(check: ReviewCheck, cwd: string, env: NodeJS.ProcessEnv)
   );
 
   return {
-    label: check.label,
+    attempt,
     passed: result.status === 0,
     exitCode: result.status,
     summary: summary || 'Command completed without additional output.',
   };
+}
+
+function calculateQualityScore(results: ReviewCheckResult[]) {
+  const totalWeight = results.reduce((sum, result) => sum + Math.max(0, result.weight), 0);
+  if (totalWeight <= 0) {
+    return 100;
+  }
+
+  const passedWeight = results
+    .filter((result) => result.passed)
+    .reduce((sum, result) => sum + Math.max(0, result.weight), 0);
+
+  return Math.round((passedWeight / totalWeight) * 100);
+}
+
+function determineEscalation(
+  results: ReviewCheckResult[],
+  score: number,
+  minScore: number,
+): ReviewEscalation {
+  const securityFailures = results.filter((result) => !result.passed && result.severity === 'security');
+  if (securityFailures.length > 0) {
+    return {
+      required: true,
+      target: 'CISO',
+      reason: `Security review checks failed: ${securityFailures.map((result) => result.label).join(', ')}`,
+    };
+  }
+
+  const requiredFailures = results.filter((result) => !result.passed && result.required);
+  if (requiredFailures.length > 0) {
+    return {
+      required: true,
+      target: 'TechLead',
+      reason: `Required review checks failed: ${requiredFailures.map((result) => result.label).join(', ')}`,
+    };
+  }
+
+  if (score < minScore) {
+    return {
+      required: true,
+      target: 'TechLead',
+      reason: `Quality score ${score}/100 is below the configured threshold ${minScore}/100.`,
+    };
+  }
+
+  return { required: false };
+}
+
+function writeReviewArtifacts(params: {
+  rootDir: string;
+  reviewCwd: string;
+  worktreePath?: string;
+  issueNumber: number;
+  sessionId: string;
+  taskId: string;
+  taskTitle: string;
+  score: number;
+  minScore: number;
+  maxRetries: number;
+  results: ReviewCheckResult[];
+  escalation: ReviewEscalation;
+}) {
+  const reportsDir = ensureDirectory(path.join(params.rootDir, '.ai', 'parallel-reports'));
+  const baseName = `review-summary-${params.sessionId}-${slugify(params.taskId)}`;
+  const markdownPath = path.join(reportsDir, `${baseName}.md`);
+  const jsonPath = path.join(reportsDir, `${baseName}.json`);
+  const payload = {
+    issueNumber: params.issueNumber,
+    sessionId: params.sessionId,
+    taskId: params.taskId,
+    taskTitle: params.taskTitle,
+    score: params.score,
+    minScore: params.minScore,
+    maxRetries: params.maxRetries,
+    reviewCwd: params.reviewCwd,
+    worktreePath: params.worktreePath,
+    escalation: params.escalation,
+    checks: params.results,
+    generatedAt: new Date().toISOString(),
+  };
+
+  fs.writeFileSync(jsonPath, JSON.stringify(payload, null, 2), 'utf8');
+  fs.writeFileSync(markdownPath, buildReviewMarkdown(payload), 'utf8');
+
+  return {
+    markdownPath,
+    jsonPath,
+  };
+}
+
+function buildReviewMarkdown(payload: {
+  issueNumber: number;
+  sessionId: string;
+  taskId: string;
+  taskTitle: string;
+  score: number;
+  minScore: number;
+  maxRetries: number;
+  reviewCwd: string;
+  worktreePath?: string;
+  escalation: ReviewEscalation;
+  checks: ReviewCheckResult[];
+  generatedAt: string;
+}) {
+  return `# Review Summary
+
+## Task
+- Issue: #${payload.issueNumber}
+- Session: ${payload.sessionId}
+- Task: ${payload.taskId}
+- Title: ${payload.taskTitle}
+
+## Gate
+- Score: ${payload.score}/100
+- Threshold: ${payload.minScore}/100
+- Max retries: ${payload.maxRetries}
+- Review cwd: ${payload.reviewCwd}
+${payload.worktreePath ? `- Staging area: ${payload.worktreePath}` : ''}
+
+## Escalation
+- Required: ${payload.escalation.required ? 'yes' : 'no'}
+${payload.escalation.target ? `- Target: ${payload.escalation.target}` : ''}
+${payload.escalation.reason ? `- Reason: ${payload.escalation.reason}` : ''}
+
+## Checks
+${payload.checks
+  .map(
+    (result) =>
+      `- ${result.label}: ${result.passed ? 'passed' : 'failed'} (${result.attemptsUsed} attempt${result.attemptsUsed === 1 ? '' : 's'}, weight ${result.weight}, ${
+        result.required ? 'required' : 'optional'
+      }, severity ${result.severity}) — ${result.summary}`,
+  )
+  .join('\n')}
+
+## Generated
+- ${payload.generatedAt}
+`;
+}
+
+async function syncIssueState(params: {
+  env: NodeJS.ProcessEnv;
+  issueNumber: number;
+  taskId: string;
+  taskTitle: string;
+}) {
+  const token = resolveGitHubToken(params.env);
+  if (!token) {
+    return 'GitHub label sync was skipped because no token is available.';
+  }
+
+  try {
+    const repository = resolveRepositoryContext(
+      params.env.GITHUB_REPOSITORY || params.env.REPOSITORY || process.env.GITHUB_REPOSITORY,
+    );
+    const stateMachine = new LabelStateMachine(token, repository.owner, repository.repo);
+    await stateMachine.assignAgent(params.issueNumber, 'review');
+    await stateMachine.transitionState(
+      params.issueNumber,
+      'reviewing',
+      `Triggered by ${params.taskId}: ${params.taskTitle}`,
+    );
+
+    return `Issue #${params.issueNumber} labels were updated to agent:review and state:reviewing.`;
+  } catch (error) {
+    return `Review artifacts were generated, but GitHub label sync could not move issue #${params.issueNumber} into reviewing: ${
+      error instanceof Error ? error.message : String(error)
+    }`;
+  }
+}
+
+function formatCheckSummary(result: ReviewCheckResult) {
+  const retryNote = result.attemptsUsed > 1 ? ` after ${result.attemptsUsed} attempts` : '';
+  return `${result.label}: ${result.passed ? 'passed' : 'failed'}${retryNote} (${result.required ? 'required' : 'optional'}, ${
+    result.severity
+  }, weight ${result.weight}) — ${result.summary}`;
+}
+
+function relativeOrSelf(rootDir: string, targetPath: string) {
+  const relative = path.relative(rootDir, targetPath);
+  if (!relative) {
+    return '.';
+  }
+
+  return relative.startsWith('..') ? targetPath : relative;
+}
+
+function describeReviewCwd(rootDir: string, reviewCwd: string, env: NodeJS.ProcessEnv) {
+  if (!env.AUTOMATION_REVIEW_CWD) {
+    return 'repo root';
+  }
+
+  return path.resolve(rootDir) === path.resolve(reviewCwd) ? '.' : relativeOrSelf(rootDir, reviewCwd);
 }
 
 function resolveGitHubToken(env: NodeJS.ProcessEnv) {

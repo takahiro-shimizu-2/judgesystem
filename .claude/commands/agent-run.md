@@ -17,7 +17,7 @@ CoordinatorAgent
   ↓
 IssueAgent      → label/state sync (token がある場合)
 CodeGenAgent    → implementation brief artifact + optional code-writing command
-ReviewAgent     → npm run typecheck / npm test
+ReviewAgent     → repo-root configured checks + score/retry/escalation artifact
 PRAgent         → local draft PR artifact + optional remote draft PR
 DeploymentAgent → env-gated command only
 ```
@@ -74,6 +74,9 @@ DEVICE_IDENTIFIER=local-runner
 AUTOMATION_ENABLE_PR_WRITE=true
 AUTOMATION_ENABLE_CODEGEN_WRITE=true
 AUTOMATION_CODEGEN_COMMAND="npm run agent:codegen"
+AUTOMATION_REVIEW_MIN_SCORE=100
+AUTOMATION_REVIEW_MAX_RETRIES=1
+AUTOMATION_REVIEW_CHECKS_JSON='[{"label":"typecheck","command":"npm","args":["run","typecheck"]},{"label":"tests","command":"npm","args":["test"]}]'
 AUTOMATION_ENABLE_DEPLOY=true
 AUTOMATION_DEPLOY_COMMAND="npm run deploy:staging"
 ```
