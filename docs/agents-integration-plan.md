@@ -235,7 +235,7 @@ repo 構造や package 境界をそのまま `judgesystem` に持ち込む対象
 - `.claude/mcp-servers/miyabi-integration.js`
 - `.claude/mcp.json`
 - `.claude/commands/miyabi-*.md`
-- `.claude/settings.json` の `Bash(miyabi *)` allow
+- `.claude/settings.json` の Miyabi 関連 permission / hook 前提
 
 これは Claude 用 surface として残すか、repo 内 runtime へ寄せるかを明確に決める必要がある。
 少なくとも現段階では「Claude 面の外部 bridge」であり、
@@ -252,8 +252,8 @@ sibling repo 前提が完全に消えたわけではない。
 - `agent-skill-bus` は `pipeline:dashboard` の optional bridge として残っている
 
 また、`.claude/mcp-servers/miyabi-integration.js` は
-optional bridge として `node_modules/.bin/miyabi` を優先し、
-無ければ `../Miyabi/packages/cli` を probe する形へ整理した。
+optional bridge として `MIYABI_CLI` / `MIYABI_ROOT` override を優先し、
+次に `node_modules/.bin/miyabi`、最後に `../Miyabi/packages/cli` を probe する形へ整理した。
 つまり `../Miyabi` は repo runtime の必須依存ではなくなったが、
 Claude 面の外部 bridge 候補としては残っている。
 

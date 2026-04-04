@@ -14,6 +14,24 @@ const server = new Server(
 );
 
 function resolveMiyabiCli(cwd = process.cwd()) {
+  const configuredCli = process.env.MIYABI_CLI;
+  if (configuredCli && existsSync(configuredCli)) {
+    return {
+      command: configuredCli,
+      prefixArgs: [],
+      source: `MIYABI_CLI=${configuredCli}`,
+    };
+  }
+
+  const configuredRoot = process.env.MIYABI_ROOT;
+  if (configuredRoot && existsSync(join(configuredRoot, "package.json"))) {
+    return {
+      command: "npx",
+      prefixArgs: ["--prefix", configuredRoot, "miyabi"],
+      source: `MIYABI_ROOT=${configuredRoot}`,
+    };
+  }
+
   const localBinary = join(cwd, "node_modules", ".bin", "miyabi");
   if (existsSync(localBinary)) {
     return {
@@ -41,7 +59,7 @@ function run(args) {
     return {
       success: false,
       error:
-        "Miyabi CLI is not installed locally. This MCP bridge is optional; install Miyabi in node_modules or place the sibling repo at ../Miyabi/packages/cli.",
+        "Miyabi CLI is unavailable. This MCP bridge is optional; set MIYABI_CLI to an executable path, set MIYABI_ROOT to a Miyabi CLI package directory, install Miyabi in node_modules, or place the sibling repo at ../Miyabi/packages/cli.",
       stdout: "",
       stderr: "",
       source: "unavailable",
@@ -275,7 +293,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         `作業ディレクトリ: ${status.workingDirectory}`,
         `Miyabi 統合: ${status.hasMiyabi ? "✅ あり" : "❌ なし"}`,
         `Claude Code 統合: ${status.hasClaude ? "✅ あり" : "❌ なし"}`,
-        `Miyabi CLI: ${status.miyabiCliSource || "未検出 (optional bridge)"}`,
+        `Miyabi CLI: ${status.miyabiCliSource || "未検出 (set MIYABI_CLI / MIYABI_ROOT, install locally, or keep sibling fallback)"}`,
         pkg ? `パッケージ: ${pkg.name}@${pkg.version}` : "package.json: なし",
         pkg ? `依存関係: ${Object.keys(pkg.dependencies).length}個` : "",
         pkg ? `開発依存: ${Object.keys(pkg.devDependencies).length}個` : "",
