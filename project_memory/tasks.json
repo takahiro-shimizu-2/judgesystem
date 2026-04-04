@@ -1,12 +1,17 @@
 {
-  "generated_at": "2026-04-04T06:54:00+09:00",
-  "query": "Phase 2 state/label delegation",
+  "generated_at": "2026-04-04T16:40:00+09:00",
+  "query": "Phase 3 adapter delegation",
   "repo": "judgesystem",
   "quality_score": 0,
   "tasks": [
     {
       "id": "phase2-state-delegation",
       "title": "Move label-state-machine runtime under scripts/automation/state",
+      "status": "completed"
+    },
+    {
+      "id": "phase3-adapter-delegation",
+      "title": "Move project status and webhook routing runtime under scripts/automation/adapters",
       "status": "in_progress"
     }
   ]
