@@ -26,6 +26,10 @@ Context-and-impact phase E appends audit entries here.
 - Updated `.github/workflows/autonomous-agent.yml` to pass `AUTOMATION_ENABLE_CODEGEN_WRITE` and `AUTOMATION_CODEGEN_COMMAND` into the runtime, alongside the existing PR gate, so execute-mode runs can opt into delegated writing intentionally.
 - Updated `docs/agents-integration-plan.md` so the capability table and phase notes no longer claim that PR execute mode is still missing and now record delegated code-writing as the next connected autonomy slice.
 - Verified the new slice with `npm run typecheck`, `python3` YAML parsing of `.github/workflows/autonomous-agent.yml`, `npx tsx scripts/agents-parallel-exec.ts --help`, and a temp-git-repo smoke run of `createCodeGenAgentHandler` that wrote `generated.txt` through the delegated writer command and reported the changed file list correctly.
+- Reworked `scripts/automation/agents/handlers/review.ts` so `ReviewAgent` now runs configured checks in the repo root, supports score/retry/min-threshold handling, writes markdown/json review artifacts, and records explicit escalation targets instead of hard-coding a fixed perfect score.
+- Fixed the review execution contract so `.ai/worktrees/...` stays a staging/artifact area while actual review commands run from the real repository root unless `AUTOMATION_REVIEW_CWD` overrides it.
+- Updated `.claude/agents/review-agent.md`, `.claude/commands/agent-run.md`, `AGENTS.md`, `CLAUDE.md`, `.github/workflows/autonomous-agent.yml`, and `docs/agents-integration-plan.md` so the ReviewAgent capability and env gates match the runtime truthfully.
+- Verified the review-loop slice with `npm run typecheck`, `python3` YAML parsing, `npx tsx scripts/agents-parallel-exec.ts --help`, a success smoke run that passed with an optional retried failure at score 60/100, and a failure smoke run that escalated to `CISO` and surfaced the review artifact paths.
 
 - Started Phase 2 by moving label state machine logic into `scripts/automation/state`.
 - Kept `scripts/label-state-machine.ts` as the stable CLI entrypoint for workflows and npm scripts.
