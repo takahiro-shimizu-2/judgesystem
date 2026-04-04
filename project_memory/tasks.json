@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-04-04T23:03:00+09:00",
-  "query": "Protected deploy workflow rollout",
+  "generated_at": "2026-04-04T23:40:00+09:00",
+  "query": "Cloud Run deploy preset rollout",
   "repo": "judgesystem",
   "quality_score": 0,
   "tasks": [
@@ -52,6 +52,11 @@
     {
       "id": "protected-deploy-workflow",
       "title": "Add a dedicated GitHub Environment-backed deploy execute workflow for protected deployments and align docs with that path",
+      "status": "completed"
+    },
+    {
+      "id": "cloud-run-deploy-preset",
+      "title": "Add a repo-local Cloud Run provider preset so DeploymentAgent can resolve backend/frontend deploy commands without a bespoke per-run command string",
       "status": "completed"
     }
   ]

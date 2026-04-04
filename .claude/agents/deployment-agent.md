@@ -17,7 +17,7 @@ repo-local deploy contract を実行する。
 ## 現在の runtime contract
 
 - `scripts/automation/agents/handlers/deployment.ts` に接続済み
-- `AUTOMATION_ENABLE_DEPLOY=true` かつ `AUTOMATION_DEPLOY_COMMAND` がある場合のみ実行する
+- `AUTOMATION_ENABLE_DEPLOY=true` かつ `AUTOMATION_DEPLOY_COMMAND` がある、または `AUTOMATION_DEPLOY_USE_PROVIDER_PRESET=true` で対応済み preset が解決できる場合のみ実行する
 - `AUTOMATION_DEPLOY_BUILD_COMMAND`, `AUTOMATION_DEPLOY_PREFLIGHT_COMMAND`, `AUTOMATION_DEPLOY_HEALTHCHECK_COMMAND`, `AUTOMATION_DEPLOY_ROLLBACK_COMMAND` があれば contract に取り込む
 - `AUTOMATION_DEPLOY_PROVIDER` と `AUTOMATION_DEPLOY_TARGET` を artifact / note に残す
 - protected environment (`prod`, `production`, `live`) は default で approval required になる
@@ -26,7 +26,8 @@ repo-local deploy contract を実行する。
 - `.ai/parallel-reports/` に markdown/json の deployment artifact を残す
 - token がある場合は `agent:deployment` の同期を試みる
 - gate が無い場合は `skipped` を返す
-- provider 固有の orchestration は依然 command-driven だが、approval / provider / target metadata は repo runtime で保持する
+- repo-local preset として `cloud-run/backend|frontend` を解決できる
+- provider 固有の orchestration は基本 command-driven だが、approval / provider / target metadata は repo runtime で保持する
 
 ## Claude 側で期待すること
 
@@ -39,7 +40,7 @@ repo-local deploy contract を実行する。
 ## 実行前の確認
 
 - review が終わっているか
-- 実行 command が明示されているか
+- 実行 command か、対応する provider preset が明示されているか
 - 対象環境と責任者がはっきりしているか
 - approval が必要な環境か、その approver が誰か決まっているか
 - preflight / healthcheck / rollback が必要か決まっているか

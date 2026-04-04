@@ -95,23 +95,36 @@ AUTOMATION_REVIEW_MIN_SCORE=100
 AUTOMATION_REVIEW_MAX_RETRIES=1
 AUTOMATION_REVIEW_CHECKS_JSON='[{"label":"typecheck","command":"npm","args":["run","typecheck"]},{"label":"tests","command":"npm","args":["test"]}]'
 AUTOMATION_ENABLE_DEPLOY=true
+AUTOMATION_DEPLOY_USE_PROVIDER_PRESET=true
 AUTOMATION_DEPLOY_PROVIDER="cloud-run"
 AUTOMATION_DEPLOY_TARGET="backend"
-AUTOMATION_DEPLOY_COMMAND="npm run deploy:staging"
-AUTOMATION_DEPLOY_BUILD_COMMAND="npm run build -w packages/backend"
 AUTOMATION_DEPLOY_REQUIRE_APPROVAL=required
 AUTOMATION_DEPLOY_ALLOWED_APPROVERS="takahiro-shimizu-2"
 AUTOMATION_DEPLOY_APPROVED_BY="takahiro-shimizu-2"
 AUTOMATION_DEPLOY_APPROVAL_REASON="manual staging rollout"
 AUTOMATION_DEPLOY_PREFLIGHT_COMMAND="npm run typecheck"
 AUTOMATION_DEPLOY_HEALTHCHECK_COMMAND="curl -fsS https://example.com/health"
-AUTOMATION_DEPLOY_ROLLBACK_COMMAND="npm run deploy:rollback"
+AUTOMATION_CLOUD_RUN_PROJECT_ID="your-gcp-project"
+AUTOMATION_CLOUD_RUN_BACKEND_SERVICE_NAME="bidapp-backend-postgres-dev"
+AUTOMATION_CLOUD_RUN_FRONTEND_URL="https://frontend.example.com"
+AUTOMATION_CLOUD_RUN_DATASET_NAME="judge_system"
+AUTOMATION_CLOUD_RUN_CONNECTION_TYPE="proxy"
+AUTOMATION_CLOUD_RUN_CLOUD_SQL_INSTANCE="project:asia-northeast1:db"
+AUTOMATION_CLOUD_RUN_PG_USER="postgres"
+AUTOMATION_CLOUD_RUN_PG_PASSWORD="***"
+AUTOMATION_CLOUD_RUN_PG_DATABASE="judge_system"
+AUTOMATION_CLOUD_RUN_PG_PORT="5432"
+AUTOMATION_CLOUD_RUN_PG_SSLMODE="disable"
+AUTOMATION_CLOUD_RUN_PG_SCHEMA="public"
+AUTOMATION_CLOUD_RUN_ENABLE_CONTACT_DELETE="false"
+AUTOMATION_CLOUD_RUN_DRY_RUN=true
 ```
 
 補足:
 
 - `GITHUB_TOKEN` が無くても dry-run や local artifact 生成は可能
 - `ANTHROPIC_API_KEY` は現行 repo-local handler の必須条件ではない
+- `DeploymentAgent` は explicit `AUTOMATION_DEPLOY_COMMAND` だけでなく、`AUTOMATION_DEPLOY_USE_PROVIDER_PRESET=true` のときは repo-local `cloud-run` preset も解決できる
 
 GitHub Actions 側の gate に使う repo variable:
 
