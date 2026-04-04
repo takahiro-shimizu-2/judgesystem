@@ -393,7 +393,7 @@ repo runtime の必須依存ではなく「override / local install 後の optio
 |----|----|----|----|
 | Coordinator / orchestration | `packages/coding-agents/coordinator/*`, `packages/cli/scripts/parallel-executor.ts` | `scripts/automation/decomposition/*`, `scripts/automation/orchestration/*`, `scripts/automation/adapters/agents-parallel-exec.ts` | 維持。planning substrate と execution substrate の中核にする |
 | Issue analysis / state sync | `IssueAgent` + label state machine + webhook routing | `scripts/automation/agents/handlers/issue.ts`, `scripts/automation/state/*`, `scripts/automation/adapters/webhook-router.ts` | 維持。state machine と event routing を repo-local runtime として育てる |
-| Code generation | `CodeGenAgent` が実コード生成・テスト生成・ドキュメント生成を行う | `scripts/automation/agents/handlers/codegen.ts` は implementation brief を必ず生成し、`AUTOMATION_ENABLE_CODEGEN_WRITE=true` と `AUTOMATION_CODEGEN_COMMAND` がある場合だけ delegated writer command を repo root で実行する | delegated writer binding を基盤にしつつ、必要なら external-model / stronger write contract へ拡張する |
+| Code generation | `CodeGenAgent` が実コード生成・テスト生成・ドキュメント生成を行う | `scripts/automation/agents/handlers/codegen.ts` は implementation brief を必ず生成し、`AUTOMATION_ENABLE_CODEGEN_WRITE=true` と `AUTOMATION_CODEGEN_COMMAND` がある場合だけ delegated writer command を repo root で実行する。`AUTOMATION_CODEGEN_ALLOWED_PATHS`, `AUTOMATION_CODEGEN_REQUIRE_CHANGES`, `AUTOMATION_CODEGEN_POSTCHECK_COMMAND` が設定されていれば stronger write contract と codegen summary artifact まで実行する | external-model や remote push を含むさらに強い codegen 契約を必要に応じて追加する |
 | Test execution | Miyabi では `TestAgent` と codegen/review 周辺で別能力として存在する | 独立 agent なし。`ReviewAgent` が `typecheck` / `test` を実行 | 当面は review/test capability に吸収する。必要になれば独立 capability として切り出す |
 | Review / quality gate | `ReviewAgent` が scoring / comment / escalation を行う | `scripts/automation/agents/handlers/review.ts` は repo root で configured checks を実行し、score / retry / escalation を review artifact と execution report へ残す。`AUTOMATION_REVIEW_COVERAGE_THRESHOLD` / `AUTOMATION_REVIEW_COVERAGE_LABELS` が設定されていれば coverage gate を評価し、security summary と review-comment artifact も生成する | security / coverage policy と richer comment publish contract を必要に応じて追加する |
 | PR creation | `PRAgent` が GitHub に draft PR を作成し、labels / reviewers も扱う | `scripts/automation/agents/handlers/pr.ts` は local draft artifact を常に生成し、`AUTOMATION_ENABLE_PR_WRITE=true` の場合だけ remote draft PR を作成または更新する。`AUTOMATION_PR_REVIEWERS`, `AUTOMATION_PR_LABELS`, `AUTOMATION_PR_REQUIRE_MERGEABLE` が設定されていれば reviewer request / PR label sync / mergeability gate まで実行する | reviewer / label policy の高度化や mergeability contract の拡張条件を必要に応じて追加する |
@@ -742,7 +742,7 @@ GitNexus は次で分ける。
 
 作業:
 
-- `CodeGenAgent` は delegated writer binding まで接続済みとし、必要なら external-model / stronger write contract への昇格条件を決める
+- `CodeGenAgent` は delegated writer binding と repo-local stronger write contract まで接続済みとし、必要なら external-model / remote push を含むさらに強い契約への昇格条件を決める
 - `ReviewAgent` は score / retry / escalation に加えて security summary / coverage gate / review-comment artifact 契約まで接続済みとし、security / coverage policy と richer comment publish contract の拡張条件を決める
 - `PRAgent` は remote draft PR 作成と reviewer / label / mergeability 契約まで接続済みとし、reviewer / label policy や mergeability contract の拡張条件を決める
 - `DeploymentAgent` は deploy approval/provider-target metadata/build/preflight/healthcheck/rollback 契約まで接続済みとし、repo-local `cloud-run` preset まで接続済みとして、それ以外の provider 固有 orchestration や GitHub Environment approval 連携の拡張条件を決める
@@ -797,7 +797,7 @@ full autonomy をどの capability から開けるかを計画書どおりに進
 `autonomous-agent.yml` の planning/execute 切替、および
 issue/comment trigger での explicit execute gate を先に完了させた。
 次の capability 候補としていた `CodeGenAgent` の delegated writer binding も接続済みである。
-残る重点は、provider 固有の高度な orchestration、review comment publish policy や security/coverage policy の高度化、codegen の stronger write contract、そして remaining capability の運用 DoD 固めである。
+残る重点は、provider 固有の高度な orchestration、review comment publish policy や security/coverage policy の高度化、external-model / remote push を含む codegen 契約、そして remaining capability の運用 DoD 固めである。
 
 ## 9. 改訂版 Definition of Done
 

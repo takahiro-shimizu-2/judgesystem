@@ -13,12 +13,47 @@ interface CodeGenAgentHandlerFactoryOptions {
   env: NodeJS.ProcessEnv;
 }
 
+interface CodegenPostcheckResult {
+  command: string;
+  passed: boolean;
+  exitCode: number | null;
+  summary: string;
+}
+
+interface CodegenCommandResult {
+  enabled: boolean;
+  command?: string;
+  writerExecuted: boolean;
+  note: string;
+  requireChanges: boolean;
+  allowedPaths: string[];
+  newlyChangedFiles: string[];
+  currentChangedFiles: string[];
+  evaluatedChangedFiles: string[];
+  unexpectedFiles: string[];
+  postcheck?: CodegenPostcheckResult;
+  failedReason?: string;
+}
+
+interface CodegenArtifactPayload {
+  issueNumber: number;
+  sessionId: string;
+  taskId: string;
+  taskTitle: string;
+  taskType: string;
+  briefPath: string;
+  worktreePath: string;
+  branchName?: string;
+  commandResult: CodegenCommandResult;
+  generatedAt: string;
+}
+
 export function createCodeGenAgentHandler(options: CodeGenAgentHandlerFactoryOptions): AgentHandlerBinding {
   return {
     id: 'codegen-brief-preparer',
     mode: 'connected',
     description:
-      'Creates a repo-local implementation brief, optionally syncs the issue into implementing, and can invoke an explicit code-writing command when enabled.',
+      'Creates a repo-local implementation brief, optionally syncs the issue into implementing, and can invoke an explicit writer contract with allowlists, post-checks, and summary artifacts.',
     execute: async ({ task, definition, context }) => {
       const rootDir = context.rootDir || options.rootDir;
       const worktreePath = ensureDirectory(
@@ -44,7 +79,7 @@ export function createCodeGenAgentHandler(options: CodeGenAgentHandlerFactoryOpt
         'utf8',
       );
 
-      const codegenNote = runCodegenCommand({
+      const codegenResult = runCodegenCommand({
         rootDir,
         env: context.env,
         issueNumber: context.issueNumber,
@@ -56,6 +91,19 @@ export function createCodeGenAgentHandler(options: CodeGenAgentHandlerFactoryOpt
         artifactPath,
       });
 
+      const codegenArtifact = writeCodegenArtifacts({
+        rootDir,
+        issueNumber: context.issueNumber,
+        sessionId: context.sessionId,
+        taskId: task.id,
+        taskTitle: task.title,
+        taskType: task.type,
+        briefPath: artifactPath,
+        worktreePath,
+        branchName,
+        commandResult: codegenResult,
+      });
+
       const syncNote = await syncIssueState({
         env: context.env,
         issueNumber: context.issueNumber,
@@ -63,19 +111,33 @@ export function createCodeGenAgentHandler(options: CodeGenAgentHandlerFactoryOpt
         taskTitle: task.title,
       });
 
+      if (codegenResult.failedReason) {
+        throw new Error(
+          `${codegenResult.failedReason} Artifacts: ${codegenArtifact.markdownPath}, ${codegenArtifact.jsonPath}`,
+        );
+      }
+
       return {
         status: 'completed',
         notes: [
           `${definition.name} prepared an implementation brief at ${path.relative(rootDir, artifactPath)}.`,
           `Use ${path.relative(rootDir, worktreePath)} as the staging area for this task.`,
-          codegenNote.note,
+          codegenResult.note,
+          `Codegen artifacts were written to ${path.relative(rootDir, codegenArtifact.markdownPath)} and ${path.relative(
+            rootDir,
+            codegenArtifact.jsonPath,
+          )}.`,
           syncNote,
-        ].join(' '),
+        ]
+          .filter(Boolean)
+          .join(' '),
         output: {
           artifactPath,
           worktreePath,
           branchName,
-          changedFiles: codegenNote.changedFiles,
+          changedFiles: codegenResult.evaluatedChangedFiles,
+          postcheck: codegenResult.postcheck,
+          codegenArtifact,
         },
       };
     },
@@ -117,6 +179,9 @@ ${params.definitionEscalation ? `- Escalation: ${params.definitionEscalation}` :
 ## Runtime Contract
 - This handler always materializes a local implementation brief first.
 - When \`AUTOMATION_ENABLE_CODEGEN_WRITE=true\` and \`AUTOMATION_CODEGEN_COMMAND\` are set, it can invoke an explicit code-writing command in the repo root.
+- \`AUTOMATION_CODEGEN_ALLOWED_PATHS\` can restrict which repo-relative paths the writer is allowed to change.
+- \`AUTOMATION_CODEGEN_REQUIRE_CHANGES=true\` can force the writer contract to fail if no changed files are detected.
+- \`AUTOMATION_CODEGEN_POSTCHECK_COMMAND\` can run a follow-up validation step after writing.
 - The code-writing command receives task metadata via environment variables and is expected to edit the repo intentionally.
 - When the gate is closed, product code changes remain an explicit follow-up step for a human or a future capability binding.
 
@@ -173,19 +238,31 @@ function runCodegenCommand(params: {
   worktreePath: string;
   branchName?: string;
   artifactPath: string;
-}) {
+}): CodegenCommandResult {
   const enabled = params.env.AUTOMATION_ENABLE_CODEGEN_WRITE === 'true';
-  const command = params.env.AUTOMATION_CODEGEN_COMMAND;
+  const command = (params.env.AUTOMATION_CODEGEN_COMMAND || '').trim();
+  const allowedPaths = parseListEnv(params.env.AUTOMATION_CODEGEN_ALLOWED_PATHS).map(normalizeRepoPath);
+  const requireChanges = resolveRequiredFlag(params.env.AUTOMATION_CODEGEN_REQUIRE_CHANGES);
+  const postcheckCommand = (params.env.AUTOMATION_CODEGEN_POSTCHECK_COMMAND || '').trim();
 
   if (!enabled || !command) {
     return {
+      enabled,
+      command: command || undefined,
+      writerExecuted: false,
       note: 'Code writing is disabled. Set AUTOMATION_ENABLE_CODEGEN_WRITE=true and AUTOMATION_CODEGEN_COMMAND to let CodeGenAgent invoke an explicit writer command.',
-      changedFiles: [] as string[],
+      requireChanges,
+      allowedPaths,
+      newlyChangedFiles: [],
+      currentChangedFiles: [],
+      evaluatedChangedFiles: [],
+      unexpectedFiles: [],
     };
   }
 
   const before = listChangedFiles(params.rootDir);
-  const result = spawnSync(command, {
+  const commandResult = runShellCommand({
+    command,
     cwd: params.rootDir,
     env: {
       ...params.env,
@@ -197,47 +274,231 @@ function runCodegenCommand(params: {
       AUTOMATION_BRIEF_PATH: params.artifactPath,
       AUTOMATION_BRANCH_NAME: params.branchName || '',
     },
-    encoding: 'utf8',
-    shell: true,
-    timeout: 30 * 60 * 1000,
+    timeoutMs: 30 * 60 * 1000,
   });
 
-  if (result.status !== 0) {
-    throw new Error(
-      `Code generation command failed (${result.status ?? 'signal'}): ${truncateText(
-        [result.stdout, result.stderr].filter(Boolean).join('\n').trim(),
-        240,
-      )}`,
-    );
+  const after = listChangedFiles(params.rootDir);
+  const newlyChangedFiles = after.filter((file) => !before.includes(file));
+  const evaluatedChangedFiles = newlyChangedFiles.length > 0 ? newlyChangedFiles : after;
+  const unexpectedFiles =
+    allowedPaths.length > 0
+      ? evaluatedChangedFiles.filter((file) => !isAllowedRepoPath(file, allowedPaths))
+      : [];
+
+  const postcheck =
+    commandResult.status === 0 && postcheckCommand
+      ? runShellCommand({
+          command: postcheckCommand,
+          cwd: params.rootDir,
+          env: params.env,
+          timeoutMs: 10 * 60 * 1000,
+        })
+      : undefined;
+
+  const postcheckResult = postcheck
+    ? {
+        command: postcheckCommand,
+        passed: postcheck.status === 0,
+        exitCode: postcheck.status,
+        summary: summarizeCommandOutput(postcheck.stdout, postcheck.stderr),
+      }
+    : undefined;
+
+  let failedReason: string | undefined;
+  if (commandResult.status !== 0) {
+    failedReason = `Code generation command failed (${commandResult.status ?? 'signal'}): ${summarizeCommandOutput(
+      commandResult.stdout,
+      commandResult.stderr,
+    )}`;
+  } else if (requireChanges && evaluatedChangedFiles.length === 0) {
+    failedReason = 'Code generation command completed, but no changed files were detected while AUTOMATION_CODEGEN_REQUIRE_CHANGES=true.';
+  } else if (unexpectedFiles.length > 0) {
+    failedReason = `Code generation command touched files outside AUTOMATION_CODEGEN_ALLOWED_PATHS: ${unexpectedFiles.join(
+      ', ',
+    )}.`;
+  } else if (postcheckResult && !postcheckResult.passed) {
+    failedReason = `Codegen post-check failed (${postcheckResult.exitCode ?? 'signal'}): ${postcheckResult.summary}`;
   }
 
-  const after = listChangedFiles(params.rootDir);
-  const changedFiles = after.filter((file) => !before.includes(file));
-  const finalFiles = changedFiles.length > 0 ? changedFiles : after;
+  const noteParts = [
+    `Code writing command ${commandResult.status === 0 ? 'executed successfully' : 'failed'} in the repo root.`,
+    evaluatedChangedFiles.length > 0
+      ? `Detected ${evaluatedChangedFiles.length} evaluated changed file(s): ${evaluatedChangedFiles.join(', ')}.`
+      : 'No changed files were detected after the writer command.',
+    allowedPaths.length > 0 ? `Allowed paths: ${allowedPaths.join(', ')}.` : 'No path allowlist was configured.',
+    postcheckResult
+      ? `Post-check ${postcheckResult.passed ? 'passed' : 'failed'}: ${postcheckResult.summary}`
+      : postcheckCommand
+        ? 'Post-check was configured but skipped because the writer command failed.'
+        : 'No post-check command was configured.',
+  ];
 
   return {
-    note:
-      finalFiles.length > 0
-        ? `Code writing command executed successfully in the repo root and left ${finalFiles.length} changed file(s): ${finalFiles.join(', ')}.`
-        : 'Code writing command executed successfully, but no tracked file changes were detected afterwards.',
-    changedFiles: finalFiles,
+    enabled,
+    command,
+    writerExecuted: true,
+    note: noteParts.join(' '),
+    requireChanges,
+    allowedPaths,
+    newlyChangedFiles,
+    currentChangedFiles: after,
+    evaluatedChangedFiles,
+    unexpectedFiles,
+    postcheck: postcheckResult,
+    failedReason,
   };
 }
 
+function writeCodegenArtifacts(params: {
+  rootDir: string;
+  issueNumber: number;
+  sessionId: string;
+  taskId: string;
+  taskTitle: string;
+  taskType: string;
+  briefPath: string;
+  worktreePath: string;
+  branchName?: string;
+  commandResult: CodegenCommandResult;
+}) {
+  const reportsDir = ensureDirectory(path.join(params.rootDir, '.ai', 'parallel-reports'));
+  const baseName = `codegen-summary-${params.sessionId}-${slugify(params.taskId)}`;
+  const markdownPath = path.join(reportsDir, `${baseName}.md`);
+  const jsonPath = path.join(reportsDir, `${baseName}.json`);
+  const payload: CodegenArtifactPayload = {
+    issueNumber: params.issueNumber,
+    sessionId: params.sessionId,
+    taskId: params.taskId,
+    taskTitle: params.taskTitle,
+    taskType: params.taskType,
+    briefPath: params.briefPath,
+    worktreePath: params.worktreePath,
+    branchName: params.branchName,
+    commandResult: params.commandResult,
+    generatedAt: new Date().toISOString(),
+  };
+
+  fs.writeFileSync(jsonPath, JSON.stringify(payload, null, 2), 'utf8');
+  fs.writeFileSync(markdownPath, buildCodegenMarkdown(payload), 'utf8');
+
+  return {
+    markdownPath,
+    jsonPath,
+  };
+}
+
+function buildCodegenMarkdown(payload: CodegenArtifactPayload) {
+  return `# Codegen Summary
+
+## Task
+- Issue: #${payload.issueNumber}
+- Session: ${payload.sessionId}
+- Task: ${payload.taskId}
+- Title: ${payload.taskTitle}
+- Type: ${payload.taskType}
+
+## Contract
+- Brief path: ${payload.briefPath}
+- Worktree path: ${payload.worktreePath}
+- Branch: ${payload.branchName || 'n/a'}
+- Writer enabled: ${payload.commandResult.enabled ? 'yes' : 'no'}
+- Writer executed: ${payload.commandResult.writerExecuted ? 'yes' : 'no'}
+- Require changes: ${payload.commandResult.requireChanges ? 'yes' : 'no'}
+- Command: ${payload.commandResult.command || 'n/a'}
+- Allowed paths: ${payload.commandResult.allowedPaths.length > 0 ? payload.commandResult.allowedPaths.join(', ') : 'n/a'}
+- Note: ${payload.commandResult.note}
+${payload.commandResult.failedReason ? `- Failure: ${payload.commandResult.failedReason}` : ''}
+
+## Files
+- Newly changed: ${payload.commandResult.newlyChangedFiles.length > 0 ? payload.commandResult.newlyChangedFiles.join(', ') : 'none'}
+- Current changed: ${payload.commandResult.currentChangedFiles.length > 0 ? payload.commandResult.currentChangedFiles.join(', ') : 'none'}
+- Evaluated changed: ${payload.commandResult.evaluatedChangedFiles.length > 0 ? payload.commandResult.evaluatedChangedFiles.join(', ') : 'none'}
+- Unexpected files: ${payload.commandResult.unexpectedFiles.length > 0 ? payload.commandResult.unexpectedFiles.join(', ') : 'none'}
+
+## Post-check
+${payload.commandResult.postcheck
+  ? `- Command: ${payload.commandResult.postcheck.command}
+- Passed: ${payload.commandResult.postcheck.passed ? 'yes' : 'no'}
+- Exit code: ${payload.commandResult.postcheck.exitCode ?? 'signal'}
+- Summary: ${payload.commandResult.postcheck.summary}`
+  : '- No post-check command was configured.'}
+
+## Generated
+- ${payload.generatedAt}
+`;
+}
+
+function runShellCommand(params: {
+  command: string;
+  cwd: string;
+  env: NodeJS.ProcessEnv;
+  timeoutMs: number;
+}) {
+  return spawnSync(params.command, {
+    cwd: params.cwd,
+    env: params.env,
+    encoding: 'utf8',
+    shell: true,
+    timeout: params.timeoutMs,
+  });
+}
+
+function summarizeCommandOutput(stdout?: string, stderr?: string) {
+  return (
+    truncateText(
+      [stdout, stderr]
+        .filter(Boolean)
+        .join('\n')
+        .trim()
+        .replace(/\s+/g, ' '),
+      240,
+    ) || 'Command completed without additional output.'
+  );
+}
+
 function listChangedFiles(rootDir: string) {
-  const result = spawnSync('git', ['status', '--short'], {
-    cwd: rootDir,
+  const modified = runGitLines(['diff', '--name-only', '--relative', 'HEAD'], rootDir);
+  const untracked = runGitLines(['ls-files', '--others', '--exclude-standard'], rootDir);
+
+  return [...new Set([...modified, ...untracked].map(normalizeRepoPath).filter(Boolean))];
+}
+
+function runGitLines(args: string[], cwd: string) {
+  const result = spawnSync('git', args, {
+    cwd,
     encoding: 'utf8',
   });
 
   if (result.status !== 0) {
-    return [];
+    return [] as string[];
   }
 
   return result.stdout
     .split('\n')
     .map((line) => line.trim())
-    .filter(Boolean)
-    .map((line) => line.replace(/^[A-Z?]{1,2}\s+/, ''))
     .filter(Boolean);
+}
+
+function parseListEnv(rawValue?: string) {
+  return (rawValue || '')
+    .split(/[\s,]+/)
+    .map((value) => value.trim())
+    .filter(Boolean);
+}
+
+function normalizeRepoPath(targetPath: string) {
+  return targetPath.replace(/\\/g, '/').replace(/^\.\//, '');
+}
+
+function isAllowedRepoPath(targetPath: string, allowedPaths: string[]) {
+  const normalizedTarget = normalizeRepoPath(targetPath);
+  return allowedPaths.some((allowedPath) => {
+    const normalizedAllowed = normalizeRepoPath(allowedPath).replace(/\/+$/, '');
+    return normalizedTarget === normalizedAllowed || normalizedTarget.startsWith(`${normalizedAllowed}/`);
+  });
+}
+
+function resolveRequiredFlag(rawValue?: string) {
+  const normalized = (rawValue || '').trim().toLowerCase();
+  return ['true', 'required', 'always', '1', 'yes'].includes(normalized);
 }

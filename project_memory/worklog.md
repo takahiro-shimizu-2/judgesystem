@@ -50,6 +50,9 @@ Context-and-impact phase E appends audit entries here.
 - Extended `scripts/automation/agents/handlers/review.ts` so `ReviewAgent` can derive a security summary, evaluate an optional coverage gate from executed check output, and emit a paste-ready review-comment artifact alongside the existing markdown/json review artifacts.
 - Passed `AUTOMATION_REVIEW_COVERAGE_THRESHOLD` and `AUTOMATION_REVIEW_COVERAGE_LABELS` through the autonomous workflows so execute-mode runs can open the richer review contract without changing the runtime home away from `scripts/automation/*`.
 - Updated Claude/runtime docs and the plan so ReviewAgent is no longer described as score-only; security/coverage/comment are connected contracts, while actual publish policy remains a future expansion.
+- Extended `scripts/automation/agents/handlers/codegen.ts` so `CodeGenAgent` now writes a codegen summary artifact and can enforce a stronger write contract via changed-file allowlists, require-changes, and an optional post-check command after the delegated writer runs.
+- Passed `AUTOMATION_CODEGEN_ALLOWED_PATHS`, `AUTOMATION_CODEGEN_REQUIRE_CHANGES`, and `AUTOMATION_CODEGEN_POSTCHECK_COMMAND` through the autonomous workflows so execute-mode runs can open the stronger write contract intentionally.
+- Updated Claude/runtime docs and the plan so CodeGenAgent is no longer described as a bare delegated writer; it now has a repo-local stronger write contract while external-model / remote push behavior remains future work.
 
 - Started Phase 2 by moving label state machine logic into `scripts/automation/state`.
 - Kept `scripts/label-state-machine.ts` as the stable CLI entrypoint for workflows and npm scripts.

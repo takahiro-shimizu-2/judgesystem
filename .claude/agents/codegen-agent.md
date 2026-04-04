@@ -19,7 +19,9 @@ repo runtime 側では implementation brief を必ず生成し、
 - `scripts/automation/agents/handlers/codegen.ts` に接続済み
 - 実行時は implementation brief を local artifact として生成する
 - `AUTOMATION_ENABLE_CODEGEN_WRITE=true` かつ `AUTOMATION_CODEGEN_COMMAND` がある場合だけ、repo root で明示 command を実行する
+- `AUTOMATION_CODEGEN_ALLOWED_PATHS`, `AUTOMATION_CODEGEN_REQUIRE_CHANGES`, `AUTOMATION_CODEGEN_POSTCHECK_COMMAND` があれば stronger write contract として適用する
 - code-writing command には issue / task / brief / worktree / branch 情報が env として渡される
+- `.ai/parallel-reports/` に codegen summary artifact を残し、changed files / allowlist / post-check を記録する
 - `GITHUB_TOKEN` 系 credential がある場合のみ `agent:codegen` / `state:implementing` を best-effort で同期する
 - 外部 model 呼び出しや remote branch push は、この handler 自体ではまだ前提にしない
 
@@ -30,6 +32,7 @@ repo runtime 側では implementation brief を必ず生成し、
 - 実装前に確認すべき GitNexus query / context / impact の対象を挙げる
 - 実装後に `ReviewAgent` と `PRAgent` へ渡すための観点を残す
 - code-writing gate が閉じている場合は、その旨を明示して brief-first で handoff する
+- stronger contract が開いている場合も、実際に観測した changed files / post-check 結果だけを truthfully に扱う
 
 ## 実装前の確認
 
@@ -44,6 +47,7 @@ repo runtime 側では implementation brief を必ず生成し、
 
 - implementation brief artifact が生成される
 - delegated writer が有効なら、その実行結果と changed files が report に残る
+- stronger write contract が有効なら、allowlist / require-changes / post-check の結果も artifact に残る
 - worktree / branch / 次の実装ステップが明示される
 - GitHub credential がある場合は implementing への同期を試みる
 - credential や capability が足りない場合は、そのことを明示して人間または将来の binding へ引き継ぐ
