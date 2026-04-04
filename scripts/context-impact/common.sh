@@ -59,6 +59,20 @@ exec_agent_skill_bus() {
   local project_root
   project_root="$(context_impact_project_root)"
 
+  if [ -n "${AGENT_SKILL_BUS_BIN:-}" ]; then
+    if command -v "$AGENT_SKILL_BUS_BIN" >/dev/null 2>&1; then
+      exec "$AGENT_SKILL_BUS_BIN" "$subcommand" "$@"
+    fi
+
+    if [ -x "$AGENT_SKILL_BUS_BIN" ]; then
+      exec "$AGENT_SKILL_BUS_BIN" "$subcommand" "$@"
+    fi
+  fi
+
+  if [ -n "${AGENT_SKILL_BUS_ROOT:-}" ] && [ -f "${AGENT_SKILL_BUS_ROOT}/package.json" ]; then
+    exec npx --prefix "$AGENT_SKILL_BUS_ROOT" agent-skill-bus "$subcommand" "$@"
+  fi
+
   local local_bin="$project_root/node_modules/.bin/agent-skill-bus"
   local sibling_dir="$project_root/../agent-skill-bus"
 
@@ -73,7 +87,8 @@ exec_agent_skill_bus() {
   cat >&2 <<EOF
 agent-skill-bus is not installed locally.
 
-This command uses an explicit external bridge. Install agent-skill-bus in node_modules
+This command uses an explicit external bridge. Set AGENT_SKILL_BUS_BIN to an executable,
+set AGENT_SKILL_BUS_ROOT to a valid package directory, install agent-skill-bus in node_modules,
 or place the sibling repository at ../agent-skill-bus before running this wrapper.
 EOF
   exit 1

@@ -170,7 +170,7 @@ Notes:
 - Several `miyabi-*` command surfaces still exist as optional external bridge surfaces
 - The Miyabi MCP bridge now resolves in this order: `MIYABI_CLI` override, `MIYABI_ROOT` override, local `node_modules/.bin/miyabi`, then optional sibling fallback at `../Miyabi/packages/cli`
 - Claude permissions no longer assume bare `miyabi` shell access; prefer the MCP bridge or `npx miyabi ...` when you need the external CLI
-- `npm run pipeline:dashboard` and `npm run pipeline:record` now use repo-local wrappers that prefer a local `agent-skill-bus` binary and otherwise probe `../agent-skill-bus`
+- `npm run pipeline:dashboard` and `npm run pipeline:record` now use repo-local wrappers that resolve in this order: `AGENT_SKILL_BUS_BIN`, `AGENT_SKILL_BUS_ROOT`, local `node_modules/.bin/agent-skill-bus`, then optional sibling fallback at `../agent-skill-bus`
 - `npm run pipeline:l1`, `pipeline:quality`, and `pipeline:classify` now use repo-local wrappers that probe `CONTEXT_AND_IMPACT_ROOT` first and otherwise fall back to `../context-and-impact`
 - `npm run pipeline:plan:init|status|clean` and the E:Stack enforcer hook are vendored locally under `scripts/context-impact/`
 
@@ -201,6 +201,7 @@ npm run pipeline:record -- "Fix eligibility lookup" success 0.9
 ```
 
 Set `CONTEXT_AND_IMPACT_ROOT=/path/to/context-and-impact` when the sibling repository is not located at `../context-and-impact`.
+Set `AGENT_SKILL_BUS_BIN=/path/to/agent-skill-bus` or `AGENT_SKILL_BUS_ROOT=/path/to/agent-skill-bus/package` when the external bridge is not installed locally.
 
 ### Skip Conditions
 
