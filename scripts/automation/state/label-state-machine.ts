@@ -1,11 +1,8 @@
 import { Octokit } from '@octokit/rest';
 
+import { replaceIssueLabelsByPrefix } from '../sync/github-label-sync.js';
+import { buildIssueStateFromLabels } from './label-state-bridge.js';
 import {
-  extractAgent,
-  extractPriority,
-  extractSeverity,
-  extractState,
-  getValidTransitions,
   stateToLabel,
   type AgentType,
   type IssueState,
@@ -31,22 +28,11 @@ export class LabelStateMachine {
       issue_number: issueNumber,
     });
 
-    const labels = issue.labels.map((label) => (typeof label === 'string' ? label : label.name || ''));
-    const state = extractState(labels);
-    const agent = extractAgent(labels);
-    const priority = extractPriority(labels);
-    const severity = extractSeverity(labels);
-
-    return {
+    return buildIssueStateFromLabels({
       number: issue.number,
       title: issue.title,
-      state,
-      agent,
-      priority,
-      severity,
-      labels,
-      canTransitionTo: getValidTransitions(state),
-    };
+      labels: issue.labels.map((label) => (typeof label === 'string' ? label : label.name || '')),
+    });
   }
 
   async transitionState(issueNumber: number, newState: State, reason?: string) {
@@ -58,20 +44,14 @@ export class LabelStateMachine {
 
     validateTransition(currentState, newState);
 
-    for (const label of currentState.labels.filter((label) => label.includes('state:'))) {
-      await this.octokit.rest.issues.removeLabel({
-        owner: this.owner,
-        repo: this.repo,
-        issue_number: issueNumber,
-        name: label,
-      });
-    }
-
-    await this.octokit.rest.issues.addLabels({
+    await replaceIssueLabelsByPrefix({
+      octokit: this.octokit,
       owner: this.owner,
       repo: this.repo,
-      issue_number: issueNumber,
-      labels: [stateToLabel(newState)],
+      issueNumber,
+      existingLabels: currentState.labels,
+      prefix: 'state:',
+      nextLabels: [stateToLabel(newState)],
     });
 
     await this.octokit.rest.issues.createComment({
@@ -91,20 +71,14 @@ Automated by \`scripts/label-state-machine.ts\`.`,
   async assignAgent(issueNumber: number, agent: AgentType) {
     const currentState = await this.getIssueState(issueNumber);
 
-    for (const label of currentState.labels.filter((label) => label.includes('agent:'))) {
-      await this.octokit.rest.issues.removeLabel({
-        owner: this.owner,
-        repo: this.repo,
-        issue_number: issueNumber,
-        name: label,
-      });
-    }
-
-    await this.octokit.rest.issues.addLabels({
+    await replaceIssueLabelsByPrefix({
+      octokit: this.octokit,
       owner: this.owner,
       repo: this.repo,
-      issue_number: issueNumber,
-      labels: [`🤖 agent:${agent}`],
+      issueNumber,
+      existingLabels: currentState.labels,
+      prefix: 'agent:',
+      nextLabels: [`🤖 agent:${agent}`],
     });
   }
 }
