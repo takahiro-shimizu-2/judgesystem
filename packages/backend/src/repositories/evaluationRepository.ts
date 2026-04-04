@@ -46,7 +46,8 @@ export class EvaluationRepository {
       const { whereClause, queryParams, paramIndex } = this.buildWhereClause(
         filters,
         statusExpression,
-        workStatusExpression
+        workStatusExpression,
+        priorityExpression
       );
 
       // Build ORDER BY clause
@@ -455,7 +456,8 @@ export class EvaluationRepository {
       const statusExpression = this.getStatusExpression();
       const workStatusExpression = this.getWorkStatusExpression();
 
-      const { whereClause, queryParams } = this.buildWhereClause(filters, statusExpression, workStatusExpression);
+      const priorityExpression = this.getPriorityExpression();
+      const { whereClause, queryParams } = this.buildWhereClause(filters, statusExpression, workStatusExpression, priorityExpression);
 
       const result = await client.query(
         `
@@ -490,7 +492,8 @@ export class EvaluationRepository {
   private buildWhereClause(
     filters: FilterParams,
     statusExpression: string,
-    workStatusExpression: string
+    workStatusExpression: string,
+    priorityExpression?: string
   ): {
     whereClause: string;
     queryParams: unknown[];
@@ -512,12 +515,12 @@ export class EvaluationRepository {
       paramIndex++;
     }
 
-    if (filters.priorities && filters.priorities.length > 0) {
+    if (filters.priorities && filters.priorities.length > 0 && priorityExpression) {
       const priorityInts = filters.priorities
         .map((p: string) => parseInt(p, 10))
         .filter((p: number) => !isNaN(p));
       if (priorityInts.length > 0) {
-        whereClauses.push(`1 = ANY($${paramIndex}::int[])`);
+        whereClauses.push(`(${priorityExpression}) = ANY($${paramIndex}::int[])`);
         queryParams.push(priorityInts);
         paramIndex++;
       }
@@ -753,8 +756,38 @@ export class EvaluationRepository {
     return `COALESCE(evs."currentStep", 'judgment')`;
   }
 
+  /**
+   * Calculate company priority (1-5) based on requirement satisfaction count.
+   *
+   * Priority mapping:
+   *   1 (highest) – all 6 requirements met (final_status = TRUE)
+   *   2 (high)    – 5 requirements met
+   *   3 (medium)  – 3-4 requirements met
+   *   4 (low)     – 1-2 requirements met
+   *   5 (lowest)  – 0 requirements met
+   */
   private getPriorityExpression(): string {
-    return `1`;
+    return `
+      CASE
+        WHEN COALESCE(cbj.final_status, FALSE) THEN 1
+        ELSE
+          CASE (
+            CAST(COALESCE(cbj.requirement_ineligibility, FALSE)::int AS int)
+            + CAST(COALESCE(cbj.requirement_grade_item, FALSE)::int AS int)
+            + CAST(COALESCE(cbj.requirement_location, FALSE)::int AS int)
+            + CAST(COALESCE(cbj.requirement_experience, FALSE)::int AS int)
+            + CAST(COALESCE(cbj.requirement_technician, FALSE)::int AS int)
+            + CAST(COALESCE(cbj.requirement_other, FALSE)::int AS int)
+          )
+            WHEN 5 THEN 2
+            WHEN 4 THEN 3
+            WHEN 3 THEN 3
+            WHEN 2 THEN 4
+            WHEN 1 THEN 4
+            ELSE 5
+          END
+      END
+    `;
   }
 
   async getCompanyOptions(search?: string, limit = 1000): Promise<CompanyOption[]> {
@@ -772,6 +805,10 @@ export class EvaluationRepository {
       paramIndex += 1;
     }
 
+    params.push(Math.max(1, limit));
+    const limitParamIndex = paramIndex;
+    paramIndex += 1;
+
     const query = `
       SELECT DISTINCT ON (cbj.office_no::text)
         cbj.company_no::text AS "companyNo",
@@ -783,7 +820,7 @@ export class EvaluationRepository {
       JOIN ${tables.officeMaster} om ON om.office_no::text = cbj.office_no::text
       ${whereClause}
       ORDER BY cbj.office_no::text, cm.company_name ASC, om.office_name ASC
-      LIMIT ${Math.max(1, limit)}
+      LIMIT $${limitParamIndex}
     `;
 
     const result = await client.query(query, params);

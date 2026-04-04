@@ -26,6 +26,8 @@ miyabi__auto({ maxIssues: 10, interval: 30 })
 
 ## 動作フロー
 
+各Issue処理時、**必ず状態遷移コマンドを実行してからフェーズに進むこと**。
+
 ```
 Water Spider Agent起動
     ↓
@@ -35,15 +37,35 @@ GitHub Issueポーリング（60秒ごと）
     ↓
 優先順位付け（緊急度・規模・種別）
     ↓
-CoordinatorAgent起動
+【状態遷移】npm run state:transition -- --issue={N} --to=analyzing --reason="CoordinatorAgent assigned"
     ↓
-├─ IssueAgent（分析・Label付与）
-├─ CodeGenAgent（コード生成）
-├─ ReviewAgent（品質チェック）
-└─ PRAgent（Draft PR作成）
+CoordinatorAgent起動（Issue分析・タスク分解）
+    ↓
+【状態遷移】npm run state:transition -- --issue={N} --to=implementing --reason="CodeGenAgent assigned"
+    ↓
+CodeGenAgent（コード生成）
+    ↓
+ReviewAgent（品質チェック）
+    ↓
+PRAgent（Draft PR作成） ※PR本文に Closes #{N} を含める
+    ↓
+CIが自動で implementing → reviewing に遷移（PR作成イベント）
     ↓
 次のIssueへ（maxIssues到達まで繰り返し）
 ```
+
+### 状態遷移ルール（必須）
+
+遷移は以下の順序でのみ許可される。スキップ不可:
+
+```
+pending → analyzing → implementing → reviewing → done
+```
+
+- `pending → analyzing`: Issue着手時に実行
+- `analyzing → implementing`: コード生成開始時に実行
+- `implementing → reviewing`: PR作成時にCIが自動実行（手動不要）
+- `reviewing → done`: PRマージ時にCIが自動実行（手動不要）
 
 ## 優先順位付けロジック
 

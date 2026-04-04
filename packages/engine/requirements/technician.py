@@ -1,8 +1,11 @@
 # coding: utf-8 -*-
 
 import re
+import logging
 import pandas as pd
 import datetime
+
+logger = logging.getLogger(__name__)
 
 #######################################
 # 技術者要件の判定
@@ -177,7 +180,9 @@ def getAllQualificationsList():
 
 
 # 資格連番から資格名を取得
-def getQualificationName(qualificationNo, qualMasterData=pd.read_csv("data/master/technician_qualification_master.txt", sep="\t")):
+def getQualificationName(qualificationNo, qualMasterData=None):
+    if qualMasterData is None:
+        qualMasterData = pd.read_csv("data/master/technician_qualification_master.txt", sep="\t")
     #const qualMasterSheet = getSheetByName("技術者資格マスター");
     #const qualMasterData = qualMasterSheet.getDataRange().getValues();
     qualifications = []
@@ -192,7 +197,7 @@ def getQualificationName(qualificationNo, qualMasterData=pd.read_csv("data/maste
     if subData.shape[0] == 0:
         return None
     elif subData.shape[0] > 1:
-        print("WARNING: 複数の資格連番が存在します。qualificationNo=" + str(qualificationNo))
+        logger.warning("複数の資格連番が存在します。qualificationNo=%s", qualificationNo)
         subData = subData.iloc[0:1]
 
     # 種別があれば付加する
@@ -201,16 +206,20 @@ def getQualificationName(qualificationNo, qualMasterData=pd.read_csv("data/maste
     else:
         return subData["qualification_name"]
 
-    return None
-
 
 def getEmployeeQualifications(
-        companyNo, 
-        officeNo, 
-        employeeData=pd.read_csv("data/master/employee_master.txt", sep="\t"), 
-        qualData=pd.read_csv("data/master/employee_qualification_master.txt", sep="\t"), 
-        qualMasterData=pd.read_csv("data/master/technician_qualification_master.txt", sep="\t")
+        companyNo,
+        officeNo,
+        employeeData=None,
+        qualData=None,
+        qualMasterData=None
         ):
+    if employeeData is None:
+        employeeData = pd.read_csv("data/master/employee_master.txt", sep="\t")
+    if qualData is None:
+        qualData = pd.read_csv("data/master/employee_qualification_master.txt", sep="\t")
+    if qualMasterData is None:
+        qualMasterData = pd.read_csv("data/master/technician_qualification_master.txt", sep="\t")
     # 1. 従業員マスターから対象拠点の従業員を取得
     # employeeData = pd.read_csv("data/master/employee_master.txt", sep="\t")
     employees = []
@@ -283,7 +292,11 @@ def getEmployeeQualifications(
 
 
 # 指定された企業・拠点に所属する従業員の実務経験情報を取得
-def getEmployeeExperiences(companyNo, officeNo, employeeData = pd.read_csv("data/master/employee_master.txt", sep="\t"), expData = pd.read_csv("data/master/employee_experience_master.txt", sep="\t")):
+def getEmployeeExperiences(companyNo, officeNo, employeeData=None, expData=None):
+    if employeeData is None:
+        employeeData = pd.read_csv("data/master/employee_master.txt", sep="\t")
+    if expData is None:
+        expData = pd.read_csv("data/master/employee_experience_master.txt", sep="\t")
     # 1. 従業員マスターから対象拠点の従業員を取得
     # employeeData = pd.read_csv("data/master/employee_master.txt", sep="\t")
     employees = []
@@ -465,7 +478,8 @@ def checkMonitoringEngineerRequirement(employeeQualifications):
             "is_ok": True,
             "reason": f"監理技術者の要件を満たす技術者が{len(validEmployees)}名います：" + "、".join(empNames)
         }
-    except:
+    except (KeyError, TypeError, ValueError) as e:
+        logger.error("監理技術者要件チェック中にエラーが発生しました: %s", e, exc_info=True)
         return {
             "is_ok": False,
             "reason": "監理技術者要件チェック中にエラーが発生しました"
@@ -543,7 +557,8 @@ def checkExperienceRequirements(requirements, employeeExperiences, matchingEmplo
             "is_ok": True,
             "reason": "経験要件を満たしています"
         }
-    except:
+    except (KeyError, TypeError, ValueError) as e:
+        logger.error("経験要件チェック中にエラーが発生しました: %s", e, exc_info=True)
         return {
             "is_ok": False,
             "reason": "経験要件チェック中にエラーが発生しました"
@@ -585,20 +600,21 @@ def generateTechnicianSuccessReason(matchingEmployees):
             if len(matchingEmployees) > 3:
                 result += " ほか" + str(len(matchingEmployees) - 3) + "名"
         return result
-    except:
+    except (KeyError, TypeError, ValueError) as e:
         # エラーが発生した場合でも最低限の情報を返す
+        logger.error("技術者要件成功理由の生成中にエラーが発生しました: %s", e, exc_info=True)
         return "技術者要件を満たしています（情報表示中にエラー）"
 
 
 # 企業公告判定マスターのメッセージ欄を更新
 def updateEvaluationMessage(companyNo, officeNo, message):
-    print("No implementation.")
-    return None
+    """企業公告判定マスターのメッセージ欄を更新する。
 
-    # 企業公告判定マスターを更新する。
-    #evalSheet = getSheetByName("企業公告判定マスター");
-    evalData = None
-    # 以下省略
+    TODO: DB接続による企業公告判定マスターの更新処理を実装する。
+    現在は未実装のため、呼び出し元で例外をハンドリングすること。
+    """
+    logger.warning("updateEvaluationMessage は未実装です。companyNo=%s, officeNo=%s", companyNo, officeNo)
+    return None
 
 # 要件と実際の資格・経験を照合 - 元の関数名を維持
 def matchTechnicianRequirements(requirements, employeeQualifications, employeeExperiences):
@@ -679,8 +695,8 @@ def matchTechnicianRequirements(requirements, employeeQualifications, employeeEx
             "is_ok": True,
             "reason": "特定の技術者資格要件はありません"
         }
-    except:
-        # MyLogger.addError("TechnicianRequirement", "matchTechnicianRequirements",`マッチングエラー: ${e.message}`, false);
+    except (KeyError, TypeError, ValueError) as e:
+        logger.error("技術者要件マッチング中にエラーが発生しました: %s", e, exc_info=True)
 
         return {
             "is_ok": False,
@@ -689,14 +705,22 @@ def matchTechnicianRequirements(requirements, employeeQualifications, employeeEx
 
 
 def checkTechnicianRequirement(
-        requirementText, 
-        companyNo, 
+        requirementText,
+        companyNo,
         officeNo,
-        employeeData=pd.read_csv("data/master/employee_master.txt", sep="\t"), 
-        qualData=pd.read_csv("data/master/employee_qualification_master.txt", sep="\t"), 
-        qualMasterData=pd.read_csv("data/master/technician_qualification_master.txt", sep="\t"),
-        expData = pd.read_csv("data/master/employee_experience_master.txt", sep="\t")
+        employeeData=None,
+        qualData=None,
+        qualMasterData=None,
+        expData=None
         ):
+    if employeeData is None:
+        employeeData = pd.read_csv("data/master/employee_master.txt", sep="\t")
+    if qualData is None:
+        qualData = pd.read_csv("data/master/employee_qualification_master.txt", sep="\t")
+    if qualMasterData is None:
+        qualMasterData = pd.read_csv("data/master/technician_qualification_master.txt", sep="\t")
+    if expData is None:
+        expData = pd.read_csv("data/master/employee_experience_master.txt", sep="\t")
     try:
         # 1. 要件テキストから必要な資格や条件を抽出
         requirements = extractTechnicianRequirements(requirementText)

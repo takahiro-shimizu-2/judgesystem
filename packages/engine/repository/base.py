@@ -1,5 +1,6 @@
 #coding: utf-8
 
+import re
 import sqlite3
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
@@ -10,6 +11,42 @@ try:
     from google.cloud import bigquery
 except Exception as e:
     print(e)
+
+
+# ---------------------------------------------------------------------------
+# SQL identifier validation utilities
+# ---------------------------------------------------------------------------
+
+# Regex: only allows alphanumerics, underscores, and dots (for BigQuery
+# project.dataset.table notation).  Rejects anything else.
+_SAFE_IDENTIFIER_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_.]*$")
+
+
+def validate_sql_identifier(name: str, label: str = "identifier") -> str:
+    """
+    Validate that *name* is a safe SQL identifier (table name, column name,
+    index name, etc.).
+
+    Raises ``ValueError`` if the name contains characters that could be used
+    for SQL injection.  Only alphanumerics, underscores, and dots are
+    permitted.  The name must start with a letter or underscore.
+
+    Args:
+        name:  The identifier to validate.
+        label: A human-readable label used in error messages (e.g.
+               ``"table name"``).
+
+    Returns:
+        The validated name (unchanged).
+    """
+    if not isinstance(name, str) or not name:
+        raise ValueError(f"Invalid {label}: must be a non-empty string, got {name!r}")
+    if not _SAFE_IDENTIFIER_RE.match(name):
+        raise ValueError(
+            f"Invalid {label}: {name!r} contains disallowed characters. "
+            f"Only alphanumerics, underscores, and dots are permitted."
+        )
+    return name
 
 
 @dataclass(frozen=True)

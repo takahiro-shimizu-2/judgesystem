@@ -698,6 +698,10 @@ class OcrProcessingMixin:
             for doc_id in document_ids:
                 doc = doc_id.strip()
                 if doc:
+                    # Validate: document_id should only contain safe characters
+                    if not all(c.isalnum() or c in ('_', '-', '.') for c in doc):
+                        print(f"[WARN] Skipping suspicious document_id: {doc!r}")
+                        continue
                     sanitized.append("'" + doc.replace("'", "''") + "'")
             if sanitized:
                 where_clauses.append(f"document_id IN ({', '.join(sanitized)})")
@@ -753,6 +757,10 @@ class OcrProcessingMixin:
             for doc_id in document_ids:
                 doc = (doc_id or "").strip()
                 if doc:
+                    # Validate: document_id should only contain safe characters
+                    if not all(c.isalnum() or c in ('_', '-', '.') for c in doc):
+                        print(f"[WARN] Skipping suspicious document_id: {doc!r}")
+                        continue
                     sanitized.append("'" + doc.replace("'", "''") + "'")
             if sanitized:
                 where_clauses.append(f"document_id IN ({', '.join(sanitized)})")
@@ -927,6 +935,10 @@ class OcrProcessingMixin:
             for doc_id in document_ids:
                 doc = doc_id.strip()
                 if doc:
+                    # Validate: document_id should only contain safe characters
+                    if not all(c.isalnum() or c in ('_', '-', '.') for c in doc):
+                        print(f"[WARN] Skipping suspicious document_id: {doc!r}")
+                        continue
                     sanitized.append("'" + doc.replace("'", "''") + "'")
             if sanitized:
                 where_clauses.append(f"document_id IN ({', '.join(sanitized)})")
@@ -1554,8 +1566,7 @@ class OcrProcessingMixin:
                         try:
                             requirement_texts = json.loads(text2)
                         except json.decoder.JSONDecodeError:
-                            text2 = text2.replace('"', "'")
-                            requirement_texts = json.loads('{"資格・条件" : ["' + text2 + '"]}')
+                            requirement_texts = {"資格・条件": [text2]}
 
                         if isinstance(requirement_texts, dict) and "資格・条件" in requirement_texts:
                             req_list = requirement_texts["資格・条件"]

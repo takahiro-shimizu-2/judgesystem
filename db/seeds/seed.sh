@@ -113,7 +113,7 @@ load_data "$MASTER_DIR/partners_qualifications_orderers.txt" \
   'partners_qualifications_orderers(partner_id, "ordererName")'
 
 load_data "$MASTER_DIR/partners_qualifications_orderer_items.txt" \
-  'partners_qualifications_orderer_items(partner_id, "ordererName", category, region, value, grade)'
+  'partners_qualifications_orderer_items(partner_id, "ordererName", category, region, value, grade, points)'
 
 load_data "$MASTER_DIR/partners_past_projects.txt" \
   'partners_past_projects(partner_id, "evaluationId", "announcementId", "announcementNo", "announcementTitle", "branchName", "workStatus", "evaluationStatus", priority, "bidType", category, prefecture, "publishDate", deadline, "evaluatedAt", organization)'
@@ -122,7 +122,7 @@ load_data "$MASTER_DIR/announcements_competing_companies_master.txt" \
   'announcements_competing_companies_master(announcement_id, company_name, "isWinner")'
 
 load_data "$MASTER_DIR/announcements_competing_company_bids_master.txt" \
-  'announcements_competing_company_bids_master(announcement_id, company_name, bid_order, bid_amount)'
+  'announcements_competing_company_bids_master(announcement_id, company_name, bid_amount, bid_order)'
 
 load_data "$MASTER_DIR/announcements_estimated_amounts.txt" \
   'announcements_estimated_amounts(announcement_no, estimated_amount_min, estimated_amount_max)'
