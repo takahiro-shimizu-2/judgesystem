@@ -11,6 +11,14 @@ on:
         description: 'Issue number to process'
         required: true
         type: number
+      execution_mode:
+        description: 'planning or execute'
+        required: true
+        default: planning
+        type: choice
+        options:
+          - planning
+          - execute
 
 env:
   NODE_VERSION: '20'
@@ -23,17 +31,20 @@ jobs:
     outputs:
       should_execute: ${{ steps.check.outputs.should_execute }}
       issue_number: ${{ steps.check.outputs.issue_number }}
+      execution_mode: ${{ steps.check.outputs.execution_mode }}
     steps:
       - name: Check trigger conditions
         id: check
         run: |
           SHOULD_EXECUTE="false"
           ISSUE_NUMBER=""
+          EXECUTION_MODE="planning"
 
           # Check if manually triggered
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             SHOULD_EXECUTE="true"
             ISSUE_NUMBER="${{ github.event.inputs.issue_number }}"
+            EXECUTION_MODE="${{ github.event.inputs.execution_mode }}"
             echo "Manual trigger for issue #${ISSUE_NUMBER}"
           fi
 
@@ -59,6 +70,7 @@ jobs:
 
           echo "should_execute=${SHOULD_EXECUTE}" >> $GITHUB_OUTPUT
           echo "issue_number=${ISSUE_NUMBER}" >> $GITHUB_OUTPUT
+          echo "execution_mode=${EXECUTION_MODE}" >> $GITHUB_OUTPUT
 
   # Job 2: Build an execution plan and publish artifacts
   execute-agents:
@@ -70,6 +82,7 @@ jobs:
     permissions:
       issues: write
       contents: read
+      pull-requests: write
 
     steps:
       - name: Checkout repository
@@ -102,16 +115,24 @@ jobs:
       - name: Execute planning runtime
         id: execute
         run: |
-          echo "🚀 Starting planning runtime for Issue #${{ needs.check-trigger.outputs.issue_number }}"
+          MODE="${{ needs.check-trigger.outputs.execution_mode }}"
+          echo "🚀 Starting ${MODE} runtime for Issue #${{ needs.check-trigger.outputs.issue_number }}"
 
-          npm run agents:parallel:exec -- \
-            --issue ${{ needs.check-trigger.outputs.issue_number }} \
-            --concurrency 3 \
-            --dry-run \
+          ARGS=(
+            --issue "${{ needs.check-trigger.outputs.issue_number }}"
+            --concurrency 3
             --log-level info
+          )
+
+          if [ "$MODE" != "execute" ]; then
+            ARGS+=(--dry-run)
+          fi
+
+          npm run agents:parallel:exec -- "${ARGS[@]}"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          AUTOMATION_ENABLE_PR_WRITE: ${{ vars.AUTOMATION_ENABLE_PR_WRITE }}
         continue-on-error: true
 
       - name: Summarize execution artifacts

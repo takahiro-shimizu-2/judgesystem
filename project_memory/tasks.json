@@ -27,12 +27,12 @@
     {
       "id": "plan-rewrite-v2",
       "title": "Rewrite docs/agents-integration-plan.md with research order, capability inventory, and full-autonomy phases",
-      "status": "in_progress"
+      "status": "completed"
     },
     {
       "id": "full-autonomy-first-slice",
       "title": "Choose and implement the first full-autonomy capability slice only after the rewritten plan is accepted",
-      "status": "pending"
+      "status": "in_progress"
     },
     {
       "id": "github-check-alignment",

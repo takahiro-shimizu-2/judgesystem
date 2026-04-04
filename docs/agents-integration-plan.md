@@ -382,6 +382,31 @@ repo runtime の必須依存ではなく「override / local install 後の optio
    - `scripts/context-impact/*.sh`
    - 一部 `.claude/mcp-servers/*`
 
+### 5.1.1 元ディレクトリからの capability 写像
+
+`../Miyabi` から `judgesystem` へ吸収する際は、「ファイルを持ってくる」ではなく
+「能力をどこへ写像するか」で判断する。
+
+| Miyabi 側 capability | Miyabi 側の主な実体 | judgesystem current | judgesystem target |
+|----|----|----|----|
+| Coordinator / orchestration | `packages/coding-agents/coordinator/*`, `packages/cli/scripts/parallel-executor.ts` | `scripts/automation/decomposition/*`, `scripts/automation/orchestration/*`, `scripts/automation/adapters/agents-parallel-exec.ts` | 維持。planning substrate と execution substrate の中核にする |
+| Issue analysis / state sync | `IssueAgent` + label state machine + webhook routing | `scripts/automation/agents/handlers/issue.ts`, `scripts/automation/state/*`, `scripts/automation/adapters/webhook-router.ts` | 維持。state machine と event routing を repo-local runtime として育てる |
+| Code generation | `CodeGenAgent` が実コード生成・テスト生成・ドキュメント生成を行う | `scripts/automation/agents/handlers/codegen.ts` は implementation brief のみ | explicit capability binding を追加し、実コード生成の contract を repo 側で持つ |
+| Test execution | Miyabi では `TestAgent` と codegen/review 周辺で別能力として存在する | 独立 agent なし。`ReviewAgent` が `typecheck` / `test` を実行 | 当面は review/test capability に吸収する。必要になれば独立 capability として切り出す |
+| Review / quality gate | `ReviewAgent` が scoring / comment / escalation を行う | `scripts/automation/agents/handlers/review.ts` は local checks を実行 | local checks を基盤に、score / retry / escalation を追加する |
+| PR creation | `PRAgent` が GitHub に draft PR を作成し、labels / reviewers も扱う | `scripts/automation/agents/handlers/pr.ts` は local draft artifact のみ | remote draft PR 作成を repo-local handler として追加する |
+| Deployment | `DeploymentAgent` が build / test / deploy / health check / rollback を扱う | `scripts/automation/agents/handlers/deployment.ts` は env-gated command 実行のみ | deploy contract を拡張し、preflight / health / rollback を段階導入する |
+| Workflow execution | `.github/workflows/autonomous-agent.yml` が execute mode で動く | `autonomous-agent.yml` は planning-first で `--dry-run` 固定 | planning / execute を明示切替し、実行した capability のみ報告する |
+| Projects V2 / reporting | `packages/github-projects`, KPI / dashboard scripts | `scripts/automation/github/*`, `scripts/automation/reporting/*` | すでに repo-local runtime 化済み。維持して活かす |
+| Context pipeline | `context-and-impact` とその wrapper | `scripts/context-impact/*` bridge + local vendor 部分 | repo-local vendor と external bridge の hybrid を維持する |
+| GitNexus stable ops | `gitnexus-stable-ops` wrapper / Agent Graph | current CLI + `gitnexus_agent_*` MCP + optional sibling wrapper | symbol analysis は local CLI、agent graph は wrapper/MCP として分離記載する |
+| Skill health / dashboard | `agent-skill-bus` | `pipeline:record`, `pipeline:dashboard` の bridge | external bridge のまま維持する |
+| Miyabi CLI / MCP bundle 全体 | `packages/cli`, `packages/mcp-bundle`, `miyabi auto` など | optional Miyabi MCP bridge のみ | `judgesystem` には持ち込まない。必要なら optional external bridge として使う |
+
+ここで重要なのは、
+`judgesystem` が吸収すべき対象は **Miyabi の monorepo 構造** ではなく
+**Miyabi が提供している能力のうち、この repo 自身が持つべき runtime contract** だけ、という点である。
+
 ### 5.2 agent 実装は fixed class ではなく registry / handler で組む
 
 新しい考え方は次である。

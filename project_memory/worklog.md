@@ -13,6 +13,10 @@ Context-and-impact phase E appends audit entries here.
 - Confirmed from the Claude Code docs that `.claude/commands/*` still works but the current recommendation is skill-oriented, and that Claude-side agent/command surfaces remain definition layers rather than generic Node runtime implementations.
 - Confirmed from GitHub Actions docs that `issues`, `issue_comment`, and `workflow_dispatch` are valid trigger surfaces for the autonomous workflow and that explicit `permissions` keys narrow all unspecified scopes to `none`.
 - Updated `docs/agents-integration-plan.md` to add a fixed research procedure, a capability classification model, the `TestAgent` absorption decision, and new full-autonomy phases after the previously completed safe-runtime work.
+- Added a concrete capability mapping table to `docs/agents-integration-plan.md` so each Miyabi-origin capability now has a `judgesystem current` and `judgesystem target` row.
+- Started the first post-research full-autonomy slice by extending `scripts/automation/agents/handlers/pr.ts` from local artifact generation to optional remote draft PR creation behind `AUTOMATION_ENABLE_PR_WRITE=true`.
+- Updated `.claude/agents/pr-agent.md` so the Claude-side contract now matches the new runtime behavior: always generate a local artifact first, and only create/update a remote draft PR when branch/token/gate conditions are satisfied.
+- Updated `.github/workflows/autonomous-agent.yml` so `workflow_dispatch` can now choose `planning` or `execute`, while issue/comment-triggered runs remain planning by default.
 - Reopened `project_memory/tasks.json` so the current phase is tracked as research gate and replanning work rather than appearing falsely complete.
 
 - Started Phase 2 by moving label state machine logic into `scripts/automation/state`.
