@@ -20,6 +20,12 @@ Context-and-impact phase E appends audit entries here.
 - Verified the first full-autonomy slice locally with `npm run typecheck`, YAML parsing, and a temp-repo smoke run of `createPrAgentHandler`, which correctly fell back to artifact-only behavior when no token was available.
 - Pushed the slice to GitHub and confirmed the push/PR checks stayed green, including backend/frontend/security and webhook-related workflows.
 - Reopened `project_memory/tasks.json` so the current phase is tracked as research gate and replanning work rather than appearing falsely complete.
+- Extended `scripts/automation/agents/handlers/codegen.ts` so `CodeGenAgent` still writes an implementation brief first, but can now invoke an explicit repo-root code-writing command when `AUTOMATION_ENABLE_CODEGEN_WRITE=true` and `AUTOMATION_CODEGEN_COMMAND` are provided.
+- Kept the runtime home under `scripts/automation/*`; the new code-writing gate does not move anything into `packages/*` and treats `.ai/worktrees/...` as a staging/artifact area rather than a real git worktree.
+- Updated `.claude/agents/codegen-agent.md`, `.claude/commands/agent-run.md`, `AGENTS.md`, and `CLAUDE.md` so the definition surfaces describe the current codegen/pr reality truthfully: delegated writer and remote draft PR are possible, but always behind explicit gates.
+- Updated `.github/workflows/autonomous-agent.yml` to pass `AUTOMATION_ENABLE_CODEGEN_WRITE` and `AUTOMATION_CODEGEN_COMMAND` into the runtime, alongside the existing PR gate, so execute-mode runs can opt into delegated writing intentionally.
+- Updated `docs/agents-integration-plan.md` so the capability table and phase notes no longer claim that PR execute mode is still missing and now record delegated code-writing as the next connected autonomy slice.
+- Verified the new slice with `npm run typecheck`, `python3` YAML parsing of `.github/workflows/autonomous-agent.yml`, `npx tsx scripts/agents-parallel-exec.ts --help`, and a temp-git-repo smoke run of `createCodeGenAgentHandler` that wrote `generated.txt` through the delegated writer command and reported the changed file list correctly.
 
 - Started Phase 2 by moving label state machine logic into `scripts/automation/state`.
 - Kept `scripts/label-state-machine.ts` as the stable CLI entrypoint for workflows and npm scripts.

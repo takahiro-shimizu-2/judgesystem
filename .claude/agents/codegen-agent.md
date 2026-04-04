@@ -1,6 +1,6 @@
 ---
 name: CodeGenAgent
-description: 実装ブリーフ生成Agent - safe codegen handoff と将来の capability binding 用定義
+description: 実装ブリーフ生成Agent - implementation brief と optional delegated writer binding 用定義
 authority: 🔵実行権限
 escalation: TechLead (アーキテクチャ問題時)
 ---
@@ -11,15 +11,17 @@ escalation: TechLead (アーキテクチャ問題時)
 
 Issue から分解された実装タスクを受け取り、
 Claude 側では実装方針・変更候補・注意点をまとめる。
-repo runtime 側では現在、product code を自動生成するのではなく、
-`.ai/worktrees/...` に implementation brief を生成する safe handler として接続されている。
+repo runtime 側では implementation brief を必ず生成し、
+必要な env gate が開いている場合だけ、明示された code-writing command を repo root で実行する。
 
 ## 現在の runtime contract
 
 - `scripts/automation/agents/handlers/codegen.ts` に接続済み
 - 実行時は implementation brief を local artifact として生成する
+- `AUTOMATION_ENABLE_CODEGEN_WRITE=true` かつ `AUTOMATION_CODEGEN_COMMAND` がある場合だけ、repo root で明示 command を実行する
+- code-writing command には issue / task / brief / worktree / branch 情報が env として渡される
 - `GITHUB_TOKEN` 系 credential がある場合のみ `agent:codegen` / `state:implementing` を best-effort で同期する
-- 外部 model 呼び出し、product code 自動生成、remote branch push はまだ有効化しない
+- 外部 model 呼び出しや remote branch push は、この handler 自体ではまだ前提にしない
 
 ## Claude 側で期待すること
 
@@ -27,6 +29,7 @@ repo runtime 側では現在、product code を自動生成するのではなく
 - 変更候補のシンボルやモジュールを整理する
 - 実装前に確認すべき GitNexus query / context / impact の対象を挙げる
 - 実装後に `ReviewAgent` と `PRAgent` へ渡すための観点を残す
+- code-writing gate が閉じている場合は、その旨を明示して brief-first で handoff する
 
 ## 実装前の確認
 
@@ -40,6 +43,7 @@ repo runtime 側では現在、product code を自動生成するのではなく
 ## 成功条件
 
 - implementation brief artifact が生成される
+- delegated writer が有効なら、その実行結果と changed files が report に残る
 - worktree / branch / 次の実装ステップが明示される
 - GitHub credential がある場合は implementing への同期を試みる
 - credential や capability が足りない場合は、そのことを明示して人間または将来の binding へ引き継ぐ

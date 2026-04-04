@@ -105,10 +105,10 @@ python -m cli.entry         # Run judgment engine
 | Agent | Role | Authority |
 |-------|------|-----------|
 | CoordinatorAgent | Task decomposition, DAG building, plan/report orchestration | Orchestrator |
-| CodeGenAgent | Implementation brief generation and future codegen binding | Executor |
+| CodeGenAgent | Implementation brief generation plus optional explicit code-writing command | Executor |
 | ReviewAgent | Local validation checks and review summary | Executor |
 | IssueAgent | Issue analysis and analyzing-state sync | Analyst |
-| PRAgent | Local draft PR artifact generation | Executor |
+| PRAgent | Local draft PR artifact generation plus optional remote draft PR | Executor |
 | DeploymentAgent | Env-gated deployment command execution | Executor |
 
 Agent specifications: `.claude/agents/`
@@ -117,6 +117,8 @@ Agent specifications: `.claude/agents/`
 
 - `scripts/automation/decomposition/*` and `scripts/automation/orchestration/*` provide a planning-first substrate
 - `npm run agents:parallel:exec` now connects safe handlers for issue/codegen/review/pr/deploy while keeping stronger side effects gated
+- `CodeGenAgent` can now invoke an explicit repo-root code-writing command when `AUTOMATION_ENABLE_CODEGEN_WRITE=true` and `AUTOMATION_CODEGEN_COMMAND` are set
+- `PRAgent` can now open or update a remote draft PR when `AUTOMATION_ENABLE_PR_WRITE=true` and branch/token conditions are satisfied
 - Runtime integration should converge on a registry/loader that reads `.claude/agents/*.md` metadata and dispatches to explicit handlers in `scripts/automation`
 
 ### State Flow

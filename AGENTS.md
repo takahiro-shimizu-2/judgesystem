@@ -17,7 +17,8 @@
 `.claude/agents/*.md` が存在しても、それだけで runtime handler が実装済みとは見なさないこと。
 現在の `agents:parallel:exec` は planning-first の orchestration substrate を土台にしつつ、
 Issue / CodeGen / Review / PR / Deploy の safe handler は接続済みである。
-ただし、remote PR 作成、外部 model による product code 自動生成、deploy の強い副作用は依然として gate 付きまたは未接続である。
+ただし、CodeGen の code-writing command、remote PR 作成、deploy の強い副作用は gate 付きであり、
+外部 model による product code 自動生成や remote branch push までは依然として未保証である。
 
 - Issue 分析 → タスク分解 → コード生成 → レビュー → PR 作成 → デプロイ
 - GitHub ラベル（53ラベル体系）でステートを管理

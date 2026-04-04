@@ -301,7 +301,9 @@ repo 構造や package 境界をそのまま `judgesystem` に持ち込む対象
 
 現時点の `agents:parallel:exec` は planning-first を土台にしつつ、
 issue / review / pr / deployment と safe codegen brief handler までは接続済みである。
-ただし、外部 model を使った本当の product code 生成、remote PR 作成、deploy 実行はまだ opt-in / 未接続である。
+ただし、そこで言う接続済み capability はあくまで repo-local / gate 付きの範囲である。
+現在は delegated code-writing command と remote draft PR は opt-in gate 付き、
+外部 model を使った本当の product code 生成や強い deploy 実行は依然として未保証である。
 ここは計画上も実装上も truthfulness を回復する必要がある。
 
 #### C. `.claude` 側に `miyabi` 依存が残っている
@@ -391,12 +393,12 @@ repo runtime の必須依存ではなく「override / local install 後の optio
 |----|----|----|----|
 | Coordinator / orchestration | `packages/coding-agents/coordinator/*`, `packages/cli/scripts/parallel-executor.ts` | `scripts/automation/decomposition/*`, `scripts/automation/orchestration/*`, `scripts/automation/adapters/agents-parallel-exec.ts` | 維持。planning substrate と execution substrate の中核にする |
 | Issue analysis / state sync | `IssueAgent` + label state machine + webhook routing | `scripts/automation/agents/handlers/issue.ts`, `scripts/automation/state/*`, `scripts/automation/adapters/webhook-router.ts` | 維持。state machine と event routing を repo-local runtime として育てる |
-| Code generation | `CodeGenAgent` が実コード生成・テスト生成・ドキュメント生成を行う | `scripts/automation/agents/handlers/codegen.ts` は implementation brief のみ | explicit capability binding を追加し、実コード生成の contract を repo 側で持つ |
+| Code generation | `CodeGenAgent` が実コード生成・テスト生成・ドキュメント生成を行う | `scripts/automation/agents/handlers/codegen.ts` は implementation brief を必ず生成し、`AUTOMATION_ENABLE_CODEGEN_WRITE=true` と `AUTOMATION_CODEGEN_COMMAND` がある場合だけ delegated writer command を repo root で実行する | delegated writer binding を基盤にしつつ、必要なら external-model / stronger write contract へ拡張する |
 | Test execution | Miyabi では `TestAgent` と codegen/review 周辺で別能力として存在する | 独立 agent なし。`ReviewAgent` が `typecheck` / `test` を実行 | 当面は review/test capability に吸収する。必要になれば独立 capability として切り出す |
 | Review / quality gate | `ReviewAgent` が scoring / comment / escalation を行う | `scripts/automation/agents/handlers/review.ts` は local checks を実行 | local checks を基盤に、score / retry / escalation を追加する |
-| PR creation | `PRAgent` が GitHub に draft PR を作成し、labels / reviewers も扱う | `scripts/automation/agents/handlers/pr.ts` は local draft artifact のみ | remote draft PR 作成を repo-local handler として追加する |
+| PR creation | `PRAgent` が GitHub に draft PR を作成し、labels / reviewers も扱う | `scripts/automation/agents/handlers/pr.ts` は local draft artifact を常に生成し、`AUTOMATION_ENABLE_PR_WRITE=true` の場合だけ remote draft PR を作成または更新する | reviewer / label / mergeability など周辺 contract を段階追加する |
 | Deployment | `DeploymentAgent` が build / test / deploy / health check / rollback を扱う | `scripts/automation/agents/handlers/deployment.ts` は env-gated command 実行のみ | deploy contract を拡張し、preflight / health / rollback を段階導入する |
-| Workflow execution | `.github/workflows/autonomous-agent.yml` が execute mode で動く | `autonomous-agent.yml` は planning-first で `--dry-run` 固定 | planning / execute を明示切替し、実行した capability のみ報告する |
+| Workflow execution | `.github/workflows/autonomous-agent.yml` が execute mode で動く | `autonomous-agent.yml` は `workflow_dispatch` で planning / execute を明示切替し、実行した capability だけを summary/comment へ出す | issue/comment trigger 時の gate や dedicated execute workflow 分離を必要に応じて追加する |
 | Projects V2 / reporting | `packages/github-projects`, KPI / dashboard scripts | `scripts/automation/github/*`, `scripts/automation/reporting/*` | すでに repo-local runtime 化済み。維持して活かす |
 | Context pipeline | `context-and-impact` とその wrapper | `scripts/context-impact/*` bridge + local vendor 部分 | repo-local vendor と external bridge の hybrid を維持する |
 | GitNexus stable ops | `gitnexus-stable-ops` wrapper / Agent Graph | current CLI + `gitnexus_agent_*` MCP + optional sibling wrapper | symbol analysis は local CLI、agent graph は wrapper/MCP として分離記載する |
@@ -517,8 +519,10 @@ Phase 3 の最初の実装スライスは、次の安全境界で入れる。
 - `CodeGenAgent`
   - `.claude/agents/codegen-agent.md` の metadata をもとに
     `.ai/worktrees/...` 配下へ implementation brief を生成する
+  - `AUTOMATION_ENABLE_CODEGEN_WRITE=true` と `AUTOMATION_CODEGEN_COMMAND` が与えられた場合だけ、
+    repo root で explicit code-writing command を実行する
   - token がある場合のみ `agent:codegen` と `state:implementing` を best-effort で同期する
-  - 外部 model を使った product code 自動生成は、将来の capability binding まで有効化しない
+  - 外部 model を使った product code 自動生成や remote push は、将来の stronger binding まで前提にしない
 
 つまり、
 Phase 3 は「危険な副作用を伴う full autonomy を解禁する段階」ではなく、
@@ -735,11 +739,11 @@ GitNexus は次で分ける。
 
 作業:
 
-- `CodeGenAgent` の実コード生成 binding をどう持つか決める
+- `CodeGenAgent` は delegated writer binding まで接続済みとし、必要なら external-model / stronger write contract への昇格条件を決める
 - `ReviewAgent` の score / retry / escalation 契約をどう持つか決める
-- `PRAgent` の remote draft PR 作成契約を決める
+- `PRAgent` は remote draft PR 作成契約まで接続済みとし、reviewer / label / mergeability 契約の拡張条件を決める
 - `DeploymentAgent` の deploy/rollback/approval 契約を決める
-- `workflow_dispatch` / label / comment から planning と execute をどう切り替えるか決める
+- `workflow_dispatch` の planning / execute 切替は接続済みとして、label / comment trigger 時の execute gate をどう扱うか決める
 - Miyabi 由来の `TestAgent` を独立 runtime にするか、review/test capability に吸収するかを明記する
 
 ### Phase 8: full autonomy の最小 slice を実装する
@@ -786,8 +790,10 @@ full autonomy をどの capability から開けるかを計画書どおりに進
 4. その capability に必要な workflow / token / permission / failure path を整える
 5. 実装、検証、GitHub 反映を行う
 
-最初の候補としては、`PRAgent` の remote draft PR 作成と
-`autonomous-agent.yml` の planning/execute 切替がもっとも自然である。
+初手としては、`PRAgent` の remote draft PR 作成と
+`autonomous-agent.yml` の planning/execute 切替を先に完了させた。
+次の capability 候補としていた `CodeGenAgent` の delegated writer binding も接続済みである。
+残る重点は、review loop の強化と deployment contract の拡張である。
 
 ## 9. 改訂版 Definition of Done
 

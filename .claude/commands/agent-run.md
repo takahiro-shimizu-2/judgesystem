@@ -16,16 +16,16 @@ Issue取得
 CoordinatorAgent
   ↓
 IssueAgent      → label/state sync (token がある場合)
-CodeGenAgent    → implementation brief artifact
+CodeGenAgent    → implementation brief artifact + optional code-writing command
 ReviewAgent     → npm run typecheck / npm test
-PRAgent         → local draft PR artifact
+PRAgent         → local draft PR artifact + optional remote draft PR
 DeploymentAgent → env-gated command only
 ```
 
 以下はまだ前提にしないこと:
 
 - external model による product code 自動生成
-- GitHub 上の remote PR 自動作成
+- gate を開いていない code-writing / remote PR / deploy を「自動実行済み」とみなすこと
 - deploy の常時実行
 - 固定の品質スコアや coverage を成功条件として断定すること
 
@@ -71,6 +71,9 @@ GITHUB_TOKEN=ghp_xxx
 GH_TOKEN=ghp_xxx
 REPOSITORY=owner/repo
 DEVICE_IDENTIFIER=local-runner
+AUTOMATION_ENABLE_PR_WRITE=true
+AUTOMATION_ENABLE_CODEGEN_WRITE=true
+AUTOMATION_CODEGEN_COMMAND="npm run agent:codegen"
 AUTOMATION_ENABLE_DEPLOY=true
 AUTOMATION_DEPLOY_COMMAND="npm run deploy:staging"
 ```

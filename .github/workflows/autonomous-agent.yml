@@ -132,7 +132,10 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          REPOSITORY: ${{ github.repository }}
           AUTOMATION_ENABLE_PR_WRITE: ${{ vars.AUTOMATION_ENABLE_PR_WRITE }}
+          AUTOMATION_ENABLE_CODEGEN_WRITE: ${{ vars.AUTOMATION_ENABLE_CODEGEN_WRITE }}
+          AUTOMATION_CODEGEN_COMMAND: ${{ vars.AUTOMATION_CODEGEN_COMMAND }}
         continue-on-error: true
 
       - name: Summarize execution artifacts
