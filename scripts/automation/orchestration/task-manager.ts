@@ -8,6 +8,7 @@ import { createAgentRegistry, type AgentRegistry } from '../agents/registry.js';
 import { LLMDecomposer, type AutomationIssue } from '../decomposition/llm-decomposer.js';
 import { validateTaskDecomposition } from '../decomposition/decomposition-validator.js';
 import { buildTaskDag, type TaskDag } from './dag-manager.js';
+import { buildLivingPlanMarkdown } from '../planning/plans-generator.js';
 import { TaskExecutor, type ExecutionReport, type TaskExecutionRunner } from './task-executor.js';
 import { WorktreeCoordinator, type WorktreeAssignment } from './worktree-coordinator.js';
 
@@ -45,6 +46,7 @@ export interface TaskManagerRunResult {
   artifactPaths: {
     planPath: string;
     reportPath: string;
+    plansPath: string;
     logPath: string;
   };
 }
@@ -160,11 +162,16 @@ export class TaskManager {
     };
   }
 
-  private writeArtifacts(plan: ExecutionPlan, report: ExecutionReport, logger: AutomationLogger) {
+  private writeArtifacts(
+    plan: ExecutionPlan,
+    report: ExecutionReport,
+    logger: AutomationLogger,
+  ): TaskManagerRunResult['artifactPaths'] {
     const aiRoot = ensureDirectory(path.join(this.rootDir, '.ai'));
     const reportsDir = ensureDirectory(path.join(aiRoot, 'parallel-reports'));
     const planPath = path.join(reportsDir, `execution-plan-${plan.sessionId}.json`);
     const reportPath = path.join(reportsDir, `agents-parallel-${plan.sessionId}.json`);
+    const plansPath = path.join(reportsDir, `plans-${plan.sessionId}.md`);
 
     fs.writeFileSync(
       planPath,
@@ -191,10 +198,23 @@ export class TaskManager {
     );
     fs.writeFileSync(reportPath, JSON.stringify(report, null, 2), 'utf8');
 
-    return {
+    const artifactPaths = {
       planPath,
       reportPath,
+      plansPath,
       logPath: logger.getLogFilePath(),
     };
+    fs.writeFileSync(
+      plansPath,
+      `${buildLivingPlanMarkdown({
+        rootDir: this.rootDir,
+        plan,
+        report,
+        artifactPaths,
+      })}\n`,
+      'utf8',
+    );
+
+    return artifactPaths;
   }
 }

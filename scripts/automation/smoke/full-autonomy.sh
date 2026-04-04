@@ -7,4 +7,5 @@ cd "$REPO_ROOT"
 
 npm run typecheck
 npx tsx scripts/agents-parallel-exec.ts --help >/dev/null
+npx tsx scripts/automation/smoke/planning-artifacts.ts
 npx tsx scripts/automation/smoke/handler-contracts.ts
