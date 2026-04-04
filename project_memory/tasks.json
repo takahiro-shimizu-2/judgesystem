@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-04-04T16:40:00+09:00",
-  "query": "Phase 3 adapter delegation",
+  "generated_at": "2026-04-04T17:05:00+09:00",
+  "query": "Phase 4 decomposition runtime",
   "repo": "judgesystem",
   "quality_score": 0,
   "tasks": [
@@ -12,6 +12,11 @@
     {
       "id": "phase3-adapter-delegation",
       "title": "Move project status and webhook routing runtime under scripts/automation/adapters",
+      "status": "completed"
+    },
+    {
+      "id": "phase4-decomposition-runtime",
+      "title": "Add decomposition and orchestration runtime with agents:parallel:exec CLI",
       "status": "in_progress"
     }
   ]

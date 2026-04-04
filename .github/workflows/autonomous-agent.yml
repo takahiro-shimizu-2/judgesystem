@@ -127,6 +127,7 @@ jobs:
           fi
 
       - name: Commit generated code
+        id: commit_changes
         if: steps.check_changes.outputs.has_changes == 'true'
         run: |
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
@@ -154,7 +155,7 @@ jobs:
         uses: peter-evans/create-pull-request@v6
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          branch: agent/issue-${{ needs.check-trigger.outputs.issue_number }}-${{ github.run_number }}
+          branch: ${{ steps.commit_changes.outputs.branch_name }}
           title: "feat: autonomous agent implementation for issue #${{ needs.check-trigger.outputs.issue_number }}"
           body: |
             ## 🤖 Autonomous Agent Execution Report

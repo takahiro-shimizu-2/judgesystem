@@ -14,6 +14,8 @@
     "pipeline:plan:clean": "bash scripts/context-impact/plan-clean.sh",
     "pipeline:record": "bash scripts/context-impact/record-run.sh",
     "test": "echo \"No tests configured yet\" && exit 0",
+    "typecheck": "tsc -p scripts/tsconfig.json --noEmit",
+    "agents:parallel:exec": "tsx scripts/agents-parallel-exec.ts",
     "state:check": "tsx scripts/label-state-machine.ts check",
     "state:transition": "tsx scripts/label-state-machine.ts transition",
     "state:assign-agent": "tsx scripts/label-state-machine.ts assign-agent",

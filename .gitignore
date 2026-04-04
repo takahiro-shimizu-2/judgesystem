@@ -51,6 +51,9 @@ coverage/
 
 # Project-specific data
 .ai/execution-plan.json
+.ai/logs/
+.ai/parallel-reports/
+.ai/worktrees/
 data/ocr
 data/pdf
 data/sec

@@ -10,3 +10,5 @@ Context-and-impact phase E appends audit entries here.
 - Started Phase 3 by moving project status and webhook routing orchestration into `scripts/automation/adapters`.
 - Added a reusable retry helper in `scripts/automation/core/retry.ts` for adapter-level backoff behavior.
 - Moved KPI report, weekly report, and dashboard data entrypoint orchestration into reporting adapters.
+- Started Phase 4 by adding a planning-first `agents:parallel:exec` runtime for issue decomposition, DAG building, and execution report generation.
+- Added `scripts/automation/decomposition` and `scripts/automation/orchestration` so the autonomous-agent workflow has a real CLI entrypoint inside this repo.
