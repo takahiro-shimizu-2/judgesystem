@@ -228,6 +228,14 @@ configured checks, score, retry, escalation, coverage/security summary, review a
 - stalled / idle / failed execute run の継続判断ができる
 - replay / retry / resume 契約が明文化される
 
+進捗メモ (2026-04-05):
+
+- repo-local `WaterSpiderAgent` runtime を追加済み
+- `autonomous-agent.yml` の summarize 後に continuity decision を生成する
+- issue comment の hidden marker で retry budget を保持する
+- gate が開いていれば `autonomous-agent.yml` を self-dispatch できる
+- P4 は完了、次の active phase は P5
+
 ### Phase P5: Omega staged absorption
 
 目的:

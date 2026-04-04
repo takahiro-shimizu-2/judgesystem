@@ -20,6 +20,7 @@ CodeGenAgent    → implementation brief artifact + optional code-writing comman
 ReviewAgent     → repo-root configured checks + score/retry/escalation artifact
 PRAgent         → local draft PR artifact + optional remote draft PR
 DeploymentAgent → preflight + deploy + optional healthcheck/rollback contract
+WaterSpiderAgent → workflow-end continuity decision + optional execute redispatch
 ```
 
 以下はまだ前提にしないこと:
@@ -77,6 +78,8 @@ npm run agents:parallel:exec -- --help
 - `.ai/parallel-reports/execution-plan-*.json`
 - `.ai/parallel-reports/agents-parallel-*.json`
 - `.ai/worktrees/issue-*/...`
+- `.ai/parallel-reports/water-spider-*.md`
+- `.ai/parallel-reports/water-spider-*.json`
 - `.ai/logs/YYYY-MM-DD.md`
 
 ## 環境変数
@@ -133,6 +136,10 @@ AUTOMATION_GITHUB_PAGES_WORKFLOW="deploy-pages.yml"
 AUTOMATION_GITHUB_PAGES_WAIT_FOR_RUN=true
 AUTOMATION_GITHUB_PAGES_RUN_TIMEOUT_MS=900000
 AUTOMATION_GITHUB_PAGES_POLL_INTERVAL_MS=5000
+AUTOMATION_WATER_SPIDER_AUTO_RETRY=true
+AUTOMATION_WATER_SPIDER_MAX_ATTEMPTS=2
+AUTOMATION_WATER_SPIDER_WORKFLOW_ID="autonomous-agent.yml"
+AUTOMATION_WATER_SPIDER_REF="develop"
 ```
 
 補足:
@@ -143,6 +150,7 @@ AUTOMATION_GITHUB_PAGES_POLL_INTERVAL_MS=5000
 - `CodeGenAgent` は explicit writer command に加えて、changed-file allowlist / require-changes / post-check を持つ stronger write contract を実行できる
 - `ReviewAgent` は security summary / coverage gate / review-comment artifact を、実際に走った check 出力からだけ生成する
 - `DeploymentAgent` は explicit `AUTOMATION_DEPLOY_COMMAND` だけでなく、`AUTOMATION_DEPLOY_USE_PROVIDER_PRESET=true` のときは repo-local `cloud-run` と `github-pages` preset を解決できる
+- `WaterSpiderAgent` は execute 後の summary/report/plan と issue comment の hidden marker を使って continuity decision を出し、gate が開いていれば follow-up execute を self-dispatch できる
 
 GitHub Actions 側の gate に使う repo variable:
 
