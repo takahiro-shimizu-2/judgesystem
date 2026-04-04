@@ -5,8 +5,12 @@
       "args": [
         ".claude/mcp-servers/miyabi-integration.js"
       ],
+      "env": {
+        "MIYABI_CLI": "${MIYABI_CLI}",
+        "MIYABI_ROOT": "${MIYABI_ROOT}"
+      },
       "disabled": false,
-      "description": "Miyabi CLI統合 (optional external bridge) - プロジェクト作成、Agent実行、自動化機能"
+      "description": "Miyabi CLI統合 (optional external bridge) - MIYABI_CLI / MIYABI_ROOT override → local install → sibling fallback"
     },
     "github": {
       "command": "npx",
