@@ -24,7 +24,7 @@ env:
   NODE_VERSION: '20'
 
 jobs:
-  # Job 1: Check if the planning workflow should execute
+  # Job 1: Check whether the runtime should start, and in which mode
   check-trigger:
     name: Check Agent Trigger
     runs-on: ubuntu-latest
@@ -32,49 +32,102 @@ jobs:
       should_execute: ${{ steps.check.outputs.should_execute }}
       issue_number: ${{ steps.check.outputs.issue_number }}
       execution_mode: ${{ steps.check.outputs.execution_mode }}
+      trigger_source: ${{ steps.check.outputs.trigger_source }}
+      trigger_note: ${{ steps.check.outputs.trigger_note }}
     steps:
       - name: Check trigger conditions
         id: check
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_ISSUE_NUMBER: ${{ github.event.inputs.issue_number }}
+          INPUT_EXECUTION_MODE: ${{ github.event.inputs.execution_mode }}
+          LABEL_EXECUTE_GATE: ${{ vars.AUTONOMOUS_AGENT_LABEL_EXECUTE_ENABLED }}
+          COMMENT_EXECUTE_GATE: ${{ vars.AUTONOMOUS_AGENT_COMMENT_EXECUTE_ENABLED }}
         run: |
-          SHOULD_EXECUTE="false"
-          ISSUE_NUMBER=""
-          EXECUTION_MODE="planning"
+          python3 <<'PY'
+          import json
+          import os
+          import re
+          from pathlib import Path
 
-          # Check if manually triggered
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            SHOULD_EXECUTE="true"
-            ISSUE_NUMBER="${{ github.event.inputs.issue_number }}"
-            EXECUTION_MODE="${{ github.event.inputs.execution_mode }}"
-            echo "Manual trigger for issue #${ISSUE_NUMBER}"
-          fi
+          def set_output(key: str, value: object) -> None:
+              rendered = '' if value is None else str(value)
+              with open(os.environ['GITHUB_OUTPUT'], 'a', encoding='utf-8') as fh:
+                  fh.write(f'{key}={rendered}\n')
 
-          # Check if issue has agent-execute label
-          if [ "${{ github.event_name }}" = "issues" ]; then
-            LABELS='${{ toJson(github.event.issue.labels.*.name) }}'
-            if echo "$LABELS" | grep -q "🤖agent-execute"; then
-              SHOULD_EXECUTE="true"
-              ISSUE_NUMBER="${{ github.event.issue.number }}"
-              echo "Issue #${ISSUE_NUMBER} has agent-execute label"
-            fi
-          fi
+          event_name = os.environ['EVENT_NAME']
+          payload = json.loads(Path(os.environ['GITHUB_EVENT_PATH']).read_text(encoding='utf-8'))
+          label_execute_gate = os.environ.get('LABEL_EXECUTE_GATE', '').lower() == 'true'
+          comment_execute_gate = os.environ.get('COMMENT_EXECUTE_GATE', '').lower() == 'true'
 
-          # Check if comment contains /agent command or @miyabi mention
-          if [ "${{ github.event_name }}" = "issue_comment" ]; then
-            COMMENT="${{ github.event.comment.body }}"
-            if echo "$COMMENT" | grep -Eq "^/agent|@miyabi"; then
-              SHOULD_EXECUTE="true"
-              ISSUE_NUMBER="${{ github.event.issue.number }}"
-              echo "Comment triggered agent execution for issue #${ISSUE_NUMBER}"
-            fi
-          fi
+          should_execute = False
+          issue_number = ''
+          execution_mode = 'planning'
+          trigger_source = ''
+          trigger_note = ''
 
-          echo "should_execute=${SHOULD_EXECUTE}" >> $GITHUB_OUTPUT
-          echo "issue_number=${ISSUE_NUMBER}" >> $GITHUB_OUTPUT
-          echo "execution_mode=${EXECUTION_MODE}" >> $GITHUB_OUTPUT
+          if event_name == 'workflow_dispatch':
+              should_execute = True
+              issue_number = os.environ.get('INPUT_ISSUE_NUMBER', '')
+              execution_mode = os.environ.get('INPUT_EXECUTION_MODE', 'planning') or 'planning'
+              trigger_source = 'workflow_dispatch'
+              trigger_note = f'manual {execution_mode} run'
+          elif event_name == 'issues':
+              issue = payload.get('issue') or {}
+              labels = [label.get('name') for label in issue.get('labels', []) if label.get('name')]
+              if '🤖agent-execute' in labels:
+                  should_execute = True
+                  issue_number = str(issue.get('number') or '')
+                  trigger_source = 'issue-label'
+                  labeled_name = (payload.get('label') or {}).get('name') or ''
+                  if payload.get('action') == 'labeled' and labeled_name == '🤖agent-execute' and label_execute_gate:
+                      execution_mode = 'execute'
+                      trigger_note = 'label execute gate enabled'
+                  else:
+                      trigger_note = (
+                          'label trigger defaults to planning; enable '
+                          'AUTONOMOUS_AGENT_LABEL_EXECUTE_ENABLED=true to open execute on labeled events'
+                      )
+          elif event_name == 'issue_comment':
+              issue = payload.get('issue') or {}
+              comment_body = ((payload.get('comment') or {}).get('body') or '').strip()
+              comment_lower = comment_body.lower()
+              slash_agent = re.search(r'(?im)^\s*/agent(?:\s+.+)?$', comment_body)
+              miyabi_mention = '@miyabi' in comment_lower
+              requested_execute = re.search(r'(?im)^\s*/agent\s+execute\b', comment_body) or re.search(
+                  r'(?i)@miyabi\b.*\bexecute\b',
+                  comment_body,
+              )
+              if slash_agent or miyabi_mention:
+                  should_execute = True
+                  issue_number = str(issue.get('number') or '')
+                  trigger_source = 'issue-comment'
+                  if requested_execute and comment_execute_gate:
+                      execution_mode = 'execute'
+                      trigger_note = 'comment execute gate enabled'
+                  elif requested_execute:
+                      trigger_note = (
+                          'comment requested execute but gate is closed; falling back to planning'
+                      )
+                  else:
+                      trigger_note = 'comment trigger defaults to planning'
 
-  # Job 2: Build an execution plan and publish artifacts
+          print(f'should_execute={should_execute}')
+          print(f'issue_number={issue_number}')
+          print(f'execution_mode={execution_mode}')
+          print(f'trigger_source={trigger_source}')
+          print(f'trigger_note={trigger_note}')
+
+          set_output('should_execute', str(should_execute).lower())
+          set_output('issue_number', issue_number)
+          set_output('execution_mode', execution_mode)
+          set_output('trigger_source', trigger_source)
+          set_output('trigger_note', trigger_note)
+          PY
+
+  # Job 2: Run the autonomous runtime and publish artifacts
   execute-agents:
-    name: Plan Autonomous Agent Execution
+    name: Run Autonomous Agent Runtime
     runs-on: ubuntu-latest
     needs: check-trigger
     if: needs.check-trigger.outputs.should_execute == 'true'
@@ -112,7 +165,13 @@ jobs:
           REPOSITORY=${{ github.repository }}
           EOF
 
-      - name: Execute planning runtime
+      - name: Log trigger mode
+        run: |
+          echo "Trigger source: ${{ needs.check-trigger.outputs.trigger_source }}"
+          echo "Trigger note: ${{ needs.check-trigger.outputs.trigger_note }}"
+          echo "Execution mode: ${{ needs.check-trigger.outputs.execution_mode }}"
+
+      - name: Execute autonomous runtime
         id: execute
         run: |
           MODE="${{ needs.check-trigger.outputs.execution_mode }}"
@@ -185,7 +244,14 @@ jobs:
 
       - name: Publish workflow summary
         if: always()
-        run: cat "${{ steps.summarize.outputs.comment_path }}" >> "$GITHUB_STEP_SUMMARY"
+        run: |
+          {
+            echo "- Trigger source: \`${{ needs.check-trigger.outputs.trigger_source || 'unknown' }}\`"
+            echo "- Trigger note: ${{ needs.check-trigger.outputs.trigger_note || 'none' }}"
+            echo "- Requested mode: \`${{ needs.check-trigger.outputs.execution_mode }}\`"
+            echo
+            cat "${{ steps.summarize.outputs.comment_path }}"
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Comment on Issue
         if: always()

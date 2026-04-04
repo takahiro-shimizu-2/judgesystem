@@ -65,15 +65,11 @@ jobs:
           github.event.action == 'labeled' &&
           github.event.label.name == '🤖agent-execute'
         run: |
-          echo "🚀 AGENT EXECUTION TRIGGERED"
+          echo "🚀 AGENT EXECUTION LABEL DETECTED"
           echo "Issue: #${{ github.event.issue.number }}"
           echo "Title: ${{ github.event.issue.title }}"
-
-          # Trigger CoordinatorAgent workflow
-          gh workflow run agent-runner.yml \
-            -f issue_number=${{ github.event.issue.number }} \
-            -f mode=autonomous \
-            || echo "⚠️ agent-runner.yml not found yet (will be created in Issue #4)"
+          echo "ℹ️ autonomous-agent.yml handles this label directly via issues triggers."
+          echo "ℹ️ The label starts planning by default; execute mode opens only when the autonomous workflow gate is enabled."
 
       - name: Route to Agent - PR Opened
         if: github.event_name == 'pull_request' && github.event.action == 'opened'
@@ -106,7 +102,8 @@ jobs:
                 echo "🔍 Triggering IssueAgent for analysis"
                 ;;
               "execute")
-                echo "🚀 Triggering CoordinatorAgent for execution"
+                echo "🚀 Execution intent detected"
+                echo "ℹ️ autonomous-agent.yml evaluates whether comment-triggered execute is allowed or should fall back to planning"
                 ;;
               "review")
                 echo "📝 Triggering ReviewAgent for code review"
@@ -124,7 +121,7 @@ jobs:
 
                 Available commands:
                 - \`/agent analyze\` - Analyze Issue
-                - \`/agent execute\` - Start autonomous execution
+                - \`/agent execute\` - Request autonomous execution (may fall back to planning if the workflow gate is closed)
                 - \`/agent review\` - Request code review
                 - \`/agent status\` - Check current status"
                 ;;

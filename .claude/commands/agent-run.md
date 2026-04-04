@@ -55,6 +55,20 @@ npm run agents:parallel:exec -- --issue 123 --dry-run
 npm run agents:parallel:exec -- --help
 ```
 
+## GitHub Actions からの起動契約
+
+- `workflow_dispatch`
+  - `execution_mode=planning|execute` を明示して起動できる
+- `issues` + `🤖agent-execute`
+  - workflow は起動するが、デフォルトでは `planning`
+  - `AUTONOMOUS_AGENT_LABEL_EXECUTE_ENABLED=true` が repo variable にあると、ラベル付与イベント時だけ `execute` を開けられる
+- `issue_comment`
+  - `/agent ...` や `@miyabi` で workflow は起動する
+  - `/agent execute` や `@miyabi ... execute` でも、デフォルトでは `planning`
+  - `AUTONOMOUS_AGENT_COMMENT_EXECUTE_ENABLED=true` が repo variable にある場合だけ comment-triggered `execute` を開けられる
+
+つまり、Issue / comment は「意図の表明」、実際の `execute` は workflow gate が開いているときだけである。
+
 ## 主な出力
 
 - `.ai/parallel-reports/execution-plan-*.json`
@@ -88,6 +102,13 @@ AUTOMATION_DEPLOY_ROLLBACK_COMMAND="npm run deploy:rollback"
 
 - `GITHUB_TOKEN` が無くても dry-run や local artifact 生成は可能
 - `ANTHROPIC_API_KEY` は現行 repo-local handler の必須条件ではない
+
+GitHub Actions 側の gate に使う repo variable:
+
+```bash
+AUTONOMOUS_AGENT_LABEL_EXECUTE_ENABLED=true
+AUTONOMOUS_AGENT_COMMENT_EXECUTE_ENABLED=true
+```
 
 ## 実行前のおすすめ
 

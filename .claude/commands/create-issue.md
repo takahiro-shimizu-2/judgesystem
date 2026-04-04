@@ -52,6 +52,8 @@ Agent runtime や workflow で処理しやすい Issue を作るための scaffo
 
 - 種別ラベルと優先度ラベルは付けてよい
 - `🤖agent-execute` は workflow 側のトリガーとして使う場合だけ付ける
+- `🤖agent-execute` を付けても、issue 起点の run はデフォルトで `planning`
+- issue ラベルから `execute` まで開けたい場合は、repo variable `AUTONOMOUS_AGENT_LABEL_EXECUTE_ENABLED=true` を別途設定する
 - repo-local で手動実行するだけなら、必ずしも `🤖agent-execute` は要らない
 
 ## 例
@@ -69,6 +71,10 @@ workflow から拾わせたい場合のみ:
 gh issue edit 123 --add-label "🤖agent-execute"
 ```
 
+write / deploy まで含む `execute` を明示したい場合は、
+`workflow_dispatch` の `execution_mode=execute` か、
+repo variable gate を開いたうえで `/agent execute` を使う。
+
 ## 作成後の進め方
 
 ### repo-local でまず plan を見る
@@ -82,6 +88,17 @@ npm run agents:parallel:exec -- --issue 123 --dry-run
 ```bash
 npm run agents:parallel:exec -- --issue 123
 ```
+
+### GitHub comment から planning / execute を要求する
+
+```text
+/agent analyze
+/agent execute
+@miyabi execute issue #123
+```
+
+ただし comment 起点もデフォルトでは `planning` で、
+`AUTONOMOUS_AGENT_COMMENT_EXECUTE_ENABLED=true` が repo variable にある場合だけ `execute` が開く。
 
 ## 注意点
 
