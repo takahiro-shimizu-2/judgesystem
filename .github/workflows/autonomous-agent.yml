@@ -282,6 +282,38 @@ jobs:
         env:
           SUMMARY_JSON_PATH: ${{ runner.temp }}/autonomous-agent-summary.json
 
+      - name: Run Water Spider continuity controller
+        id: water_spider
+        if: always()
+        run: |
+          npx tsx scripts/water-spider.ts \
+            --issue "${{ needs.check-trigger.outputs.issue_number }}" \
+            --root "$GITHUB_WORKSPACE" \
+            --summary-json "${{ steps.summarize.outputs.summary_json_path }}" \
+            --trigger-source "${{ needs.check-trigger.outputs.trigger_source }}" \
+            --run-url "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+            --out-md "$RUNNER_TEMP/water-spider-comment.md" \
+            --out-json "$RUNNER_TEMP/water-spider-summary.json"
+
+          echo "comment_path=$RUNNER_TEMP/water-spider-comment.md" >> $GITHUB_OUTPUT
+          echo "summary_json_path=$RUNNER_TEMP/water-spider-summary.json" >> $GITHUB_OUTPUT
+
+          node <<'NODE' >> "$GITHUB_OUTPUT"
+          const fs = require('fs');
+          const summary = JSON.parse(fs.readFileSync(process.env.WATER_SPIDER_JSON_PATH, 'utf8'));
+          console.log(`continuity_status=${summary.continuityStatus}`);
+          console.log(`continuity_action=${summary.action}`);
+          console.log(`continuity_dispatched=${summary.dispatched}`);
+          NODE
+        env:
+          WATER_SPIDER_JSON_PATH: ${{ runner.temp }}/water-spider-summary.json
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          AUTOMATION_WATER_SPIDER_AUTO_RETRY: ${{ vars.AUTOMATION_WATER_SPIDER_AUTO_RETRY }}
+          AUTOMATION_WATER_SPIDER_MAX_ATTEMPTS: ${{ vars.AUTOMATION_WATER_SPIDER_MAX_ATTEMPTS }}
+          AUTOMATION_WATER_SPIDER_WORKFLOW_ID: ${{ vars.AUTOMATION_WATER_SPIDER_WORKFLOW_ID }}
+          AUTOMATION_WATER_SPIDER_REF: ${{ vars.AUTOMATION_WATER_SPIDER_REF || github.ref_name }}
+
       - name: Upload execution logs
         if: always()
         uses: actions/upload-artifact@v4
@@ -299,8 +331,13 @@ jobs:
             echo "- Trigger source: \`${{ needs.check-trigger.outputs.trigger_source || 'unknown' }}\`"
             echo "- Trigger note: ${{ needs.check-trigger.outputs.trigger_note || 'none' }}"
             echo "- Requested mode: \`${{ needs.check-trigger.outputs.execution_mode }}\`"
+            echo "- Water Spider status: \`${{ steps.water_spider.outputs.continuity_status || 'unknown' }}\`"
+            echo "- Water Spider action: \`${{ steps.water_spider.outputs.continuity_action || 'noop' }}\`"
+            echo "- Water Spider dispatched follow-up: \`${{ steps.water_spider.outputs.continuity_dispatched || 'false' }}\`"
             echo
             cat "${{ steps.summarize.outputs.comment_path }}"
+            echo
+            cat "${{ steps.water_spider.outputs.comment_path }}"
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Comment on Issue
@@ -308,11 +345,12 @@ jobs:
         uses: actions/github-script@v7
         env:
           COMMENT_PATH: ${{ steps.summarize.outputs.comment_path }}
+          WATER_SPIDER_PATH: ${{ steps.water_spider.outputs.comment_path }}
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             const fs = require('fs');
-            const body = fs.readFileSync(process.env.COMMENT_PATH, 'utf8');
+            const body = `${fs.readFileSync(process.env.COMMENT_PATH, 'utf8')}\n\n${fs.readFileSync(process.env.WATER_SPIDER_PATH, 'utf8')}`;
             github.rest.issues.createComment({
               issue_number: ${{ needs.check-trigger.outputs.issue_number }},
               owner: context.repo.owner,
@@ -321,7 +359,7 @@ jobs:
             })
 
       - name: Add escalation label on failure
-        if: steps.summarize.outputs.status == 'failure'
+        if: steps.summarize.outputs.status == 'failure' || steps.water_spider.outputs.continuity_action == 'escalate'
         uses: actions/github-script@v7
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}

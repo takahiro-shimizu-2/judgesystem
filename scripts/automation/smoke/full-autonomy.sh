@@ -11,3 +11,4 @@ npx tsx scripts/automation/smoke/planning-artifacts.ts
 npx tsx scripts/automation/smoke/worktree-lifecycle.ts
 npx tsx scripts/automation/smoke/quality-pipeline.ts
 npx tsx scripts/automation/smoke/handler-contracts.ts
+npx tsx scripts/automation/smoke/water-spider.ts
