@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-04-05T00:05:00+09:00",
+  "generated_at": "2026-04-05T00:25:00+09:00",
   "query": "Miyabi absorption architecture reassessment",
   "repo": "judgesystem",
   "quality_score": 0,
@@ -77,6 +77,11 @@
     {
       "id": "claude-agent-contract-alignment",
       "title": "Rewrite .claude/agents definitions so their summaries and instructions match the connected safe handler contracts instead of historical full-autonomy claims",
+      "status": "completed"
+    },
+    {
+      "id": "claude-command-truthfulness",
+      "title": "Rewrite key .claude/commands entrypoints so they describe the current repo-local runtime and optional bridges instead of historical full-autonomy flows",
       "status": "completed"
     }
   ]

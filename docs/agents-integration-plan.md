@@ -46,10 +46,12 @@ Claude Code はそれらを「Claude が読む定義」として扱う。
 - `.claude/settings.json` では `PreToolUse` / `PostToolUse` hook が定義されている
 - `.claude/commands/*.md` には `miyabi` CLI を前提にした command が残っている
 - `.claude/agents/*.md` の一部には、過去の自動 codegen / scoring / remote PR / deploy 前提が残っている
+- `.claude/commands/*.md` の一部にも、full autonomy や即時 workflow 実行を前提にした説明が残っている
 
 このため、`.claude/agents` を runtime 実装そのものと見なす設計は不適切である。
 さらに、runtime は `.claude/agents` の要約を registry / brief に使うため、
 agent 定義そのものの truthfulness も重要である。
+同様に、Claude 用 command surface も現在の runtime contract に合わせて説明を揃える必要がある。
 
 ### 2.2 Codex の現実
 
@@ -513,6 +515,7 @@ GitNexus は次で分ける。
 - `autonomous-agent.yml` の過剰な claim を棚卸しする
 - GitNexus / `context-and-impact` / sibling repo 依存を一覧化する
 - `.claude/agents/*.md` に残る古い自動化前提を、実際の handler contract に合わせて修正する
+- `.claude/commands/*.md` の主要入口 (`agent-run`, `create-issue`, `miyabi-auto`, `deploy`) も実際の runtime / bridge 契約に合わせて修正する
 
 ### Phase 1: 既存 substrate を活かす前提で contract を修正
 
