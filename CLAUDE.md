@@ -169,6 +169,7 @@ Notes:
 - `.claude/commands/` still works in Claude Code, but the official recommendation has moved toward skills
 - Several `miyabi-*` command surfaces still exist as optional external bridge surfaces
 - The Miyabi MCP bridge now prefers a local `node_modules/.bin/miyabi` binary and otherwise probes `../Miyabi/packages/cli`; it is no longer a required repo runtime dependency
+- `npm run pipeline:dashboard` also behaves as an optional bridge: it prefers a local `agent-skill-bus` binary and otherwise probes `../agent-skill-bus`
 
 ## Context-and-Impact Pipeline
 

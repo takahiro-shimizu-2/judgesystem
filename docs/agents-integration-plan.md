@@ -122,7 +122,7 @@ AGENTS / CLAUDE / 周辺 skill 群に書かれている「GitNexus の理想 API
 - root `package.json` の `pipeline:*` script は `../context-and-impact` を直接呼ぶ
 - `scripts/context-impact/*.sh` は repo-local wrapper だが、中身は sibling repo 委譲
 - `record-run.sh` も `../context-and-impact/src/skill-bus/record-run.sh` を呼んでいる
-- `pipeline:dashboard` は `agent-skill-bus` を直接要求する
+- `pipeline:dashboard` は `agent-skill-bus` bridge を要求する
 
 ここは非常に重要で、
 Miyabi 差分吸収とは別に、
@@ -246,7 +246,7 @@ repo 構造や package 境界をそのまま `judgesystem` に持ち込む対象
 `package.json` の root runtime dependency からは `miyabi` を外したが、
 sibling repo 前提が完全に消えたわけではない。
 
-- `agent-skill-bus: file:../agent-skill-bus`
+- `agent-skill-bus` は `pipeline:dashboard` の optional bridge として残っている
 
 また、`.claude/mcp-servers/miyabi-integration.js` は
 optional bridge として `node_modules/.bin/miyabi` を優先し、
