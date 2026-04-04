@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-04-04T22:02:00+09:00",
+  "generated_at": "2026-04-04T23:00:00+09:00",
   "query": "Miyabi absorption architecture reassessment",
   "repo": "judgesystem",
   "quality_score": 0,
@@ -62,6 +62,11 @@
     {
       "id": "miyabi-bridge-overrides",
       "title": "Add MIYABI_CLI / MIYABI_ROOT override support to the optional Miyabi MCP bridge and remove bare miyabi shell assumptions",
+      "status": "completed"
+    },
+    {
+      "id": "codegen-brief-handler",
+      "title": "Connect CodeGenAgent to a safe implementation-brief handler with optional issue state sync, while keeping actual code writing opt-in for future bindings",
       "status": "completed"
     }
   ]

@@ -220,12 +220,13 @@ repo 構造や package 境界をそのまま `judgesystem` に持ち込む対象
 
 `autonomous-agent.yml` には、現状ではまだ成立していない表現がある。
 
-- CodeGenAgent が実装したことを前提とした PR テンプレート
+- CodeGenAgent が実際に product code を書いたことを前提とした PR テンプレート
 - ReviewAgent が 80 点以上を判定した体裁
 - tests generated / security scan passed などの断定
 
-現時点の `agents:parallel:exec` は planning-first であり、
-本当の codegen / review / pr / deployment handler までは未接続である。
+現時点の `agents:parallel:exec` は planning-first を土台にしつつ、
+issue / review / pr / deployment と safe codegen brief handler までは接続済みである。
+ただし、外部 model を使った本当の product code 生成、remote PR 作成、deploy 実行はまだ opt-in / 未接続である。
 ここは計画上も実装上も truthfulness を回復する必要がある。
 
 #### C. `.claude` 側に `miyabi` 依存が残っている
@@ -407,7 +408,10 @@ Phase 3 の最初の実装スライスは、次の安全境界で入れる。
   - デフォルトでは deploy しない
   - 明示 env flag と command が与えられた場合のみ実行する
 - `CodeGenAgent`
-  - この Phase 3 では handler を持たせず、generic fallback で planning-only に残す
+  - `.claude/agents/codegen-agent.md` の metadata をもとに
+    `.ai/worktrees/...` 配下へ implementation brief を生成する
+  - token がある場合のみ `agent:codegen` と `state:implementing` を best-effort で同期する
+  - 外部 model を使った product code 自動生成は、将来の capability binding まで有効化しない
 
 つまり、
 Phase 3 は「危険な副作用を伴う full autonomy を解禁する段階」ではなく、
@@ -552,14 +556,14 @@ GitNexus は次で分ける。
 
 - `capability-router.ts` が registry を見て handler または fallback へ分岐できる
 - `IssueAgent` は label/state machine を介して analyzing へ遷移できる
+- `CodeGenAgent` は local implementation brief artifact を生成し、必要なら implementing へ同期できる
 - `ReviewAgent` は local check 実行結果を report に残せる
 - `PRAgent` は local artifact を生成できる
 - `DeploymentAgent` は opt-in gate なしでは skip する
-- `CodeGenAgent` は planning-only のまま truthfully 報告される
 
 補足:
 
-- `CodeGenAgent` も「即 class を作る」より、まずは generic executor + capability binding で扱う
+- `CodeGenAgent` も「即 class を作る」より、まずは implementation brief + capability binding で扱う
 - handler がない agent は planning-only / comment-only / escalation-only に落とす
 
 ### Phase 4: workflow と runtime の事実を一致させる
