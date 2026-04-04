@@ -1,6 +1,6 @@
 ---
 name: PRAgent
-description: Draft PR artifact Agent - local artifact first, remote PR is opt-in
+description: Draft PR Agent - local artifact first, optional remote draft PR when the repo is ready
 authority: 🔵作成権限
 escalation: TechLead (権限・整合性エラー時)
 ---
@@ -11,15 +11,15 @@ escalation: TechLead (権限・整合性エラー時)
 
 実装と review の結果を受け取り、
 PR に相当するタイトル・本文・リンク情報をまとめる。
-現在の runtime は GitHub 上の Pull Request を自動作成せず、
-`.ai/parallel-reports/` に draft PR artifact を生成するところまでを担う。
+現在の runtime は、まず `.ai/parallel-reports/` に draft PR artifact を生成し、
+前提条件がそろった場合だけ GitHub 上の draft PR を作成または更新する。
 
 ## 現在の runtime contract
 
 - `scripts/automation/agents/handlers/pr.ts` に接続済み
 - branch 名と task 情報から local markdown artifact を生成する
-- remote PR 作成はまだ explicit opt-in gate の先にある
-- reviewer 自動割り当て、label 書き込み、GitHub 上の PR 作成は現時点では保証しない
+- `AUTOMATION_ENABLE_PR_WRITE=true` かつ token / branch / base の前提がそろうと remote draft PR を作成または更新する
+- reviewer 自動割り当てや PR label 同期までは現時点では保証しない
 
 ## Claude 側で期待すること
 
@@ -40,13 +40,14 @@ PR に相当するタイトル・本文・リンク情報をまとめる。
 
 - draft PR artifact が local に生成される
 - title / body / linked issue が再利用できる形で残る
-- remote PR 未作成であることが明確に分かる
+- remote PR を作成できた場合は、その番号と URL が report に残る
+- remote PR を作成できなかった場合も、その理由が明確に分かる
 
 ## エスカレーション
 
 - branch 情報が取れない
 - task 種別から適切な prefix を決められない
-- GitHub 上での PR 作成が必要だが gate が閉じている
+- GitHub 上での PR 作成が必要だが gate / token / branch 条件が満たせない
 
 ## 関連Agent
 

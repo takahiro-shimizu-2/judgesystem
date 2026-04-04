@@ -1,87 +1,42 @@
 {
-  "generated_at": "2026-04-05T00:45:00+09:00",
-  "query": "Miyabi absorption architecture reassessment",
+  "generated_at": "2026-04-04T20:31:36+09:00",
+  "query": "Full autonomy research gate and absorption replanning",
   "repo": "judgesystem",
   "quality_score": 0,
   "tasks": [
     {
-      "id": "architecture-research",
-      "title": "Research Claude, Codex, GitHub, GitNexus, context-and-impact, and Miyabi boundaries before further implementation",
+      "id": "official-contract-research",
+      "title": "Research official contracts for Claude Code, Codex, and GitHub before deciding full-autonomy runtime behavior",
       "status": "completed"
     },
     {
-      "id": "plan-rewrite",
-      "title": "Rewrite docs/agents-integration-plan.md around registry/handler architecture and explicit external bridges",
+      "id": "origin-runtime-readthrough",
+      "title": "Read ../Miyabi, ../gitnexus-stable-ops, ../context-and-impact, and ../agent-skill-bus in dependency order",
       "status": "completed"
     },
     {
-      "id": "remediation-inventory",
-      "title": "Document already-implemented substrate and required follow-up for workflows, docs, and external dependencies",
+      "id": "judgesystem-runtime-readthrough",
+      "title": "Re-read judgesystem runtime, workflow, and bridge layers in the same order as the external systems",
       "status": "completed"
     },
     {
-      "id": "truthfulness-alignment",
-      "title": "Align AGENTS.md, CLAUDE.md, workflow claims, and runtime contracts with the revised architecture",
+      "id": "absorption-mapping",
+      "title": "Map Miyabi capabilities into repo-local runtime, external bridge, or non-target classifications",
       "status": "completed"
     },
     {
-      "id": "registry-loader",
-      "title": "Introduce a .claude/agents markdown loader and runtime registry before adding more agent behavior",
+      "id": "plan-rewrite-v2",
+      "title": "Rewrite docs/agents-integration-plan.md with research order, capability inventory, and full-autonomy phases",
       "status": "completed"
     },
     {
-      "id": "handler-wiring",
-      "title": "Implement the safe Phase 3 handler slice: issue/review runtime hooks, local PR artifact generation, deployment opt-in gate, and generic fallback routing",
+      "id": "full-autonomy-first-slice",
+      "title": "Choose and implement the first full-autonomy capability slice only after the rewritten plan is accepted",
       "status": "completed"
     },
     {
-      "id": "workflow-report-alignment",
-      "title": "Align autonomous-agent workflow comments and job summary with real execution report artifacts",
-      "status": "completed"
-    },
-    {
-      "id": "external-bridge-cleanup",
-      "title": "Clarify or reduce sibling-repo dependencies for miyabi, context-and-impact, and agent-skill-bus",
-      "status": "completed"
-    },
-    {
-      "id": "local-estack-contract",
-      "title": "Vendor the lightweight E:Stack plan/enforcer contract locally while keeping l1/quality/classify as explicit context-and-impact bridges",
-      "status": "completed"
-    },
-    {
-      "id": "miyabi-command-alignment",
-      "title": "Rewrite .claude/commands/miyabi-* as optional external bridge surfaces with truthful repo-local alternatives",
-      "status": "completed"
-    },
-    {
-      "id": "gitnexus-contract-alignment",
-      "title": "Align AGENTS.md, CLAUDE.md, and GitNexus skills with the actual local CLI and agent-graph MCP surfaces",
-      "status": "completed"
-    },
-    {
-      "id": "miyabi-bridge-overrides",
-      "title": "Add MIYABI_CLI / MIYABI_ROOT override support to the optional Miyabi MCP bridge and remove bare miyabi shell assumptions",
-      "status": "completed"
-    },
-    {
-      "id": "codegen-brief-handler",
-      "title": "Connect CodeGenAgent to a safe implementation-brief handler with optional issue state sync, while keeping actual code writing opt-in for future bindings",
-      "status": "completed"
-    },
-    {
-      "id": "agent-skill-bus-overrides",
-      "title": "Add AGENT_SKILL_BUS_BIN / AGENT_SKILL_BUS_ROOT override support so dashboard and record wrappers do not require a sibling checkout",
-      "status": "completed"
-    },
-    {
-      "id": "claude-agent-contract-alignment",
-      "title": "Rewrite .claude/agents definitions so their summaries and instructions match the connected safe handler contracts instead of historical full-autonomy claims",
-      "status": "completed"
-    },
-    {
-      "id": "claude-command-truthfulness",
-      "title": "Rewrite key .claude/commands entrypoints so they describe the current repo-local runtime and optional bridges instead of historical full-autonomy flows",
+      "id": "github-check-alignment",
+      "title": "Validate push/PR Actions, permissions, and failure paths while implementing the first full-autonomy slice",
       "status": "completed"
     }
   ]

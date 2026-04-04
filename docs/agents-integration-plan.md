@@ -16,7 +16,37 @@
 - ただし、誤った前提で先に進めてしまった部分は、手当て対象として明示する
 - `judgesystem` が `../Miyabi` を runtime 前提にしない状態を最終目標にする
 
-## 2. 今回の調査で分かったこと
+## 2. 調査手順と調査結果
+
+### 2.0 調査手順を固定する
+
+以後の判断は、次の順番を崩さない。
+
+1. 公式契約を確認する
+   - Claude Code
+   - Codex
+   - GitHub Actions / GitHub API
+2. 外部元システムを読む
+   - `../Miyabi`
+   - `../gitnexus-stable-ops`
+   - `../context-and-impact`
+   - 必要なら `../agent-skill-bus`
+3. `judgesystem` 現状を読む
+   - `.claude/*`
+   - `AGENTS.md`
+   - `scripts/automation/*`
+   - `scripts/context-impact/*`
+   - `.github/workflows/*`
+   - `project_memory/*`
+4. 差分を写像する
+   - repo-local runtime に吸収する
+   - external bridge として残す
+   - 今回の計画では吸収しない
+5. その写像に従って計画を更新し、初めて実装へ進む
+
+この順番にする理由は、
+「Claude / Codex / GitHub の仕様を無視して runtime を決める」と、
+見かけだけ Miyabi 風で内部は衝突した状態になりやすいためである。
 
 この計画は、`judgesystem` 内だけでなく、最低でも以下を確認したうえで組み直す。
 
@@ -138,12 +168,52 @@ Miyabi 差分吸収とは別に、
 `../Miyabi` は単一 repo 完結の単純な構造ではない。
 
 - `packages/cli` に `miyabi` CLI がある
+- `packages/miyabi-agent-sdk` と `packages/coding-agents` に class-based agent runtime がある
 - `.claude/` は Claude plugin / command / agent 資産として使われている
 - `.codex/` は Codex project config と subagent 設定を持つ
-- `docs/CODEX_MIYABI_INTEGRATION.md` では `miyabi-agent-sdk` と Codex repo を含む別 repo 群前提の連携が説明されている
+- `packages/github-projects` や webhook / state machine / dashboard / reporting も同居している
+- `README.md` は 7 coding agents、53 labels、16 workflows、`Issue -> Code -> Test -> PR` を中核価値としている
+- `CodeGenAgent` / `ReviewAgent` / `PRAgent` / `DeploymentAgent` は、それぞれ class として実コード生成、点数評価、remote PR 作成、deploy を担う
+- 一方で `agent-skill-bus`、`gitnexus-stable-ops`、`context-and-impact` など、別 repo の外部基盤も前提にしている
 
 つまり Miyabi は「ふるまい」だけ見れば参考になるが、
 repo 構造や package 境界をそのまま `judgesystem` に持ち込む対象ではない。
+
+### 2.7 元ディレクトリの能力をどう分類するか
+
+`../Miyabi` の能力は、そのまま 1 パッケージ分を移植するのではなく、次の 3 つに分けて扱う。
+
+| 分類 | 例 | judgesystem での扱い |
+|----|----|----|
+| repo-local runtime として吸収する | Issue 分解、DAG、label state、review 実行、PR 作成、deploy 起動、workflow 配線、Projects V2 / reporting | `scripts/automation/*` と `.github/workflows/*` に吸収する |
+| external bridge として明示維持する | `context-and-impact`, `agent-skill-bus`, `gitnexus-stable-ops`, optional `miyabi` CLI/MCP | override 付き bridge として残す |
+| 今回の計画では吸収しない | Miyabi CLI の 25 command 面、MCP bundle 全体、business agents、voice/release/social、Water Spider cluster、web dashboard 全体 | 参照はするが、`judgesystem` には持ち込まない |
+
+重要な判断:
+
+- Miyabi の **7 coding agents** を、そのまま `judgesystem` に 7 class として再現しない
+- とくに `TestAgent` は、現行 `judgesystem` では独立 agent よりも `ReviewAgent` が実行する review/test capability に吸収する
+- 逆に、`PRAgent` の remote PR 作成や `CodeGenAgent` の実コード生成のように、full autonomy に直結する能力は capability binding として明示実装する
+
+### 2.8 full autonomy を開けるときの前提
+
+`judgesystem` で欲しいのは「Miyabi の monorepo を再現すること」ではなく、
+`judgesystem` 自身が full autonomy を安全に持てること、である。
+
+そのため full autonomy は、次の capability 単位で段階的に開ける。
+
+1. `CodeGenAgent`
+   - implementation brief ではなく、実際の code-writing binding を持つ
+2. `ReviewAgent`
+   - 実行した local checks を集約し、必要なら score / retry / escalation を持つ
+3. `PRAgent`
+   - local artifact ではなく GitHub 上の draft PR を作成できる
+4. `DeploymentAgent`
+   - gate 付き command 実行だけでなく、deploy contract と失敗時 handling を持つ
+5. workflow
+   - `--dry-run` 固定ではなく、planning / execute を明示切替できる
+
+つまり、full autonomy の対象は「agent 名」ではなく「副作用つき capability」である。
 
 ## 3. 境界をどう切るか
 
@@ -311,6 +381,31 @@ repo runtime の必須依存ではなく「override / local install 後の optio
 3. **必要なら外部 bridge**
    - `scripts/context-impact/*.sh`
    - 一部 `.claude/mcp-servers/*`
+
+### 5.1.1 元ディレクトリからの capability 写像
+
+`../Miyabi` から `judgesystem` へ吸収する際は、「ファイルを持ってくる」ではなく
+「能力をどこへ写像するか」で判断する。
+
+| Miyabi 側 capability | Miyabi 側の主な実体 | judgesystem current | judgesystem target |
+|----|----|----|----|
+| Coordinator / orchestration | `packages/coding-agents/coordinator/*`, `packages/cli/scripts/parallel-executor.ts` | `scripts/automation/decomposition/*`, `scripts/automation/orchestration/*`, `scripts/automation/adapters/agents-parallel-exec.ts` | 維持。planning substrate と execution substrate の中核にする |
+| Issue analysis / state sync | `IssueAgent` + label state machine + webhook routing | `scripts/automation/agents/handlers/issue.ts`, `scripts/automation/state/*`, `scripts/automation/adapters/webhook-router.ts` | 維持。state machine と event routing を repo-local runtime として育てる |
+| Code generation | `CodeGenAgent` が実コード生成・テスト生成・ドキュメント生成を行う | `scripts/automation/agents/handlers/codegen.ts` は implementation brief のみ | explicit capability binding を追加し、実コード生成の contract を repo 側で持つ |
+| Test execution | Miyabi では `TestAgent` と codegen/review 周辺で別能力として存在する | 独立 agent なし。`ReviewAgent` が `typecheck` / `test` を実行 | 当面は review/test capability に吸収する。必要になれば独立 capability として切り出す |
+| Review / quality gate | `ReviewAgent` が scoring / comment / escalation を行う | `scripts/automation/agents/handlers/review.ts` は local checks を実行 | local checks を基盤に、score / retry / escalation を追加する |
+| PR creation | `PRAgent` が GitHub に draft PR を作成し、labels / reviewers も扱う | `scripts/automation/agents/handlers/pr.ts` は local draft artifact のみ | remote draft PR 作成を repo-local handler として追加する |
+| Deployment | `DeploymentAgent` が build / test / deploy / health check / rollback を扱う | `scripts/automation/agents/handlers/deployment.ts` は env-gated command 実行のみ | deploy contract を拡張し、preflight / health / rollback を段階導入する |
+| Workflow execution | `.github/workflows/autonomous-agent.yml` が execute mode で動く | `autonomous-agent.yml` は planning-first で `--dry-run` 固定 | planning / execute を明示切替し、実行した capability のみ報告する |
+| Projects V2 / reporting | `packages/github-projects`, KPI / dashboard scripts | `scripts/automation/github/*`, `scripts/automation/reporting/*` | すでに repo-local runtime 化済み。維持して活かす |
+| Context pipeline | `context-and-impact` とその wrapper | `scripts/context-impact/*` bridge + local vendor 部分 | repo-local vendor と external bridge の hybrid を維持する |
+| GitNexus stable ops | `gitnexus-stable-ops` wrapper / Agent Graph | current CLI + `gitnexus_agent_*` MCP + optional sibling wrapper | symbol analysis は local CLI、agent graph は wrapper/MCP として分離記載する |
+| Skill health / dashboard | `agent-skill-bus` | `pipeline:record`, `pipeline:dashboard` の bridge | external bridge のまま維持する |
+| Miyabi CLI / MCP bundle 全体 | `packages/cli`, `packages/mcp-bundle`, `miyabi auto` など | optional Miyabi MCP bridge のみ | `judgesystem` には持ち込まない。必要なら optional external bridge として使う |
+
+ここで重要なのは、
+`judgesystem` が吸収すべき対象は **Miyabi の monorepo 構造** ではなく
+**Miyabi が提供している能力のうち、この repo 自身が持つべき runtime contract** だけ、という点である。
 
 ### 5.2 agent 実装は fixed class ではなく registry / handler で組む
 
@@ -504,6 +599,20 @@ GitNexus は次で分ける。
 
 ## 7. 改訂後の実装フェーズ
 
+### Research Gate: 実装前の読解完了条件
+
+目的:
+
+- 吸収対象と非対象を、公式契約とローカル実装の両方から確定する
+
+完了条件:
+
+- Claude / Codex / GitHub の公式契約を確認済み
+- `../Miyabi` の core runtime と外部依存を切り分け済み
+- `../gitnexus-stable-ops` と `../context-and-impact` の役割を把握済み
+- `judgesystem` 現状の safe runtime / workflow / bridge 状態を棚卸し済み
+- 本計画書に「何を吸収するか / しないか」が明記されている
+
 ### Phase 0: 調査結果の反映と truthfulness 回復
 
 目的:
@@ -618,22 +727,67 @@ GitNexus は次で分ける。
 - `.claude/commands/miyabi-*.md` の扱いを決める
 - `agent-skill-bus` と `context-and-impact` を bridge のまま残すか、最小 vendor するかを決める
 
+### Phase 7: full autonomy capability plan を確定する
+
+目的:
+
+- safe handler を超えて、どの能力を repo-local に昇格させるかを明文化する
+
+作業:
+
+- `CodeGenAgent` の実コード生成 binding をどう持つか決める
+- `ReviewAgent` の score / retry / escalation 契約をどう持つか決める
+- `PRAgent` の remote draft PR 作成契約を決める
+- `DeploymentAgent` の deploy/rollback/approval 契約を決める
+- `workflow_dispatch` / label / comment から planning と execute をどう切り替えるか決める
+- Miyabi 由来の `TestAgent` を独立 runtime にするか、review/test capability に吸収するかを明記する
+
+### Phase 8: full autonomy の最小 slice を実装する
+
+目的:
+
+- full autonomy を 1 機能ずつ現実の runtime に接続する
+
+初手の候補:
+
+- `PRAgent`: remote draft PR 作成
+- workflow: planning / execute 切替
+- `CodeGenAgent`: external-model or delegated writer binding
+
+受け入れ条件:
+
+- `--dry-run` なしの実行で、実際に走った能力だけが report / issue comment / workflow summary に出る
+- 実行に必要な GitHub permissions と env gate が明記されている
+- fail / skip / escalate が曖昧な成功文言に埋もれない
+
+### Phase 9: full autonomy の運用 DoD を固める
+
+目的:
+
+- 「動く」だけでなく、repo として保守できる full autonomy にする
+
+作業:
+
+- push / PR 時の Actions を確認し、足りない permissions / branch filter / failure path を修正する
+- remote PR / deploy / review loop に必要な smoke test を定義する
+- `project_memory/*` と execution artifact の更新責務を整理する
+- 必要なら `autonomous-agent.yml` とは別に execute 用 workflow を切る
+
 ## 8. まず着手すべき最小スライス
 
-次にやるべき最小スライスは固定 agent class の追加ではない。
-まず以下の順で進める。
+ここから先の最小スライスは、safe runtime を増やすことではなく、
+full autonomy をどの capability から開けるかを計画書どおりに進めることである。
 
-1. AGENTS / CLAUDE / workflow の表現を現実へ合わせる
-2. `.claude/agents` を読む registry / loader contract を作る
-3. `capability-router` と generic fallback を入れる
-4. safe handler slice として issue/review/pr/deployment を既存 substrate へ接続する
-5. その上で workflow 側の表示を必要な範囲だけ進化させる
-3. `TaskExecutor` が registry を介せる形へ寄せる
-4. 最小の handler だけを接続する
-5. `miyabi` 直呼び部分と `context-and-impact` bridge を整理する
+順番は次で固定する。
 
-この順で進めると、
-いまある実装を活かしながら、設計の歪みだけを先に直せる。
+1. Research Gate を満たす
+2. 計画書に吸収対象 / 非対象 / bridge 対象を明記する
+3. full autonomy phase の初手を 1 つに絞る
+4. その capability に必要な workflow / token / permission / failure path を整える
+5. 実装、検証、GitHub 反映を行う
+
+最初の候補としては、`PRAgent` の remote draft PR 作成と
+`autonomous-agent.yml` の planning/execute 切替がもっとも自然である。
 
 ## 9. 改訂版 Definition of Done
 
@@ -647,6 +801,9 @@ GitNexus は次で分ける。
 - `AGENTS.md` / `CLAUDE.md` / 計画書が、実際に使える GitNexus / context-and-impact / runtime 構成と矛盾しない
 - sibling repo 参照が残る場合でも、それが override / local install の後ろにある optional fallback であると明文化されている
 - `context-and-impact` と `agent-skill-bus` を外部 bridge として残すなら、その前提が明文化されている
+- 元ディレクトリの能力が `repo-local runtime / external bridge / 非対象` に分類されている
+- Miyabi 由来の full autonomy 能力について、少なくとも 1 つは `judgesystem` 側の実 runtime として接続済みである
+- full autonomy を開ける remaining capability について、何が未接続かが計画書に明記されている
 
 ## 10. 調査ソース
 
