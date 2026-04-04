@@ -1,10 +1,17 @@
 ---
-description: Miyabi Water Spider全自動モード起動
+description: Miyabi Water Spider外部bridge
 ---
 
-# Miyabi Water Spider全自動モード
+# Miyabi Water Spider全自動モード（外部bridge）
 
-Water Spider Agent（水すまし）を起動して、GitHub Issueを自動的に検出・処理します。
+Water Spider Agent（水すまし）を起動するための optional external bridge です。
+`judgesystem` の repo-local runtime だけでこの全自動挙動が常に再現されるわけではありません。
+
+## judgesystem での位置づけ
+
+- `miyabi__auto` は local `miyabi` binary または外部 bridge が解決できる場合のみ利用可能
+- repo-local 側では Issue ごとの `agents:parallel:exec`、state machine、workflow が中心
+- CodeGen / Review / PR / Deploy は optional handler であり、未接続なら planning/reporting に留まる
 
 ## MCPツール
 
@@ -24,7 +31,7 @@ miyabi__auto({})
 miyabi__auto({ maxIssues: 10, interval: 30 })
 ```
 
-## 動作フロー
+## bridge 利用時の想定フロー
 
 各Issue処理時、**必ず状態遷移コマンドを実行してからフェーズに進むこと**。
 
@@ -47,7 +54,7 @@ CodeGenAgent（コード生成）
     ↓
 ReviewAgent（品質チェック）
     ↓
-PRAgent（Draft PR作成） ※PR本文に各Issueを1行ずつ「Closes #N」で記載（カンマ区切り不可）
+PRAgent（handler がある場合に artifact / PR 作成）
     ↓
 【CI確認】gh pr checks {PR番号} でCI結果を確認。失敗時は修正してから次へ進む
     ↓
@@ -125,9 +132,9 @@ npx miyabi auto --max-issues 3
 npx miyabi auto --interval 0
 ```
 
-## 成功条件
+## 前提条件
 
-Water Spiderが正常に動作するための条件:
+Water Spider bridge を利用するための条件:
 
 ✅ **環境**:
 - `GITHUB_TOKEN` が設定済み
@@ -141,6 +148,8 @@ Water Spiderが正常に動作するための条件:
 ✅ **Issue**:
 - 未処理Issueが存在する
 - Issueがブロック状態でない（`status:blocked` ラベルなし）
+
+未接続 handler がある場合、repo-local runtime は plan / report を返して停止することがあります。
 
 ## 処理結果の確認
 

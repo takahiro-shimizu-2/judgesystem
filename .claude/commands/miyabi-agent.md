@@ -1,14 +1,21 @@
 ---
-description: Miyabi Agent実行 - Issue自動処理
+description: Miyabi Agent外部bridge - Issue処理
 ---
 
-# Miyabi Agent実行
+# Miyabi Agent実行（外部bridge）
 
-GitHub IssueをMiyabi Autonomous Agentで自動処理します。
+GitHub Issue を Miyabi bridge 経由で処理するための surface です。
+`judgesystem` の repo-local runtime そのものではありません。
+
+## judgesystem での位置づけ
+
+- `miyabi__agent_run` と `npx miyabi ...` は optional external bridge
+- bridge が使えないときの repo-local 入口は `npm run agents:parallel:exec -- --issue <番号> --dry-run`
+- codegen / review / PR / deploy は capability ごとの optional handler であり、常時保証ではない
 
 ## 利用可能なMCPツール
 
-Claude CodeからMiyabi機能を直接呼び出せます：
+Claude Codeから外部 bridge 経由で Miyabi 機能を呼び出せます：
 
 ### `miyabi__agent_run`
 Autonomous Agentを実行してIssueを自動処理
@@ -44,26 +51,24 @@ Water Spider Agent（全自動モード）起動
 miyabi__auto({ maxIssues: 10, interval: 30 })
 ```
 
-## 実行フロー
+## bridge 利用時の想定フロー
 
 ```
 Issue作成/検出
     ↓
 CoordinatorAgent（タスク分解・DAG構築）
-    ↓ 並行実行
-├─ IssueAgent（分析・Label付与）
-├─ CodeGenAgent（Claude Sonnet 4でコード生成）
-├─ ReviewAgent（品質チェック≥80点）
-└─ TestAgent（テスト実行）
     ↓
-PRAgent（Draft PR作成）
+IssueAgent（分析・Label付与）
     ↓
-人間レビュー待ち
+optional handlers（CodeGen / Review / PR / Deploy）
+    ↓
+handler 未接続なら planning / report / escalation に留まる
 ```
 
 ## コマンドライン実行
 
-MCPツールの代わりにコマンドラインでも実行可能:
+MCPツールの代わりにコマンドラインでも実行可能です。
+ただし `miyabi` binary または外部 bridge が解決できる場合に限ります。
 
 ```bash
 # 単一Issue処理
@@ -90,19 +95,11 @@ REPOSITORY=owner/repo
 DEVICE_IDENTIFIER=MacBook Pro 16-inch
 ```
 
-## 成功条件
+## judgesystem で期待すべき結果
 
-✅ **必須**:
-- Issue分析完了
-- コード生成成功
-- 品質スコア ≥80点
-- Draft PR作成
-
-✅ **品質**:
-- TypeScriptエラー 0件
-- ESLintエラー 0件
-- セキュリティスキャン合格
-- テストカバレッジ ≥80%
+- bridge が利用可能なら Miyabi CLI / MCP の結果を呼び出せる
+- bridge がなくても repo-local runtime では plan / report / workflow 連携が使える
+- 未接続 handler がある場合、結果は planning-only / report-only になりうる
 
 ## エスカレーション
 
@@ -117,4 +114,4 @@ DEVICE_IDENTIFIER=MacBook Pro 16-inch
 
 ---
 
-💡 **ヒント**: MCPツールを使うと、Claude Codeが自動的にパラメータを推論して実行します。
+💡 **ヒント**: `judgesystem` の実装本体は `scripts/automation/*` です。`miyabi-*` command は外部 bridge surface として扱います。

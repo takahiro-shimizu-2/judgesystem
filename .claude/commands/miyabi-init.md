@@ -1,10 +1,17 @@
 ---
-description: 新しいMiyabiプロジェクト作成
+description: 新しいMiyabiプロジェクト作成（外部bridge）
 ---
 
-# Miyabiプロジェクト作成
+# Miyabiプロジェクト作成（外部bridge）
 
-新しいMiyabiプロジェクトを作成します。GitHub連携、Agent設定、Claude Code統合を含む完全なセットアップを実行します。
+新しい Miyabi プロジェクトを作成するための optional external bridge です。
+これは `judgesystem` 自身の repo-local runtime を初期化する command ではなく、別プロジェクトの bootstrap 用 surface です。
+
+## judgesystem での位置づけ
+
+- この repo の自動化実装本体は `scripts/automation/*` と `scripts/context-impact/*`
+- `miyabi__init` は外部の Miyabi CLI / MCP が利用可能な場合だけ意味を持つ
+- `judgesystem` 自体をこの command で再セットアップする前提は置かない
 
 ## MCPツール
 

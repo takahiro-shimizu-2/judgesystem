@@ -1,10 +1,16 @@
 ---
-description: TODOコメント自動検出・Issue化
+description: TODOコメント自動検出・Issue化（外部bridge）
 ---
 
-# Miyabi TODOコメント自動検出
+# Miyabi TODOコメント自動検出（外部bridge）
 
-コード内のTODOコメントを自動的に検出して、GitHub Issueを作成します。
+TODO コメントを検出して Issue 化するための optional external bridge です。
+`judgesystem` の repo-local runtime に TODO scanner が常設されている、という意味ではありません。
+
+## judgesystem での代替入口
+
+- bridge が無い場合は `rg -n "TODO|FIXME|HACK|XXX|NOTE" .` で repo-local に探索する
+- Issue 化や label 付与は GitHub CLI / workflow / state machine と組み合わせて行う
 
 ## MCPツール
 
