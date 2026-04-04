@@ -3,6 +3,12 @@
 作成日: 2026-04-04
 最終更新: 2026-04-04
 
+> 2026-04-05 補足:
+> この文書で定義していた `judgesystem` への repo-local runtime 吸収フェーズは完了済みである。
+> 元 `Miyabi` との parity gap を追加で吸収する次フェーズは
+> [miyabi-parity-plan.md](/home/shimizu/project/package/judgesystem/docs/miyabi-parity-plan.md)
+> で管理する。
+
 ## 1. この計画の目的
 
 やりたいことは、Miyabi の元ディレクトリにだけ存在する仕組みを `judgesystem` に雑に複製することではない。

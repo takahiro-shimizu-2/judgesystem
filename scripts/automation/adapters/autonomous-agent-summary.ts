@@ -36,6 +36,7 @@ interface ExecutionArtifactSummary {
   sessionId?: string;
   reportPath?: string;
   planPath?: string;
+  plansMarkdownPath?: string;
   totals: {
     total: number;
     completed: number;
@@ -60,12 +61,14 @@ export async function runAutonomousAgentSummaryCli(argv = process.argv) {
 export function buildExecutionArtifactSummary(args: SummaryCliArgs): ExecutionArtifactSummary {
   const latestReport = findLatestExecutionReport(args.rootDir, args.issueNumber);
   const linkedPlan = latestReport ? findExecutionPlan(args.rootDir, latestReport.report.sessionId) : undefined;
+  const livingPlan = latestReport ? findLivingPlan(args.rootDir, latestReport.report.sessionId) : undefined;
   const effectiveStatus = deriveEffectiveStatus(args.workflowStatus, latestReport?.report);
   const markdown = buildIssueCommentMarkdown({
     ...args,
     status: effectiveStatus,
     report: latestReport?.report,
     plan: linkedPlan?.plan,
+    livingPlanPath: livingPlan ? path.relative(args.rootDir, livingPlan.path) : undefined,
   });
 
   return {
@@ -75,6 +78,7 @@ export function buildExecutionArtifactSummary(args: SummaryCliArgs): ExecutionAr
     sessionId: latestReport?.report.sessionId,
     reportPath: latestReport?.path,
     planPath: linkedPlan?.path,
+    plansMarkdownPath: livingPlan?.path,
     totals: latestReport
       ? {
           total: latestReport.report.summary.total,
@@ -102,6 +106,7 @@ function buildIssueCommentMarkdown(params: {
   status: WorkflowExecutionStatus;
   report?: ExecutionReport;
   plan?: StoredExecutionPlan;
+  livingPlanPath?: string;
 }) {
   if (!params.report) {
     return `## ${params.status === 'success' ? '⚠️' : '❌'} Autonomous Agent Summary Unavailable
@@ -118,10 +123,14 @@ The workflow finished, but no execution report artifact was found under \`.ai/pa
 
   const modeLabel = params.report.executionMode === 'planning' ? 'Planning' : 'Execution';
   const headingIcon = params.status === 'success' ? '✅' : '❌';
-  const planNotes =
-    params.plan && params.plan.strategy
-      ? `- Strategy: \`${params.plan.strategy}\`\n- Concurrency: ${params.plan.concurrency}\n`
-      : '';
+  const planNotes = [
+    params.plan && params.plan.strategy ? `- Strategy: \`${params.plan.strategy}\`` : null,
+    params.plan ? `- Concurrency: ${params.plan.concurrency}` : null,
+    params.livingPlanPath ? `- Planning Artifact: \`${params.livingPlanPath}\`` : null,
+  ]
+    .filter(Boolean)
+    .join('\n');
+  const executionNotes = [planNotes, renderWarnings(params.report.warnings)].filter(Boolean).join('\n');
 
   return `## ${headingIcon} Autonomous ${modeLabel} Report
 
@@ -154,7 +163,7 @@ ${renderTaskSection('Failed', params.report, 'failed')}
 
 ### Execution Notes
 
-${planNotes}${renderWarnings(params.report.warnings)}
+${executionNotes}
 
 [View Run Logs →](${params.runUrl})
 `;
@@ -231,6 +240,17 @@ function findExecutionPlan(rootDir: string, sessionId: string) {
   return {
     path: planPath,
     plan: JSON.parse(fs.readFileSync(planPath, 'utf8')) as StoredExecutionPlan,
+  };
+}
+
+function findLivingPlan(rootDir: string, sessionId: string) {
+  const plansPath = path.join(rootDir, '.ai', 'parallel-reports', `plans-${sessionId}.md`);
+  if (!fs.existsSync(plansPath)) {
+    return undefined;
+  }
+
+  return {
+    path: plansPath,
   };
 }
 

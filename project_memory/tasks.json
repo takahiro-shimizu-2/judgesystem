@@ -1,93 +1,58 @@
 {
-  "generated_at": "2026-04-05T00:02:00+09:00",
-  "query": "Phase 9 autonomy operations DoD and TestAgent decision",
+  "generated_at": "2026-04-05T01:08:00+09:00",
+  "query": "Miyabi parity implementation",
   "repo": "judgesystem",
   "quality_score": 0,
   "tasks": [
     {
-      "id": "research-gate",
-      "title": "Research official contracts, origin systems, and judgesystem runtime before opening full-autonomy capabilities",
+      "id": "parity-audit",
+      "title": "Classify Miyabi-origin capabilities into absorb / bridge / non-target with explicit rationale",
       "status": "completed"
     },
     {
-      "id": "pr-write-binding",
-      "title": "Enable gated remote draft PR creation/update for PRAgent and align workflow execution mode",
+      "id": "plans-artifact-parity",
+      "title": "Restore a living planning artifact layer equivalent to Miyabi Plans.md on top of the current planning/runtime artifacts",
       "status": "completed"
     },
     {
-      "id": "codegen-write-binding",
-      "title": "Enable gated delegated writer binding for CodeGenAgent while keeping scripts/automation as the runtime home",
-      "status": "completed"
+      "id": "real-worktree-lifecycle",
+      "title": "Replace .ai/worktrees staging-only behavior with real git worktree create/reuse/cleanup lifecycle management",
+      "status": "in_progress"
     },
     {
-      "id": "review-loop-contract",
-      "title": "Strengthen ReviewAgent with repo-root execution, score/retry/escalation artifacts, and workflow-aligned env gates",
-      "status": "completed"
+      "id": "review-loop-parity",
+      "title": "Evolve review from configured one-shot checks to an iterative review loop with explicit handoff and escalation",
+      "status": "pending"
     },
     {
-      "id": "deployment-contract",
-      "title": "Extend DeploymentAgent from a command gate to a deploy contract with preflight, healthcheck, rollback, artifacts, and workflow env gates",
-      "status": "completed"
+      "id": "test-agent-runtime",
+      "title": "Introduce an independent TestAgent runtime instead of keeping test execution absorbed inside ReviewAgent",
+      "status": "pending"
     },
     {
-      "id": "contract-truthfulness",
-      "title": "Keep plan, Claude-side definitions, AGENTS, and workflow comments aligned with the runtime that actually exists",
-      "status": "completed"
+      "id": "water-spider-runtime",
+      "title": "Add a repo-local Water Spider continuity layer without importing tmux or multi-machine infrastructure wholesale",
+      "status": "pending"
     },
     {
-      "id": "github-check-alignment",
-      "title": "Validate push/PR Actions, permissions, env gates, and failure paths while rolling out autonomy slices",
-      "status": "completed"
+      "id": "omega-understanding-plan",
+      "title": "Stage Omega absorption by adding intent/understanding and strategic-plan layers ahead of the current decomposition runtime",
+      "status": "pending"
     },
     {
-      "id": "event-execute-gate",
-      "title": "Keep issue/comment triggers planning-first by default while allowing explicit execute only behind repository-variable gates",
-      "status": "completed"
+      "id": "omega-integration-learning",
+      "title": "Stage Omega integration and learning artifacts after the current execution/runtime layer",
+      "status": "pending"
     },
     {
-      "id": "deployment-approval-gate",
-      "title": "Add deployment approval/provider-target metadata and make workflow execution pass the actual deploy env gates through to DeploymentAgent",
-      "status": "completed"
+      "id": "bridge-revalidation",
+      "title": "Revalidate that context-and-impact, agent-skill-bus, gitnexus-stable-ops, and optional Miyabi CLI/MCP remain narrow bridges rather than hidden runtime dependencies",
+      "status": "pending"
     },
     {
-      "id": "protected-deploy-workflow",
-      "title": "Add a dedicated GitHub Environment-backed deploy execute workflow for protected deployments and align docs with that path",
-      "status": "completed"
-    },
-    {
-      "id": "cloud-run-deploy-preset",
-      "title": "Add a repo-local Cloud Run provider preset so DeploymentAgent can resolve backend/frontend deploy commands without a bespoke per-run command string",
-      "status": "completed"
-    },
-    {
-      "id": "pr-contract-alignment",
-      "title": "Extend PRAgent so remote draft PR execution can also request reviewers, sync labels, and enforce a mergeability gate when those env contracts are configured",
-      "status": "completed"
-    },
-    {
-      "id": "review-contract-alignment",
-      "title": "Extend ReviewAgent with coverage gates, security summaries, and a review-comment artifact while keeping outputs truthful to the executed checks",
-      "status": "completed"
-    },
-    {
-      "id": "codegen-write-contract",
-      "title": "Extend CodeGenAgent with allowlisted changed-file enforcement, require-changes, post-check execution, and codegen summary artifacts",
-      "status": "completed"
-    },
-    {
-      "id": "deployment-provider-phase",
-      "title": "Extend DeploymentAgent with a repo-local github-pages preset, workflow-dispatch orchestration, and aligned Actions permissions/env gates",
-      "status": "completed"
-    },
-    {
-      "id": "phase9-dod",
-      "title": "Consolidate full-autonomy operational DoD, smoke tests, artifact ownership, and remaining workflow/permission cleanup",
-      "status": "completed"
-    },
-    {
-      "id": "test-agent-decision",
-      "title": "Decide whether TestAgent remains absorbed into ReviewAgent or becomes an explicit runtime capability",
-      "status": "completed"
+      "id": "parity-dod-v2",
+      "title": "Expand smoke, CI, and runtime docs so the parity targets stay truthful and continuously verifiable",
+      "status": "pending"
     }
   ]
 }

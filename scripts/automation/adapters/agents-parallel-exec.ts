@@ -62,6 +62,7 @@ export async function runAgentsParallelExecCli(argv = process.argv, env = proces
       );
       console.log(`   Report: ${result.artifactPaths.reportPath}`);
       console.log(`   Plan:   ${result.artifactPaths.planPath}`);
+      console.log(`   Plans:  ${result.artifactPaths.plansPath}`);
 
       if (report.warnings.length > 0) {
         console.log('   Warnings:');
