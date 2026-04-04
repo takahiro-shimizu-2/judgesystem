@@ -1,42 +1,32 @@
 {
-  "generated_at": "2026-04-04T20:31:36+09:00",
-  "query": "Full autonomy research gate and absorption replanning",
+  "generated_at": "2026-04-04T20:59:02+09:00",
+  "query": "Full autonomy capability rollout",
   "repo": "judgesystem",
   "quality_score": 0,
   "tasks": [
     {
-      "id": "official-contract-research",
-      "title": "Research official contracts for Claude Code, Codex, and GitHub before deciding full-autonomy runtime behavior",
+      "id": "research-gate",
+      "title": "Research official contracts, origin systems, and judgesystem runtime before opening full-autonomy capabilities",
       "status": "completed"
     },
     {
-      "id": "origin-runtime-readthrough",
-      "title": "Read ../Miyabi, ../gitnexus-stable-ops, ../context-and-impact, and ../agent-skill-bus in dependency order",
+      "id": "pr-write-binding",
+      "title": "Enable gated remote draft PR creation/update for PRAgent and align workflow execution mode",
       "status": "completed"
     },
     {
-      "id": "judgesystem-runtime-readthrough",
-      "title": "Re-read judgesystem runtime, workflow, and bridge layers in the same order as the external systems",
+      "id": "codegen-write-binding",
+      "title": "Enable gated delegated writer binding for CodeGenAgent while keeping scripts/automation as the runtime home",
       "status": "completed"
     },
     {
-      "id": "absorption-mapping",
-      "title": "Map Miyabi capabilities into repo-local runtime, external bridge, or non-target classifications",
-      "status": "completed"
-    },
-    {
-      "id": "plan-rewrite-v2",
-      "title": "Rewrite docs/agents-integration-plan.md with research order, capability inventory, and full-autonomy phases",
-      "status": "completed"
-    },
-    {
-      "id": "full-autonomy-first-slice",
-      "title": "Choose and implement the first full-autonomy capability slice only after the rewritten plan is accepted",
+      "id": "contract-truthfulness",
+      "title": "Keep plan, Claude-side definitions, AGENTS, and workflow comments aligned with the runtime that actually exists",
       "status": "completed"
     },
     {
       "id": "github-check-alignment",
-      "title": "Validate push/PR Actions, permissions, and failure paths while implementing the first full-autonomy slice",
+      "title": "Validate push/PR Actions, permissions, env gates, and failure paths while rolling out autonomy slices",
       "status": "completed"
     }
   ]
