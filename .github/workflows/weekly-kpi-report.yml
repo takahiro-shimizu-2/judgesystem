@@ -26,52 +26,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GH_PROJECT_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
-        run: |
-          cat > post-kpi-report.ts << 'EOF'
-          import { ProjectsV2Client } from './agents/github/projects-v2.js';
-          import { DiscussionsClient } from './agents/github/discussions.js';
-
-          async function main() {
-            const token = process.env.GITHUB_TOKEN!;
-            const [owner, repo] = process.env.GITHUB_REPOSITORY!.split('/');
-
-            // Initialize clients
-            const projectsClient = new ProjectsV2Client(token, {
-              owner,
-              repo,
-              projectNumber: parseInt(process.env.GITHUB_PROJECT_NUMBER || '1'),
-            });
-
-            const discussionsClient = new DiscussionsClient(token, {
-              owner,
-              repo,
-            });
-
-            // Initialize both clients
-            await projectsClient.initialize();
-            await discussionsClient.initialize();
-
-            // Generate KPI report
-            console.log('📊 Generating KPI report...');
-            const kpiData = await projectsClient.generateKPIReport();
-
-            console.log('KPI Data:', kpiData);
-
-            // Post to Discussions
-            console.log('📝 Posting to GitHub Discussions...');
-            const discussion = await discussionsClient.postWeeklyKPIReport(kpiData);
-
-            console.log(`✓ Posted weekly KPI report: ${discussion.url}`);
-            console.log(`  Discussion #${discussion.number}: ${discussion.title}`);
-          }
-
-          main().catch((error) => {
-            console.error('Error generating KPI report:', error);
-            process.exit(1);
-          });
-          EOF
-
-          npx tsx post-kpi-report.ts
+        run: npx tsx scripts/post-kpi-report.ts
 
       - name: Summary
         run: |

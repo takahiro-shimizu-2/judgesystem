@@ -2,10 +2,17 @@
 
 import { Octokit } from '@octokit/rest';
 
-import { buildKpiReportMarkdown, type ProjectKpiSummary } from './lib/automation-reporting.js';
-import { DiscussionsClient } from './lib/discussions.js';
-import { ProjectsV2Client } from './lib/projects-v2.js';
-import { collectRepositoryMetrics, resolveGitHubToken, resolveRepositoryContext } from './lib/repository-metrics.js';
+import { DiscussionsClient } from './automation/github/discussions.js';
+import { ProjectsV2Client } from './automation/github/projects-v2.js';
+import {
+  buildKpiReportMarkdown,
+  type ProjectKpiSummary,
+} from './automation/reporting/automation-reporting.js';
+import {
+  collectRepositoryMetrics,
+  resolveGitHubToken,
+  resolveRepositoryContext,
+} from './automation/reporting/repository-metrics.js';
 
 async function main() {
   const token = resolveGitHubToken();
