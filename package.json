@@ -20,6 +20,8 @@
     "test": "echo \"No tests configured yet\" && exit 0",
     "typecheck": "tsc -p scripts/tsconfig.json --noEmit",
     "agents:parallel:exec": "tsx scripts/agents-parallel-exec.ts",
+    "deploy:cloud-run:backend": "bash scripts/automation/deploy/cloud-run.sh backend",
+    "deploy:cloud-run:frontend": "bash scripts/automation/deploy/cloud-run.sh frontend",
     "state:check": "tsx scripts/label-state-machine.ts check",
     "state:transition": "tsx scripts/label-state-machine.ts transition",
     "state:assign-agent": "tsx scripts/label-state-machine.ts assign-agent",

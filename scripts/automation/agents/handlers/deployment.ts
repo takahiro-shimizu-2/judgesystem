@@ -38,6 +38,7 @@ interface DeploymentArtifactPayload {
   sessionId: string;
   taskId: string;
   taskTitle: string;
+  commandSource: string;
   provider: string;
   target: string;
   environment: string;
@@ -57,23 +58,35 @@ export function createDeploymentAgentHandler(options: DeploymentAgentHandlerFact
     id: 'deployment-command-gate',
     mode: 'connected',
     description:
-      'Runs an explicitly configured deployment contract with optional preflight, health check, rollback, and artifact generation.',
+      'Runs a gated deployment contract with optional provider presets, preflight, health check, rollback, and artifact generation.',
     execute: async ({ task, definition, context }) => {
       const env = context.env;
       const enabled = env.AUTOMATION_ENABLE_DEPLOY === 'true';
-      const deployCommand = env.AUTOMATION_DEPLOY_COMMAND;
-
-      if (!enabled || !deployCommand) {
-        return {
-          status: 'skipped',
-          notes: `${definition.name} is connected, but deployment is gated. Set AUTOMATION_ENABLE_DEPLOY=true and AUTOMATION_DEPLOY_COMMAND to enable it.`,
-        };
-      }
-
       const rootDir = context.rootDir || options.rootDir;
       const environment = env.AUTOMATION_DEPLOY_ENVIRONMENT || 'unspecified';
       const provider = (env.AUTOMATION_DEPLOY_PROVIDER || 'custom').trim() || 'custom';
       const target = (env.AUTOMATION_DEPLOY_TARGET || environment).trim() || 'unspecified';
+      const resolvedDeployCommand = resolveDeployCommand({
+        rootDir,
+        env,
+        provider,
+        target,
+      });
+      const deployCommand = resolvedDeployCommand.command;
+
+      if (!enabled || !deployCommand) {
+        return {
+          status: 'skipped',
+          notes: [
+            `${definition.name} is connected, but deployment is gated.`,
+            'Set AUTOMATION_ENABLE_DEPLOY=true and AUTOMATION_DEPLOY_COMMAND to enable it, or enable AUTOMATION_DEPLOY_USE_PROVIDER_PRESET=true for a supported provider preset.',
+            resolvedDeployCommand.note,
+          ]
+            .filter(Boolean)
+            .join(' '),
+        };
+      }
+
       const workingDirectory = resolveDeploymentWorkingDirectory(rootDir, env);
       const preflightCommand = env.AUTOMATION_DEPLOY_PREFLIGHT_COMMAND;
       const buildCommand = env.AUTOMATION_DEPLOY_BUILD_COMMAND;
@@ -107,6 +120,7 @@ export function createDeploymentAgentHandler(options: DeploymentAgentHandlerFact
             sessionId: context.sessionId,
             taskId: task.id,
             taskTitle: task.title,
+            commandSource: resolvedDeployCommand.source,
             provider,
             target,
             environment,
@@ -129,6 +143,7 @@ export function createDeploymentAgentHandler(options: DeploymentAgentHandlerFact
           sessionId: context.sessionId,
           taskId: task.id,
           taskTitle: task.title,
+          commandSource: resolvedDeployCommand.source,
           provider,
           target,
           environment,
@@ -178,6 +193,7 @@ export function createDeploymentAgentHandler(options: DeploymentAgentHandlerFact
             sessionId: context.sessionId,
             taskId: task.id,
             taskTitle: task.title,
+            commandSource: resolvedDeployCommand.source,
             provider,
             target,
             environment,
@@ -227,6 +243,7 @@ export function createDeploymentAgentHandler(options: DeploymentAgentHandlerFact
           sessionId: context.sessionId,
           taskId: task.id,
           taskTitle: task.title,
+          commandSource: resolvedDeployCommand.source,
           provider,
           target,
           environment,
@@ -282,6 +299,7 @@ export function createDeploymentAgentHandler(options: DeploymentAgentHandlerFact
             sessionId: context.sessionId,
             taskId: task.id,
             taskTitle: task.title,
+            commandSource: resolvedDeployCommand.source,
             provider,
             target,
             environment,
@@ -311,6 +329,7 @@ export function createDeploymentAgentHandler(options: DeploymentAgentHandlerFact
         sessionId: context.sessionId,
         taskId: task.id,
         taskTitle: task.title,
+        commandSource: resolvedDeployCommand.source,
         provider,
         target,
         environment,
@@ -328,6 +347,7 @@ export function createDeploymentAgentHandler(options: DeploymentAgentHandlerFact
             workingDirectory,
             env,
           )}.`,
+          resolvedDeployCommand.note,
           approval.details.summary,
           preflightResult ? formatStepSummary(preflightResult) : 'No preflight command was configured.',
           buildResult ? formatStepSummary(buildResult) : 'No build command was configured.',
@@ -345,6 +365,7 @@ export function createDeploymentAgentHandler(options: DeploymentAgentHandlerFact
           )}.`,
         ].join(' '),
         output: {
+          commandSource: resolvedDeployCommand.source,
           provider,
           target,
           environment,
@@ -356,6 +377,41 @@ export function createDeploymentAgentHandler(options: DeploymentAgentHandlerFact
         },
       };
     },
+  };
+}
+
+function resolveDeployCommand(params: {
+  rootDir: string;
+  env: NodeJS.ProcessEnv;
+  provider: string;
+  target: string;
+}) {
+  const explicit = (params.env.AUTOMATION_DEPLOY_COMMAND || '').trim();
+  if (explicit) {
+    return {
+      command: explicit,
+      source: 'explicit',
+      note: 'Deploy command source: explicit AUTOMATION_DEPLOY_COMMAND.',
+    };
+  }
+
+  if (params.env.AUTOMATION_DEPLOY_USE_PROVIDER_PRESET === 'true') {
+    const preset = resolveProviderPresetCommand(params);
+    if (preset) {
+      return preset;
+    }
+
+    return {
+      command: undefined,
+      source: 'unresolved',
+      note: `Provider preset is enabled, but no repo-local preset exists for ${params.provider}/${params.target}.`,
+    };
+  }
+
+  return {
+    command: undefined,
+    source: 'unresolved',
+    note: 'No deploy command was resolved. Provide AUTOMATION_DEPLOY_COMMAND or enable AUTOMATION_DEPLOY_USE_PROVIDER_PRESET=true for a supported provider preset.',
   };
 }
 
@@ -414,6 +470,28 @@ function resolveDeploymentApproval(params: {
       summary,
       attemptsUsed: 1,
     },
+  };
+}
+
+function resolveProviderPresetCommand(params: {
+  rootDir: string;
+  env: NodeJS.ProcessEnv;
+  provider: string;
+  target: string;
+}) {
+  if (params.provider !== 'cloud-run') {
+    return undefined;
+  }
+
+  if (!['backend', 'frontend'].includes(params.target)) {
+    return undefined;
+  }
+
+  const wrapperPath = path.join(params.rootDir, 'scripts', 'automation', 'deploy', 'cloud-run.sh');
+  return {
+    command: `bash ${shellEscape(wrapperPath)} ${shellEscape(params.target)}`,
+    source: 'cloud-run-preset',
+    note: `Deploy command source: repo-local cloud-run preset for target=${params.target}.`,
   };
 }
 
@@ -543,6 +621,7 @@ function writeDeploymentArtifacts(params: {
   sessionId: string;
   taskId: string;
   taskTitle: string;
+  commandSource: string;
   provider: string;
   target: string;
   environment: string;
@@ -560,6 +639,7 @@ function writeDeploymentArtifacts(params: {
     sessionId: params.sessionId,
     taskId: params.taskId,
     taskTitle: params.taskTitle,
+    commandSource: params.commandSource,
     provider: params.provider,
     target: params.target,
     environment: params.environment,
@@ -589,6 +669,7 @@ function buildDeploymentMarkdown(payload: DeploymentArtifactPayload) {
 - Title: ${payload.taskTitle}
 
 ## Contract
+- Command source: ${payload.commandSource}
 - Provider: ${payload.provider}
 - Target: ${payload.target}
 - Environment: ${payload.environment}
@@ -696,4 +777,8 @@ function parseListEnv(rawValue?: string) {
     .split(/[\s,]+/)
     .map((item) => item.trim())
     .filter(Boolean);
+}
+
+function shellEscape(value: string) {
+  return `'${value.replace(/'/g, `'\"'\"'`)}'`;
 }

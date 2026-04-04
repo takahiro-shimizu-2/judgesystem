@@ -41,6 +41,9 @@ Context-and-impact phase E appends audit entries here.
 - Updated `.claude/agents/deployment-agent.md`, `.claude/commands/deploy.md`, `.claude/commands/agent-run.md`, `AGENTS.md`, `CLAUDE.md`, `docs/agents-integration-plan.md`, and `project_memory/tasks.json` so approval/build/provider-target deployment behavior is documented truthfully.
 - Added `.github/workflows/autonomous-deploy-execute.yml` as a dedicated protected-deploy path that uses `workflow_dispatch` plus GitHub Environment approval while reusing the repo-local runtime and summary/comment publication flow.
 - Updated deploy/runtime docs and the plan so `autonomous-agent.yml` remains the generic planning/execute workflow, while protected deploys now prefer `autonomous-deploy-execute.yml` to keep GitHub Environment approval and DeploymentAgent approval metadata aligned.
+- Added `scripts/automation/deploy/cloud-run.sh` plus `npm run deploy:cloud-run:backend|frontend` so `DeploymentAgent` can resolve a repo-local Cloud Run preset instead of requiring a bespoke deploy command for the common backend/frontend paths.
+- Extended both autonomous workflows so `AUTOMATION_DEPLOY_USE_PROVIDER_PRESET=true` and the Cloud Run env set are passed into the runtime, and protected deploy validation now accepts the Cloud Run preset path in addition to an explicit `AUTOMATION_DEPLOY_COMMAND`.
+- Updated deploy/runtime docs, agent definitions, and the plan so Cloud Run is now the first repo-local provider preset, while other providers remain explicit-command-driven.
 
 - Started Phase 2 by moving label state machine logic into `scripts/automation/state`.
 - Kept `scripts/label-state-machine.ts` as the stable CLI entrypoint for workflows and npm scripts.
