@@ -48,6 +48,12 @@ export const STATE_TRANSITIONS: StateTransition[] = [
     action: 'Analyze dependencies and complexity',
   },
   {
+    from: 'pending',
+    to: 'reviewing',
+    trigger: 'Pull request created before implementation labels were applied',
+    action: 'Start review from a linked pull request',
+  },
+  {
     from: 'analyzing',
     to: 'implementing',
     trigger: 'Specialist agent assigned',
