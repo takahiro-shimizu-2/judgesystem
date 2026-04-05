@@ -282,7 +282,8 @@ configured checks, score, retry, escalation, coverage/security summary, review a
 - `scripts/context-impact/*` は explicit bridge のまま維持し、override/sibling fallback/error surface を smoke で固定した
 - optional Miyabi MCP bridge も `MIYABI_CLI` / `MIYABI_ROOT` / local install / sibling fallback / unavailable の順を smoke で確認した
 - `scripts/automation/*` と autonomous workflows に bridge 参照が紛れ込んでいないことを smoke で固定した
-- 次の active slice は `parity-dod-v2`
+- `parity-dod-v2` として `AGENTS.md` / `CLAUDE.md` / command 面の stale claim を current runtime truth に同期した
+- この parity 計画の active slice はこれで完了
 
 ## 6. 今回やらないこと
 

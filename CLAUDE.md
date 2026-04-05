@@ -24,11 +24,11 @@ Use these boundaries:
 Current runtime status:
 
 1. **Issue Analysis / Task Decomposition** → available inside repo
-2. **DAG / execution planning** → available inside repo
-3. **Execution report / artifacts** → available inside repo
-4. **Issue / codegen / review / PR / deploy handlers** → connected in a safe, capability-specific way
-5. **Remote PR creation / external-model code writing / deploy side effects** → still gated or optional, not guaranteed
-6. **Test execution** → remains part of `ReviewAgent`; there is no standalone `TestAgent` runtime in `judgesystem`
+2. **Omega understanding / strategic planning / integration / learning** → available inside repo
+3. **DAG / execution planning + living plan artifacts** → available inside repo
+4. **Execution report / artifacts + Water Spider continuity** → available inside repo
+5. **Issue / codegen / test / review / PR / deploy handlers** → connected in a safe, capability-specific way
+6. **Remote PR creation / explicit code-writing / deploy side effects** → still gated or optional, not guaranteed
 
 ### Core Behavior
 
@@ -107,24 +107,28 @@ python -m cli.entry         # Run judgment engine
 |-------|------|-----------|
 | CoordinatorAgent | Task decomposition, DAG building, plan/report orchestration | Orchestrator |
 | CodeGenAgent | Implementation brief generation plus optional explicit code-writing command | Executor |
+| TestAgent | Test / coverage execution and test handoff artifact generation | Executor |
 | ReviewAgent | Repo-root validation checks with score/retry/escalation artifacts | Executor |
 | IssueAgent | Issue analysis and analyzing-state sync | Analyst |
 | PRAgent | Local draft PR artifact generation plus optional remote draft PR | Executor |
 | DeploymentAgent | Env-gated deployment contract with optional approval/build/preflight/healthcheck/rollback | Executor |
+| WaterSpiderAgent | Repo-local continuity controller after execute runs | Orchestrator |
 
 Agent specifications: `.claude/agents/`
 
 ### Runtime Reality
 
-- `scripts/automation/decomposition/*` and `scripts/automation/orchestration/*` provide a planning-first substrate
-- `npm run agents:parallel:exec` now connects safe handlers for issue/codegen/review/pr/deploy while keeping stronger side effects gated
+- `scripts/automation/decomposition/*`, `scripts/automation/orchestration/*`, and `scripts/automation/omega/*` provide a planning-first substrate with Omega intent/strategic-plan/deliverable/learning artifacts
+- `npm run agents:parallel:exec` now connects safe handlers for issue/codegen/test/review/pr/deploy while keeping stronger side effects gated
 - `CodeGenAgent` can now invoke an explicit repo-root code-writing command when `AUTOMATION_ENABLE_CODEGEN_WRITE=true` and `AUTOMATION_CODEGEN_COMMAND` are set, and it can enforce allowlists, require-changes, and post-check contracts while writing a codegen summary artifact
+- `TestAgent` now owns repo-root or worktree-local test/coverage execution, writes test artifacts, and hands coverage/state forward into review
 - `ReviewAgent` now runs repo-root configured checks, writes review artifacts plus a review-comment artifact, and can enforce coverage/security contracts only when the executed checks produced those signals
 - `PRAgent` can now open or update a remote draft PR when `AUTOMATION_ENABLE_PR_WRITE=true` and branch/token conditions are satisfied, and it can optionally request reviewers, sync PR labels, and enforce a mergeability gate
 - `DeploymentAgent` can now execute an explicit deploy contract with optional approval, build, preflight, health check, rollback, and deployment artifacts when the corresponding env gates are set, and it can resolve repo-local `cloud-run` and `github-pages` presets when `AUTOMATION_DEPLOY_USE_PROVIDER_PRESET=true`
+- `WaterSpiderAgent` now evaluates execute-run continuity from summary/report/plan artifacts and can self-dispatch a follow-up execute when the retry gate is open
 - protected deploys can also use the dedicated `autonomous-deploy-execute.yml` workflow so GitHub Environment approvals and DeploymentAgent approval metadata stay aligned
 - Runtime integration should converge on a registry/loader that reads `.claude/agents/*.md` metadata and dispatches to explicit handlers in `scripts/automation`
-- `npm run automation:smoke` is the repo-local operational smoke entrypoint for the review/pr/deploy autonomy contracts
+- `npm run automation:smoke` is the repo-local operational smoke entrypoint for planning/Omega/worktree/quality/PR/deploy/Water Spider/bridge parity contracts
 
 ### State Flow
 ```
