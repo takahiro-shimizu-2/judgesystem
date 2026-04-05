@@ -30,6 +30,7 @@ npm run automation:smoke
 - Omega integration / learning parity
 - `worktree-lifecycle` parity smoke
 - `quality-pipeline` parity smoke
+- external bridge contract smoke
 - `TestAgent` contract smoke
 - `ReviewAgent` contract smoke
 - `PRAgent` remote-PR contract smoke
@@ -39,6 +40,7 @@ npm run automation:smoke
 planning / Omega / worktree / quality / test / review / PR / deploy / Water Spider の smoke は
 `scripts/automation/smoke/handler-contracts.ts`
 と `scripts/automation/smoke/quality-pipeline.ts`,
+`scripts/automation/smoke/bridge-contracts.ts`,
 `scripts/automation/smoke/planning-artifacts.ts`,
 `scripts/automation/smoke/omega-integration-learning.ts`,
 `scripts/automation/smoke/worktree-lifecycle.ts`,
@@ -61,6 +63,8 @@ push / PR 時には `.github/workflows/ci.yml` の `automation-smoke` job が
 - `CodeGen -> Test -> Review -> PR` handoff と shared worktree contract が壊れていない
 - `TestAgent` contract が壊れていない
 - review loop contract が壊れていない
+- external bridge が hidden runtime dependency に戻っていない
+- `context-and-impact` / `agent-skill-bus` / optional Miyabi MCP の解決順と unavailable 時のエラーが壊れていない
 - remote draft PR contract が壊れていない
 - provider-dispatch deploy contract が壊れていない
 - Water Spider continuity / retry-budget contract が壊れていない
@@ -133,3 +137,20 @@ repo-local / workflow-aware な continuity controller として扱う。
 - Cloud Run / GitHub Pages 以外の provider orchestration
 - external-model / remote push を含む stronger codegen
 - richer review comment publish policy
+
+## 8. External Bridge Decision
+
+次の surface は repo-local runtime 本体ではなく、bridge として扱い続ける。
+
+- `scripts/context-impact/*`
+  - `CONTEXT_AND_IMPACT_ROOT` override → optional sibling fallback
+- `agent-skill-bus`
+  - `AGENT_SKILL_BUS_BIN` / `AGENT_SKILL_BUS_ROOT` / local install / optional sibling fallback
+- `.claude/mcp-servers/miyabi-integration.js`
+  - `MIYABI_CLI` / `MIYABI_ROOT` / local install / optional sibling fallback
+
+bridge revalidation の運用条件:
+
+- `scripts/automation/*` と autonomous workflows は、これら bridge 名を直接参照しない
+- unavailable 時は success 扱いにせず、明示的な bridge error を返す
+- `npm run automation:smoke` で resolution order と explicit failure surface を継続確認する
