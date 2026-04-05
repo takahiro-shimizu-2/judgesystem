@@ -26,6 +26,7 @@ npm run automation:smoke
 - `npm run typecheck`
 - `npx tsx scripts/agents-parallel-exec.ts --help`
 - `planning-artifacts` parity smoke
+- Omega understanding / strategic-plan parity
 - `worktree-lifecycle` parity smoke
 - `quality-pipeline` parity smoke
 - `TestAgent` contract smoke
@@ -34,7 +35,7 @@ npm run automation:smoke
 - `DeploymentAgent` `github-pages` preset smoke
 - `WaterSpiderAgent` continuity smoke
 
-planning / worktree / quality / test / review / PR / deploy / Water Spider の smoke は
+planning / Omega / worktree / quality / test / review / PR / deploy / Water Spider の smoke は
 `scripts/automation/smoke/handler-contracts.ts`
 と `scripts/automation/smoke/quality-pipeline.ts`,
 `scripts/automation/smoke/planning-artifacts.ts`,
@@ -52,6 +53,7 @@ push / PR 時には `.github/workflows/ci.yml` の `automation-smoke` job が
 
 - runtime entrypoint が壊れていない
 - living planning artifact contract が壊れていない
+- Omega understanding / strategic-plan contract が壊れていない
 - real worktree lifecycle contract が壊れていない
 - `CodeGen -> Test -> Review -> PR` handoff と shared worktree contract が壊れていない
 - `TestAgent` contract が壊れていない
@@ -70,7 +72,7 @@ push / PR 時には `.github/workflows/ci.yml` の `automation-smoke` job が
   - notable な phase 変更や運用判断を記録する
 - `.ai/parallel-reports/*`
   - 実行ごとの artifact
-  - `execution-plan-*`, `agents-parallel-*`, `plans-*`, `water-spider-*` を含む
+  - `omega-intent-*`, `strategic-plan-*`, `execution-plan-*`, `agents-parallel-*`, `plans-*`, `water-spider-*` を含む
   - commit 対象ではなく、run 出力として扱う
 - `.ai/logs/*`
   - 実行ログ
