@@ -11,7 +11,7 @@ GitHub Issue を Miyabi bridge 経由で処理するための surface です。
 
 - `miyabi__agent_run` と `npx miyabi ...` は optional external bridge
 - bridge が使えないときの repo-local 入口は `npm run agents:parallel:exec -- --issue <番号> --dry-run`
-- codegen / review / PR / deploy は capability ごとの optional handler であり、常時保証ではない
+- codegen / test / review / PR / deploy は capability ごとの optional handler であり、常時保証ではない
 
 ## 利用可能なMCPツール
 
@@ -60,7 +60,7 @@ CoordinatorAgent（タスク分解・DAG構築）
     ↓
 IssueAgent（分析・Label付与）
     ↓
-optional handlers（CodeGen / Review / PR / Deploy）
+optional handlers（CodeGen / Test / Review / PR / Deploy）
     ↓
 handler 未接続なら planning / report / escalation に留まる
 ```

@@ -13,10 +13,13 @@ description: Autonomous Agent実行 - planning-first orchestration と safe hand
 ```text
 Issue取得
   ↓
+Omega Understanding / Strategic Plan
+  ↓
 CoordinatorAgent
   ↓
 IssueAgent      → label/state sync (token がある場合)
 CodeGenAgent    → implementation brief artifact + optional code-writing command
+TestAgent       → test / coverage artifact + testing state sync
 ReviewAgent     → repo-root configured checks + score/retry/escalation artifact
 PRAgent         → local draft PR artifact + optional remote draft PR
 DeploymentAgent → preflight + deploy + optional healthcheck/rollback contract
@@ -77,6 +80,11 @@ npm run agents:parallel:exec -- --help
 
 - `.ai/parallel-reports/execution-plan-*.json`
 - `.ai/parallel-reports/agents-parallel-*.json`
+- `.ai/parallel-reports/plans-*.md`
+- `.ai/parallel-reports/omega-intent-*.json`
+- `.ai/parallel-reports/strategic-plan-*.md`
+- `.ai/parallel-reports/omega-deliverable-*.json`
+- `.ai/parallel-reports/omega-learning-*.json`
 - `.ai/worktrees/issue-*/...`
 - `.ai/parallel-reports/water-spider-*.md`
 - `.ai/parallel-reports/water-spider-*.json`
@@ -149,6 +157,7 @@ AUTOMATION_WATER_SPIDER_REF="develop"
 - `PRAgent` は `AUTOMATION_ENABLE_PR_WRITE=true` のとき、必要なら reviewer request / label sync / mergeability gate まで実行できる
 - `CodeGenAgent` は explicit writer command に加えて、changed-file allowlist / require-changes / post-check を持つ stronger write contract を実行できる
 - `ReviewAgent` は security summary / coverage gate / review-comment artifact を、実際に走った check 出力からだけ生成する
+- `TestAgent` は test / coverage artifact を独立 authority として生成し、`ReviewAgent` はその handoff を消費する
 - `DeploymentAgent` は explicit `AUTOMATION_DEPLOY_COMMAND` だけでなく、`AUTOMATION_DEPLOY_USE_PROVIDER_PRESET=true` のときは repo-local `cloud-run` と `github-pages` preset を解決できる
 - `WaterSpiderAgent` は execute 後の summary/report/plan と issue comment の hidden marker を使って continuity decision を出し、gate が開いていれば follow-up execute を self-dispatch できる
 
