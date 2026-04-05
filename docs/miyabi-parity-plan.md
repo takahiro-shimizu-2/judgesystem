@@ -255,6 +255,13 @@ configured checks, score, retry, escalation, coverage/security summary, review a
 - 実行結果が deliverable として再統合される
 - learning artifact が次回 run に引き継げる
 
+進捗メモ (2026-04-05):
+
+- Stage A/B として `issue-to-intent` と strategic plan generation を先行実装した
+- `TaskManager` は decomposition の前に Omega understanding を作り、`.ai/parallel-reports/omega-intent-*.json` と `strategic-plan-*.md` を残す
+- living planning artifact と workflow summary からも Omega planning layer を参照できる
+- 次の active slice は `omega-integration-learning`
+
 ### Phase P6: parity DoD
 
 目的:
