@@ -12,4 +12,5 @@ npx tsx scripts/automation/smoke/omega-integration-learning.ts
 npx tsx scripts/automation/smoke/worktree-lifecycle.ts
 npx tsx scripts/automation/smoke/quality-pipeline.ts
 npx tsx scripts/automation/smoke/handler-contracts.ts
+npx tsx scripts/automation/smoke/bridge-contracts.ts
 npx tsx scripts/automation/smoke/water-spider.ts
