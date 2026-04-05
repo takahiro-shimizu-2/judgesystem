@@ -276,6 +276,14 @@ configured checks, score, retry, escalation, coverage/security summary, review a
 - planning artifact, worktree, test/review loop, Water Spider, Omega の運用責務を固定する
 - false claim を避けるため docs / commands / workflows を同期する
 
+進捗メモ (2026-04-05):
+
+- `bridge-revalidation` として external bridge contract smoke を追加した
+- `scripts/context-impact/*` は explicit bridge のまま維持し、override/sibling fallback/error surface を smoke で固定した
+- optional Miyabi MCP bridge も `MIYABI_CLI` / `MIYABI_ROOT` / local install / sibling fallback / unavailable の順を smoke で確認した
+- `scripts/automation/*` と autonomous workflows に bridge 参照が紛れ込んでいないことを smoke で固定した
+- 次の active slice は `parity-dod-v2`
+
 ## 6. 今回やらないこと
 
 次は意図的にこの parity 計画から外す。

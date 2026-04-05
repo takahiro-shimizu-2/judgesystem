@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-04-05T22:17:05+09:00",
+  "generated_at": "2026-04-05T23:12:00+09:00",
   "query": "Miyabi parity implementation",
   "repo": "judgesystem",
   "quality_score": 0,
@@ -47,12 +47,12 @@
     {
       "id": "bridge-revalidation",
       "title": "Revalidate that context-and-impact, agent-skill-bus, gitnexus-stable-ops, and optional Miyabi CLI/MCP remain narrow bridges rather than hidden runtime dependencies",
-      "status": "in_progress"
+      "status": "completed"
     },
     {
       "id": "parity-dod-v2",
       "title": "Expand smoke, CI, and runtime docs so the parity targets stay truthful and continuously verifiable",
-      "status": "pending"
+      "status": "in_progress"
     }
   ]
 }
