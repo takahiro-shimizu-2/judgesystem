@@ -4,6 +4,16 @@ import { truncateText, unique } from '../core/utils.js';
 export type OmegaCapability = 'analysis' | 'codegen' | 'test' | 'review' | 'pr' | 'deploy';
 export type OmegaRunMode = 'planning' | 'execute';
 
+export interface OmegaLearningCarryForward {
+  knowledgeId: string;
+  sourceSessionId: string;
+  createdAt: string;
+  sourcePath: string;
+  overallLearningScore: number;
+  immediateRecommendations: string[];
+  lessonPreview: string;
+}
+
 export interface OmegaIntent {
   issueNumber: number;
   normalizedGoal: string;
@@ -38,10 +48,12 @@ export interface OmegaStrategicPlan {
 export interface OmegaPlanningLayer {
   intent: OmegaIntent;
   strategicPlan: OmegaStrategicPlan;
+  previousLearning?: OmegaLearningCarryForward;
 }
 
 export interface OmegaPlanningOptions {
   dryRun?: boolean;
+  previousLearning?: OmegaLearningCarryForward;
 }
 
 const GOAL_LIMIT = 5;
@@ -79,7 +91,8 @@ export function createOmegaPlanningLayer(
 
   return {
     intent,
-    strategicPlan: buildStrategicPlan(issue, intent),
+    strategicPlan: buildStrategicPlan(issue, intent, options.previousLearning),
+    previousLearning: options.previousLearning,
   };
 }
 
@@ -122,7 +135,11 @@ ${phase.successCriteria.map((criterion) => `  - ${criterion}`).join('\n')}`,
   return `${sections.join('\n\n')}\n`;
 }
 
-function buildStrategicPlan(issue: AutomationIssue, intent: OmegaIntent): OmegaStrategicPlan {
+function buildStrategicPlan(
+  issue: AutomationIssue,
+  intent: OmegaIntent,
+  previousLearning?: OmegaLearningCarryForward,
+): OmegaStrategicPlan {
   const deliverableFocus = describeDeliverableFocus(intent.preferredCapabilities);
   const phases = buildPhases(intent);
   const assumptions = [
@@ -131,6 +148,9 @@ function buildStrategicPlan(issue: AutomationIssue, intent: OmegaIntent): OmegaS
       ? 'This run stays planning-first; write-capable side effects remain gated and are not assumed.'
       : 'This run may execute connected handlers, but each side effect must still satisfy its explicit runtime gates.',
     'Any missing runtime capability should stay truthfully visible in reports instead of being treated as implicitly available.',
+    previousLearning
+      ? `Carry forward lessons from ${previousLearning.sourceSessionId} (learning score ${previousLearning.overallLearningScore}/100).`
+      : null,
   ];
   const successCriteria = [
     `Translate Issue #${issue.number} into an intent-first plan before decomposition begins.`,
@@ -139,6 +159,7 @@ function buildStrategicPlan(issue: AutomationIssue, intent: OmegaIntent): OmegaS
   ];
   const riskMitigations = [
     ...intent.risks.map((risk) => mitigateRisk(risk)),
+    ...(previousLearning?.immediateRecommendations || []),
     intent.preferredCapabilities.includes('deploy')
       ? 'Keep deployment on the protected workflow path or an approved provider preset before any execute run is considered healthy.'
       : 'Use worktree-isolated execution and report artifacts to keep changes auditable across the quality pipeline.',
@@ -147,10 +168,10 @@ function buildStrategicPlan(issue: AutomationIssue, intent: OmegaIntent): OmegaS
   return {
     summary: `Start from the issue intent, then drive the existing DAG/runtime substrate toward ${deliverableFocus.toLowerCase()} with capability-aware handoffs.`,
     deliverableFocus,
-    assumptions: unique(assumptions),
+    assumptions: unique(assumptions.filter((value): value is string => Boolean(value))),
     phases,
     successCriteria: unique(successCriteria),
-    riskMitigations: unique(riskMitigations),
+    riskMitigations: unique(riskMitigations.filter((value): value is string => Boolean(value))),
   };
 }
 

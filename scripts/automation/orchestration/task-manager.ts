@@ -12,6 +12,11 @@ import {
   createOmegaPlanningLayer,
   type OmegaPlanningLayer,
 } from '../omega/understanding.js';
+import {
+  buildOmegaDeliverable,
+  buildOmegaLearningArtifact,
+  loadLatestOmegaLearningContext,
+} from '../omega/integration.js';
 import { buildTaskDag, type TaskDag } from './dag-manager.js';
 import { buildLivingPlanMarkdown } from '../planning/plans-generator.js';
 import { TaskExecutor, type ExecutionReport, type TaskExecutionRunner } from './task-executor.js';
@@ -56,6 +61,8 @@ export interface TaskManagerRunResult {
     plansPath: string;
     intentPath: string;
     strategicPlanPath: string;
+    deliverablePath: string;
+    learningPath: string;
     logPath: string;
   };
 }
@@ -154,9 +161,17 @@ export class TaskManager {
     logger: AutomationLogger,
     worktreeCoordinator: WorktreeCoordinator,
   ): Promise<ExecutionPlan> {
+    const sessionId = `session-${Date.now()}`;
+    const createdAt = new Date().toISOString();
+    const previousLearning = loadLatestOmegaLearningContext({
+      rootDir: this.rootDir,
+      issueNumber: issue.number,
+      excludeSessionId: sessionId,
+    });
     logger.info(`Building Omega understanding for Issue #${issue.number}`);
     const omega = createOmegaPlanningLayer(issue, {
       dryRun: this.dryRun,
+      previousLearning,
     });
     logger.info(
       `Omega intent captured with ${omega.intent.goals.length} goal(s) and ${omega.strategicPlan.phases.length} strategic phase(s)`,
@@ -183,13 +198,12 @@ export class TaskManager {
 
     logger.info('No circular dependencies found');
 
-    const sessionId = `session-${Date.now()}`;
     const concurrency = Math.max(1, Math.min(this.concurrency, Math.max(1, dag.maxParallelism), 5));
     const worktrees = worktreeCoordinator.planAssignments(issue.number, validated.tasks);
 
     return {
       sessionId,
-      createdAt: new Date().toISOString(),
+      createdAt,
       issue,
       omega,
       strategy: decomposition.strategy,
@@ -214,6 +228,8 @@ export class TaskManager {
     const plansPath = path.join(reportsDir, `plans-${plan.sessionId}.md`);
     const intentPath = path.join(reportsDir, `omega-intent-${plan.sessionId}.json`);
     const strategicPlanPath = path.join(reportsDir, `strategic-plan-${plan.sessionId}.md`);
+    const deliverablePath = path.join(reportsDir, `omega-deliverable-${plan.sessionId}.json`);
+    const learningPath = path.join(reportsDir, `omega-learning-${plan.sessionId}.json`);
 
     fs.writeFileSync(
       planPath,
@@ -248,8 +264,25 @@ export class TaskManager {
       plansPath,
       intentPath,
       strategicPlanPath,
+      deliverablePath,
+      learningPath,
       logPath: logger.getLogFilePath(),
     };
+
+    const deliverable = buildOmegaDeliverable({
+      rootDir: this.rootDir,
+      plan,
+      report,
+      artifactPaths,
+    });
+    const learning = buildOmegaLearningArtifact({
+      deliverable,
+      plan,
+      report,
+    });
+
+    fs.writeFileSync(deliverablePath, JSON.stringify(deliverable, null, 2), 'utf8');
+    fs.writeFileSync(learningPath, JSON.stringify(learning, null, 2), 'utf8');
     fs.writeFileSync(
       strategicPlanPath,
       buildStrategicPlanMarkdown({
@@ -267,6 +300,8 @@ export class TaskManager {
         plan,
         report,
         artifactPaths,
+        deliverable,
+        learning,
       })}\n`,
       'utf8',
     );
