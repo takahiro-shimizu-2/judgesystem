@@ -522,13 +522,24 @@ function resolveTestHandoff(params: {
     };
   }
 
+  const testDependencyIds = new Set(
+    params.dependencyIds.filter((dependencyId) => dependencyId.endsWith('-test') || dependencyId.includes('quality-test')),
+  );
+
   const candidates = fs
     .readdirSync(reportsDir)
     .filter((entry) => entry.startsWith(`test-summary-${params.sessionId}-`) && entry.endsWith('.json'))
     .map((entry) => path.join(reportsDir, entry))
     .sort((left, right) => fs.statSync(right).mtimeMs - fs.statSync(left).mtimeMs);
 
-  const artifactPath = candidates[0];
+  const resolvedCandidate = candidates
+    .map((artifactPath) => ({
+      artifactPath,
+      payload: JSON.parse(fs.readFileSync(artifactPath, 'utf8')) as TestArtifactPayload,
+    }))
+    .find((candidate) => testDependencyIds.size > 0 && testDependencyIds.has(candidate.payload.taskId));
+
+  const artifactPath = resolvedCandidate?.artifactPath ?? candidates[0];
   if (!artifactPath) {
     return {
       required,
@@ -541,7 +552,10 @@ function resolveTestHandoff(params: {
     };
   }
 
-  const payload = JSON.parse(fs.readFileSync(artifactPath, 'utf8')) as TestArtifactPayload;
+  const payload =
+    resolvedCandidate?.artifactPath === artifactPath
+      ? resolvedCandidate.payload
+      : (JSON.parse(fs.readFileSync(artifactPath, 'utf8')) as TestArtifactPayload);
   const failedChecks = (payload.checks || []).filter((check) => check.passed === false).map((check) => check.label);
   const coveragePassed = payload.coverage?.passed;
   const requiredFailures = payload.summary?.requiredFailures ?? 0;
