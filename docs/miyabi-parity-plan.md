@@ -260,7 +260,9 @@ configured checks, score, retry, escalation, coverage/security summary, review a
 - Stage A/B として `issue-to-intent` と strategic plan generation を先行実装した
 - `TaskManager` は decomposition の前に Omega understanding を作り、`.ai/parallel-reports/omega-intent-*.json` と `strategic-plan-*.md` を残す
 - living planning artifact と workflow summary からも Omega planning layer を参照できる
-- 次の active slice は `omega-integration-learning`
+- Stage C/D として `omega-deliverable-*.json` と `omega-learning-*.json` を追加し、次回 run が prior learning を carry-forward できるようにした
+- `plans-*.md` は prior learning / deliverable integration / learning recommendations を含む
+- P5 は完了、次の active slice は `bridge-revalidation`
 
 ### Phase P6: parity DoD
 

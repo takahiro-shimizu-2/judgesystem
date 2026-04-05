@@ -2,6 +2,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 import { truncateText } from '../core/utils.js';
+import type { OmegaDeliverable, OmegaLearningArtifact } from '../omega/integration.js';
 import type { ExecutionReport } from '../orchestration/task-executor.js';
 
 type WorkflowExecutionStatus = 'success' | 'failure';
@@ -49,6 +50,8 @@ interface ExecutionArtifactSummary {
   plansMarkdownPath?: string;
   intentPath?: string;
   strategicPlanPath?: string;
+  deliverablePath?: string;
+  learningPath?: string;
   totals: {
     total: number;
     completed: number;
@@ -76,15 +79,21 @@ export function buildExecutionArtifactSummary(args: SummaryCliArgs): ExecutionAr
   const livingPlan = latestReport ? findLivingPlan(args.rootDir, latestReport.report.sessionId) : undefined;
   const omegaIntent = latestReport ? findOmegaIntent(args.rootDir, latestReport.report.sessionId) : undefined;
   const strategicPlan = latestReport ? findStrategicPlan(args.rootDir, latestReport.report.sessionId) : undefined;
+  const deliverable = latestReport ? findOmegaDeliverable(args.rootDir, latestReport.report.sessionId) : undefined;
+  const learning = latestReport ? findOmegaLearning(args.rootDir, latestReport.report.sessionId) : undefined;
   const effectiveStatus = deriveEffectiveStatus(args.workflowStatus, latestReport?.report);
   const markdown = buildIssueCommentMarkdown({
     ...args,
     status: effectiveStatus,
     report: latestReport?.report,
     plan: linkedPlan?.plan,
+    deliverable: deliverable?.payload,
+    learning: learning?.payload,
     intentPath: omegaIntent ? path.relative(args.rootDir, omegaIntent.path) : undefined,
     livingPlanPath: livingPlan ? path.relative(args.rootDir, livingPlan.path) : undefined,
     strategicPlanPath: strategicPlan ? path.relative(args.rootDir, strategicPlan.path) : undefined,
+    deliverablePath: deliverable ? path.relative(args.rootDir, deliverable.path) : undefined,
+    learningPath: learning ? path.relative(args.rootDir, learning.path) : undefined,
   });
 
   return {
@@ -97,6 +106,8 @@ export function buildExecutionArtifactSummary(args: SummaryCliArgs): ExecutionAr
     plansMarkdownPath: livingPlan?.path,
     intentPath: omegaIntent?.path,
     strategicPlanPath: strategicPlan?.path,
+    deliverablePath: deliverable?.path,
+    learningPath: learning?.path,
     totals: latestReport
       ? {
           total: latestReport.report.summary.total,
@@ -124,9 +135,13 @@ function buildIssueCommentMarkdown(params: {
   status: WorkflowExecutionStatus;
   report?: ExecutionReport;
   plan?: StoredExecutionPlan;
+  deliverable?: OmegaDeliverable;
+  learning?: OmegaLearningArtifact;
   intentPath?: string;
   livingPlanPath?: string;
   strategicPlanPath?: string;
+  deliverablePath?: string;
+  learningPath?: string;
 }) {
   if (!params.report) {
     return `## ${params.status === 'success' ? '⚠️' : '❌'} Autonomous Agent Summary Unavailable
@@ -148,11 +163,15 @@ The workflow finished, but no execution report artifact was found under \`.ai/pa
     params.plan?.omega?.strategicPlan?.deliverableFocus
       ? `- Deliverable Focus: ${params.plan.omega.strategicPlan.deliverableFocus}`
       : null,
+    params.deliverable ? `- Deliverable Status: \`${params.deliverable.status}\`` : null,
+    params.learning ? `- Learning Score: ${params.learning.summary.overallLearningScore}/100` : null,
     params.plan && params.plan.strategy ? `- Strategy: \`${params.plan.strategy}\`` : null,
     params.plan ? `- Concurrency: ${params.plan.concurrency}` : null,
     params.intentPath ? `- Intent Artifact: \`${params.intentPath}\`` : null,
     params.livingPlanPath ? `- Planning Artifact: \`${params.livingPlanPath}\`` : null,
     params.strategicPlanPath ? `- Strategic Plan: \`${params.strategicPlanPath}\`` : null,
+    params.deliverablePath ? `- Deliverable Artifact: \`${params.deliverablePath}\`` : null,
+    params.learningPath ? `- Learning Artifact: \`${params.learningPath}\`` : null,
   ]
     .filter(Boolean)
     .join('\n');
@@ -299,6 +318,30 @@ function findStrategicPlan(rootDir: string, sessionId: string) {
 
   return {
     path: strategicPlanPath,
+  };
+}
+
+function findOmegaDeliverable(rootDir: string, sessionId: string) {
+  const deliverablePath = path.join(rootDir, '.ai', 'parallel-reports', `omega-deliverable-${sessionId}.json`);
+  if (!fs.existsSync(deliverablePath)) {
+    return undefined;
+  }
+
+  return {
+    path: deliverablePath,
+    payload: JSON.parse(fs.readFileSync(deliverablePath, 'utf8')) as OmegaDeliverable,
+  };
+}
+
+function findOmegaLearning(rootDir: string, sessionId: string) {
+  const learningPath = path.join(rootDir, '.ai', 'parallel-reports', `omega-learning-${sessionId}.json`);
+  if (!fs.existsSync(learningPath)) {
+    return undefined;
+  }
+
+  return {
+    path: learningPath,
+    payload: JSON.parse(fs.readFileSync(learningPath, 'utf8')) as OmegaLearningArtifact,
   };
 }
 

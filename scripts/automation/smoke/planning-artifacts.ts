@@ -90,9 +90,23 @@ async function main() {
     assert(existsSync(result.artifactPaths.plansPath), 'Living plan artifact was not created.');
     assert(existsSync(result.artifactPaths.intentPath), 'Omega intent artifact was not created.');
     assert(existsSync(result.artifactPaths.strategicPlanPath), 'Strategic plan artifact was not created.');
+    assert(existsSync(result.artifactPaths.deliverablePath), 'Omega deliverable artifact was not created.');
+    assert(existsSync(result.artifactPaths.learningPath), 'Omega learning artifact was not created.');
 
     const markdown = readFileSync(result.artifactPaths.plansPath, 'utf8');
     const strategicPlan = readFileSync(result.artifactPaths.strategicPlanPath, 'utf8');
+    const deliverable = JSON.parse(readFileSync(result.artifactPaths.deliverablePath, 'utf8')) as {
+      status?: string;
+      recommendations?: string[];
+    };
+    const learning = JSON.parse(readFileSync(result.artifactPaths.learningPath, 'utf8')) as {
+      summary?: {
+        overallLearningScore?: number;
+      };
+      recommendations?: {
+        immediate?: string[];
+      };
+    };
     const intent = JSON.parse(readFileSync(result.artifactPaths.intentPath, 'utf8')) as {
       normalizedGoal?: string;
       preferredCapabilities?: string[];
@@ -104,12 +118,21 @@ async function main() {
     );
     assert(markdown.includes('## Omega Understanding'), 'Living plan is missing Omega Understanding.');
     assert(markdown.includes('## Strategic Plan'), 'Living plan is missing Strategic Plan.');
+    assert(markdown.includes('## Deliverable Integration'), 'Living plan is missing Deliverable Integration.');
+    assert(markdown.includes('## Learning Artifact'), 'Living plan is missing Learning Artifact.');
     assert(markdown.includes('## DAG Visualization'), 'Living plan is missing DAG Visualization.');
     assert(markdown.includes('## Task Breakdown'), 'Living plan is missing Task Breakdown.');
     assert(markdown.includes('## Decisions'), 'Living plan is missing Decisions.');
     assert(markdown.includes('## Artifacts'), 'Living plan is missing Artifacts.');
     assert(strategicPlan.includes('## Strategic Summary'), 'Strategic plan artifact is missing Strategic Summary.');
     assert(strategicPlan.includes('## Phases'), 'Strategic plan artifact is missing Phases.');
+    assert(deliverable.status, 'Omega deliverable did not record a status.');
+    assert(Array.isArray(deliverable.recommendations), 'Omega deliverable did not record recommendations.');
+    assert(
+      typeof learning.summary?.overallLearningScore === 'number',
+      'Omega learning did not record an overall learning score.',
+    );
+    assert(Array.isArray(learning.recommendations?.immediate), 'Omega learning did not record immediate recommendations.');
 
     const summary = buildExecutionArtifactSummary({
       issueNumber: issue.number,
@@ -126,12 +149,17 @@ async function main() {
       summary.strategicPlanPath === result.artifactPaths.strategicPlanPath,
       'Summary did not resolve the strategic plan artifact.',
     );
+    assert(summary.deliverablePath === result.artifactPaths.deliverablePath, 'Summary did not resolve the deliverable artifact.');
+    assert(summary.learningPath === result.artifactPaths.learningPath, 'Summary did not resolve the learning artifact.');
     assert(summary.markdown.includes('Planning Artifact'), 'Summary markdown did not mention the planning artifact.');
     assert(summary.markdown.includes('Strategic Plan'), 'Summary markdown did not mention the strategic plan artifact.');
+    assert(summary.markdown.includes('Deliverable Artifact'), 'Summary markdown did not mention the deliverable artifact.');
+    assert(summary.markdown.includes('Learning Artifact'), 'Summary markdown did not mention the learning artifact.');
 
     console.log('[passed] planning-artifact');
     console.log(`  - ${path.basename(result.artifactPaths.plansPath)}`);
     console.log(`  - ${path.basename(result.artifactPaths.strategicPlanPath)}`);
+    console.log(`  - ${path.basename(result.artifactPaths.deliverablePath)}`);
     console.log(`  - status=${summary.status}`);
   } finally {
     rmSync(rootDir, { recursive: true, force: true });

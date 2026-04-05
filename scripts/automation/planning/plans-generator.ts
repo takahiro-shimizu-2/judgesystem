@@ -1,6 +1,7 @@
 import * as path from 'path';
 
 import { truncateText } from '../core/utils.js';
+import type { OmegaDeliverable, OmegaLearningArtifact } from '../omega/integration.js';
 import type { ExecutionPlan, TaskManagerRunResult } from '../orchestration/task-manager.js';
 import type { ExecutionReport, TaskExecutionRecord } from '../orchestration/task-executor.js';
 
@@ -9,6 +10,8 @@ interface LivingPlanMarkdownArgs {
   plan: ExecutionPlan;
   report: ExecutionReport;
   artifactPaths: TaskManagerRunResult['artifactPaths'];
+  deliverable: OmegaDeliverable;
+  learning: OmegaLearningArtifact;
 }
 
 export function buildLivingPlanMarkdown(args: LivingPlanMarkdownArgs) {
@@ -23,9 +26,12 @@ export function buildLivingPlanMarkdown(args: LivingPlanMarkdownArgs) {
     renderOverview(args, issueBody, totalEstimatedMinutes),
     renderOmegaUnderstanding(args),
     renderStrategicPlan(args),
+    renderPriorLearning(args),
     renderDagVisualization(args),
     renderTaskBreakdown(args, recordsByTaskId, worktreesByTaskId),
     renderProgress(args, totalEstimatedMinutes),
+    renderDeliverable(args),
+    renderLearning(args),
     renderDecisions(args, warnings),
     renderRecommendations(warnings),
     renderTimeline(args, expectedCompletion),
@@ -134,6 +140,27 @@ ${renderBulletList(strategicPlan.successCriteria)}
 ${renderBulletList(strategicPlan.riskMitigations)}`;
 }
 
+function renderPriorLearning(args: LivingPlanMarkdownArgs) {
+  const previousLearning = args.plan.omega.previousLearning;
+  if (!previousLearning) {
+    return `## Learning Context
+
+- No prior Omega learning artifact was available for this issue.`;
+  }
+
+  return `## Learning Context
+
+- **Source Session**: \`${previousLearning.sourceSessionId}\`
+- **Learning Score**: ${previousLearning.overallLearningScore}/100
+- **Artifact**: \`${toRelativePath(args.rootDir, previousLearning.sourcePath)}\`
+- **Created**: ${formatTimestamp(previousLearning.createdAt)}
+- **Lesson Preview**: ${previousLearning.lessonPreview}
+
+### Carried-forward Recommendations
+
+${renderBulletList(previousLearning.immediateRecommendations)}`;
+}
+
 function renderDagVisualization(args: LivingPlanMarkdownArgs) {
   const levelSummary = args.plan.dag.levels
     .map((level, index) => {
@@ -225,6 +252,62 @@ ${buildProgressBar(percent)} ${percent}%
 `;
 }
 
+function renderDeliverable(args: LivingPlanMarkdownArgs) {
+  const { deliverable } = args;
+  const handlerArtifactRows = Object.entries(deliverable.handlerArtifacts)
+    .filter(([, artifacts]) => artifacts.length > 0)
+    .map(([kind, artifacts]) => `- **${kind}**: ${artifacts.map((artifact) => `\`${artifact}\``).join(', ')}`)
+    .join('\n');
+
+  return `## Deliverable Integration
+
+- **Status**: \`${deliverable.status}\`
+- **Deliverable Focus**: ${deliverable.deliverableFocus}
+- **Completeness**: ${deliverable.completeness}%
+- **Completed Agents**: ${deliverable.taskSummary.completedAgents.length > 0 ? deliverable.taskSummary.completedAgents.map((agent) => `\`${agent}\``).join(', ') : 'None'}
+- **Blocked Tasks**: ${deliverable.taskSummary.blockedTasks.length > 0 ? deliverable.taskSummary.blockedTasks.join(', ') : 'None'}
+- **Pending Tasks**: ${deliverable.taskSummary.pendingTasks.length > 0 ? deliverable.taskSummary.pendingTasks.join(', ') : 'None'}
+
+### Integrated Handler Artifacts
+
+${handlerArtifactRows || '- No handler-specific session artifacts were discovered yet.'}
+
+### Deliverable Recommendations
+
+${renderBulletList(deliverable.recommendations)}`;
+}
+
+function renderLearning(args: LivingPlanMarkdownArgs) {
+  const { learning } = args;
+
+  return `## Learning Artifact
+
+- **Knowledge ID**: \`${learning.knowledgeId}\`
+- **Learning Score**: ${learning.summary.overallLearningScore}/100
+- **Carries Forward**: ${learning.summary.carriesForwardToNextRun ? 'yes' : 'no'}
+- **Artifact Count**: ${learning.summary.artifactCount}
+
+### Patterns
+
+${learning.patterns.length > 0 ? learning.patterns.map((pattern) => `- \`${pattern.type}\` ${pattern.description}`).join('\n') : '- None'}
+
+### Lessons
+
+${learning.lessons.map((lesson) => `- [${lesson.severity}] ${lesson.title}: ${lesson.description}`).join('\n')}
+
+### Next-run Recommendations
+
+${renderBulletList(learning.recommendations.immediate)}
+
+### Short-term Follow-up
+
+${renderBulletList(learning.recommendations.shortTerm)}
+
+### Long-term Direction
+
+${renderBulletList(learning.recommendations.longTerm)}`;
+}
+
 function renderDecisions(args: LivingPlanMarkdownArgs, warnings: string[]) {
   const decisionEntries = [
     {
@@ -243,6 +326,13 @@ function renderDecisions(args: LivingPlanMarkdownArgs, warnings: string[]) {
         args.plan.strategy === 'heuristic'
           ? 'An explicit LLM invocation hook can replace heuristic decomposition when the runtime is configured for it.'
           : undefined,
+    },
+    {
+      timestamp: new Date(args.report.endTime).toISOString(),
+      decision: 'Integrate runtime output into a deliverable and learning artifact before closing the session',
+      reason: 'P5 Stage C/D requires the execution result to be replayable as both a human-facing deliverable summary and a machine-readable carry-forward artifact.',
+      implementation: `Deliverable status=${args.deliverable.status}, learningScore=${args.learning.summary.overallLearningScore}/100`,
+      alternatives: 'Leave the execution report as the terminal artifact and re-derive learning later.',
     },
     {
       timestamp: new Date(args.report.endTime).toISOString(),
@@ -307,6 +397,8 @@ function renderArtifacts(args: LivingPlanMarkdownArgs) {
 - **Living Plan**: \`${toRelativePath(args.rootDir, args.artifactPaths.plansPath)}\`
 - **Omega Intent JSON**: \`${toRelativePath(args.rootDir, args.artifactPaths.intentPath)}\`
 - **Strategic Plan Markdown**: \`${toRelativePath(args.rootDir, args.artifactPaths.strategicPlanPath)}\`
+- **Omega Deliverable JSON**: \`${toRelativePath(args.rootDir, args.artifactPaths.deliverablePath)}\`
+- **Omega Learning JSON**: \`${toRelativePath(args.rootDir, args.artifactPaths.learningPath)}\`
 - **Execution Plan JSON**: \`${toRelativePath(args.rootDir, args.artifactPaths.planPath)}\`
 - **Execution Report JSON**: \`${toRelativePath(args.rootDir, args.artifactPaths.reportPath)}\`
 - **Coordinator Log**: \`${toRelativePath(args.rootDir, args.artifactPaths.logPath)}\``;
