@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { chmodSync, mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdtempSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
@@ -35,21 +35,33 @@ function runBash(command: string, env: Record<string, string>) {
   });
 }
 
-function runRgWithoutMatches(pattern: string, targets: string[]) {
-  try {
-    const output = execFileSync('rg', ['-n', pattern, ...targets], {
-      cwd: repoRoot,
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
-    throw new Error(`Unexpected bridge reference(s) found:\n${output}`);
-  } catch (error) {
-    const rgError = error as NodeJS.ErrnoException & { status?: number; stdout?: string };
-    if (rgError.status === 1) {
-      return;
-    }
+function runSearchWithoutMatches(pattern: RegExp, targets: string[]) {
+  const matches: string[] = [];
 
-    throw error;
+  for (const target of targets) {
+    const absoluteTarget = path.join(repoRoot, target);
+    collectMatches(pattern, absoluteTarget, target, matches);
+  }
+
+  if (matches.length > 0) {
+    throw new Error(`Unexpected bridge reference(s) found:\n${matches.join('\n')}`);
+  }
+}
+
+function collectMatches(pattern: RegExp, absolutePath: string, relativePath: string, matches: string[]) {
+  const stats = statSync(absolutePath);
+  if (stats.isDirectory()) {
+    for (const entry of readdirSync(absolutePath)) {
+      collectMatches(pattern, path.join(absolutePath, entry), path.join(relativePath, entry), matches);
+    }
+    return;
+  }
+
+  const lines = readFileSync(absolutePath, 'utf8').split('\n');
+  for (const [index, line] of lines.entries()) {
+    if (pattern.test(line)) {
+      matches.push(`${relativePath}:${index + 1}:${line}`);
+    }
   }
 }
 
@@ -108,7 +120,7 @@ async function main() {
 }
 
 function runRuntimeIsolationSmoke() {
-  runRgWithoutMatches('MIYABI_|miyabi__|agent-skill-bus|CONTEXT_AND_IMPACT_ROOT|context-and-impact|AGENT_SKILL_BUS_|gitnexus-stable-ops', [
+  runSearchWithoutMatches(/MIYABI_|miyabi__|agent-skill-bus|CONTEXT_AND_IMPACT_ROOT|context-and-impact|AGENT_SKILL_BUS_|gitnexus-stable-ops/, [
     'scripts/automation/adapters',
     'scripts/automation/agents',
     'scripts/automation/core',
