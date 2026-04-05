@@ -20,6 +20,7 @@ Closes #122 and owner/repo#123
 
 ## Notes
 This line mentions #999 but does not intentionally link it.
+Examples like \`Refs #555\` or \`Closes #556\` are documentation only and must be ignored.
 `;
 
   const parsed = parsePullRequestIssueLinks(body);

@@ -10,11 +10,12 @@ export interface PullRequestIssueLinks {
 }
 
 export function parsePullRequestIssueLinks(body: string): PullRequestIssueLinks {
+  const sanitizedBody = sanitizeBodyForIssueLinkParsing(body);
   const reviewTargets = new Set<number>();
   const closingTargets = new Set<number>();
   const referencedTargets = new Set<number>();
 
-  for (const line of body.split(/\r?\n/)) {
+  for (const line of sanitizedBody.split(/\r?\n/)) {
     const issueNumbers = extractIssueNumbers(line);
     if (issueNumbers.length === 0) {
       continue;
@@ -41,6 +42,12 @@ export function parsePullRequestIssueLinks(body: string): PullRequestIssueLinks 
     closingTargets: Array.from(closingTargets),
     referencedTargets: Array.from(referencedTargets),
   };
+}
+
+function sanitizeBodyForIssueLinkParsing(body: string) {
+  return body
+    .replace(/```[\s\S]*?```/g, '')
+    .replace(/`[^`\n]+`/g, '');
 }
 
 function extractIssueNumbers(line: string) {

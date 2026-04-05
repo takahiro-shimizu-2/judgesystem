@@ -190,6 +190,19 @@ jobs:
         run: |
           IFS=',' read -ra ISSUE_NUMBERS <<< "${{ steps.issue-links.outputs.review_targets }}"
           for issue_number in "${ISSUE_NUMBERS[@]}"; do
+            current_state="$(
+              GITHUB_TOKEN="$GITHUB_TOKEN" \
+              GITHUB_OWNER="$GITHUB_OWNER" \
+              GITHUB_REPO="$GITHUB_REPO" \
+              npm run --silent state:check -- --issue="${issue_number}" \
+                | node -e "let input=''; process.stdin.on('data', (chunk) => input += chunk); process.stdin.on('end', () => process.stdout.write(JSON.parse(input).state || ''));"
+            )"
+
+            if [ "${current_state}" = "done" ]; then
+              echo "Skipping issue ${issue_number} because it is already done."
+              continue
+            fi
+
             npm run state:transition -- \
               --issue="${issue_number}" \
               --to=reviewing \
