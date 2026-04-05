@@ -99,6 +99,25 @@ async function runReviewSmoke(): Promise<SmokeReport> {
   const repo = createRepo('judgesystem-review-smoke');
   const testHandler = createTestAgentHandler({ rootDir: repo.rootDir, env: {} });
   const handler = createReviewAgentHandler({ rootDir: repo.rootDir, env: {} });
+  const testEnv = {
+    AUTOMATION_TEST_COVERAGE_THRESHOLD: '85',
+    AUTOMATION_TEST_COVERAGE_LABELS: 'coverage',
+    AUTOMATION_TEST_CHECKS_JSON: JSON.stringify([
+      {
+        label: 'tests',
+        command: 'bash',
+        args: ['-lc', 'echo tests ok'],
+        required: true,
+      },
+      {
+        label: 'coverage',
+        command: 'bash',
+        args: ['-lc', 'echo total coverage 92%'],
+        required: true,
+        severity: 'coverage',
+      },
+    ]),
+  };
 
   await testHandler.execute({
     task: {
@@ -127,25 +146,38 @@ async function runReviewSmoke(): Promise<SmokeReport> {
       rootDir: repo.rootDir,
       dryRun: false,
       logger,
-      env: {
-        AUTOMATION_TEST_COVERAGE_THRESHOLD: '85',
-        AUTOMATION_TEST_COVERAGE_LABELS: 'coverage',
-        AUTOMATION_TEST_CHECKS_JSON: JSON.stringify([
-          {
-            label: 'tests',
-            command: 'bash',
-            args: ['-lc', 'echo tests ok'],
-            required: true,
-          },
-          {
-            label: 'coverage',
-            command: 'bash',
-            args: ['-lc', 'echo total coverage 92%'],
-            required: true,
-            severity: 'coverage',
-          },
-        ]),
-      },
+      env: testEnv,
+    },
+  });
+
+  await testHandler.execute({
+    task: {
+      id: 'quality-smoke-other-test',
+      issueNumber: 101,
+      title: 'Other Test smoke',
+      type: 'test',
+      agent: 'TestAgent',
+      estimatedMinutes: 10,
+      priority: 'medium',
+      dependencies: [],
+      rawText: 'Other Test smoke',
+      source: 'fallback',
+    },
+    definition: {
+      name: 'TestAgent',
+      slug: 'test-agent',
+      description: 'test',
+      summary: 'test',
+      instructions: 'test',
+      sourcePath: '.claude/agents/test-agent.md',
+    },
+    context: {
+      sessionId: 'quality-smoke-session',
+      issueNumber: 101,
+      rootDir: repo.rootDir,
+      dryRun: false,
+      logger,
+      env: testEnv,
     },
   });
 
@@ -204,7 +236,7 @@ async function runReviewSmoke(): Promise<SmokeReport> {
 
   const output = result.output as {
     score: number;
-    testHandoff?: { coverage?: number; passed?: boolean };
+    testHandoff?: { coverage?: number; passed?: boolean; taskId?: string };
     security: { totalChecks: number };
     loop: { attempts: Array<{ iteration: number; appliedFixCommand: boolean }> };
     artifact: { markdownPath: string; jsonPath: string; commentPath: string };
@@ -212,6 +244,7 @@ async function runReviewSmoke(): Promise<SmokeReport> {
 
   assert(result.status === 'completed', 'Review smoke did not complete.');
   assert(output.score === 100, `Expected review score 100, got ${output.score}.`);
+  assert(output.testHandoff?.taskId === 'quality-smoke-test', `Expected test handoff task quality-smoke-test, got ${output.testHandoff?.taskId}.`);
   assert(output.testHandoff?.coverage === 92, `Expected test handoff coverage 92, got ${output.testHandoff?.coverage}.`);
   assert(output.testHandoff?.passed === true, 'Expected test handoff to pass.');
   assert(output.security.totalChecks === 1, `Expected one security check, got ${output.security.totalChecks}.`);
