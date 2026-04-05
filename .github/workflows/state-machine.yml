@@ -171,30 +171,30 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Find linked issue
-        id: find-issue
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const body = context.payload.pull_request.body || '';
-            const match = body.match(/#(\d+)/);
-            if (match) {
-              return match[1];
-            }
-            return null;
-          result-encoding: string
+      - name: Classify linked issues
+        id: issue-links
+        env:
+          PULL_REQUEST_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          review_targets="$(npx tsx scripts/automation/github/pr-issue-links-cli.ts review-targets)"
+          closing_targets="$(npx tsx scripts/automation/github/pr-issue-links-cli.ts closing-targets)"
+          echo "review_targets=${review_targets}" >> "$GITHUB_OUTPUT"
+          echo "closing_targets=${closing_targets}" >> "$GITHUB_OUTPUT"
 
-      - name: Transition linked issue to reviewing
-        if: steps.find-issue.outputs.result != 'null'
+      - name: Transition linked issues to reviewing
+        if: steps.issue-links.outputs.review_targets != ''
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_OWNER: ${{ github.repository_owner }}
           GITHUB_REPO: ${{ github.event.repository.name }}
         run: |
-          npm run state:transition -- \
-            --issue=${{ steps.find-issue.outputs.result }} \
-            --to=reviewing \
-            --reason="PR #${{ github.event.pull_request.number }} created"
+          IFS=',' read -ra ISSUE_NUMBERS <<< "${{ steps.issue-links.outputs.review_targets }}"
+          for issue_number in "${ISSUE_NUMBERS[@]}"; do
+            npm run state:transition -- \
+              --issue="${issue_number}" \
+              --to=reviewing \
+              --reason="PR #${{ github.event.pull_request.number }} created"
+          done
 
       - name: Add review agent label to PR
         uses: actions/github-script@v7
@@ -232,30 +232,30 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Find linked issue
-        id: find-issue
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const body = context.payload.pull_request.body || '';
-            const match = body.match(/#(\d+)/);
-            if (match) {
-              return match[1];
-            }
-            return null;
-          result-encoding: string
+      - name: Classify linked issues
+        id: issue-links
+        env:
+          PULL_REQUEST_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          review_targets="$(npx tsx scripts/automation/github/pr-issue-links-cli.ts review-targets)"
+          closing_targets="$(npx tsx scripts/automation/github/pr-issue-links-cli.ts closing-targets)"
+          echo "review_targets=${review_targets}" >> "$GITHUB_OUTPUT"
+          echo "closing_targets=${closing_targets}" >> "$GITHUB_OUTPUT"
 
-      - name: Transition linked issue to done
-        if: steps.find-issue.outputs.result != 'null'
+      - name: Transition resolved issues to done
+        if: steps.issue-links.outputs.closing_targets != ''
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_OWNER: ${{ github.repository_owner }}
           GITHUB_REPO: ${{ github.event.repository.name }}
         run: |
-          npm run state:transition -- \
-            --issue=${{ steps.find-issue.outputs.result }} \
-            --to=done \
-            --reason="PR #${{ github.event.pull_request.number }} merged successfully"
+          IFS=',' read -ra ISSUE_NUMBERS <<< "${{ steps.issue-links.outputs.closing_targets }}"
+          for issue_number in "${ISSUE_NUMBERS[@]}"; do
+            npm run state:transition -- \
+              --issue="${issue_number}" \
+              --to=done \
+              --reason="PR #${{ github.event.pull_request.number }} merged successfully"
+          done
 
   # ==========================================================================
   # 6. Blocked Label - Escalate
