@@ -7,6 +7,11 @@ import { ensureDirectory } from '../core/utils.js';
 import { createAgentRegistry, type AgentRegistry } from '../agents/registry.js';
 import { LLMDecomposer, type AutomationIssue } from '../decomposition/llm-decomposer.js';
 import { validateTaskDecomposition } from '../decomposition/decomposition-validator.js';
+import {
+  buildStrategicPlanMarkdown,
+  createOmegaPlanningLayer,
+  type OmegaPlanningLayer,
+} from '../omega/understanding.js';
 import { buildTaskDag, type TaskDag } from './dag-manager.js';
 import { buildLivingPlanMarkdown } from '../planning/plans-generator.js';
 import { TaskExecutor, type ExecutionReport, type TaskExecutionRunner } from './task-executor.js';
@@ -16,6 +21,7 @@ export interface ExecutionPlan {
   sessionId: string;
   createdAt: string;
   issue: AutomationIssue;
+  omega: OmegaPlanningLayer;
   strategy: 'llm' | 'heuristic';
   tasks: ReturnType<typeof validateTaskDecomposition>['tasks'];
   warnings: string[];
@@ -48,6 +54,8 @@ export interface TaskManagerRunResult {
     planPath: string;
     reportPath: string;
     plansPath: string;
+    intentPath: string;
+    strategicPlanPath: string;
     logPath: string;
   };
 }
@@ -146,6 +154,14 @@ export class TaskManager {
     logger: AutomationLogger,
     worktreeCoordinator: WorktreeCoordinator,
   ): Promise<ExecutionPlan> {
+    logger.info(`Building Omega understanding for Issue #${issue.number}`);
+    const omega = createOmegaPlanningLayer(issue, {
+      dryRun: this.dryRun,
+    });
+    logger.info(
+      `Omega intent captured with ${omega.intent.goals.length} goal(s) and ${omega.strategicPlan.phases.length} strategic phase(s)`,
+    );
+
     logger.info(`Decomposing Issue #${issue.number}`);
     const decomposition = await this.decomposer.decomposeIssue(issue);
     logger.info(`Found ${decomposition.tasks.length} task candidates`);
@@ -175,6 +191,7 @@ export class TaskManager {
       sessionId,
       createdAt: new Date().toISOString(),
       issue,
+      omega,
       strategy: decomposition.strategy,
       tasks: validated.tasks,
       warnings,
@@ -195,6 +212,8 @@ export class TaskManager {
     const planPath = path.join(reportsDir, `execution-plan-${plan.sessionId}.json`);
     const reportPath = path.join(reportsDir, `agents-parallel-${plan.sessionId}.json`);
     const plansPath = path.join(reportsDir, `plans-${plan.sessionId}.md`);
+    const intentPath = path.join(reportsDir, `omega-intent-${plan.sessionId}.json`);
+    const strategicPlanPath = path.join(reportsDir, `strategic-plan-${plan.sessionId}.md`);
 
     fs.writeFileSync(
       planPath,
@@ -203,6 +222,7 @@ export class TaskManager {
           sessionId: plan.sessionId,
           createdAt: plan.createdAt,
           issue: plan.issue,
+          omega: plan.omega,
           strategy: plan.strategy,
           concurrency: plan.concurrency,
           dryRun: plan.dryRun,
@@ -220,13 +240,26 @@ export class TaskManager {
       'utf8',
     );
     fs.writeFileSync(reportPath, JSON.stringify(report, null, 2), 'utf8');
+    fs.writeFileSync(intentPath, JSON.stringify(plan.omega.intent, null, 2), 'utf8');
 
     const artifactPaths = {
       planPath,
       reportPath,
       plansPath,
+      intentPath,
+      strategicPlanPath,
       logPath: logger.getLogFilePath(),
     };
+    fs.writeFileSync(
+      strategicPlanPath,
+      buildStrategicPlanMarkdown({
+        sessionId: plan.sessionId,
+        createdAt: plan.createdAt,
+        issue: plan.issue,
+        planning: plan.omega,
+      }),
+      'utf8',
+    );
     fs.writeFileSync(
       plansPath,
       `${buildLivingPlanMarkdown({

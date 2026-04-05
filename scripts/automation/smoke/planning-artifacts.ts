@@ -88,12 +88,28 @@ async function main() {
 
     const result = await manager.runIssue(issue);
     assert(existsSync(result.artifactPaths.plansPath), 'Living plan artifact was not created.');
+    assert(existsSync(result.artifactPaths.intentPath), 'Omega intent artifact was not created.');
+    assert(existsSync(result.artifactPaths.strategicPlanPath), 'Strategic plan artifact was not created.');
 
     const markdown = readFileSync(result.artifactPaths.plansPath, 'utf8');
+    const strategicPlan = readFileSync(result.artifactPaths.strategicPlanPath, 'utf8');
+    const intent = JSON.parse(readFileSync(result.artifactPaths.intentPath, 'utf8')) as {
+      normalizedGoal?: string;
+      preferredCapabilities?: string[];
+    };
+    assert(intent.normalizedGoal, 'Omega intent did not capture a normalized goal.');
+    assert(
+      Array.isArray(intent.preferredCapabilities) && intent.preferredCapabilities.length > 0,
+      'Omega intent did not capture preferred capabilities.',
+    );
+    assert(markdown.includes('## Omega Understanding'), 'Living plan is missing Omega Understanding.');
+    assert(markdown.includes('## Strategic Plan'), 'Living plan is missing Strategic Plan.');
     assert(markdown.includes('## DAG Visualization'), 'Living plan is missing DAG Visualization.');
     assert(markdown.includes('## Task Breakdown'), 'Living plan is missing Task Breakdown.');
     assert(markdown.includes('## Decisions'), 'Living plan is missing Decisions.');
     assert(markdown.includes('## Artifacts'), 'Living plan is missing Artifacts.');
+    assert(strategicPlan.includes('## Strategic Summary'), 'Strategic plan artifact is missing Strategic Summary.');
+    assert(strategicPlan.includes('## Phases'), 'Strategic plan artifact is missing Phases.');
 
     const summary = buildExecutionArtifactSummary({
       issueNumber: issue.number,
@@ -105,10 +121,17 @@ async function main() {
       outJsonPath: path.join(rootDir, 'summary.json'),
     });
     assert(summary.plansMarkdownPath === result.artifactPaths.plansPath, 'Summary did not resolve the living plan artifact.');
+    assert(summary.intentPath === result.artifactPaths.intentPath, 'Summary did not resolve the omega intent artifact.');
+    assert(
+      summary.strategicPlanPath === result.artifactPaths.strategicPlanPath,
+      'Summary did not resolve the strategic plan artifact.',
+    );
     assert(summary.markdown.includes('Planning Artifact'), 'Summary markdown did not mention the planning artifact.');
+    assert(summary.markdown.includes('Strategic Plan'), 'Summary markdown did not mention the strategic plan artifact.');
 
     console.log('[passed] planning-artifact');
     console.log(`  - ${path.basename(result.artifactPaths.plansPath)}`);
+    console.log(`  - ${path.basename(result.artifactPaths.strategicPlanPath)}`);
     console.log(`  - status=${summary.status}`);
   } finally {
     rmSync(rootDir, { recursive: true, force: true });

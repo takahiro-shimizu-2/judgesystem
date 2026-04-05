@@ -21,6 +21,8 @@ export function buildLivingPlanMarkdown(args: LivingPlanMarkdownArgs) {
   const sections = [
     renderHeader(args),
     renderOverview(args, issueBody, totalEstimatedMinutes),
+    renderOmegaUnderstanding(args),
+    renderStrategicPlan(args),
     renderDagVisualization(args),
     renderTaskBreakdown(args, recordsByTaskId, worktreesByTaskId),
     renderProgress(args, totalEstimatedMinutes),
@@ -66,6 +68,70 @@ ${issueBody}
 - **Execution Mode**: \`${args.report.executionMode}\`
 - **Warnings**: ${args.report.warnings.length}
 `;
+}
+
+function renderOmegaUnderstanding(args: LivingPlanMarkdownArgs) {
+  const { intent } = args.plan.omega;
+
+  return `## Omega Understanding
+
+- **Normalized Goal**: ${intent.normalizedGoal}
+- **Desired Outcome**: ${intent.desiredOutcome}
+- **Current Run Mode**: \`${intent.currentRunMode}\`
+- **Recommended Next Mode**: \`${intent.recommendedNextMode}\`
+- **Preferred Capabilities**: ${intent.preferredCapabilities.map((capability) => `\`${capability}\``).join(', ')}
+
+### Goals
+
+${renderBulletList(intent.goals)}
+
+### Constraints
+
+${renderBulletList(intent.constraints)}
+
+### Risks
+
+${renderBulletList(intent.risks)}
+
+### Source Signals
+
+${renderBulletList(intent.sourceSignals)}`;
+}
+
+function renderStrategicPlan(args: LivingPlanMarkdownArgs) {
+  const { strategicPlan } = args.plan.omega;
+
+  return `## Strategic Plan
+
+${strategicPlan.summary}
+
+- **Deliverable Focus**: ${strategicPlan.deliverableFocus}
+
+### Phases
+
+${strategicPlan.phases
+  .map(
+    (phase) => `#### ${phase.label}
+
+- **Owner**: \`${phase.owner}\`
+- **Objective**: ${phase.objective}
+- **Capabilities**: ${phase.capabilities.map((capability) => `\`${capability}\``).join(', ')}
+- **Success Criteria**:
+${phase.successCriteria.map((criterion) => `  - ${criterion}`).join('\n')}`,
+  )
+  .join('\n\n')}
+
+### Assumptions
+
+${renderBulletList(strategicPlan.assumptions)}
+
+### Success Criteria
+
+${renderBulletList(strategicPlan.successCriteria)}
+
+### Risk Mitigations
+
+${renderBulletList(strategicPlan.riskMitigations)}`;
 }
 
 function renderDagVisualization(args: LivingPlanMarkdownArgs) {
@@ -163,6 +229,13 @@ function renderDecisions(args: LivingPlanMarkdownArgs, warnings: string[]) {
   const decisionEntries = [
     {
       timestamp: args.plan.createdAt,
+      decision: 'Run Omega understanding before task decomposition and persist the intent/strategic-plan artifacts',
+      reason: 'Issue-to-task execution should have a stable planning layer that later agents can inspect without re-reading the raw issue body alone.',
+      implementation: `Intent and Strategic Plan are written alongside the execution artifacts for session \`${args.plan.sessionId}\`.`,
+      alternatives: 'Skip Omega understanding and go directly from the issue body to task decomposition.',
+    },
+    {
+      timestamp: args.plan.createdAt,
       decision: `Use ${args.plan.strategy} decomposition with DAG-based orchestration`,
       reason: `Issue #${args.plan.issue.number} needs an execution order that can be handed off to repo-local runtime handlers safely.`,
       implementation: `Concurrency=${args.plan.concurrency}, executionMode=${args.report.executionMode}, worktreeAssignments=${args.plan.worktrees.length}`,
@@ -232,9 +305,15 @@ function renderArtifacts(args: LivingPlanMarkdownArgs) {
   return `## Artifacts
 
 - **Living Plan**: \`${toRelativePath(args.rootDir, args.artifactPaths.plansPath)}\`
+- **Omega Intent JSON**: \`${toRelativePath(args.rootDir, args.artifactPaths.intentPath)}\`
+- **Strategic Plan Markdown**: \`${toRelativePath(args.rootDir, args.artifactPaths.strategicPlanPath)}\`
 - **Execution Plan JSON**: \`${toRelativePath(args.rootDir, args.artifactPaths.planPath)}\`
 - **Execution Report JSON**: \`${toRelativePath(args.rootDir, args.artifactPaths.reportPath)}\`
 - **Coordinator Log**: \`${toRelativePath(args.rootDir, args.artifactPaths.logPath)}\``;
+}
+
+function renderBulletList(values: string[]) {
+  return values.length > 0 ? values.map((value) => `- ${value}`).join('\n') : '- None';
 }
 
 function buildMermaidGraph(args: LivingPlanMarkdownArgs) {

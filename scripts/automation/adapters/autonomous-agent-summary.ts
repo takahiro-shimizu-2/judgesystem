@@ -23,6 +23,16 @@ interface StoredExecutionPlan {
     number: number;
     title: string;
   };
+  omega?: {
+    intent?: {
+      normalizedGoal: string;
+      recommendedNextMode: 'planning' | 'execute';
+    };
+    strategicPlan?: {
+      summary: string;
+      deliverableFocus: string;
+    };
+  };
   strategy: 'llm' | 'heuristic';
   concurrency: number;
   dryRun: boolean;
@@ -37,6 +47,8 @@ interface ExecutionArtifactSummary {
   reportPath?: string;
   planPath?: string;
   plansMarkdownPath?: string;
+  intentPath?: string;
+  strategicPlanPath?: string;
   totals: {
     total: number;
     completed: number;
@@ -62,13 +74,17 @@ export function buildExecutionArtifactSummary(args: SummaryCliArgs): ExecutionAr
   const latestReport = findLatestExecutionReport(args.rootDir, args.issueNumber);
   const linkedPlan = latestReport ? findExecutionPlan(args.rootDir, latestReport.report.sessionId) : undefined;
   const livingPlan = latestReport ? findLivingPlan(args.rootDir, latestReport.report.sessionId) : undefined;
+  const omegaIntent = latestReport ? findOmegaIntent(args.rootDir, latestReport.report.sessionId) : undefined;
+  const strategicPlan = latestReport ? findStrategicPlan(args.rootDir, latestReport.report.sessionId) : undefined;
   const effectiveStatus = deriveEffectiveStatus(args.workflowStatus, latestReport?.report);
   const markdown = buildIssueCommentMarkdown({
     ...args,
     status: effectiveStatus,
     report: latestReport?.report,
     plan: linkedPlan?.plan,
+    intentPath: omegaIntent ? path.relative(args.rootDir, omegaIntent.path) : undefined,
     livingPlanPath: livingPlan ? path.relative(args.rootDir, livingPlan.path) : undefined,
+    strategicPlanPath: strategicPlan ? path.relative(args.rootDir, strategicPlan.path) : undefined,
   });
 
   return {
@@ -79,6 +95,8 @@ export function buildExecutionArtifactSummary(args: SummaryCliArgs): ExecutionAr
     reportPath: latestReport?.path,
     planPath: linkedPlan?.path,
     plansMarkdownPath: livingPlan?.path,
+    intentPath: omegaIntent?.path,
+    strategicPlanPath: strategicPlan?.path,
     totals: latestReport
       ? {
           total: latestReport.report.summary.total,
@@ -106,7 +124,9 @@ function buildIssueCommentMarkdown(params: {
   status: WorkflowExecutionStatus;
   report?: ExecutionReport;
   plan?: StoredExecutionPlan;
+  intentPath?: string;
   livingPlanPath?: string;
+  strategicPlanPath?: string;
 }) {
   if (!params.report) {
     return `## ${params.status === 'success' ? '⚠️' : '❌'} Autonomous Agent Summary Unavailable
@@ -124,9 +144,15 @@ The workflow finished, but no execution report artifact was found under \`.ai/pa
   const modeLabel = params.report.executionMode === 'planning' ? 'Planning' : 'Execution';
   const headingIcon = params.status === 'success' ? '✅' : '❌';
   const planNotes = [
+    params.plan?.omega?.intent?.normalizedGoal ? `- Intent: ${params.plan.omega.intent.normalizedGoal}` : null,
+    params.plan?.omega?.strategicPlan?.deliverableFocus
+      ? `- Deliverable Focus: ${params.plan.omega.strategicPlan.deliverableFocus}`
+      : null,
     params.plan && params.plan.strategy ? `- Strategy: \`${params.plan.strategy}\`` : null,
     params.plan ? `- Concurrency: ${params.plan.concurrency}` : null,
+    params.intentPath ? `- Intent Artifact: \`${params.intentPath}\`` : null,
     params.livingPlanPath ? `- Planning Artifact: \`${params.livingPlanPath}\`` : null,
+    params.strategicPlanPath ? `- Strategic Plan: \`${params.strategicPlanPath}\`` : null,
   ]
     .filter(Boolean)
     .join('\n');
@@ -251,6 +277,28 @@ function findLivingPlan(rootDir: string, sessionId: string) {
 
   return {
     path: plansPath,
+  };
+}
+
+function findOmegaIntent(rootDir: string, sessionId: string) {
+  const intentPath = path.join(rootDir, '.ai', 'parallel-reports', `omega-intent-${sessionId}.json`);
+  if (!fs.existsSync(intentPath)) {
+    return undefined;
+  }
+
+  return {
+    path: intentPath,
+  };
+}
+
+function findStrategicPlan(rootDir: string, sessionId: string) {
+  const strategicPlanPath = path.join(rootDir, '.ai', 'parallel-reports', `strategic-plan-${sessionId}.md`);
+  if (!fs.existsSync(strategicPlanPath)) {
+    return undefined;
+  }
+
+  return {
+    path: strategicPlanPath,
   };
 }
 
