@@ -1,0 +1,20 @@
+{
+  "defaults": {
+    "max_connections": 2,
+    "interval": 3.0
+  },
+  "hosts": {
+    "www.mod.go.jp": {
+      "max_connections": 1,
+      "interval": 5.0
+    },
+    "www.chotatujoho.go.jp": {
+      "max_connections": 1,
+      "interval": 5.0
+    },
+    "www.geps.go.jp": {
+      "max_connections": 2,
+      "interval": 3.0
+    }
+  }
+}

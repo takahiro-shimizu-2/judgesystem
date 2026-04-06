@@ -23,6 +23,8 @@ import pandas as pd
 import numpy as np
 import requests
 from tqdm import tqdm
+
+from packages.engine.domain.async_http import AsyncFetcher
 from google import genai
 from google.genai import types
 
@@ -190,12 +192,11 @@ class OcrProcessingMixin:
 
     def _step0_download_pdfs(self, df, use_gcs=False):
         """
-        PDF を URL からダウンロードして保存
-        """
-        SLEEP_AFTER_REQUEST = 0.4
-        SLEEP_ON_HTTP_ERROR = 0.4
-        SLEEP_ON_REQUEST_ERROR = 0.4
+        PDF を URL からダウンロードして保存（async 並列版）
 
+        内部で asyncio.run() → _step0_download_pdfs_async() を呼び出す。
+        ホスト別レートリミット付きで異なるサイトへは並列アクセスする。
+        """
         today_str = datetime.now().strftime("%Y-%m-%d")
 
         if use_gcs:
@@ -206,6 +207,7 @@ class OcrProcessingMixin:
 
         pdf_requests_skip_urls = ["dummy"]
 
+        # --- 既存ファイルチェック (同期、I/O bound ではなくメタデータチェック) ---
         print("Check pdf_is_saved (before url_requests).")
         file_cache = {}
 
@@ -241,66 +243,89 @@ class OcrProcessingMixin:
 
         print(f"pdf_is_saved status: {df['pdf_is_saved'].value_counts(dropna=False).to_dict()}")
 
-        print("Save pdf by requests.")
-        for i, row in tqdm(df.iterrows(), total=len(df), desc="Downloading PDFs"):
+        # --- ダウンロード対象を収集 ---
+        download_tasks = []
+        for i, row in df.iterrows():
             pdfurl = row["url"]
             save_path = row["save_path"]
 
             if pdfurl is None or pd.isna(pdfurl):
                 continue
-
             if df.loc[i, "pdf_is_saved"] == True:
                 continue
-
-            save_path_dirname = os.path.dirname(save_path)
-            if not use_gcs and not os.path.exists(save_path_dirname):
-                os.makedirs(save_path_dirname, exist_ok=True)
 
             skip_this_url = False
             for skipurl in pdf_requests_skip_urls:
                 if pdfurl.startswith(skipurl):
-                    tqdm.write(fr"Skip url: {skipurl}...")
                     skip_this_url = True
                     break
             if skip_this_url:
                 continue
 
             if pdfurl is not None and not pdfurl.startswith("https://tinyurl"):
-                df.loc[i, "pdf_is_saved_date"] = today_str
+                download_tasks.append({
+                    "index": i,
+                    "url": pdfurl,
+                    "save_path": save_path,
+                })
 
-                try:
-                    response = requests.get(pdfurl, headers={
-                        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.5993.90 Safari/537.36",
-                        "Accept-Language": "ja,en-US;q=0.9,en;q=0.8",
-                        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp",
-                        "Connection": "keep-alive",
-                    })
-                    response.raise_for_status()
-                except requests.exceptions.HTTPError as e:
-                    tqdm.write(f"HTTP error: {pdfurl} -> {e}")
-                    time.sleep(SLEEP_ON_HTTP_ERROR)
-                    continue
-                except requests.exceptions.RequestException as e:
-                    tqdm.write(f"Request error: {pdfurl} -> {e}")
-                    time.sleep(SLEEP_ON_REQUEST_ERROR)
-                    continue
-
-                try:
-                    if use_gcs and save_path.startswith("gs://"):
-                        content_type = "application/pdf" if str(save_path).lower().endswith(".pdf") else None
-                        gcs_upload_from_bytes(save_path, response.content, content_type=content_type)
-                        tqdm.write(fr"Saved {save_path}.")
-                        df.loc[i, "pdf_is_saved"] = True
-                    else:
-                        Path(save_path).write_bytes(response.content)
-                        tqdm.write(fr"Saved {save_path}.")
-                        df.loc[i, "pdf_is_saved"] = True
-                except Exception as e:
-                    tqdm.write(str(e))
-
-                time.sleep(SLEEP_AFTER_REQUEST)
+        if download_tasks:
+            print(f"Save pdf by async requests ({len(download_tasks)} files).")
+            results = asyncio.run(
+                self._step0_download_pdfs_async(download_tasks, use_gcs)
+            )
+            for idx, saved in results:
+                if saved:
+                    df.loc[idx, "pdf_is_saved"] = True
+                    df.loc[idx, "pdf_is_saved_date"] = today_str
+        else:
+            print("No PDFs to download.")
 
         return df
+
+    async def _step0_download_pdfs_async(self, tasks, use_gcs):
+        """
+        PDF を非同期並列でダウンロード。
+        ホスト別レートリミット付きで異なるサイトへは並列アクセスする。
+        """
+        results = []
+
+        async with AsyncFetcher(check_robots=True, check_diff=False) as fetcher:
+            sem = asyncio.Semaphore(20)  # グローバル並列上限
+
+            async def download_one(task):
+                async with sem:
+                    idx = task["index"]
+                    pdfurl = task["url"]
+                    save_path = task["save_path"]
+
+                    save_path_dirname = os.path.dirname(save_path)
+                    if not use_gcs and not os.path.exists(save_path_dirname):
+                        os.makedirs(save_path_dirname, exist_ok=True)
+
+                    data = await fetcher.get_bytes(pdfurl)
+                    if data is None:
+                        tqdm.write(f"Failed to download: {pdfurl}")
+                        results.append((idx, False))
+                        return
+
+                    try:
+                        if use_gcs and save_path.startswith("gs://"):
+                            content_type = "application/pdf" if str(save_path).lower().endswith(".pdf") else None
+                            await asyncio.to_thread(
+                                gcs_upload_from_bytes, save_path, data, content_type
+                            )
+                        else:
+                            await asyncio.to_thread(Path(save_path).write_bytes, data)
+                        tqdm.write(f"Saved {save_path}.")
+                        results.append((idx, True))
+                    except Exception as e:
+                        tqdm.write(f"Save error {save_path}: {e}")
+                        results.append((idx, False))
+
+            await asyncio.gather(*[download_one(t) for t in tasks])
+
+        return results
 
 
     def _build_markdown_path(self, document_id, file_format=None, use_gcs=False):
