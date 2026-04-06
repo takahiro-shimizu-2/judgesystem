@@ -13,6 +13,7 @@ import {
   OrdererController,
   ContactController,
   CompanyController,
+  BidRequirementController,
 } from "./src/controllers";
 
 const app = express();
@@ -77,6 +78,7 @@ const announcementController = new AnnouncementController();
 const ordererController = new OrdererController();
 const contactController = new ContactController();
 const companyController = new CompanyController();
+const bidRequirementController = new BidRequirementController();
 
 // Apply authentication to all /api routes
 app.use("/api", authenticate);
@@ -122,6 +124,9 @@ app.get("/api/contacts/:id", contactController.getById);
 app.post("/api/contacts", authorize("admin", "evaluator"), contactController.create);
 app.patch("/api/contacts/:id", authorize("admin", "evaluator"), contactController.update);
 app.delete("/api/contacts/:id", authorize("admin"), contactController.delete);
+
+// Bid requirement routes
+app.get("/api/bid-requirements/search", bidRequirementController.search);
 
 // Company routes
 app.get("/api/companies", companyController.getList);
