@@ -32,5 +32,8 @@
     "@types/pino-http": "^5.8.4",
     "ts-node": "^10.9.1",
     "typescript": "^5.0.0"
+  },
+  "overrides": {
+    "path-to-regexp": "0.1.13"
   }
 }

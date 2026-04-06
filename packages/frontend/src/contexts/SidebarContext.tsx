@@ -1,5 +1,5 @@
 /* eslint-disable react-refresh/only-export-components */
-import { createContext, useContext, useState, useCallback, useEffect } from 'react';
+import { createContext, useContext, useState, useCallback } from 'react';
 import type { ReactNode } from 'react';
 import { useMediaQuery, useTheme } from '@mui/material';
 
@@ -26,12 +26,6 @@ export function SidebarProvider({ children }: { children: ReactNode }) {
   const [mobileStateOpen, setMobileStateOpen] = useState(false);
   const [rightPanelOpen, setRightPanelOpen] = useState(true);
   const mobileOpen = isMobile ? mobileStateOpen : false;
-
-  useEffect(() => {
-    if (!isMobile) {
-      setMobileStateOpen(false);
-    }
-  }, [isMobile]);
 
   const toggle = useCallback(() => {
     setIsOpen((prev) => !prev);

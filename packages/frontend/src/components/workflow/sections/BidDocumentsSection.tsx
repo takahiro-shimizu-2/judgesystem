@@ -20,11 +20,7 @@ const DOCUMENT_LINK_BUTTON_STYLE = {
   fontWeight: 500,
 } as const;
 
-const PREVIEW_TABS = [
-  { id: 'pdf', label: 'PDFプレビュー' },
-  { id: 'transcription', label: '文字起こし' },
-] as const;
-type PreviewTab = (typeof PREVIEW_TABS)[number]['id'];
+type PreviewTab = 'pdf' | 'transcription';
 
 type PreviewState = { url?: string; loading: boolean; error?: string };
 

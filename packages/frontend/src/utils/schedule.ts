@@ -313,5 +313,8 @@ export const buildFallbackScheduleFromAnnouncement = (announcement: Announcement
   return legacyItems
     .filter((item) => item.dateText && item.dateText !== '日付情報なし')
     .sort((a, b) => a.sortValue - b.sortValue)
-    .map(({ sortValue, ...rest }) => rest);
+    .map(({ sortValue, ...rest }) => {
+      void sortValue;
+      return rest;
+    });
 };
