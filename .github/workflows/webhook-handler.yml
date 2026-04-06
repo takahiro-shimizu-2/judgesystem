@@ -66,10 +66,12 @@ jobs:
           github.event_name == 'issues' &&
           github.event.action == 'labeled' &&
           github.event.label.name == '🤖agent-execute'
+        env:
+          ISSUE_TITLE: ${{ github.event.issue.title }}
         run: |
           echo "🚀 AGENT EXECUTION LABEL DETECTED"
           echo "Issue: #${{ github.event.issue.number }}"
-          echo "Title: ${{ github.event.issue.title }}"
+          echo "Title: $ISSUE_TITLE"
           echo "ℹ️ autonomous-agent.yml handles this label directly via issues triggers."
           echo "ℹ️ The label starts planning by default; execute mode opens only when the autonomous workflow gate is enabled."
 
@@ -89,9 +91,9 @@ jobs:
 
       - name: Route to Agent - Comment Command
         if: github.event_name == 'issue_comment' && github.event.action == 'created'
+        env:
+          COMMENT_BODY: ${{ github.event.comment.body }}
         run: |
-          COMMENT_BODY="${{ github.event.comment.body }}"
-
           if echo "$COMMENT_BODY" | grep -q "^/agent"; then
             echo "💬 Agent command detected in comment"
             echo "Command: $COMMENT_BODY"
@@ -135,12 +137,15 @@ jobs:
           github.event_name == 'pull_request' &&
           github.event.action == 'closed' &&
           github.event.pull_request.merged == true
+        env:
+          PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          PR_BASE_REF: ${{ github.event.pull_request.base.ref }}
         run: |
           echo "🎉 PR #${{ github.event.pull_request.number }} merged!"
-          echo "Branch: ${{ github.event.pull_request.head.ref }} → ${{ github.event.pull_request.base.ref }}"
+          echo "Branch: $PR_HEAD_REF → $PR_BASE_REF"
 
           # If merged to main, may trigger deployment
-          if [ "${{ github.event.pull_request.base.ref }}" == "main" ]; then
+          if [ "$PR_BASE_REF" == "main" ]; then
             echo "🚀 Merged to main, considering deployment..."
             # TODO: Trigger DeploymentAgent if applicable
           fi
