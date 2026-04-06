@@ -1,27 +1,32 @@
 {
-  "generated_at": "2026-04-06T19:55:00+09:00",
-  "query": "Mandate GitNexus in Miyabi runtime flow",
+  "generated_at": "2026-04-06T21:10:00+09:00",
+  "query": "Rebuild CI into necessary-and-sufficient common and dynamic gates",
   "repo": "judgesystem",
   "quality_score": 0,
   "tasks": [
     {
-      "id": "gitnexus-runtime-audit",
-      "title": "Confirm the gap between GitNexus guidance and the current runtime, then define the mandatory integration contract",
+      "id": "ci-scope-audit",
+      "title": "Audit the current CI, workspace scripts, engine/db assets, and workflow surfaces to define common gates vs dynamic gates",
       "status": "completed"
     },
     {
-      "id": "gitnexus-planning-artifact",
-      "title": "Generate a GitNexus runtime artifact during planning with issue-level query plus runtime anchor context/impact",
+      "id": "ci-common-gates",
+      "title": "Add common gates for workflow lint, automation smoke, Python syntax, shell syntax, and fail-fast security audit",
       "status": "completed"
     },
     {
-      "id": "gitnexus-handoff-gate",
-      "title": "Require task-level GitNexus binding for execution and surface it in CodeGen/Test/Review artifacts",
+      "id": "ci-dynamic-gates",
+      "title": "Add change-aware workspace and migration validation with dependency-aware workspace expansion",
       "status": "completed"
     },
     {
-      "id": "gitnexus-runtime-dod",
-      "title": "Lock the GitNexus mandatory contract into smoke, docs, and workflow summaries so it stays truthful",
+      "id": "ci-baseline-fixes",
+      "title": "Resolve newly enforced CI blockers so the new gates are green by default",
+      "status": "completed"
+    },
+    {
+      "id": "ci-contract-docs",
+      "title": "Record the CI contract in docs and project memory so the common/dynamic split stays truthful",
       "status": "completed"
     }
   ]
