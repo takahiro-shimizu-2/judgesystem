@@ -19,6 +19,7 @@ export interface EventPayload {
   title?: string;
   body?: string;
   labels?: string[];
+  labelName?: string;
   author?: string;
   branch?: string;
   commit?: string;
@@ -52,7 +53,7 @@ const ROUTING_RULES: RoutingRule[] = [
     condition: (payload) =>
       payload.type === 'issue' &&
       payload.action === 'labeled' &&
-      (payload.labels?.includes('🤖agent-execute') ?? false),
+      payload.labelName === '🤖agent-execute',
     agent: 'CoordinatorAgent',
     priority: 'critical',
     action: 'Execute autonomous task',
@@ -135,7 +136,7 @@ export class WebhookEventRouter {
     console.log(`\nReceived ${payload.type} event: ${payload.action}`);
     console.log('Payload:', JSON.stringify(payload, null, 2));
 
-    const matchedRules = ROUTING_RULES.filter((rule) => rule.condition(payload));
+    const matchedRules = getMatchingRoutingRules(payload);
 
     if (matchedRules.length === 0) {
       console.log('No routing rules matched for this event');
@@ -270,6 +271,7 @@ Examples:
     payload.number = parseInt(rest[0], 10);
     payload.title = env.ISSUE_TITLE || env.PR_TITLE;
     payload.merged = eventType === 'pr' ? env.PR_MERGED === 'true' : undefined;
+    payload.labelName = env.EVENT_LABEL_NAME;
 
     const labelsJson = env.ISSUE_LABELS;
     if (labelsJson) {
@@ -291,6 +293,14 @@ Examples:
   }
 
   return payload;
+}
+
+export function getMatchingRoutingRules(payload: EventPayload) {
+  const priorityOrder = { critical: 0, high: 1, medium: 2, low: 3 };
+
+  return ROUTING_RULES.filter((rule) => rule.condition(payload)).sort(
+    (left, right) => priorityOrder[left.priority] - priorityOrder[right.priority],
+  );
 }
 
 export async function runWebhookRouterCli(argv = process.argv, env = process.env) {
