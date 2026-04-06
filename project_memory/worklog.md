@@ -134,6 +134,16 @@ Context-and-impact phase E appends audit entries here.
 
 ## 2026-04-06
 
+- Rebuilt the CI plan around two layers instead of the previous static checklist: common gates that always run and dynamic gates that depend on changed areas.
+- Audited the real repo surfaces before changing CI: current `ci.yml`, root/package workspace scripts, Python engine, DB migrations, workflow inventory, and existing security audit behavior.
+- Added `scripts/ci/` with reusable local/CI entrypoints for workflow lint, Python syntax, shell syntax, workspace-aware package gates, changed-scope detection, and fresh-Postgres migration validation.
+- Reworked `.github/workflows/ci.yml` so it now has a `changes` job, common gates (`automation-smoke`, workflow lint, Python syntax, shell syntax, security audit), dynamic workspace gates with downstream workspace expansion, and migration validation only when `db/migrations/**` changes.
+- Hardened the CI summary so skipped dynamic jobs only pass when the corresponding scope is genuinely absent; otherwise the workflow fails instead of silently accepting a missing check.
+- Fixed `webhook-handler.yml` inline expression usage so `actionlint` can be a real gate instead of tripping on pre-existing untrusted-input warnings.
+- Added a backend override for `path-to-regexp` so `npm audit --audit-level=high` becomes an actual pass/fail gate instead of forcing `|| true`.
+- Cleaned the frontend lint baseline enough for package-level lint/build gating to be usable: `.vite` is ignored and the current source errors in the new dynamic path were reduced to a remaining warning-only state.
+- Recorded the resulting CI contract in `docs/ci-contract.md`, including workspace dependency expansion (`shared -> backend/frontend`) and fresh PostgreSQL migration validation semantics.
+
 - Reopened planning with a runtime-specific target because GitNexus existed mostly as guidance, hooks, and Claude-side instructions while the actual `TaskManager -> TaskExecutor -> handler` path could still run without any GitNexus artifact.
 - Recorded a dedicated GitNexus runtime integration plan in `docs/gitnexus-runtime-integration-plan.md` instead of treating the change as an untracked follow-up.
 - Added `scripts/automation/gitnexus/runtime-context.ts` and `runtime-contract.ts`, which make planning emit a mandatory `gitnexus-runtime-*.json` artifact containing issue-level query results plus context/impact snapshots for stable runtime anchor symbols.

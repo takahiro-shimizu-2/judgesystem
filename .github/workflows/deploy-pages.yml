@@ -64,9 +64,11 @@ jobs:
     steps:
       - name: Summary
         run: |
-          echo "### ℹ️ GitHub Pages deploy skipped" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "Set repository variable \`AUTOMATION_GITHUB_PAGES_ENABLED=true\` after configuring Pages to build from GitHub Actions." >> $GITHUB_STEP_SUMMARY
+          {
+            echo "### ℹ️ GitHub Pages deploy skipped"
+            echo
+            echo "Set repository variable \`AUTOMATION_GITHUB_PAGES_ENABLED=true\` after configuring Pages to build from GitHub Actions."
+          } >> "$GITHUB_STEP_SUMMARY"
 
   deploy:
     needs: generate-data
@@ -100,10 +102,12 @@ jobs:
 
       - name: Summary
         run: |
-          echo "### 🚀 Dashboard Deployed" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "✓ Dashboard successfully deployed to GitHub Pages" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**URL**: ${{ steps.deployment.outputs.page_url }}" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "_Dashboard data will auto-update every 6 hours_" >> $GITHUB_STEP_SUMMARY
+          {
+            echo "### 🚀 Dashboard Deployed"
+            echo
+            echo "✓ Dashboard successfully deployed to GitHub Pages"
+            echo
+            echo "**URL**: ${{ steps.deployment.outputs.page_url }}"
+            echo
+            echo "_Dashboard data will auto-update every 6 hours_"
+          } >> "$GITHUB_STEP_SUMMARY"

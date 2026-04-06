@@ -7,6 +7,48 @@ on:
     branches: [main, develop, feat/**, feature/**, fix/**, refactor/**]
 
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      changed_files_json: ${{ steps.scope.outputs.changed_files_json }}
+      workspace_matrix: ${{ steps.scope.outputs.workspace_matrix }}
+      has_workspace_changes: ${{ steps.scope.outputs.has_workspace_changes }}
+      workflow_changed: ${{ steps.scope.outputs.workflow_changed }}
+      migration_changed: ${{ steps.scope.outputs.migration_changed }}
+      python_changed: ${{ steps.scope.outputs.python_changed }}
+      diff_range: ${{ steps.scope.outputs.diff_range }}
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Resolve diff range
+        id: refs
+        shell: bash
+        run: |
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            base_sha="${{ github.event.pull_request.base.sha }}"
+          elif [[ -n "${{ github.event.before }}" && "${{ github.event.before }}" != "0000000000000000000000000000000000000000" ]]; then
+            base_sha="${{ github.event.before }}"
+          elif git rev-parse HEAD^ >/dev/null 2>&1; then
+            base_sha="$(git rev-parse HEAD^)"
+          else
+            base_sha="$(git rev-parse HEAD)"
+          fi
+
+          echo "base_sha=$base_sha" >> "$GITHUB_OUTPUT"
+          echo "head_sha=${{ github.sha }}" >> "$GITHUB_OUTPUT"
+
+      - name: Detect CI scope
+        id: scope
+        run: node scripts/ci/detect-changed-scope.mjs --base "${{ steps.refs.outputs.base_sha }}" --head "${{ steps.refs.outputs.head_sha }}"
+
   automation-smoke:
     runs-on: ubuntu-latest
 
@@ -21,11 +63,38 @@ jobs:
       - run: npm ci
       - run: npm run automation:smoke
 
-  backend-check:
+  workflow-lint:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: packages/backend
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - run: npm run ci:workflow-lint
+
+  python-syntax:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - run: npm run ci:python-syntax
+
+  shell-syntax:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - run: npm run ci:shell-syntax
+
+  workspace-gates:
+    needs: changes
+    if: needs.changes.outputs.has_workspace_changes == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        workspace: ${{ fromJson(needs.changes.outputs.workspace_matrix) }}
 
     steps:
       - uses: actions/checkout@v6
@@ -34,43 +103,91 @@ jobs:
         with:
           node-version: '20'
           cache: 'npm'
-          cache-dependency-path: packages/backend/package-lock.json
+          cache-dependency-path: ${{ matrix.workspace.lockfile }}
 
-      - run: npm ci
-      - run: npx tsc --noEmit
+      - run: bash scripts/ci/run-workspace-gates.sh "${{ matrix.workspace.path }}"
 
-  frontend-check:
+  migration-validate:
+    needs: changes
+    if: needs.changes.outputs.migration_changed == 'true'
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: packages/frontend
 
     steps:
       - uses: actions/checkout@v6
 
-      - uses: actions/setup-node@v6
-        with:
-          node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: packages/frontend/package-lock.json
-
-      - run: npm ci
-      - run: npx tsc --noEmit
-      - run: npm run build
+      - run: npm run ci:migrations:validate
 
   security-audit:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        workspace:
+          - packages/backend
+          - packages/frontend
+
     steps:
       - uses: actions/checkout@v6
 
       - uses: actions/setup-node@v6
         with:
           node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: ${{ matrix.workspace }}/package-lock.json
 
-      - name: Backend audit
-        working-directory: packages/backend
-        run: npm audit --audit-level=high || true
+      - working-directory: ${{ matrix.workspace }}
+        run: npm ci
 
-      - name: Frontend audit
-        working-directory: packages/frontend
-        run: npm audit --audit-level=high || true
+      - working-directory: ${{ matrix.workspace }}
+        run: npm audit --audit-level=high
+
+  ci-summary:
+    if: always()
+    needs:
+      - changes
+      - automation-smoke
+      - workflow-lint
+      - python-syntax
+      - shell-syntax
+      - workspace-gates
+      - migration-validate
+      - security-audit
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Summarize CI scope
+        run: |
+          cat <<'EOF' >> "$GITHUB_STEP_SUMMARY"
+          ## CI Scope
+          - Diff range: `${{ needs.changes.outputs.diff_range }}`
+          - Changed workspaces: `${{ needs.changes.outputs.workspace_matrix }}`
+          - Workflow changed: `${{ needs.changes.outputs.workflow_changed }}`
+          - Migration changed: `${{ needs.changes.outputs.migration_changed }}`
+          - Python changed: `${{ needs.changes.outputs.python_changed }}`
+          EOF
+
+          if [[ "${{ needs.automation-smoke.result }}" != "success" || \
+                "${{ needs.workflow-lint.result }}" != "success" || \
+                "${{ needs.python-syntax.result }}" != "success" || \
+                "${{ needs.shell-syntax.result }}" != "success" || \
+                "${{ needs.security-audit.result }}" != "success" ]]; then
+            exit 1
+          fi
+
+          if [[ "${{ needs.workspace-gates.result }}" == "failure" || \
+                "${{ needs.migration-validate.result }}" == "failure" ]]; then
+            exit 1
+          fi
+
+          if [[ "${{ needs.workspace-gates.result }}" == "cancelled" || \
+                "${{ needs.migration-validate.result }}" == "cancelled" ]]; then
+            exit 1
+          fi
+
+          if [[ "${{ needs.workspace-gates.result }}" == "skipped" && "${{ needs.changes.outputs.has_workspace_changes }}" == "true" ]]; then
+            exit 1
+          fi
+
+          if [[ "${{ needs.migration-validate.result }}" == "skipped" && "${{ needs.changes.outputs.migration_changed }}" == "true" ]]; then
+            exit 1
+          fi

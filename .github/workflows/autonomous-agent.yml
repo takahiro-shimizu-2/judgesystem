@@ -198,8 +198,10 @@ jobs:
             --out-md "$RUNNER_TEMP/autonomous-agent-comment.md" \
             --out-json "$RUNNER_TEMP/autonomous-agent-summary.json"
 
-          echo "comment_path=$RUNNER_TEMP/autonomous-agent-comment.md" >> $GITHUB_OUTPUT
-          echo "summary_json_path=$RUNNER_TEMP/autonomous-agent-summary.json" >> $GITHUB_OUTPUT
+          {
+            echo "comment_path=$RUNNER_TEMP/autonomous-agent-comment.md"
+            echo "summary_json_path=$RUNNER_TEMP/autonomous-agent-summary.json"
+          } >> "$GITHUB_OUTPUT"
 
           node <<'NODE' >> "$GITHUB_OUTPUT"
           const fs = require('fs');
@@ -224,8 +226,10 @@ jobs:
             --out-md "$RUNNER_TEMP/water-spider-comment.md" \
             --out-json "$RUNNER_TEMP/water-spider-summary.json"
 
-          echo "comment_path=$RUNNER_TEMP/water-spider-comment.md" >> $GITHUB_OUTPUT
-          echo "summary_json_path=$RUNNER_TEMP/water-spider-summary.json" >> $GITHUB_OUTPUT
+          {
+            echo "comment_path=$RUNNER_TEMP/water-spider-comment.md"
+            echo "summary_json_path=$RUNNER_TEMP/water-spider-summary.json"
+          } >> "$GITHUB_OUTPUT"
 
           node <<'NODE' >> "$GITHUB_OUTPUT"
           const fs = require('fs');
