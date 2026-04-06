@@ -67,6 +67,7 @@ export function createOmegaPlanningLayer(
   const currentRunMode: OmegaRunMode = options.dryRun ? 'planning' : 'execute';
   const goals = extractGoalCandidates(issue).slice(0, GOAL_LIMIT);
   const preferredCapabilities = inferCapabilities(issue, goals);
+  const analysisOnly = preferredCapabilities.length === 1 && preferredCapabilities[0] === 'analysis';
   const constraints = inferConstraints(issue, preferredCapabilities, currentRunMode);
   const risks = inferRisks(issue, goals, preferredCapabilities);
   const sourceSignals = inferSourceSignals(issue, goals);
@@ -74,7 +75,9 @@ export function createOmegaPlanningLayer(
     goals[0] || truncateText(issue.title || `Issue #${issue.number}`, 140);
   const desiredOutcome = describeDesiredOutcome(preferredCapabilities, normalizedGoal);
   const recommendedNextMode =
-    currentRunMode === 'planning' || preferredCapabilities.includes('deploy') || risks.length > 2 ? 'planning' : 'execute';
+    analysisOnly || currentRunMode === 'planning' || preferredCapabilities.includes('deploy') || risks.length > 2
+      ? 'planning'
+      : 'execute';
 
   const intent: OmegaIntent = {
     issueNumber: issue.number,
@@ -142,24 +145,34 @@ function buildStrategicPlan(
 ): OmegaStrategicPlan {
   const deliverableFocus = describeDeliverableFocus(intent.preferredCapabilities);
   const phases = buildPhases(intent);
+  const executionCapabilities = intent.preferredCapabilities.filter((capability) => capability !== 'analysis');
+  const analysisOnly = executionCapabilities.length === 0;
   const assumptions = [
     'Existing decomposition, DAG, and handler routing remain the current theta2-theta4 substrate for this slice.',
     intent.currentRunMode === 'planning'
       ? 'This run stays planning-first; write-capable side effects remain gated and are not assumed.'
       : 'This run may execute connected handlers, but each side effect must still satisfy its explicit runtime gates.',
     'Any missing runtime capability should stay truthfully visible in reports instead of being treated as implicitly available.',
+    analysisOnly
+      ? 'This issue is assessment/design-oriented, so the primary outcome should remain planning and analysis artifacts instead of implementation claims.'
+      : null,
     previousLearning
       ? `Carry forward lessons from ${previousLearning.sourceSessionId} (learning score ${previousLearning.overallLearningScore}/100).`
       : null,
   ];
   const successCriteria = [
     `Translate Issue #${issue.number} into an intent-first plan before decomposition begins.`,
-    'Preserve explicit handoffs for code generation, testing, review, PR, and deploy when those capabilities are in scope.',
+    analysisOnly
+      ? 'Keep the outcome in planning, assessment, and design artifacts without implying code-writing or PR execution.'
+      : 'Preserve explicit handoffs for code generation, testing, review, PR, and deploy when those capabilities are in scope.',
     `Produce a deliverable that is ${deliverableFocus.toLowerCase()} and traceable through runtime artifacts.`,
   ];
   const riskMitigations = [
     ...intent.risks.map((risk) => mitigateRisk(risk)),
     ...(previousLearning?.immediateRecommendations || []),
+    analysisOnly
+      ? 'Keep the slice in planning mode and route findings into living plans, strategic plans, and learning artifacts.'
+      : null,
     intent.preferredCapabilities.includes('deploy')
       ? 'Keep deployment on the protected workflow path or an approved provider preset before any execute run is considered healthy.'
       : 'Use worktree-isolated execution and report artifacts to keep changes auditable across the quality pipeline.',
@@ -176,13 +189,17 @@ function buildStrategicPlan(
 }
 
 function buildPhases(intent: OmegaIntent): OmegaStrategicPlanPhase[] {
-  const executionOwner = intent.preferredCapabilities.includes('deploy')
-    ? 'DeploymentAgent'
-    : intent.preferredCapabilities.includes('pr')
-      ? 'PRAgent'
-      : intent.preferredCapabilities.includes('review')
-        ? 'ReviewAgent'
-        : 'CodeGenAgent';
+  const executionCapabilities = intent.preferredCapabilities.filter((capability) => capability !== 'analysis');
+  const analysisOnly = executionCapabilities.length === 0;
+  const executionOwner = analysisOnly
+    ? 'IssueAgent'
+    : intent.preferredCapabilities.includes('deploy')
+      ? 'DeploymentAgent'
+      : intent.preferredCapabilities.includes('pr')
+        ? 'PRAgent'
+        : intent.preferredCapabilities.includes('review')
+          ? 'ReviewAgent'
+          : 'CodeGenAgent';
 
   return [
     {
@@ -222,11 +239,15 @@ function buildPhases(intent: OmegaIntent): OmegaStrategicPlanPhase[] {
       id: 'theta4-execution',
       label: 'Theta 4 Execution',
       owner: executionOwner,
-      objective: 'Run the capability pipeline with artifact preservation so later integration and learning stages can summarize the outcome cleanly.',
-      capabilities: intent.preferredCapabilities,
+      objective: analysisOnly
+        ? 'Produce assessment artifacts and coordinator-facing findings without implying write-capable implementation work.'
+        : 'Run the capability pipeline with artifact preservation so later integration and learning stages can summarize the outcome cleanly.',
+      capabilities: analysisOnly ? ['analysis'] : intent.preferredCapabilities,
       successCriteria: [
         'Execution artifacts stay replayable and discoverable under .ai/parallel-reports.',
-        'Quality, PR, and deploy stages follow explicit handoffs rather than implicit transitions.',
+        analysisOnly
+          ? 'Assessment outputs stay in planning/report artifacts and do not masquerade as implementation or PR work.'
+          : 'Quality, PR, and deploy stages follow explicit handoffs rather than implicit transitions.',
       ],
     },
   ];
@@ -273,6 +294,10 @@ function extractGoalCandidates(issue: AutomationIssue) {
 function inferCapabilities(issue: AutomationIssue, goals: string[]): OmegaCapability[] {
   const haystack = [issue.title, issue.body || '', ...goals, ...(issue.labels || [])].join('\n').toLowerCase();
   const capabilities: OmegaCapability[] = ['analysis'];
+
+  if (isAnalysisOnlyIssue(haystack)) {
+    return capabilities;
+  }
 
   if (matchesAny(haystack, ['feature', 'add', 'new', 'implement', 'fix', 'bug', 'refactor', 'cleanup', 'improve', 'docs', 'readme', 'guide', '実装', '追加', '修正', '改善', 'ドキュメント'])) {
     capabilities.push('codegen');
@@ -375,6 +400,10 @@ function describeDesiredOutcome(capabilities: OmegaCapability[], normalizedGoal:
 }
 
 function describeDeliverableFocus(capabilities: OmegaCapability[]) {
+  if (capabilities.length === 1 && capabilities[0] === 'analysis') {
+    return 'an assessment/design report and planning artifact set';
+  }
+
   if (capabilities.includes('deploy')) {
     return 'a validated implementation, PR handoff, and deploy-ready artifact set';
   }
@@ -421,6 +450,77 @@ function extractPolicyLines(body: string) {
 
 function matchesAny(text: string, keywords: string[]) {
   return keywords.some((keyword) => text.includes(keyword));
+}
+
+function isAnalysisOnlyIssue(haystack: string) {
+  const explicitPlanningSignals = [
+    '実装ではなく',
+    '今すぐの実装ではなく',
+    '実装ではない',
+    'implementation is not the goal',
+    'implementation is not required',
+    'evaluation only',
+    'research only',
+    'planning only',
+    'design direction',
+    '設計方針',
+    '評価・設計方針',
+    '評価のみ',
+    '調査のみ',
+    'ドキュメント化が主成果物',
+    '主成果物',
+  ];
+  if (matchesAny(haystack, explicitPlanningSignals)) {
+    return true;
+  }
+
+  const researchSignals = [
+    'research',
+    'analysis',
+    'investigate',
+    'assessment',
+    'evaluate',
+    'throughput',
+    'bottleneck',
+    'architecture',
+    'roadmap',
+    'estimate',
+    'cost',
+    'scale',
+    '調査',
+    '分析',
+    '評価',
+    '確認',
+    '整理',
+    '設計',
+    '方針',
+    'ロードマップ',
+    '概算',
+    'スループット',
+    'ボトルネック',
+    'アーキテクチャ',
+    '拡張パス',
+  ];
+  const implementationSignals = [
+    'implement',
+    'build',
+    'fix',
+    'add',
+    'create',
+    'refactor',
+    'migrate',
+    'deploy',
+    'release',
+    '実装',
+    '修正',
+    '追加',
+    '作成',
+    '移行',
+    '反映',
+    'デプロイ',
+  ];
+
+  return matchesAny(haystack, researchSignals) && !matchesAny(haystack, implementationSignals);
 }
 
 function renderList(values: string[]) {
