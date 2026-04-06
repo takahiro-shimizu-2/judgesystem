@@ -1,8 +1,7 @@
 name: Deploy GitHub Pages
 
-# Deploy dashboard to GitHub Pages
-# Pages deployment is opt-in. Set repository variable `AUTOMATION_GITHUB_PAGES_ENABLED=true`
-# after configuring Pages to build from GitHub Actions.
+# ダッシュボードを GitHub Pages にデプロイする
+# opt-in: リポジトリ変数 AUTOMATION_GITHUB_PAGES_ENABLED=true を設定してから有効化
 on:
   push:
     branches:
@@ -14,7 +13,7 @@ on:
       - 'docs/**'
       - '.github/workflows/deploy-pages.yml'
   schedule:
-    - cron: '0 */6 * * *'  # Every 6 hours
+    - cron: '0 */6 * * *'
   workflow_dispatch:  # Manual trigger
 
 # Sets permissions of the GITHUB_TOKEN to allow deployment to GitHub Pages

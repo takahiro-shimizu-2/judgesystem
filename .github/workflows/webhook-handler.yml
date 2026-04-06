@@ -15,7 +15,9 @@ on:
   push:
     branches: ['feat/**', 'feature/**', 'fix/**', 'refactor/**']
   workflow_run:
-    workflows: ["*"]
+    workflows:
+      - "Autonomous Agent Execution"
+      - "🔴 Economic Circuit Breaker"
     types: [completed]
 
 permissions:
