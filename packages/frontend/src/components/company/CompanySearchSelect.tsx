@@ -1,35 +1,35 @@
 import { Autocomplete, Box, CircularProgress, TextField, Typography } from '@mui/material';
 import { useEffect, useMemo, useState } from 'react';
 import { fontSizes, colors } from '../../constants/styles';
-import { fetchPartnerList } from '../../data/partners';
-import type { PartnerListRow } from '../../data/partners';
+import { fetchCompanyMasterList } from '../../data/companies-master';
+import type { CompanyListRow } from '../../data/companies-master';
 
-export interface PartnerSearchOption {
+export interface CompanySearchOption {
   id: string;
   name: string;
   address?: string;
   phone?: string;
 }
 
-interface PartnerSearchSelectProps {
-  value: PartnerSearchOption | null;
-  onChange: (option: PartnerSearchOption | null) => void;
+interface CompanySearchSelectProps {
+  value: CompanySearchOption | null;
+  onChange: (option: CompanySearchOption | null) => void;
   label?: string;
   placeholder?: string;
   helperText?: string;
   disabled?: boolean;
 }
 
-export function PartnerSearchSelect({
+export function CompanySearchSelect({
   value,
   onChange,
   label = '協力会社',
   placeholder = '会社名で検索',
   helperText,
   disabled = false,
-}: PartnerSearchSelectProps) {
+}: CompanySearchSelectProps) {
   const [inputValue, setInputValue] = useState(value?.name ?? '');
-  const [options, setOptions] = useState<PartnerSearchOption[]>([]);
+  const [options, setOptions] = useState<CompanySearchOption[]>([]);
   const [loading, setLoading] = useState(false);
   const [debouncedInput, setDebouncedInput] = useState('');
 
@@ -51,7 +51,7 @@ export function PartnerSearchSelect({
     const loadOptions = async () => {
       setLoading(true);
       try {
-        const { data } = await fetchPartnerList(
+        const { data } = await fetchCompanyMasterList(
           {
             q: debouncedInput || undefined,
             page: 0,
@@ -62,7 +62,7 @@ export function PartnerSearchSelect({
         if (!active) {
           return;
         }
-        const mapped = (data || []).map((item: PartnerListRow): PartnerSearchOption => ({
+        const mapped = (data || []).map((item: CompanyListRow): CompanySearchOption => ({
           id: item.id,
           name: item.name,
           address: item.address,
@@ -71,7 +71,7 @@ export function PartnerSearchSelect({
         setOptions(mapped);
       } catch (error) {
         if (active) {
-          console.error('Failed to search partners:', error);
+          console.error('Failed to search companies:', error);
           setOptions([]);
         }
       } finally {
@@ -93,7 +93,7 @@ export function PartnerSearchSelect({
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-      <Autocomplete<PartnerSearchOption, false, true, false>
+      <Autocomplete<CompanySearchOption, false, true, false>
         disablePortal
         options={options}
         loading={loading}

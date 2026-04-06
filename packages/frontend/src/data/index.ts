@@ -33,16 +33,16 @@ export type { CompanyWithDetails } from './companies';
 
 // 協力会社
 export {
-  fetchPartnerList,
-} from './partners';
+  fetchCompanyMasterList,
+} from './companies-master';
 
 // 協力会社種別（定数は constants/ から re-export）
-export { allPartnerCategories as allCategories } from '../constants/partnerCategories';
+export { allCompanyCategories as allCategories } from '../constants/companyCategories';
 export type {
-  PartnerListParams,
-  PartnerListRow,
-  PaginatedPartnerResponse,
-} from './partners';
+  CompanyListParams,
+  CompanyListRow,
+  PaginatedCompanyResponse,
+} from './companies-master';
 
 // 案件
 // Note: モックデータ（mockAnnouncements, findAnnouncementById, getAnnouncementsByOrdererId）は
@@ -59,10 +59,10 @@ export type { DocumentType, DocumentOcr } from '../types';
 export {
   updateWorkStatus,
   updateEvaluationAssignee,
-  fetchPartnerCandidates,
-  createPartnerCandidate,
-  updatePartnerCandidate,
-  deletePartnerCandidate,
+  fetchCompanyCandidates,
+  createCompanyCandidate,
+  updateCompanyCandidate,
+  deleteCompanyCandidate,
 } from './evaluations';
 
 // 担当者

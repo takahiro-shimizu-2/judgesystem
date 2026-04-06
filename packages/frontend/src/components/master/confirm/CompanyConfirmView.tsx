@@ -9,12 +9,12 @@ import {
   LocationIcon,
   VerifiedUserIcon,
 } from '../../../constants/icons';
-import type { PartnerFormData } from '../../../hooks/usePartnerForm';
+import type { CompanyFormData } from '../../../hooks/useCompanyForm';
 import { formGridStyles } from '../../../constants/formStyles';
 import { colors, fontSizes, borderRadius } from '../../../constants/styles';
 
-interface PartnerConfirmViewProps {
-  data: PartnerFormData;
+interface CompanyConfirmViewProps {
+  data: CompanyFormData;
 }
 
 const tableStyles = {
@@ -54,7 +54,7 @@ const tableStyles = {
   },
 } as const;
 
-export function PartnerConfirmView({ data }: PartnerConfirmViewProps) {
+export function CompanyConfirmView({ data }: CompanyConfirmViewProps) {
   // 金額フォーマット
   const formatCurrency = (value: string) => {
     if (!value) return '';

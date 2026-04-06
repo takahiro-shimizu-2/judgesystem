@@ -1,10 +1,10 @@
-import type { PartnerStatus } from '../types/workflow';
+import type { CompanyStatus } from '../types/workflow';
 import { colors } from './styles';
 
 /**
- * パートナーステータスのラベル
+ * 協力会社ステータスのラベル
  */
-export const partnerStatusLabels: Record<PartnerStatus, string> = {
+export const companyStatusLabels: Record<CompanyStatus, string> = {
   not_called: '未架電',
   unavailable: '対応不可',
   waiting_documents: '資料送付待',
@@ -15,9 +15,9 @@ export const partnerStatusLabels: Record<PartnerStatus, string> = {
 };
 
 /**
- * パートナーステータスの色設定
+ * 協力会社ステータスの色設定
  */
-export const partnerStatusColors: Record<PartnerStatus, { color: string; bgColor: string }> = {
+export const companyStatusColors: Record<CompanyStatus, { color: string; bgColor: string }> = {
   not_called: { color: colors.text.muted, bgColor: 'rgba(107, 114, 128, 0.1)' },
   unavailable: { color: colors.accent.red, bgColor: colors.accent.redBg },
   waiting_documents: { color: colors.accent.purple, bgColor: colors.accent.purpleBg },
@@ -28,10 +28,10 @@ export const partnerStatusColors: Record<PartnerStatus, { color: string; bgColor
 };
 
 /**
- * パートナーステータスの優先度（ソート用）
+ * 協力会社ステータスの優先度（ソート用）
  * 数字が小さいほど優先
  */
-export const partnerStatusPriority: Record<PartnerStatus, number> = {
+export const companyStatusPriority: Record<CompanyStatus, number> = {
   estimate_adopted: 1,
   estimate_completed: 2,
   estimate_in_progress: 3,

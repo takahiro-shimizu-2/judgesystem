@@ -1,10 +1,10 @@
 /**
  * 協力会社マスターデータ（企業情報を統合）
  */
-import type { PartnerListItem } from '../types';
+import type { CompanyListItem } from '../types';
 import { getApiUrl } from '../config/api';
 
-export interface PartnerListParams {
+export interface CompanyListParams {
   page?: number;
   pageSize?: number;
   q?: string;
@@ -17,7 +17,7 @@ export interface PartnerListParams {
   order?: string;
 }
 
-export interface PartnerListRow {
+export interface CompanyListRow {
   id: string;
   no: number;
   name: string;
@@ -30,17 +30,17 @@ export interface PartnerListRow {
   categories: { group: string | null; name: string }[];
 }
 
-export interface PaginatedPartnerResponse {
-  data: PartnerListRow[];
+export interface PaginatedCompanyResponse {
+  data: CompanyListRow[];
   total: number;
   page: number;
   pageSize: number;
 }
 
-export async function fetchPartnerList(
-  params?: PartnerListParams,
+export async function fetchCompanyMasterList(
+  params?: CompanyListParams,
   signal?: AbortSignal,
-): Promise<PaginatedPartnerResponse> {
+): Promise<PaginatedCompanyResponse> {
   const sp = new URLSearchParams();
   if (params?.page != null) sp.set('page', String(params.page));
   if (params?.pageSize != null) sp.set('pageSize', String(params.pageSize));
@@ -54,15 +54,15 @@ export async function fetchPartnerList(
   if (params?.order) sp.set('order', params.order);
 
   const qs = sp.toString();
-  const url = getApiUrl(`/api/partners${qs ? `?${qs}` : ''}`);
+  const url = getApiUrl(`/api/companies${qs ? `?${qs}` : ''}`);
   const response = await fetch(url, { signal });
   if (!response.ok) {
-    throw new Error(`Failed to load partners: ${response.status}`);
+    throw new Error(`Failed to load companies: ${response.status}`);
   }
   return await response.json();
 }
 
-export async function createPartnerRecord(
+export async function createCompanyRecord(
   data: {
     name: string;
     postalCode: string;
@@ -78,25 +78,25 @@ export async function createPartnerRecord(
     categories: { group: string | null; name: string }[];
     branches: { name: string; address: string }[];
   }
-): Promise<PartnerListItem | null> {
+): Promise<CompanyListItem | null> {
   try {
-    const response = await fetch(getApiUrl('/api/partners'), {
+    const response = await fetch(getApiUrl('/api/companies'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
     });
     if (!response.ok) {
-      throw new Error(`Failed to create partner: ${response.status}`);
+      throw new Error(`Failed to create company: ${response.status}`);
     }
     return await response.json();
   } catch (error) {
-    console.error('Failed to create partner:', error);
+    console.error('Failed to create company:', error);
     return null;
   }
 }
 
-/** updatePartnerRecord に渡せるフィールド（PATCH 用部分更新） */
-export interface PartnerUpdateData {
+/** updateCompanyRecord に渡せるフィールド（PATCH 用部分更新） */
+export interface CompanyUpdateData {
   name?: string;
   postalCode?: string;
   address?: string;
@@ -115,39 +115,37 @@ export interface PartnerUpdateData {
   rating?: number;
 }
 
-export async function updatePartnerRecord(
+export async function updateCompanyRecord(
   id: string,
-  data: PartnerUpdateData
-): Promise<PartnerListItem | null> {
+  data: CompanyUpdateData
+): Promise<CompanyListItem | null> {
   try {
-    const response = await fetch(getApiUrl(`/api/partners/${id}`), {
+    const response = await fetch(getApiUrl(`/api/companies/${id}`), {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
     });
     if (!response.ok) {
-      throw new Error(`Failed to update partner: ${response.status}`);
+      throw new Error(`Failed to update company: ${response.status}`);
     }
     return await response.json();
   } catch (error) {
-    console.error('Failed to update partner:', error);
+    console.error('Failed to update company:', error);
     return null;
   }
 }
 
-export async function deletePartnerRecord(id: string): Promise<boolean> {
+export async function deleteCompanyRecord(id: string): Promise<boolean> {
   try {
-    const response = await fetch(getApiUrl(`/api/partners/${id}`), {
+    const response = await fetch(getApiUrl(`/api/companies/${id}`), {
       method: 'DELETE',
     });
     if (!response.ok) {
-      throw new Error(`Failed to delete partner: ${response.status}`);
+      throw new Error(`Failed to delete company: ${response.status}`);
     }
     return true;
   } catch (error) {
-    console.error('Failed to delete partner:', error);
+    console.error('Failed to delete company:', error);
     return false;
   }
 }
-
-

@@ -6,26 +6,26 @@
  */
 import { useState, useCallback, useEffect, useRef } from 'react';
 import {
-  fetchPartnerCandidates,
-  createPartnerCandidate,
-  deletePartnerCandidate,
-  updatePartnerCandidate,
+  fetchCompanyCandidates,
+  createCompanyCandidate,
+  deleteCompanyCandidate,
+  updateCompanyCandidate,
 } from '../data';
-import type { Partner, PartnerStatus, PartnerCandidatePayload } from '../types';
+import type { CompanyCandidate, CompanyStatus, CompanyCandidatePayload } from '../types';
 
-export interface UsePartnerAssignmentResult {
+export interface UseCompanyAssignmentResult {
   /** 協力会社候補リスト */
-  partners: Partner[];
+  companies: CompanyCandidate[];
   /** ローディング状態 */
   isLoading: boolean;
   /** 協力会社候補を追加 */
-  addPartner: (payload: PartnerCandidatePayload) => Promise<void>;
+  addCompany: (payload: CompanyCandidatePayload) => Promise<void>;
   /** 協力会社候補を削除 */
-  removePartner: (partnerId: string) => Promise<void>;
+  removeCompany: (companyId: string) => Promise<void>;
   /** 協力会社のステータスを変更（楽観的更新） */
-  changePartnerStatus: (partnerId: string, status: PartnerStatus) => Promise<void>;
+  changeCompanyStatus: (companyId: string, status: CompanyStatus) => Promise<void>;
   /** 現地調査の承認状態をトグル（楽観的更新） */
-  togglePartnerSurvey: (partnerId: string, nextValue: boolean) => Promise<void>;
+  toggleCompanySurvey: (companyId: string, nextValue: boolean) => Promise<void>;
 }
 
 /**
@@ -34,23 +34,23 @@ export interface UsePartnerAssignmentResult {
  * @param evaluationNo - 判定結果の連番。nullish の場合はフェッチしない。
  * @returns 協力会社データと操作関数
  */
-export function usePartnerAssignment(evaluationNo: string | undefined | null): UsePartnerAssignmentResult {
-  const [partners, setPartners] = useState<Partner[]>([]);
+export function useCompanyAssignment(evaluationNo: string | undefined | null): UseCompanyAssignmentResult {
+  const [companies, setCompanies] = useState<CompanyCandidate[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const requestIdRef = useRef(0);
 
-  const loadPartners = useCallback(async (targetEvaluationNo: string) => {
+  const loadCompanies = useCallback(async (targetEvaluationNo: string) => {
     const requestId = ++requestIdRef.current;
     setIsLoading(true);
     try {
-      const list = await fetchPartnerCandidates(targetEvaluationNo);
+      const list = await fetchCompanyCandidates(targetEvaluationNo);
       if (requestIdRef.current === requestId) {
-        setPartners(list);
+        setCompanies(list);
       }
     } catch (error) {
-      console.error('Failed to fetch partner candidates:', error);
+      console.error('Failed to fetch company candidates:', error);
       if (requestIdRef.current === requestId) {
-        setPartners([]);
+        setCompanies([]);
       }
     } finally {
       if (requestIdRef.current === requestId) {
@@ -62,69 +62,69 @@ export function usePartnerAssignment(evaluationNo: string | undefined | null): U
   useEffect(() => {
     if (!evaluationNo) {
       requestIdRef.current += 1;
-      setPartners([]);
+      setCompanies([]);
       setIsLoading(false);
       return;
     }
-    void loadPartners(evaluationNo);
-  }, [evaluationNo, loadPartners]);
+    void loadCompanies(evaluationNo);
+  }, [evaluationNo, loadCompanies]);
 
-  const addPartner = useCallback(async (payload: PartnerCandidatePayload) => {
+  const addCompany = useCallback(async (payload: CompanyCandidatePayload) => {
     if (!evaluationNo) {
       throw new Error('判定結果を読み込み中です。再度お試しください。');
     }
-    const created = await createPartnerCandidate(evaluationNo, payload);
+    const created = await createCompanyCandidate(evaluationNo, payload);
     if (!created) {
       throw new Error('協力会社の追加に失敗しました。');
     }
-    setPartners((prev) => [...prev, created]);
+    setCompanies((prev) => [...prev, created]);
   }, [evaluationNo]);
 
-  const removePartner = useCallback(async (partnerId: string) => {
+  const removeCompany = useCallback(async (companyId: string) => {
     if (!evaluationNo) {
       throw new Error('判定結果を読み込み中です。');
     }
-    const success = await deletePartnerCandidate(evaluationNo, partnerId);
+    const success = await deleteCompanyCandidate(evaluationNo, companyId);
     if (!success) {
       throw new Error('候補の削除に失敗しました。');
     }
-    setPartners((prev) => prev.filter((p) => p.id !== partnerId));
+    setCompanies((prev) => prev.filter((p) => p.id !== companyId));
   }, [evaluationNo]);
 
-  const changePartnerStatus = useCallback(async (partnerId: string, status: PartnerStatus) => {
+  const changeCompanyStatus = useCallback(async (companyId: string, status: CompanyStatus) => {
     if (!evaluationNo) {
       throw new Error('判定結果を読み込み中です。');
     }
     // 楽観的更新
-    setPartners((prev) => prev.map((p) => (p.id === partnerId ? { ...p, status } : p)));
-    const updated = await updatePartnerCandidate(evaluationNo, partnerId, { status });
+    setCompanies((prev) => prev.map((p) => (p.id === companyId ? { ...p, status } : p)));
+    const updated = await updateCompanyCandidate(evaluationNo, companyId, { status });
     if (!updated) {
       // 失敗時はサーバーから再取得
-      await loadPartners(evaluationNo);
+      await loadCompanies(evaluationNo);
       throw new Error('ステータスの更新に失敗しました。');
     }
-  }, [evaluationNo, loadPartners]);
+  }, [evaluationNo, loadCompanies]);
 
-  const togglePartnerSurvey = useCallback(async (partnerId: string, nextValue: boolean) => {
+  const toggleCompanySurvey = useCallback(async (companyId: string, nextValue: boolean) => {
     if (!evaluationNo) {
       throw new Error('判定結果を読み込み中です。');
     }
     // 楽観的更新
-    setPartners((prev) => prev.map((p) => (p.id === partnerId ? { ...p, surveyApproved: nextValue } : p)));
-    const updated = await updatePartnerCandidate(evaluationNo, partnerId, { surveyApproved: nextValue });
+    setCompanies((prev) => prev.map((p) => (p.id === companyId ? { ...p, surveyApproved: nextValue } : p)));
+    const updated = await updateCompanyCandidate(evaluationNo, companyId, { surveyApproved: nextValue });
     if (!updated) {
       // 失敗時はサーバーから再取得
-      await loadPartners(evaluationNo);
+      await loadCompanies(evaluationNo);
       throw new Error('現地調査ステータスの更新に失敗しました。');
     }
-  }, [evaluationNo, loadPartners]);
+  }, [evaluationNo, loadCompanies]);
 
   return {
-    partners,
+    companies,
     isLoading,
-    addPartner,
-    removePartner,
-    changePartnerStatus,
-    togglePartnerSurvey,
+    addCompany,
+    removeCompany,
+    changeCompanyStatus,
+    toggleCompanySurvey,
   };
 }

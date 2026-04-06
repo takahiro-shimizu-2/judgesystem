@@ -16,7 +16,7 @@ export {
   OrdererSection,
   OrdererInfoSection,
   OrdererWorkflowSection,
-  PartnerSection,
+  CompanySection,
   ClientSection,
   RequestSection,
   AwardSection,

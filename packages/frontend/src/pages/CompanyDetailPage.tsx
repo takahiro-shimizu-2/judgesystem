@@ -39,7 +39,7 @@ import {
   Delete as DeleteIcon,
 } from '@mui/icons-material';
 import { bidTypeConfig } from '../data';
-import { deletePartnerRecord } from '../data/partners';
+import { deleteCompanyRecord } from '../data/companies-master';
 import { colors, pageStyles, fontSizes, chipStyles, iconStyles, borderRadius, rightPanelColors } from '../constants/styles';
 import { workStatusConfig } from '../constants/workStatus';
 import { evaluationStatusConfig } from '../constants/status';
@@ -52,10 +52,10 @@ import { NotFoundView, FloatingBackButton, ScrollToTopButton } from '../componen
 import { CustomPagination } from '../components/bid';
 import { RightSidePanel } from '../components/layout';
 import { useSidebar } from '../contexts/SidebarContext';
-import type { PastProject } from '../types/partner';
+import type { PastProject } from '../types/company';
 import type { BidType } from '../types/announcement';
 import type { EvaluationStatus, WorkStatus, CompanyPriority } from '../types';
-import type { PartnerListItem } from '../types/partner';
+import type { CompanyListItem } from '../types/company';
 import { getApiUrl } from '../config/api';
 
 // ソートオプション
@@ -922,7 +922,7 @@ export default function PartnerDetailPage() {
   const [conditionTab, setConditionTab] = useState<'sort' | 'filter'>('sort');
 
   // APIからデータ取得
-  const [partner, setPartner] = useState<PartnerListItem | null>(null);
+  const [partner, setPartner] = useState<CompanyListItem | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -948,11 +948,11 @@ export default function PartnerDetailPage() {
       setLoading(true);
       setError(null);
       try {
-        const response = await fetch(getApiUrl(`/api/partners/${id}`));
+        const response = await fetch(getApiUrl(`/api/companies/${id}`));
         if (!response.ok) {
           throw new Error(`Failed to fetch partner: ${response.status}`);
         }
-        const data: PartnerListItem = await response.json();
+        const data: CompanyListItem = await response.json();
         setPartner(data);
       } catch (err) {
         setError(err instanceof Error ? err.message : String(err));
@@ -1101,13 +1101,13 @@ export default function PartnerDetailPage() {
       <NotFoundView
         message="指定された会社が見つかりません。"
         backLabel="一覧に戻る"
-        onBack={() => navigate('/partners')}
+        onBack={() => navigate('/companies')}
       />
     );
   }
 
   // データ構造の保証（デフォルト値設定）
-  const safePartner: PartnerListItem = {
+  const safePartner: CompanyListItem = {
     ...partner,
     branches: partner.branches ?? [],
     categories: partner.categories ?? [],
@@ -1135,7 +1135,7 @@ export default function PartnerDetailPage() {
               <Button
                 size="small"
                 startIcon={<ArrowBackIcon sx={iconStyles.small} />}
-                onClick={() => navigate('/partners')}
+                onClick={() => navigate('/companies')}
                 sx={{
                   color: colors.text.muted,
                   fontWeight: 500,
@@ -1190,9 +1190,9 @@ export default function PartnerDetailPage() {
                   if (!window.confirm(`「${safePartner.name}」を削除しますか？`)) return;
                   setIsDeleting(true);
                   try {
-                    const success = await deletePartnerRecord(safePartner.id);
+                    const success = await deleteCompanyRecord(safePartner.id);
                     if (success) {
-                      navigate('/partners');
+                      navigate('/companies');
                     } else {
                       console.error('Failed to delete partner:', safePartner.id);
                       setSnackbar({ open: true, message: '削除に失敗しました。時間をおいて再度お試しください。', severity: 'error' });
@@ -1589,7 +1589,7 @@ export default function PartnerDetailPage() {
           )}
         </Box>
       </Box>
-      <FloatingBackButton onClick={() => navigate('/partners')} />
+      <FloatingBackButton onClick={() => navigate('/companies')} />
       <ScrollToTopButton />
 
       <Snackbar

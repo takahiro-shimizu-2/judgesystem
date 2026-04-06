@@ -10,9 +10,9 @@ import type {
   WorkStatus,
   OrdererWorkflowState,
   PartnerWorkflowState,
-  Partner,
-  PartnerStatus,
-  PartnerCandidatePayload,
+  CompanyCandidate,
+  CompanyStatus,
+  CompanyCandidatePayload,
 } from '../types';
 import { getApiUrl } from '../config/api';
 
@@ -285,7 +285,7 @@ export const downloadPartnerWorkflowFile = async (
   return await response.blob();
 };
 
-const PARTNER_STATUS_VALUES: PartnerStatus[] = [
+const COMPANY_STATUS_VALUES: CompanyStatus[] = [
   'not_called',
   'waiting_documents',
   'waiting_response',
@@ -295,7 +295,7 @@ const PARTNER_STATUS_VALUES: PartnerStatus[] = [
   'unavailable',
 ];
 
-interface PartnerCandidateResponse {
+interface CompanyCandidateResponse {
   id: string;
   evaluationNo: string;
   partnerId: string;
@@ -310,9 +310,9 @@ interface PartnerCandidateResponse {
   updatedAt?: string;
 }
 
-const mapPartnerFromApi = (candidate: PartnerCandidateResponse): Partner => {
-  const normalizedStatus = PARTNER_STATUS_VALUES.includes(candidate.status as PartnerStatus)
-    ? (candidate.status as PartnerStatus)
+const mapCompanyFromApi = (candidate: CompanyCandidateResponse): CompanyCandidate => {
+  const normalizedStatus = COMPANY_STATUS_VALUES.includes(candidate.status as CompanyStatus)
+    ? (candidate.status as CompanyStatus)
     : 'not_called';
   return {
     id: String(candidate.id),
@@ -330,27 +330,27 @@ const mapPartnerFromApi = (candidate: PartnerCandidateResponse): Partner => {
   };
 };
 
-export const fetchPartnerCandidates = async (evaluationNo: string): Promise<Partner[]> => {
+export const fetchCompanyCandidates = async (evaluationNo: string): Promise<CompanyCandidate[]> => {
   try {
     const response = await fetch(getApiUrl(`/api/evaluations/${evaluationNo}/partners`));
     if (!response.ok) {
       throw new Error(`Failed to fetch partners: ${response.status}`);
     }
-    const data: PartnerCandidateResponse[] = await response.json();
+    const data: CompanyCandidateResponse[] = await response.json();
     if (!Array.isArray(data)) {
       return [];
     }
-    return data.map(mapPartnerFromApi);
+    return data.map(mapCompanyFromApi);
   } catch (error) {
-    console.error('Error fetching partner candidates:', error);
+    console.error('Error fetching company candidates:', error);
     return [];
   }
 };
 
-export const createPartnerCandidate = async (
+export const createCompanyCandidate = async (
   evaluationNo: string,
-  payload: PartnerCandidatePayload
-): Promise<Partner | null> => {
+  payload: CompanyCandidatePayload
+): Promise<CompanyCandidate | null> => {
   try {
     const response = await fetch(getApiUrl(`/api/evaluations/${evaluationNo}/partners`), {
       method: 'POST',
@@ -358,7 +358,7 @@ export const createPartnerCandidate = async (
       body: JSON.stringify(payload),
     });
     if (!response.ok) {
-      let message = `Failed to create partner candidate: ${response.status}`;
+      let message = `Failed to create company candidate: ${response.status}`;
       try {
         const errorBody = await response.json();
         if (typeof errorBody?.message === 'string') {
@@ -369,30 +369,30 @@ export const createPartnerCandidate = async (
       }
       throw new Error(message);
     }
-    const data: PartnerCandidateResponse = await response.json();
-    return mapPartnerFromApi(data);
+    const data: CompanyCandidateResponse = await response.json();
+    return mapCompanyFromApi(data);
   } catch (error) {
-    console.error('Error creating partner candidate:', error);
+    console.error('Error creating company candidate:', error);
     return null;
   }
 };
 
-interface PartnerCandidateUpdatePayload {
+interface CompanyCandidateUpdatePayload {
   partnerName?: string;
   contactPerson?: string | null;
   phone?: string | null;
   email?: string | null;
   fax?: string | null;
-  status?: PartnerStatus;
+  status?: CompanyStatus;
   surveyApproved?: boolean;
 }
 
-export const updatePartnerCandidate = async (
+export const updateCompanyCandidate = async (
   evaluationNo: string,
   partnerId: string,
-  updates: PartnerCandidateUpdatePayload
-): Promise<Partner | null> => {
-  const body: PartnerCandidateUpdatePayload = { ...updates };
+  updates: CompanyCandidateUpdatePayload
+): Promise<CompanyCandidate | null> => {
+  const body: CompanyCandidateUpdatePayload = { ...updates };
   try {
     const response = await fetch(
       getApiUrl(`/api/evaluations/${evaluationNo}/partners/${partnerId}`),
@@ -403,17 +403,17 @@ export const updatePartnerCandidate = async (
       }
     );
     if (!response.ok) {
-      throw new Error(`Failed to update partner candidate: ${response.status}`);
+      throw new Error(`Failed to update company candidate: ${response.status}`);
     }
-    const data: PartnerCandidateResponse = await response.json();
-    return mapPartnerFromApi(data);
+    const data: CompanyCandidateResponse = await response.json();
+    return mapCompanyFromApi(data);
   } catch (error) {
-    console.error('Error updating partner candidate:', error);
+    console.error('Error updating company candidate:', error);
     return null;
   }
 };
 
-export const deletePartnerCandidate = async (
+export const deleteCompanyCandidate = async (
   evaluationNo: string,
   partnerId: string
 ): Promise<boolean> => {
@@ -425,11 +425,11 @@ export const deletePartnerCandidate = async (
       return true;
     }
     if (!response.ok) {
-      throw new Error(`Failed to delete partner candidate: ${response.status}`);
+      throw new Error(`Failed to delete company candidate: ${response.status}`);
     }
     return true;
   } catch (error) {
-    console.error('Error deleting partner candidate:', error);
+    console.error('Error deleting company candidate:', error);
     return false;
   }
 };

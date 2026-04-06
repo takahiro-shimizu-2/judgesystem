@@ -27,7 +27,7 @@ import {
 import { FormSection } from './FormSection';
 import { DynamicArrayInput } from './DynamicArrayInput';
 import { CategoryMultiSelect } from './CategoryMultiSelect';
-import { usePartnerForm, type PartnerFormData } from '../../hooks/usePartnerForm';
+import { useCompanyForm, type CompanyFormData } from '../../hooks/useCompanyForm';
 import {
   formFieldStyles,
   formGridStyles,
@@ -51,14 +51,14 @@ import {
   type UnifiedMainCategory,
 } from '../../constants/qualifications';
 
-interface PartnerRegisterFormProps {
-  onSubmit?: (data: PartnerFormData) => void;
-  initialData?: PartnerFormData;
+interface CompanyRegisterFormProps {
+  onSubmit?: (data: CompanyFormData) => void;
+  initialData?: CompanyFormData;
   editMode?: boolean;
   entityId?: string;
 }
 
-export function PartnerRegisterForm({ onSubmit, initialData, editMode, entityId }: PartnerRegisterFormProps) {
+export function CompanyRegisterForm({ onSubmit, initialData, editMode, entityId }: CompanyRegisterFormProps) {
   const navigate = useNavigate();
   const {
     formData,
@@ -81,7 +81,7 @@ export function PartnerRegisterForm({ onSubmit, initialData, editMode, entityId 
     updateOrdererQualificationItem,
     removeOrdererQualificationItem,
     addOrdererQualificationItemsForAllRegions,
-  } = usePartnerForm();
+  } = useCompanyForm();
 
   // 全地域一括追加用の状態（発注者ごとに管理）
   const [bulkAddState, setBulkAddState] = useState<Record<number, { category: string; value: string; grade: string }>>({});
@@ -90,7 +90,7 @@ export function PartnerRegisterForm({ onSubmit, initialData, editMode, entityId 
   useEffect(() => {
     if (initialData) {
       Object.entries(initialData).forEach(([key, value]) => {
-        updateField(key as keyof PartnerFormData, value as PartnerFormData[keyof PartnerFormData]);
+        updateField(key as keyof CompanyFormData, value as CompanyFormData[keyof CompanyFormData]);
       });
     }
   }, [initialData, updateField]);
@@ -104,7 +104,7 @@ export function PartnerRegisterForm({ onSubmit, initialData, editMode, entityId 
     }
   };
 
-  const showError = (field: keyof PartnerFormData) => touched[field] && errors[field];
+  const showError = (field: keyof CompanyFormData) => touched[field] && errors[field];
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
