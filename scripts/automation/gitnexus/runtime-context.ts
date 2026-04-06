@@ -91,6 +91,7 @@ const AGENT_ANCHOR_SYMBOLS: Partial<Record<AutomationAgentName, readonly string[
 export function buildGitNexusRuntimeArtifact(options: GitNexusRuntimeContextOptions): GitNexusRuntimeArtifact {
   const logger = options.logger;
   const generatedAt = new Date().toISOString();
+  ensureGitNexusIndex(options.gitnexusRootDir, logger);
   const issueQuery = runIssueQuery(options);
   const planningAnchors = PLANNING_ANCHOR_SYMBOLS.map((symbolName) =>
     loadAnchorSnapshot(symbolName, options.gitnexusRootDir, options.repo),
@@ -295,12 +296,30 @@ function formatCallable(name?: string, filePath?: string) {
   return name || filePath || '';
 }
 
+function ensureGitNexusIndex(cwd: string, logger?: AutomationLogger) {
+  const status = runGitNexusCommand(['status'], cwd, { tolerateFailure: true });
+  const output = [status.stdout, status.stderr].filter(Boolean).join('\n');
+
+  if (status.status === 0 && output.includes('Status: ✅ up-to-date')) {
+    return;
+  }
+
+  logger?.warn(
+    `GitNexus index is unavailable or stale for ${cwd}; bootstrapping with analyze before runtime planning.`,
+  );
+
+  const analyze = runGitNexusCommand(['analyze'], cwd);
+  if (analyze.status !== 0) {
+    throw new Error(
+      [`GitNexus analyze failed: npx gitnexus analyze`, analyze.stderr?.trim(), analyze.stdout?.trim()]
+        .filter(Boolean)
+        .join('\n'),
+    );
+  }
+}
+
 function runGitNexusJson<T>(args: string[], cwd: string): T {
-  const result = spawnSync('npx', ['gitnexus', ...args], {
-    cwd,
-    encoding: 'utf8',
-    maxBuffer: 10 * 1024 * 1024,
-  });
+  const result = runGitNexusCommand(args, cwd);
 
   if (result.status !== 0) {
     throw new Error(
@@ -324,4 +343,18 @@ function runGitNexusJson<T>(args: string[], cwd: string): T {
       }`,
     );
   }
+}
+
+function runGitNexusCommand(args: string[], cwd: string, options?: { tolerateFailure?: boolean }) {
+  const result = spawnSync('npx', ['gitnexus', ...args], {
+    cwd,
+    encoding: 'utf8',
+    maxBuffer: 10 * 1024 * 1024,
+  });
+
+  if (!options?.tolerateFailure && result.error) {
+    throw result.error;
+  }
+
+  return result;
 }

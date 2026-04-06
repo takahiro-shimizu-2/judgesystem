@@ -52,10 +52,10 @@ GitNexus を「使うべき補助ツール」ではなく、
 - GitNexus runtime artifact が planning ごとに必ず生成される
 - `TaskManager` の全 task に GitNexus binding が付く
 - `CodeGen/Test/Review` artifact に GitNexus note が残る
+- fresh checkout / CI でも GitNexus index bootstrap 後に `automation:smoke` が green
 - `npm run automation:smoke` が green
 
 ## 6. 非目標
 
-- GitNexus index 自動再生成そのものを runtime の中に入れること
 - `gitnexus-stable-ops` を repo-local runtime に取り込むこと
 - PR / Deploy 側の business policy を GitNexus 依存にすること

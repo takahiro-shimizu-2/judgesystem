@@ -166,6 +166,7 @@ task ごとに GitNexus binding を付ける。
 現在の運用契約:
 
 - `TaskManager` が issue-level query と runtime anchor symbol の context / impact を artifact 化する
+- planning 開始前に GitNexus index が無い / stale の場合、runtime が `npx gitnexus analyze` で bootstrap する
 - `TaskExecutor` は GitNexus binding が無い task を execute しない
 - `CodeGenAgent`, `TestAgent`, `ReviewAgent` は GitNexus note を artifact に残す
 - living plan と workflow summary から GitNexus artifact path が見える
