@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [main, develop, feat/**, fix/**, refactor/**]
+    branches: [main, develop, feat/**, feature/**, fix/**, refactor/**]
   pull_request:
-    branches: [main, develop, feat/**, fix/**, refactor/**]
+    branches: [main, develop, feat/**, feature/**, fix/**, refactor/**]
 
 jobs:
   automation-smoke:
