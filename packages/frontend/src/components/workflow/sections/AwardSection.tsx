@@ -145,7 +145,7 @@ export function AwardSection({ evaluation, partners = [], workflowAssigneeId }: 
   type AnnouncementWithExtras = Announcement & {
     actualAmount?: number;
     winningCompanyName?: string;
-    competingCompanies?: CompetingCompanyCandidate[];
+    competingCompanies?: CompetingCompany[];
   };
 
   const announcementExtras = evaluation?.announcement as AnnouncementWithExtras | undefined;
@@ -155,7 +155,7 @@ export function AwardSection({ evaluation, partners = [], workflowAssigneeId }: 
     [announcementExtras?.competingCompanies]
   );
 
-  const participants: ParticipantCompanyCandidate[] = useMemo(() => {
+  const participants: ParticipantCompany[] = useMemo(() => {
     return competingCompanies.map((company: CompetingCompany, index: number) => {
       const bidAmounts = (company.bidAmounts || []).filter(
         (amount): amount is number => typeof amount === 'number'

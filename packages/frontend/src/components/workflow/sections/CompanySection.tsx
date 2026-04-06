@@ -62,6 +62,7 @@ import type {
   CompanyCandidate,
   CompanyStatus,
   CompanyCandidatePayload,
+  PartnerDocument,
   PartnerWorkflowState,
   PartnerWorkflowEntry,
 } from '../../../types';
@@ -667,7 +668,7 @@ function PartnerCard({
     }
   };
 
-  const handleDeleteReceivedDocument = async (doc: CompanyCandidateDocument) => {
+  const handleDeleteReceivedDocument = async (doc: PartnerDocument) => {
     if (!evaluationNo) {
       return;
     }
@@ -686,7 +687,7 @@ function PartnerCard({
     }
   };
 
-  const handleDownloadReceivedDocument = async (doc: CompanyCandidateDocument) => {
+  const handleDownloadReceivedDocument = async (doc: PartnerDocument) => {
     const fileToken = doc.fileId || doc.id;
     if (!evaluationNo || !fileToken) {
       onWorkflowError('ファイルをダウンロードできません。');
@@ -1546,7 +1547,7 @@ interface CompanySectionProps {
   workflowAssigneeId?: string;
   onAddPartner?: (input: CompanyCandidatePayload) => Promise<void>;
   onRemovePartner?: (partnerId: string) => Promise<void>;
-  onCompanyStatusChange?: (partnerId: string, status: CompanyStatus) => Promise<void>;
+  onPartnerStatusChange?: (partnerId: string, status: CompanyStatus) => Promise<void>;
   onPartnerSurveyToggle?: (partnerId: string, nextValue: boolean) => Promise<void>;
   isLoading?: boolean;
 }
@@ -1561,10 +1562,10 @@ export function CompanySection({
   workflowAssigneeId,
   onAddPartner,
   onRemovePartner,
-  onCompanyStatusChange,
+  onPartnerStatusChange,
   onPartnerSurveyToggle,
   isLoading = false,
-}: CompanyCandidateSectionProps) {
+}: CompanySectionProps) {
   const { staff, findById } = useStaffDirectory();
   // 案件・自社情報をevaluationから取得
   const projectName = evaluation?.announcement?.title || '（案件名）';
@@ -1634,7 +1635,7 @@ export function CompanySection({
   }, [evaluationNo]);
 
   const persistPartnerWorkflow = useCallback(async (
-    updater: (prev: CompanyCandidateWorkflowState) => PartnerWorkflowState,
+    updater: (prev: PartnerWorkflowState) => PartnerWorkflowState,
     options?: { onError?: (message: string | null) => void }
   ): Promise<boolean> => {
     const previousState = partnerWorkflowRef.current;
@@ -1722,7 +1723,7 @@ export function CompanySection({
     }
   };
 
-  const handleDeleteSentDocument = async (doc: CompanyCandidateDocument) => {
+  const handleDeleteSentDocument = async (doc: PartnerDocument) => {
     if (!evaluationNo) {
       return;
     }
@@ -1733,7 +1734,7 @@ export function CompanySection({
       }
       await persistPartnerWorkflow((prev) => ({
         ...prev,
-        sentDocuments: prev.sentDocuments.filter((item) => item.id !== doc.id),
+        sentDocuments: prev.sentDocuments.filter((item: PartnerDocument) => item.id !== doc.id),
       }), { onError: setDocsError });
     } catch (error) {
       console.error('Failed to delete sent document:', error);
@@ -1743,7 +1744,7 @@ export function CompanySection({
     }
   };
 
-  const handleDownloadDocument = async (doc: CompanyCandidateDocument) => {
+  const handleDownloadDocument = async (doc: PartnerDocument) => {
     const fileToken = doc.fileId || doc.id;
     if (!evaluationNo || !fileToken) {
       setDocsError('ファイルをダウンロードできません。');
@@ -1800,14 +1801,14 @@ export function CompanySection({
 
   // コールバック
   const changeStatus = useCallback((id: string, newStatus: CompanyStatus) => {
-    if (!onCompanyStatusChange) return;
-    onCompanyStatusChange(id, newStatus)
+    if (!onPartnerStatusChange) return;
+    onPartnerStatusChange(id, newStatus)
       .then(() => setActionError(null))
       .catch((error) => {
         console.error("Failed to update partner status:", error);
         setActionError(error instanceof Error ? error.message : "協力会社のステータス更新に失敗しました。");
       });
-  }, [onCompanyStatusChange]);
+  }, [onPartnerStatusChange]);
 
   const toggleSurvey = useCallback((id: string, nextValue: boolean) => {
     if (!onPartnerSurveyToggle) return;
@@ -2033,7 +2034,7 @@ export function CompanySection({
           </Typography>
         ) : (
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-            {partnerWorkflowState.sentDocuments.map((doc: CompanyCandidateDocument) => (
+            {partnerWorkflowState.sentDocuments.map((doc: PartnerDocument) => (
               <Box
                 key={doc.id}
                 sx={{
