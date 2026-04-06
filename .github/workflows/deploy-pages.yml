@@ -7,6 +7,9 @@ on:
   push:
     branches:
       - 'feat/**'
+      - 'feature/**'
+      - 'fix/**'
+      - 'refactor/**'
     paths:
       - 'docs/**'
       - '.github/workflows/deploy-pages.yml'
