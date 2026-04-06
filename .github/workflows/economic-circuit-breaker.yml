@@ -43,9 +43,11 @@ jobs:
           WARNING_THRESHOLD=$(yq '.thresholds.warning' BUDGET.yml)
           EMERGENCY_THRESHOLD=$(yq '.thresholds.emergency' BUDGET.yml)
 
-          echo "monthly_budget=$BUDGET" >> $GITHUB_OUTPUT
-          echo "warning_threshold=$WARNING_THRESHOLD" >> $GITHUB_OUTPUT
-          echo "emergency_threshold=$EMERGENCY_THRESHOLD" >> $GITHUB_OUTPUT
+          {
+            echo "monthly_budget=$BUDGET"
+            echo "warning_threshold=$WARNING_THRESHOLD"
+            echo "emergency_threshold=$EMERGENCY_THRESHOLD"
+          } >> "$GITHUB_OUTPUT"
 
           echo "📊 Budget Configuration:"
           echo "  Monthly Budget: \$$BUDGET USD"
@@ -77,7 +79,7 @@ jobs:
             ANTHROPIC_COST_USD=45.23
           fi
 
-          echo "anthropic_cost=$ANTHROPIC_COST_USD" >> $GITHUB_OUTPUT
+          echo "anthropic_cost=$ANTHROPIC_COST_USD" >> "$GITHUB_OUTPUT"
           echo "🤖 Anthropic API Cost: \$$ANTHROPIC_COST_USD USD"
 
       - name: Check Firebase Costs
@@ -99,7 +101,7 @@ jobs:
             FIREBASE_COST_USD=12.50
           fi
 
-          echo "firebase_cost=$FIREBASE_COST_USD" >> $GITHUB_OUTPUT
+          echo "firebase_cost=$FIREBASE_COST_USD" >> "$GITHUB_OUTPUT"
           echo "🔥 Firebase Cost: \$$FIREBASE_COST_USD USD"
 
       - name: Check GitHub Actions Usage
@@ -115,24 +117,24 @@ jobs:
 
           # 当月のActions使用時間を取得
           MONTH_START_UNIX=$(date -d "$(date +%Y-%m-01)" +%s)
-          CURRENT_UNIX=$(date +%s)
+          MONTH_START_ISO=$(date -d "@$MONTH_START_UNIX" -u +%Y-%m-%dT%H:%M:%SZ)
 
           # GitHub API: Workflow runs (last 30 days)
           TOTAL_MINUTES=$(gh api \
             -H "Accept: application/vnd.github+json" \
             "/repos/$OWNER/$REPO/actions/runs?per_page=100" \
-            --jq '[.workflow_runs[] | select(.created_at >= "'$(date -d "@$MONTH_START_UNIX" -u +%Y-%m-%dT%H:%M:%SZ)'") | .run_duration_ms // 0] | add // 0' \
+            --jq "[.workflow_runs[] | select(.created_at >= \"$MONTH_START_ISO\") | .run_duration_ms // 0] | add // 0" \
             | awk '{print int($1/60000)}')
 
-          echo "github_minutes=$TOTAL_MINUTES" >> $GITHUB_OUTPUT
+          echo "github_minutes=$TOTAL_MINUTES" >> "$GITHUB_OUTPUT"
           echo "⚙️ GitHub Actions Usage: ${TOTAL_MINUTES} minutes this month"
 
           # 無料枠3000分を超えたら警告
           if [ "$TOTAL_MINUTES" -gt 3000 ]; then
-            echo "github_over_quota=true" >> $GITHUB_OUTPUT
+            echo "github_over_quota=true" >> "$GITHUB_OUTPUT"
             echo "⚠️ WARNING: GitHub Actions over free tier quota!"
           else
-            echo "github_over_quota=false" >> $GITHUB_OUTPUT
+            echo "github_over_quota=false" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Calculate Total Cost and Consumption Rate
@@ -156,9 +158,11 @@ jobs:
           WARNING_AMOUNT=$(echo "$BUDGET * $WARNING" | bc)
           EMERGENCY_AMOUNT=$(echo "$BUDGET * $EMERGENCY" | bc)
 
-          echo "total_cost=$TOTAL_COST" >> $GITHUB_OUTPUT
-          echo "consumption_rate=$CONSUMPTION_RATE" >> $GITHUB_OUTPUT
-          echo "consumption_percent=$CONSUMPTION_PERCENT" >> $GITHUB_OUTPUT
+          {
+            echo "total_cost=$TOTAL_COST"
+            echo "consumption_rate=$CONSUMPTION_RATE"
+            echo "consumption_percent=$CONSUMPTION_PERCENT"
+          } >> "$GITHUB_OUTPUT"
 
           echo ""
           echo "═══════════════════════════════════════"
@@ -173,13 +177,13 @@ jobs:
 
           # しきい値チェック
           if (( $(echo "$TOTAL_COST >= $EMERGENCY_AMOUNT" | bc -l) )); then
-            echo "status=EMERGENCY" >> $GITHUB_OUTPUT
+            echo "status=EMERGENCY" >> "$GITHUB_OUTPUT"
             echo "🚨 STATUS: EMERGENCY - Circuit Breaker will activate!"
           elif (( $(echo "$TOTAL_COST >= $WARNING_AMOUNT" | bc -l) )); then
-            echo "status=WARNING" >> $GITHUB_OUTPUT
+            echo "status=WARNING" >> "$GITHUB_OUTPUT"
             echo "⚠️ STATUS: WARNING - Approaching budget limit"
           else
-            echo "status=OK" >> $GITHUB_OUTPUT
+            echo "status=OK" >> "$GITHUB_OUTPUT"
             echo "✅ STATUS: OK - Within budget"
           fi
 

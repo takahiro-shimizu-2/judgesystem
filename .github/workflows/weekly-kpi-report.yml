@@ -30,8 +30,10 @@ jobs:
 
       - name: Summary
         run: |
-          echo "### 📊 Weekly KPI Report Posted" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "✓ Successfully generated and posted weekly KPI report to Discussions" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "View at: https://github.com/${{ github.repository }}/discussions" >> $GITHUB_STEP_SUMMARY
+          {
+            echo "### 📊 Weekly KPI Report Posted"
+            echo
+            echo "✓ Successfully generated and posted weekly KPI report to Discussions"
+            echo
+            echo "View at: https://github.com/${{ github.repository }}/discussions"
+          } >> "$GITHUB_STEP_SUMMARY"
