@@ -31,11 +31,19 @@ CREATE INDEX IF NOT EXISTS idx_bid_requirements_announcement_no
 -- -----------------------------------------------------------------------------
 -- 4. bid_requirements — requirement_text 全文検索 (pg_bigm)
 --    pg_bigm: Cloud SQL 公式対応、日本語 2-gram インデックス
+--    pg_bigm が利用不可の環境 (CI等) では NOTICE を出してスキップ
 -- -----------------------------------------------------------------------------
-CREATE EXTENSION IF NOT EXISTS pg_bigm;
-
-CREATE INDEX IF NOT EXISTS idx_bid_requirements_text_bigm
-  ON bid_requirements USING gin (requirement_text gin_bigm_ops);
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_available_extensions WHERE name = 'pg_bigm') THEN
+    CREATE EXTENSION IF NOT EXISTS pg_bigm;
+    CREATE INDEX IF NOT EXISTS idx_bid_requirements_text_bigm
+      ON bid_requirements USING gin (requirement_text gin_bigm_ops);
+  ELSE
+    RAISE NOTICE 'pg_bigm extension not available — skipping full-text search index';
+  END IF;
+END;
+$$;
 
 -- -----------------------------------------------------------------------------
 -- 5. sufficient_requirements / insufficient_requirements — ルックアップ高速化
