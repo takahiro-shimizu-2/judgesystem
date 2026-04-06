@@ -158,11 +158,14 @@ class Master:
     """
     Masterクラス。
 
+    @deprecated: Use db_operator instead. このクラスは段階的に廃止予定。
+    #188 企業マスタ統合により companies / company_disqualifications は DB 経由に移行済み。
+
     Attributes:
 
     - agency_master:
 
-    - company_master:
+    - companies: (旧 company_master, DB経由を推奨)
 
     - construction_master:
 
@@ -191,7 +194,8 @@ class Master:
             "announcements_competing_companies_master":"data/master/announcements_competing_companies_master.txt",
             "announcements_competing_company_bids_master":"data/master/announcements_competing_company_bids_master.txt",
 
-            "company_master":"data/master/company_master.txt",
+            "companies":"data/master/companies.txt",
+            "company_disqualifications":"data/master/company_disqualifications.txt",
             "construction_master":"data/master/construction_master.txt",
             "employee_master":"data/master/employee_master.txt",
             "employee_qualification_master":"data/master/employee_qualification_master.txt",
@@ -205,13 +209,13 @@ class Master:
             "similar_cases_master":"data/master/similar_cases_master.txt",
             "similar_cases_competitors":"data/master/similar_cases_competitors.txt",
 
-            "partners_master":"data/master/partners_master.txt",
-            "partners_branches":"data/master/partners_branches.txt",
-            "partners_categories":"data/master/partners_categories.txt",
-            "partners_past_projects":"data/master/partners_past_projects.txt",
-            "partners_qualifications_orderer_items":"data/master/partners_qualifications_orderer_items.txt",
-            "partners_qualifications_orderers":"data/master/partners_qualifications_orderers.txt",
-            "partners_qualifications_unified":"data/master/partners_qualifications_unified.txt"
+            "companies_master":"data/master/companies_master.txt",
+            "companies_branches":"data/master/companies_branches.txt",
+            "companies_categories":"data/master/companies_categories.txt",
+            "companies_past_projects":"data/master/companies_past_projects.txt",
+            "companies_qualifications_orderer_items":"data/master/companies_qualifications_orderer_items.txt",
+            "companies_qualifications_orderers":"data/master/companies_qualifications_orderers.txt",
+            "companies_qualifications_unified":"data/master/companies_qualifications_unified.txt"
         }
 
         for key, val in master_dict.items():
@@ -237,8 +241,17 @@ class Master:
         return pd.read_csv(self.similar_cases_competitors, sep="\t")
 
 
+    def getCompanies(self):
+        """@deprecated: Use db_operator.selectToTable(tablename='companies') instead."""
+        return pd.read_csv(self.companies, sep="\t")
+
+    def getCompanyDisqualifications(self):
+        """@deprecated: Use db_operator.selectToTable(tablename='company_disqualifications') instead."""
+        return pd.read_csv(self.company_disqualifications, sep="\t")
+
     def getCompanyMaster(self):
-        return pd.read_csv(self.company_master, sep="\t")
+        """@deprecated: Use getCompanies() or db_operator instead."""
+        return self.getCompanies()
 
     def getConstructionMaster(self):
         return pd.read_csv(self.construction_master, sep="\t")
@@ -265,32 +278,69 @@ class Master:
         return pd.read_csv(self.technician_qualification_master, sep="\t")
 
 
+    def getCompaniesMaster(self):
+        """@deprecated: Use db_operator instead."""
+        return pd.read_csv(self.companies_master, sep="\t")
+
+    def getCompaniesBranches(self):
+        """@deprecated: Use db_operator instead."""
+        return pd.read_csv(self.companies_branches, sep="\t")
+
+    def getCompaniesCategories(self):
+        """@deprecated: Use db_operator instead."""
+        return pd.read_csv(self.companies_categories, sep="\t")
+
+    def getCompaniesPastProjects(self):
+        """@deprecated: Use db_operator instead."""
+        return pd.read_csv(self.companies_past_projects, sep="\t")
+
+    def getCompaniesQualificationsOrdererItems(self):
+        """@deprecated: Use db_operator instead."""
+        return pd.read_csv(self.companies_qualifications_orderer_items, sep="\t")
+
+    def getCompaniesQualificationsOrderers(self):
+        """@deprecated: Use db_operator instead."""
+        return pd.read_csv(self.companies_qualifications_orderers, sep="\t")
+
+    def getCompaniesQualificationsUnified(self):
+        """@deprecated: Use db_operator instead."""
+        return pd.read_csv(self.companies_qualifications_unified, sep="\t")
+
+    # 後方互換エイリアス
     def getPartnersMaster(self):
-        return pd.read_csv(self.partners_master, sep="\t")
+        """@deprecated: Use getCompaniesMaster() instead."""
+        return self.getCompaniesMaster()
 
     def getPartnersBranches(self):
-        return pd.read_csv(self.partners_branches, sep="\t")
+        """@deprecated: Use getCompaniesBranches() instead."""
+        return self.getCompaniesBranches()
 
     def getPartnersCategories(self):
-        return pd.read_csv(self.partners_categories, sep="\t")
+        """@deprecated: Use getCompaniesCategories() instead."""
+        return self.getCompaniesCategories()
 
     def getPartnersPastProjects(self):
-        return pd.read_csv(self.partners_past_projects, sep="\t")
+        """@deprecated: Use getCompaniesPastProjects() instead."""
+        return self.getCompaniesPastProjects()
 
     def getPartnersQualificationsOrdererItems(self):
-        return pd.read_csv(self.partners_qualifications_orderer_items, sep="\t")
+        """@deprecated: Use getCompaniesQualificationsOrdererItems() instead."""
+        return self.getCompaniesQualificationsOrdererItems()
 
     def getPartnersQualificationsOrderers(self):
-        return pd.read_csv(self.partners_qualifications_orderers, sep="\t")
+        """@deprecated: Use getCompaniesQualificationsOrderers() instead."""
+        return self.getCompaniesQualificationsOrderers()
 
     def getPartnersQualificationsUnified(self):
-        return pd.read_csv(self.partners_qualifications_unified, sep="\t")
+        """@deprecated: Use getCompaniesQualificationsUnified() instead."""
+        return self.getCompaniesQualificationsUnified()
 
     @staticmethod
     def test():
         master = Master()
         print(master.getAgencyMaster())
-        print(master.getCompanyMaster())
+        print(master.getCompanies())
+        print(master.getCompanyDisqualifications())
         print(master.getConstructionMaster())
         print(master.getEmployeeMaster())
         print(master.getEmployeeQualificationMaster())
@@ -316,6 +366,7 @@ def _process_judgement_chunk(args):
 
     # マスターデータを取り出し
     master_data_company = master_data_dict['company']
+    master_data_disqualifications = master_data_dict['disqualifications']
     master_data_office = master_data_dict['office']
     master_data_office_registration_authorization = master_data_dict['office_registration_authorization']
     master_data_office_registration_authorization_with_converter = master_data_dict['office_registration_authorization_with_converter']
@@ -372,6 +423,7 @@ def _process_judgement_chunk(args):
                     companyNo=company_no,
                     officeNo=office_no,
                     company_data=master_data_company,
+                    disqualification_data=master_data_disqualifications,
                     office_registration_authorization_data=master_data_office_registration_authorization
                 )
             elif requirement_type == "業種・等級要件":

@@ -13,7 +13,7 @@ import type { EvaluationStatus, WorkStatus, RequirementCategory, CompanyPriority
 
 // 各ファイルの型をre-export
 export * from './workflow';
-export * from './partner';
+export * from './company';
 export * from './orderer';
 export * from './announcement';
 export * from './staff';

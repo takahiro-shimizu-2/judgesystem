@@ -24,7 +24,7 @@ jobs:
 
       - name: Generate and Post KPI Report
         env:
-          GITHUB_TOKEN: ${{ secrets.GH_PROJECT_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GH_PROJECT_TOKEN || secrets.GITHUB_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
         run: npx tsx scripts/post-kpi-report.ts
 

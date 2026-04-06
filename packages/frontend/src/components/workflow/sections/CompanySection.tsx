@@ -59,10 +59,10 @@ import {
 } from '../../../constants/styles';
 import { MEMO_TAGS, type MemoTag, type MemoTagConfig } from '../../../constants/memoTags';
 import type {
-  Partner,
-  PartnerStatus,
+  CompanyCandidate,
+  CompanyStatus,
+  CompanyCandidatePayload,
   PartnerDocument,
-  PartnerCandidatePayload,
   PartnerWorkflowState,
   PartnerWorkflowEntry,
 } from '../../../types';
@@ -77,11 +77,11 @@ import {
 
 const TALK_TEMPLATE_IDS = ['talk-intro', 'talk-followup'] as const;
 const EMAIL_TEMPLATE_IDS = ['email-request', 'email-estimate'] as const;
-import { partnerStatusLabels, partnerStatusColors, partnerStatusPriority } from '../../../constants/partnerStatus';
+import { companyStatusLabels, companyStatusColors, companyStatusPriority } from '../../../constants/companyStatus';
 import { ContactInfo, ContactActions } from '../../common/ContactInfo';
 import { useStaffDirectory } from '../../../contexts/StaffContext';
 import { PersonIcon } from '../../../constants/icons';
-import { PartnerSearchSelect, type PartnerSearchOption } from '../../partner';
+import { CompanySearchSelect, type CompanySearchOption } from '../../company';
 
 // ============================================================================
 // テンプレート定義
@@ -196,7 +196,7 @@ const SCRIPT_TEMPLATES: ScriptTemplate[] = [
 // プレースホルダーを置換する関数
 const replacePlaceholders = (
   template: string,
-  partner: Partner,
+  partner: CompanyCandidate,
   projectName: string,
   companyName: string,
   staffName: string
@@ -259,11 +259,11 @@ function StatusChip({
   status,
   onStatusChange,
 }: {
-  status: PartnerStatus;
-  onStatusChange: (newStatus: PartnerStatus) => void;
+  status: CompanyStatus;
+  onStatusChange: (newStatus: CompanyStatus) => void;
 }) {
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
-  const config = partnerStatusColors[status];
+  const config = companyStatusColors[status];
 
   const handleClick = (event: React.MouseEvent<HTMLElement>) => {
     event.stopPropagation();
@@ -272,12 +272,12 @@ function StatusChip({
 
   const handleClose = () => setAnchorEl(null);
 
-  const handleSelect = (newStatus: PartnerStatus) => {
+  const handleSelect = (newStatus: CompanyStatus) => {
     onStatusChange(newStatus);
     handleClose();
   };
 
-  const allStatuses: PartnerStatus[] = [
+  const allStatuses: CompanyStatus[] = [
     'not_called', 'waiting_documents', 'waiting_response',
     'estimate_in_progress', 'estimate_completed', 'estimate_adopted', 'unavailable',
   ];
@@ -285,7 +285,7 @@ function StatusChip({
   return (
     <>
       <Chip
-        label={partnerStatusLabels[status]}
+        label={companyStatusLabels[status]}
         size="small"
         onClick={handleClick}
         deleteIcon={<ArrowDownIcon sx={iconStyles.small} />}
@@ -300,7 +300,7 @@ function StatusChip({
       />
       <Menu anchorEl={anchorEl} open={Boolean(anchorEl)} onClose={handleClose}>
         {allStatuses.map((s) => {
-          const sConfig = partnerStatusColors[s];
+          const sConfig = companyStatusColors[s];
           return (
             <MenuItem
               key={s}
@@ -308,7 +308,7 @@ function StatusChip({
               selected={s === status}
               sx={{ fontSize: fontSizes.sm, color: sConfig.color, '&.Mui-selected': { backgroundColor: sConfig.bgColor } }}
             >
-              {partnerStatusLabels[s]}
+              {companyStatusLabels[s]}
             </MenuItem>
           );
         })}
@@ -344,23 +344,23 @@ function FilterChips({
   onToggleStatus,
   onToggleShowUnavailable,
 }: {
-  selectedStatuses: PartnerStatus[];
+  selectedStatuses: CompanyStatus[];
   showUnavailable: boolean;
-  onToggleStatus: (status: PartnerStatus) => void;
+  onToggleStatus: (status: CompanyStatus) => void;
   onToggleShowUnavailable: () => void;
 }) {
-  const allStatuses: PartnerStatus[] = ['not_called', 'waiting_documents', 'waiting_response', 'estimate_in_progress', 'estimate_completed', 'estimate_adopted'];
+  const allStatuses: CompanyStatus[] = ['not_called', 'waiting_documents', 'waiting_response', 'estimate_in_progress', 'estimate_completed', 'estimate_adopted'];
 
   return (
     <Box sx={{ display: 'flex', gap: 0.75, alignItems: 'center', flexWrap: 'wrap', mb: 1 }}>
       <FilterIcon sx={{ ...iconStyles.medium, color: colors.text.muted }} />
       {allStatuses.map((status) => {
         const isSelected = selectedStatuses.includes(status);
-        const config = partnerStatusColors[status];
+        const config = companyStatusColors[status];
         return (
           <Chip
             key={status}
-            label={partnerStatusLabels[status]}
+            label={companyStatusLabels[status]}
             size="small"
             onClick={() => onToggleStatus(status)}
             sx={{
@@ -401,10 +401,10 @@ function PartnerCard({
   onWorkflowError,
   onDelete,
 }: {
-  partner: Partner;
+  partner: CompanyCandidate;
   isExpanded: boolean;
   onToggleExpand: () => void;
-  onStatusChange: (status: PartnerStatus) => void;
+  onStatusChange: (status: CompanyStatus) => void;
   onToggleSurvey: (nextValue: boolean) => void;
   projectName: string;
   defaultCompanyName: string;
@@ -1540,14 +1540,14 @@ function PartnerCard({
 // Props
 // ============================================================================
 
-interface PartnerSectionProps {
+interface CompanySectionProps {
   evaluation?: import('../../../types').BidEvaluation;
-  partners: Partner[];
+  partners: CompanyCandidate[];
   /** ワークフロー（協力会社タブ）の担当者ID */
   workflowAssigneeId?: string;
-  onAddPartner?: (input: PartnerCandidatePayload) => Promise<void>;
+  onAddPartner?: (input: CompanyCandidatePayload) => Promise<void>;
   onRemovePartner?: (partnerId: string) => Promise<void>;
-  onPartnerStatusChange?: (partnerId: string, status: PartnerStatus) => Promise<void>;
+  onPartnerStatusChange?: (partnerId: string, status: CompanyStatus) => Promise<void>;
   onPartnerSurveyToggle?: (partnerId: string, nextValue: boolean) => Promise<void>;
   isLoading?: boolean;
 }
@@ -1556,7 +1556,7 @@ interface PartnerSectionProps {
 // メインコンポーネント
 // ============================================================================
 
-export function PartnerSection({
+export function CompanySection({
   evaluation,
   partners,
   workflowAssigneeId,
@@ -1565,7 +1565,7 @@ export function PartnerSection({
   onPartnerStatusChange,
   onPartnerSurveyToggle,
   isLoading = false,
-}: PartnerSectionProps) {
+}: CompanySectionProps) {
   const { staff, findById } = useStaffDirectory();
   // 案件・自社情報をevaluationから取得
   const projectName = evaluation?.announcement?.title || '（案件名）';
@@ -1589,7 +1589,7 @@ export function PartnerSection({
 
   const [actionError, setActionError] = useState<string | null>(null);
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
-  const [selectedPartnerOption, setSelectedPartnerOption] = useState<PartnerSearchOption | null>(null);
+  const [selectedPartnerOption, setSelectedPartnerOption] = useState<CompanySearchOption | null>(null);
   const [addContactPerson, setAddContactPerson] = useState('');
   const [addPhone, setAddPhone] = useState('');
   const [addEmail, setAddEmail] = useState('');
@@ -1734,7 +1734,7 @@ export function PartnerSection({
       }
       await persistPartnerWorkflow((prev) => ({
         ...prev,
-        sentDocuments: prev.sentDocuments.filter((item) => item.id !== doc.id),
+        sentDocuments: prev.sentDocuments.filter((item: PartnerDocument) => item.id !== doc.id),
       }), { onError: setDocsError });
     } catch (error) {
       console.error('Failed to delete sent document:', error);
@@ -1794,13 +1794,13 @@ export function PartnerSection({
   }, [persistPartnerWorkflow]);
 
   // フィルター状態
-  const [selectedStatuses, setSelectedStatuses] = useState<PartnerStatus[]>([
+  const [selectedStatuses, setSelectedStatuses] = useState<CompanyStatus[]>([
     'not_called', 'waiting_documents', 'waiting_response', 'estimate_in_progress', 'estimate_completed', 'estimate_adopted',
   ]);
   const [showUnavailable, setShowUnavailable] = useState(false);
 
   // コールバック
-  const changeStatus = useCallback((id: string, newStatus: PartnerStatus) => {
+  const changeStatus = useCallback((id: string, newStatus: CompanyStatus) => {
     if (!onPartnerStatusChange) return;
     onPartnerStatusChange(id, newStatus)
       .then(() => setActionError(null))
@@ -1820,7 +1820,7 @@ export function PartnerSection({
       });
   }, [onPartnerSurveyToggle]);
 
-  const handleRemovePartner = useCallback((partner: Partner) => {
+  const handleRemovePartner = useCallback((partner: CompanyCandidate) => {
     if (!onRemovePartner) return;
     const confirmed = window.confirm(`${partner.name} を候補から削除しますか？`);
     if (!confirmed) return;
@@ -1883,10 +1883,10 @@ export function PartnerSection({
       if (p.status === 'unavailable') return showUnavailable;
       return selectedStatuses.includes(p.status);
     });
-    return filtered.sort((a, b) => partnerStatusPriority[a.status] - partnerStatusPriority[b.status]);
+    return filtered.sort((a, b) => companyStatusPriority[a.status] - companyStatusPriority[b.status]);
   }, [partners, selectedStatuses, showUnavailable]);
 
-  const toggleStatus = (status: PartnerStatus) => {
+  const toggleStatus = (status: CompanyStatus) => {
     setSelectedStatuses((prev) => prev.includes(status) ? prev.filter((s) => s !== status) : [...prev, status]);
   };
 
@@ -2081,7 +2081,7 @@ export function PartnerSection({
               {addError}
             </Alert>
           )}
-          <PartnerSearchSelect
+          <CompanySearchSelect
             value={selectedPartnerOption}
             onChange={(option) => {
               setSelectedPartnerOption(option);

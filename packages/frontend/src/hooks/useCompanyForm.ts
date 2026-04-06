@@ -4,10 +4,10 @@ import type {
   UnifiedQualificationItem,
   OrdererQualificationItem,
   OrdererQualification,
-} from '../types/partner';
+} from '../types/company';
 import { validationRules } from '../constants/formStyles';
 
-export interface PartnerFormData {
+export interface CompanyFormData {
   // 基本情報
   name: string;
   postalCode: string;
@@ -34,7 +34,7 @@ export interface PartnerFormData {
   ordererQualifications: OrdererQualification[];
 }
 
-const initialFormData: PartnerFormData = {
+const initialFormData: CompanyFormData = {
   name: '',
   postalCode: '',
   address: '',
@@ -56,25 +56,25 @@ const initialFormData: PartnerFormData = {
 };
 
 type SimpleFields = Exclude<
-  keyof PartnerFormData,
+  keyof CompanyFormData,
   'categories' | 'branches' | 'unifiedQualifications' | 'ordererQualifications'
 >;
 
-export function usePartnerForm() {
-  const [formData, setFormData] = useState<PartnerFormData>(initialFormData);
-  const [errors, setErrors] = useState<Partial<Record<keyof PartnerFormData, string>>>({});
-  const [touched, setTouched] = useState<Partial<Record<keyof PartnerFormData, boolean>>>({});
+export function useCompanyForm() {
+  const [formData, setFormData] = useState<CompanyFormData>(initialFormData);
+  const [errors, setErrors] = useState<Partial<Record<keyof CompanyFormData, string>>>({});
+  const [touched, setTouched] = useState<Partial<Record<keyof CompanyFormData, boolean>>>({});
 
-  const updateField = useCallback(<K extends keyof PartnerFormData>(field: K, value: PartnerFormData[K]) => {
+  const updateField = useCallback(<K extends keyof CompanyFormData>(field: K, value: CompanyFormData[K]) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
     setErrors((prev) => ({ ...prev, [field]: undefined }));
   }, []);
 
-  const setFieldTouched = useCallback((field: keyof PartnerFormData) => {
+  const setFieldTouched = useCallback((field: keyof CompanyFormData) => {
     setTouched((prev) => ({ ...prev, [field]: true }));
   }, []);
 
-  const validateField = useCallback((field: keyof PartnerFormData, value: unknown): string | undefined => {
+  const validateField = useCallback((field: keyof CompanyFormData, value: unknown): string | undefined => {
     switch (field) {
       case 'name':
         return validationRules.required(value as string);
@@ -101,7 +101,7 @@ export function usePartnerForm() {
   }, []);
 
   const validateAll = useCallback((): boolean => {
-    const newErrors: Partial<Record<keyof PartnerFormData, string>> = {};
+    const newErrors: Partial<Record<keyof CompanyFormData, string>> = {};
     let isValid = true;
 
     const simpleFields: SimpleFields[] = [
@@ -132,7 +132,7 @@ export function usePartnerForm() {
     setErrors(newErrors);
     const allTouched = Object.keys(formData).reduce(
       (acc, key) => ({ ...acc, [key]: true }),
-      {} as Partial<Record<keyof PartnerFormData, boolean>>
+      {} as Partial<Record<keyof CompanyFormData, boolean>>
     );
     setTouched(allTouched);
 

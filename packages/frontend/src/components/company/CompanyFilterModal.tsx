@@ -23,7 +23,7 @@ import { FilterOptionButton, SelectAllButton } from '../common';
 import { fontSizes, iconStyles, borderRadius, colors } from '../../constants/styles';
 
 // フィルター状態の型
-export interface PartnerFilterState {
+export interface CompanyFilterState {
   ratings: number[];
   hasPrimeQualification: 'all' | 'yes' | 'no';
   categories: string[];
@@ -48,17 +48,17 @@ const COLUMN_LABELS: Record<string, { label: string; placeholder: string }> = {
 // 評価オプション
 const ratingValues = [3, 2.5, 2, 1.5, 1];
 
-interface PartnerFilterModalProps {
-  filters: PartnerFilterState;
+interface CompanyFilterModalProps {
+  filters: CompanyFilterState;
   gridFilterModel: GridFilterModel;
   categories: string[];
   prefectures: string[];
-  onApply: (filters: PartnerFilterState) => void;
+  onApply: (filters: CompanyFilterState) => void;
   onGridFilterApply: (model: GridFilterModel) => void;
   onClose: () => void;
 }
 
-export function PartnerFilterModal({
+export function CompanyFilterModal({
   filters,
   gridFilterModel,
   categories,
@@ -66,9 +66,9 @@ export function PartnerFilterModal({
   onApply,
   onGridFilterApply,
   onClose,
-}: PartnerFilterModalProps) {
+}: CompanyFilterModalProps) {
   const [activeTab, setActiveTab] = useState<'preset' | 'column'>('preset');
-  const [localFilters, setLocalFilters] = useState<PartnerFilterState>(filters);
+  const [localFilters, setLocalFilters] = useState<CompanyFilterState>(filters);
   const initialColumnFilters = useMemo(() => {
     const newColumnFilters = { ...DEFAULT_COLUMN_FILTERS };
     gridFilterModel.items.forEach(item => {

@@ -42,7 +42,7 @@ export interface PartnerWorkflowState {
 }
 
 export class EvaluationPartnerWorkflowRepository {
-  private readonly tableName = `${schemaPrefix}${TABLES.evaluationPartnerWorkflowStates}`;
+  private readonly tableName = `${schemaPrefix}${TABLES.evaluationCompanyWorkflowStates}`;
 
   private createEmptyState(): PartnerWorkflowState {
     return {

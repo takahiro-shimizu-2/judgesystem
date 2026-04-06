@@ -37,7 +37,7 @@ jobs:
           GITHUB_OWNER: ${{ github.repository_owner }}
           GITHUB_REPO: ${{ github.event.repository.name }}
           PROJECT_NUMBER: 1
-        run: npm run report:weekly:issue
+        run: npx tsx scripts/generate-weekly-report.ts
 
       - name: Log completion
         run: |

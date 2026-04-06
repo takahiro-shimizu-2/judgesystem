@@ -2,17 +2,17 @@ import { useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { Box, Paper, Typography, Tabs, Tab, Chip } from '@mui/material';
 import { BusinessIcon, OrdererIcon, PersonIcon } from '../constants/icons';
-import { PartnerRegisterForm, OrdererRegisterForm, StaffRegisterForm } from '../components/master';
+import { CompanyRegisterForm, OrdererRegisterForm, StaffRegisterForm } from '../components/master';
 import { formPageStyles } from '../constants/formStyles';
 import { colors, fontSizes } from '../constants/styles';
-import type { PartnerFormData } from '../hooks/usePartnerForm';
+import type { CompanyFormData } from '../hooks/useCompanyForm';
 import type { OrdererFormData } from '../hooks/useOrdererForm';
 import type { StaffFormData } from '../hooks/useStaffForm';
 
 type FormType = 'partner' | 'orderer' | 'staff';
 
 interface PageState {
-  formData?: PartnerFormData | OrdererFormData | StaffFormData;
+  formData?: CompanyFormData | OrdererFormData | StaffFormData;
   formType?: FormType;
   activeTab?: number;
   editMode?: boolean;
@@ -96,8 +96,8 @@ export default function MasterRegisterPage() {
 
           <Box sx={formPageStyles.formContent}>
             <TabPanel value={activeTab} index={0}>
-              <PartnerRegisterForm
-                initialData={getInitialData('partner') as PartnerFormData | undefined}
+              <CompanyRegisterForm
+                initialData={getInitialData('partner') as CompanyFormData | undefined}
                 editMode={editMode}
                 entityId={entityId}
               />

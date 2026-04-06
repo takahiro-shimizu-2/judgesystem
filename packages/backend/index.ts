@@ -10,7 +10,6 @@ import { pool } from "./src/config/database";
 import {
   EvaluationController,
   AnnouncementController,
-  PartnerController,
   OrdererController,
   ContactController,
   CompanyController,
@@ -75,7 +74,6 @@ app.get("/", (_req, res) => {
 // Initialize controllers
 const evaluationController = new EvaluationController();
 const announcementController = new AnnouncementController();
-const partnerController = new PartnerController();
 const ordererController = new OrdererController();
 const contactController = new ContactController();
 const companyController = new CompanyController();
@@ -110,13 +108,6 @@ app.get("/api/announcements/:announcementNo", announcementController.getByNo);
 app.get("/api/announcements/:announcementNo/progressing-companies", announcementController.getProgressingCompanies);
 app.get("/api/announcements/:announcementNo/similar-cases", announcementController.getSimilarCases);
 app.get("/api/announcements/:announcementNo/documents/:documentId/preview", announcementController.getDocumentPreview);
-
-// Partner routes
-app.get("/api/partners", partnerController.getList);
-app.get("/api/partners/:id", partnerController.getById);
-app.post("/api/partners", authorize("admin", "evaluator"), partnerController.create);
-app.patch("/api/partners/:id", authorize("admin", "evaluator"), partnerController.update);
-app.delete("/api/partners/:id", authorize("admin"), partnerController.delete);
 
 // Orderer routes
 app.get("/api/orderers", ordererController.getList);

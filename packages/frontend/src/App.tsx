@@ -9,8 +9,8 @@ const BidListPage = lazy(() => import('./pages/BidListPage'));
 const BidDetailPage = lazy(() => import('./pages/BidDetailPage'));
 const AnnouncementListPage = lazy(() => import('./pages/AnnouncementListPage'));
 const AnnouncementDetailPage = lazy(() => import('./pages/AnnouncementDetailPage'));
-const PartnerListPage = lazy(() => import('./pages/PartnerListPage'));
-const PartnerDetailPage = lazy(() => import('./pages/PartnerDetailPage'));
+const CompanyListPage = lazy(() => import('./pages/CompanyListPage'));
+const CompanyDetailPage = lazy(() => import('./pages/CompanyDetailPage'));
 const OrdererListPage = lazy(() => import('./pages/OrdererListPage'));
 const OrdererDetailPage = lazy(() => import('./pages/OrdererDetailPage'));
 const StaffListPage = lazy(() => import('./pages/StaffListPage'));
@@ -75,8 +75,8 @@ function App() {
                 <Route path="/detail/:id" element={<BidDetailPage />} />
                 <Route path="/announcements" element={<AnnouncementListPage />} />
                 <Route path="/announcements/:id" element={<AnnouncementDetailPage />} />
-                <Route path="/partners" element={<PartnerListPage />} />
-                <Route path="/partners/:id" element={<PartnerDetailPage />} />
+                <Route path="/companies" element={<CompanyListPage />} />
+                <Route path="/companies/:id" element={<CompanyDetailPage />} />
                 <Route path="/orderers" element={<OrdererListPage />} />
                 <Route path="/orderers/:id" element={<OrdererDetailPage />} />
                 <Route path="/staff" element={<StaffListPage />} />
