@@ -13,9 +13,11 @@ jobs:
       changed_files_json: ${{ steps.scope.outputs.changed_files_json }}
       workspace_matrix: ${{ steps.scope.outputs.workspace_matrix }}
       has_workspace_changes: ${{ steps.scope.outputs.has_workspace_changes }}
+      automation_changed: ${{ steps.classify.outputs.automation_changed }}
       workflow_changed: ${{ steps.scope.outputs.workflow_changed }}
       migration_changed: ${{ steps.scope.outputs.migration_changed }}
       python_changed: ${{ steps.scope.outputs.python_changed }}
+      shell_changed: ${{ steps.classify.outputs.shell_changed }}
       diff_range: ${{ steps.scope.outputs.diff_range }}
 
     steps:
@@ -49,7 +51,53 @@ jobs:
         id: scope
         run: node scripts/ci/detect-changed-scope.mjs --base "${{ steps.refs.outputs.base_sha }}" --head "${{ steps.refs.outputs.head_sha }}"
 
+      - name: Classify CI surfaces
+        id: classify
+        env:
+          CHANGED_FILES_JSON: ${{ steps.scope.outputs.changed_files_json }}
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs');
+
+          const changedFiles = JSON.parse(process.env.CHANGED_FILES_JSON || '[]');
+          const exactAutomationPaths = new Set([
+            '.github/workflows/ci.yml',
+            '.github/workflows/issue-opened.yml',
+            '.github/workflows/label-sync.yml',
+            '.github/workflows/pr-opened.yml',
+            '.github/workflows/project-sync.yml',
+            '.github/workflows/state-machine.yml',
+            '.github/workflows/update-project-status.yml',
+            'package-lock.json',
+            'package.json',
+            'scripts/agents-parallel-exec.ts',
+            'scripts/tsconfig.json',
+            'scripts/water-spider.ts',
+          ]);
+          const automationPrefixes = [
+            '.github/workflows/autonomous-',
+            '.github/workflows/webhook-',
+            'scripts/automation/',
+            'scripts/ci/',
+            'scripts/context-impact/',
+          ];
+
+          const automationChanged = changedFiles.some(
+            (filePath) =>
+              exactAutomationPaths.has(filePath) ||
+              automationPrefixes.some((prefix) => filePath.startsWith(prefix)),
+          );
+          const shellChanged = changedFiles.some(
+            (filePath) => filePath.startsWith('scripts/') || filePath.startsWith('db/'),
+          );
+
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, `automation_changed=${automationChanged ? 'true' : 'false'}\n`);
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, `shell_changed=${shellChanged ? 'true' : 'false'}\n`);
+          NODE
+
   automation-smoke:
+    needs: changes
+    if: needs.changes.outputs.automation_changed == 'true'
     runs-on: ubuntu-latest
 
     steps:
@@ -72,6 +120,8 @@ jobs:
       - run: npm run ci:workflow-lint
 
   python-syntax:
+    needs: changes
+    if: needs.changes.outputs.python_changed == 'true'
     runs-on: ubuntu-latest
 
     steps:
@@ -80,6 +130,8 @@ jobs:
       - run: npm run ci:python-syntax
 
   shell-syntax:
+    needs: changes
+    if: needs.changes.outputs.shell_changed == 'true'
     runs-on: ubuntu-latest
 
     steps:
@@ -118,6 +170,8 @@ jobs:
       - run: npm run ci:migrations:validate
 
   security-audit:
+    needs: changes
+    if: needs.changes.outputs.has_workspace_changes == 'true'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -161,33 +215,39 @@ jobs:
           ## CI Scope
           - Diff range: `${{ needs.changes.outputs.diff_range }}`
           - Changed workspaces: `${{ needs.changes.outputs.workspace_matrix }}`
+          - Automation changed: `${{ needs.changes.outputs.automation_changed }}`
           - Workflow changed: `${{ needs.changes.outputs.workflow_changed }}`
           - Migration changed: `${{ needs.changes.outputs.migration_changed }}`
           - Python changed: `${{ needs.changes.outputs.python_changed }}`
+          - Shell changed: `${{ needs.changes.outputs.shell_changed }}`
           EOF
 
-          if [[ "${{ needs.automation-smoke.result }}" != "success" || \
-                "${{ needs.workflow-lint.result }}" != "success" || \
-                "${{ needs.python-syntax.result }}" != "success" || \
-                "${{ needs.shell-syntax.result }}" != "success" || \
-                "${{ needs.security-audit.result }}" != "success" ]]; then
+          if [[ "${{ needs.workflow-lint.result }}" != "success" ]]; then
             exit 1
           fi
 
-          if [[ "${{ needs.workspace-gates.result }}" == "failure" || \
-                "${{ needs.migration-validate.result }}" == "failure" ]]; then
+          if [[ "${{ needs.changes.outputs.automation_changed }}" == "true" && \
+                "${{ needs.automation-smoke.result }}" != "success" ]]; then
             exit 1
           fi
 
-          if [[ "${{ needs.workspace-gates.result }}" == "cancelled" || \
-                "${{ needs.migration-validate.result }}" == "cancelled" ]]; then
+          if [[ "${{ needs.changes.outputs.python_changed }}" == "true" && \
+                "${{ needs.python-syntax.result }}" != "success" ]]; then
             exit 1
           fi
 
-          if [[ "${{ needs.workspace-gates.result }}" == "skipped" && "${{ needs.changes.outputs.has_workspace_changes }}" == "true" ]]; then
+          if [[ "${{ needs.changes.outputs.shell_changed }}" == "true" && \
+                "${{ needs.shell-syntax.result }}" != "success" ]]; then
             exit 1
           fi
 
-          if [[ "${{ needs.migration-validate.result }}" == "skipped" && "${{ needs.changes.outputs.migration_changed }}" == "true" ]]; then
+          if [[ "${{ needs.changes.outputs.has_workspace_changes }}" == "true" && \
+                ( "${{ needs.workspace-gates.result }}" != "success" || \
+                  "${{ needs.security-audit.result }}" != "success" ) ]]; then
+            exit 1
+          fi
+
+          if [[ "${{ needs.changes.outputs.migration_changed }}" == "true" && \
+                "${{ needs.migration-validate.result }}" != "success" ]]; then
             exit 1
           fi

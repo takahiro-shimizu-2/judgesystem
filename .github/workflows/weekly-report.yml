@@ -6,7 +6,7 @@ name: 📊 Generate Weekly Report
 on:
   schedule:
     # Run every Monday at 9:00 AM UTC (6:00 PM JST)
-    - cron: '0 9 * * 1'
+    - cron: '0 9 * * MON'
   workflow_dispatch:
 
 permissions:
