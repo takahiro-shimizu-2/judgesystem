@@ -3,6 +3,7 @@ import * as path from 'path';
 import { spawnSync } from 'child_process';
 
 import { ensureDirectory, slugify, truncateText } from '../../core/utils.js';
+import { renderGitNexusBindingNote, requireGitNexusTaskBinding } from '../../gitnexus/runtime-contract.js';
 import { resolveRepositoryContext } from '../../reporting/repository-metrics.js';
 import { LabelStateMachine } from '../../state/label-state-machine.js';
 import type { AgentHandlerBinding } from '../handler-contract.js';
@@ -63,6 +64,8 @@ interface TestArtifactPayload {
   taskTitle: string;
   testCwd: string;
   worktreePath?: string;
+  gitnexusArtifactPath?: string;
+  gitnexusNote: string;
   maxRetries: number;
   coverage?: TestCoverageSummary;
   checks: TestCheckResult[];
@@ -95,6 +98,8 @@ export function createTestAgentHandler(options: TestAgentHandlerFactoryOptions):
     description:
       'Runs repo-local test and coverage commands, writes dedicated test artifacts, and optionally syncs the issue into testing.',
     execute: async ({ task, definition, context }) => {
+      const gitnexusBinding = requireGitNexusTaskBinding(task, context);
+      const gitnexusNote = renderGitNexusBindingNote(gitnexusBinding, context.gitnexusArtifactPath);
       const rootDir = context.rootDir || options.rootDir;
       const testCwd = resolveTestWorkingDirectory(rootDir, context.env, context.worktree?.worktreePath);
       const checks = resolveTestChecks(context.env);
@@ -117,6 +122,8 @@ export function createTestAgentHandler(options: TestAgentHandlerFactoryOptions):
         sessionId: context.sessionId,
         taskId: task.id,
         taskTitle: task.title,
+        gitnexusArtifactPath: context.gitnexusArtifactPath,
+        gitnexusNote,
         maxRetries,
         results,
         coverage,
@@ -134,6 +141,7 @@ export function createTestAgentHandler(options: TestAgentHandlerFactoryOptions):
 
       const notes = [
         `${definition.name} ran ${results.length} configured test checks in ${describeTestCwd(rootDir, testCwd, context.env)}.`,
+        gitnexusNote,
         context.worktree?.worktreePath
           ? `Pipeline worktree: ${relativeOrSelf(rootDir, context.worktree.worktreePath)}.`
           : '',
@@ -367,6 +375,8 @@ function writeTestArtifacts(params: {
   sessionId: string;
   taskId: string;
   taskTitle: string;
+  gitnexusArtifactPath?: string;
+  gitnexusNote: string;
   maxRetries: number;
   results: TestCheckResult[];
   coverage?: TestCoverageSummary;
@@ -383,6 +393,8 @@ function writeTestArtifacts(params: {
     taskTitle: params.taskTitle,
     testCwd: params.testCwd,
     worktreePath: params.worktreePath,
+    gitnexusArtifactPath: params.gitnexusArtifactPath,
+    gitnexusNote: params.gitnexusNote,
     maxRetries: params.maxRetries,
     coverage: params.coverage,
     checks: params.results,
@@ -414,6 +426,8 @@ function buildTestMarkdown(payload: TestArtifactPayload) {
 - Session: ${payload.sessionId}
 - Task: ${payload.taskId}
 - Title: ${payload.taskTitle}
+- GitNexus artifact: ${payload.gitnexusArtifactPath || 'n/a'}
+- GitNexus note: ${payload.gitnexusNote}
 
 ## Execution
 - Test cwd: ${payload.testCwd}

@@ -1,57 +1,27 @@
 {
-  "generated_at": "2026-04-05T23:40:00+09:00",
-  "query": "Miyabi parity implementation",
+  "generated_at": "2026-04-06T19:55:00+09:00",
+  "query": "Mandate GitNexus in Miyabi runtime flow",
   "repo": "judgesystem",
   "quality_score": 0,
   "tasks": [
     {
-      "id": "parity-audit",
-      "title": "Classify Miyabi-origin capabilities into absorb / bridge / non-target with explicit rationale",
+      "id": "gitnexus-runtime-audit",
+      "title": "Confirm the gap between GitNexus guidance and the current runtime, then define the mandatory integration contract",
       "status": "completed"
     },
     {
-      "id": "plans-artifact-parity",
-      "title": "Restore a living planning artifact layer equivalent to Miyabi Plans.md on top of the current planning/runtime artifacts",
+      "id": "gitnexus-planning-artifact",
+      "title": "Generate a GitNexus runtime artifact during planning with issue-level query plus runtime anchor context/impact",
       "status": "completed"
     },
     {
-      "id": "real-worktree-lifecycle",
-      "title": "Replace .ai/worktrees staging-only behavior with real git worktree create/reuse/cleanup lifecycle management",
+      "id": "gitnexus-handoff-gate",
+      "title": "Require task-level GitNexus binding for execution and surface it in CodeGen/Test/Review artifacts",
       "status": "completed"
     },
     {
-      "id": "review-loop-parity",
-      "title": "Evolve review from configured one-shot checks to an iterative review loop with explicit handoff and escalation",
-      "status": "completed"
-    },
-    {
-      "id": "test-agent-runtime",
-      "title": "Introduce an independent TestAgent runtime instead of keeping test execution absorbed inside ReviewAgent",
-      "status": "completed"
-    },
-    {
-      "id": "water-spider-runtime",
-      "title": "Add a repo-local Water Spider continuity layer without importing tmux or multi-machine infrastructure wholesale",
-      "status": "completed"
-    },
-    {
-      "id": "omega-understanding-plan",
-      "title": "Stage Omega absorption by adding intent/understanding and strategic-plan layers ahead of the current decomposition runtime",
-      "status": "completed"
-    },
-    {
-      "id": "omega-integration-learning",
-      "title": "Stage Omega integration and learning artifacts after the current execution/runtime layer",
-      "status": "completed"
-    },
-    {
-      "id": "bridge-revalidation",
-      "title": "Revalidate that context-and-impact, agent-skill-bus, gitnexus-stable-ops, and optional Miyabi CLI/MCP remain narrow bridges rather than hidden runtime dependencies",
-      "status": "completed"
-    },
-    {
-      "id": "parity-dod-v2",
-      "title": "Expand smoke, CI, and runtime docs so the parity targets stay truthful and continuously verifiable",
+      "id": "gitnexus-runtime-dod",
+      "title": "Lock the GitNexus mandatory contract into smoke, docs, and workflow summaries so it stays truthful",
       "status": "completed"
     }
   ]

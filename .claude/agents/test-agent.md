@@ -22,6 +22,7 @@ review 前の明示 handoff artifact を生成する。
 - `AUTOMATION_TEST_MAX_RETRIES` で retry 回数を調整できる
 - `AUTOMATION_TEST_COVERAGE_THRESHOLD` / `AUTOMATION_TEST_COVERAGE_LABELS` で coverage gate を有効化できる
 - `.ai/parallel-reports/` に markdown/json の test artifact と test-comment artifact を残す
+- test artifact には GitNexus runtime note が残る
 - `GITHUB_TOKEN` 系 credential がある場合は `agent:test` / `state:testing` の同期を試みる
 
 ## Claude 側で期待すること
@@ -44,6 +45,7 @@ review 前の明示 handoff artifact を生成する。
 
 - configured local test checks が完了する
 - pass / fail と coverage gate の結果が test artifact に残る
+- GitNexus runtime artifact / anchor symbol note が test artifact に残る
 - token がある場合は testing への state sync を試みる
 - `ReviewAgent` が消費できる test handoff artifact が生成される
 

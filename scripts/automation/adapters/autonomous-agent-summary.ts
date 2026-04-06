@@ -52,6 +52,7 @@ interface ExecutionArtifactSummary {
   strategicPlanPath?: string;
   deliverablePath?: string;
   learningPath?: string;
+  gitnexusPath?: string;
   totals: {
     total: number;
     completed: number;
@@ -81,6 +82,7 @@ export function buildExecutionArtifactSummary(args: SummaryCliArgs): ExecutionAr
   const strategicPlan = latestReport ? findStrategicPlan(args.rootDir, latestReport.report.sessionId) : undefined;
   const deliverable = latestReport ? findOmegaDeliverable(args.rootDir, latestReport.report.sessionId) : undefined;
   const learning = latestReport ? findOmegaLearning(args.rootDir, latestReport.report.sessionId) : undefined;
+  const gitnexus = latestReport ? findGitNexusArtifact(args.rootDir, latestReport.report.sessionId) : undefined;
   const effectiveStatus = deriveEffectiveStatus(args.workflowStatus, latestReport?.report);
   const markdown = buildIssueCommentMarkdown({
     ...args,
@@ -94,6 +96,7 @@ export function buildExecutionArtifactSummary(args: SummaryCliArgs): ExecutionAr
     strategicPlanPath: strategicPlan ? path.relative(args.rootDir, strategicPlan.path) : undefined,
     deliverablePath: deliverable ? path.relative(args.rootDir, deliverable.path) : undefined,
     learningPath: learning ? path.relative(args.rootDir, learning.path) : undefined,
+    gitnexusPath: gitnexus ? path.relative(args.rootDir, gitnexus.path) : undefined,
   });
 
   return {
@@ -108,6 +111,7 @@ export function buildExecutionArtifactSummary(args: SummaryCliArgs): ExecutionAr
     strategicPlanPath: strategicPlan?.path,
     deliverablePath: deliverable?.path,
     learningPath: learning?.path,
+    gitnexusPath: gitnexus?.path,
     totals: latestReport
       ? {
           total: latestReport.report.summary.total,
@@ -142,6 +146,7 @@ function buildIssueCommentMarkdown(params: {
   strategicPlanPath?: string;
   deliverablePath?: string;
   learningPath?: string;
+  gitnexusPath?: string;
 }) {
   if (!params.report) {
     return `## ${params.status === 'success' ? '⚠️' : '❌'} Autonomous Agent Summary Unavailable
@@ -172,6 +177,7 @@ The workflow finished, but no execution report artifact was found under \`.ai/pa
     params.strategicPlanPath ? `- Strategic Plan: \`${params.strategicPlanPath}\`` : null,
     params.deliverablePath ? `- Deliverable Artifact: \`${params.deliverablePath}\`` : null,
     params.learningPath ? `- Learning Artifact: \`${params.learningPath}\`` : null,
+    params.gitnexusPath ? `- GitNexus Artifact: \`${params.gitnexusPath}\`` : null,
   ]
     .filter(Boolean)
     .join('\n');
@@ -285,6 +291,17 @@ function findExecutionPlan(rootDir: string, sessionId: string) {
   return {
     path: planPath,
     plan: JSON.parse(fs.readFileSync(planPath, 'utf8')) as StoredExecutionPlan,
+  };
+}
+
+function findGitNexusArtifact(rootDir: string, sessionId: string) {
+  const artifactPath = path.join(rootDir, '.ai', 'parallel-reports', `gitnexus-runtime-${sessionId}.json`);
+  if (!fs.existsSync(artifactPath)) {
+    return undefined;
+  }
+
+  return {
+    path: artifactPath,
   };
 }
 

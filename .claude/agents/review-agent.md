@@ -24,6 +24,7 @@ score / review loop / escalation を判定して review artifact を残す。
 - `AUTOMATION_REVIEW_LOOP_MAX_ITERATIONS` と `AUTOMATION_REVIEW_FIX_COMMAND` があれば iterative review loop を回せる
 - `AUTOMATION_REVIEW_REQUIRE_TEST_ARTIFACT` が有効、または dependency に `-test` handoff がある場合は `TestAgent` artifact を必須とする
 - `.ai/parallel-reports/` に markdown/json の review artifact と review-comment artifact を残す
+- review artifact には GitNexus runtime note が残る
 - `GITHUB_TOKEN` 系 credential がある場合は review 成否にかかわらず `agent:review` / `state:reviewing` の同期を試みる
 - 固定の 80 点スコア、ESLint / npm audit の常時実行は現時点では前提にしない
 - security check の成否と test handoff の結果は、実際に実行した check / artifact 出力からだけ summary 化する
@@ -51,6 +52,7 @@ score / review loop / escalation を判定して review artifact を残す。
 
 - configured local checks が完了する
 - pass / fail と出力要約が report / review artifact に残る
+- GitNexus runtime artifact / anchor symbol note が review artifact に残る
 - security summary / TestAgent handoff / review-comment artifact が contract に応じて残る
 - token がある場合は reviewing への state sync を試みる
 - gate failure 時は score / threshold / escalation / artifact path が明示される

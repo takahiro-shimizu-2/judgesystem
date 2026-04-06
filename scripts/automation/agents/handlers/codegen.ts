@@ -3,6 +3,8 @@ import * as path from 'path';
 import { spawnSync } from 'child_process';
 
 import { ensureDirectory, slugify, truncateText } from '../../core/utils.js';
+import type { GitNexusTaskBinding } from '../../gitnexus/runtime-contract.js';
+import { renderGitNexusBindingNote, requireGitNexusTaskBinding } from '../../gitnexus/runtime-contract.js';
 import type { WorktreeAssignmentMode } from '../../orchestration/worktree-coordinator.js';
 import { resolveRepositoryContext } from '../../reporting/repository-metrics.js';
 import { LabelStateMachine } from '../../state/label-state-machine.js';
@@ -47,6 +49,8 @@ interface CodegenArtifactPayload {
   worktreePath: string;
   branchName?: string;
   commandCwd: string;
+  gitnexusArtifactPath?: string;
+  gitnexusNote: string;
   commandResult: CodegenCommandResult;
   generatedAt: string;
 }
@@ -58,6 +62,8 @@ export function createCodeGenAgentHandler(options: CodeGenAgentHandlerFactoryOpt
     description:
       'Creates a repo-local implementation brief, optionally syncs the issue into implementing, and can invoke an explicit writer contract with allowlists, post-checks, and summary artifacts.',
     execute: async ({ task, definition, context }) => {
+      const gitnexusBinding = requireGitNexusTaskBinding(task, context);
+      const gitnexusNote = renderGitNexusBindingNote(gitnexusBinding, context.gitnexusArtifactPath);
       const rootDir = context.rootDir || options.rootDir;
       const worktreePath = ensureDirectory(
         context.worktree?.worktreePath || path.join(rootDir, '.ai', 'worktrees', `issue-${context.issueNumber}`, task.id),
@@ -78,6 +84,8 @@ export function createCodeGenAgentHandler(options: CodeGenAgentHandlerFactoryOpt
           definitionPath: definition.sourcePath,
           definitionSummary: definition.summary,
           definitionEscalation: definition.escalation,
+          gitnexusNote,
+          gitnexusBinding,
         }),
         'utf8',
       );
@@ -106,6 +114,8 @@ export function createCodeGenAgentHandler(options: CodeGenAgentHandlerFactoryOpt
         worktreePath,
         branchName,
         commandCwd: codegenResult.commandCwd,
+        gitnexusArtifactPath: context.gitnexusArtifactPath,
+        gitnexusNote,
         commandResult: codegenResult,
       });
 
@@ -127,6 +137,7 @@ export function createCodeGenAgentHandler(options: CodeGenAgentHandlerFactoryOpt
         notes: [
           `${definition.name} prepared an implementation brief at ${path.relative(rootDir, artifactPath)}.`,
           `Use ${path.relative(rootDir, worktreePath)} as the staging area for this task.`,
+          gitnexusNote,
           codegenResult.note,
           `Codegen artifacts were written to ${path.relative(rootDir, codegenArtifact.markdownPath)} and ${path.relative(
             rootDir,
@@ -159,6 +170,8 @@ function buildImplementationBrief(params: {
   definitionPath: string;
   definitionSummary: string;
   definitionEscalation?: string;
+  gitnexusNote: string;
+  gitnexusBinding: GitNexusTaskBinding;
 }) {
   const branchLine = params.branchName ? params.branchName : 'agent branch not assigned';
 
@@ -180,6 +193,22 @@ function buildImplementationBrief(params: {
 - Definition: ${params.definitionPath}
 - Summary: ${params.definitionSummary}
 ${params.definitionEscalation ? `- Escalation: ${params.definitionEscalation}` : ''}
+
+## Mandatory GitNexus Context
+- ${params.gitnexusNote}
+- Task highlights:
+${params.gitnexusBinding.queryHighlights.length > 0
+  ? params.gitnexusBinding.queryHighlights.map((highlight) => `  - ${highlight}`).join('\n')
+  : '  - No issue-level highlights captured.'}
+- Runtime anchors:
+${params.gitnexusBinding.anchorSymbols.length > 0
+  ? params.gitnexusBinding.anchorSymbols
+      .map(
+        (anchor) =>
+          `  - ${anchor.symbolName} (${anchor.impact.risk}, blast radius ${anchor.impact.impactedCount}, ${anchor.context.filePath})`,
+      )
+      .join('\n')
+  : '  - No runtime anchors configured.'}
 
 ## Runtime Contract
 - This handler always materializes a local implementation brief first.
@@ -371,6 +400,8 @@ function writeCodegenArtifacts(params: {
   worktreePath: string;
   branchName?: string;
   commandCwd: string;
+  gitnexusArtifactPath?: string;
+  gitnexusNote: string;
   commandResult: CodegenCommandResult;
 }) {
   const reportsDir = ensureDirectory(path.join(params.rootDir, '.ai', 'parallel-reports'));
@@ -387,6 +418,8 @@ function writeCodegenArtifacts(params: {
     worktreePath: params.worktreePath,
     branchName: params.branchName,
     commandCwd: params.commandCwd,
+    gitnexusArtifactPath: params.gitnexusArtifactPath,
+    gitnexusNote: params.gitnexusNote,
     commandResult: params.commandResult,
     generatedAt: new Date().toISOString(),
   };
@@ -415,6 +448,8 @@ function buildCodegenMarkdown(payload: CodegenArtifactPayload) {
 - Worktree path: ${payload.worktreePath}
 - Branch: ${payload.branchName || 'n/a'}
 - Command cwd: ${payload.commandCwd}
+- GitNexus artifact: ${payload.gitnexusArtifactPath || 'n/a'}
+- GitNexus note: ${payload.gitnexusNote}
 - Writer enabled: ${payload.commandResult.enabled ? 'yes' : 'no'}
 - Writer executed: ${payload.commandResult.writerExecuted ? 'yes' : 'no'}
 - Require changes: ${payload.commandResult.requireChanges ? 'yes' : 'no'}

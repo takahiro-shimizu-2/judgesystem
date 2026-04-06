@@ -5,6 +5,7 @@ import { execFileSync } from 'node:child_process';
 
 import { createCodeGenAgentHandler } from '../agents/handlers/codegen.js';
 import { AutomationLogger } from '../core/logger.js';
+import type { GitNexusTaskBinding } from '../gitnexus/runtime-contract.js';
 import { WorktreeCoordinator, type WorktreeAssignment } from '../orchestration/worktree-coordinator.js';
 
 function assert(condition: unknown, message: string): asserts condition {
@@ -66,6 +67,36 @@ async function main() {
     assert(existsSync(path.join(assignment.worktreePath, '.git')), 'Materialized worktree is missing its .git file.');
 
     const handler = createCodeGenAgentHandler({ rootDir, env: {} });
+    const gitnexusBinding: GitNexusTaskBinding = {
+      taskId: 'task-801-1',
+      taskTitle: 'Implement worktree-aware change',
+      agent: 'CodeGenAgent',
+      queryHighlights: ['Function createCodeGenAgentHandler (scripts/automation/agents/handlers/codegen.ts)'],
+      anchorSymbols: [
+        {
+          symbolName: 'createCodeGenAgentHandler',
+          context: {
+            uid: 'Function:scripts/automation/agents/handlers/codegen.ts:createCodeGenAgentHandler',
+            name: 'createCodeGenAgentHandler',
+            kind: 'Function',
+            filePath: 'scripts/automation/agents/handlers/codegen.ts',
+            incomingCalls: ['buildDefaultAgentHandlers (scripts/automation/agents/handlers/index.ts)'],
+            outgoingCalls: [],
+            processes: [],
+          },
+          impact: {
+            target: 'createCodeGenAgentHandler',
+            risk: 'CRITICAL',
+            impactedCount: 8,
+            directCount: 3,
+            processesAffected: 3,
+            modulesAffected: 2,
+            depthOneBreakers: ['buildDefaultAgentHandlers (scripts/automation/agents/handlers/index.ts)'],
+          },
+        },
+      ],
+      notes: ['Use the issue-level GitNexus query hits before touching CodeGenAgent.'],
+    };
     const result = await handler.execute({
       task: {
         id: 'task-801-1',
@@ -93,6 +124,8 @@ async function main() {
         rootDir,
         dryRun: false,
         logger,
+        gitnexusArtifactPath: '.ai/parallel-reports/gitnexus-runtime-worktree-smoke.json',
+        gitnexusTaskBinding: gitnexusBinding,
         env: {
           AUTOMATION_ENABLE_CODEGEN_WRITE: 'true',
           AUTOMATION_CODEGEN_COMMAND: "bash -lc 'printf worktree-smoke > generated.txt'",

@@ -1,5 +1,6 @@
 import type { AutomationLogger } from '../core/logger.js';
 import type { DecomposedTask } from '../decomposition/llm-decomposer.js';
+import type { GitNexusTaskBinding } from '../gitnexus/runtime-contract.js';
 import { executeTaskWithAgent } from '../agents/capability-router.js';
 import type { AutomationAgentHandlerResult } from '../agents/handler-contract.js';
 import type { AgentRegistry } from '../agents/registry.js';
@@ -62,6 +63,9 @@ export interface TaskExecutionContext {
   worktrees: Map<string, WorktreeAssignment>;
   worktree?: WorktreeAssignment;
   agentRegistry?: AgentRegistry;
+  gitnexusArtifactPath?: string;
+  gitnexusTaskBindings: Map<string, GitNexusTaskBinding>;
+  gitnexusTaskBinding?: GitNexusTaskBinding;
 }
 
 export type TaskExecutionRunner = (
@@ -99,6 +103,8 @@ export class TaskExecutor {
       env: NodeJS.ProcessEnv;
       worktrees: Map<string, WorktreeAssignment>;
       agentRegistry?: AgentRegistry;
+      gitnexusArtifactPath?: string;
+      gitnexusTaskBindings: Map<string, GitNexusTaskBinding>;
     },
     runner?: TaskExecutionRunner,
   ): Promise<ExecutionReport> {
@@ -115,6 +121,8 @@ export class TaskExecutor {
       env: params.env,
       worktrees: params.worktrees,
       agentRegistry: params.agentRegistry,
+      gitnexusArtifactPath: params.gitnexusArtifactPath,
+      gitnexusTaskBindings: params.gitnexusTaskBindings,
     };
 
     for (const [index, level] of params.levels.entries()) {
@@ -197,10 +205,26 @@ export class TaskExecutor {
   ): Promise<TaskExecutionRecord> {
     const startedAt = Date.now();
     const worktree = context.worktrees.get(task.id);
+    const gitnexusTaskBinding = context.gitnexusTaskBindings.get(task.id);
     const failedDependencies = task.dependencies.filter((dependencyId) => {
       const status = dependencyStatuses.get(dependencyId);
       return status === 'failed' || status === 'skipped';
     });
+
+    if (!gitnexusTaskBinding) {
+      const endedAt = Date.now();
+      return {
+        taskId: task.id,
+        title: task.title,
+        agentType: task.agent,
+        status: 'failed',
+        startedAt,
+        endedAt,
+        durationMs: endedAt - startedAt,
+        error: `GitNexus task binding is missing for ${task.id}; planning must create GitNexus runtime context before execution.`,
+        worktreePath: worktree?.worktreePath,
+      };
+    }
 
     if (context.dryRun) {
       const agentNote = describeAgentForTask(task, context.agentRegistry);
@@ -213,6 +237,7 @@ export class TaskExecutor {
         endedAt: Date.now(),
         durationMs: Date.now() - startedAt,
         notes: ['Dry-run mode: execution was planned but not performed.', agentNote]
+          .concat(gitnexusTaskBinding.notes[0] ? [`GitNexus: ${gitnexusTaskBinding.notes[0]}`] : [])
           .filter(Boolean)
           .join(' '),
         worktreePath: worktree?.worktreePath,
@@ -275,12 +300,14 @@ export class TaskExecutor {
       return runner(task, {
         ...context,
         worktree: context.worktrees.get(task.id),
+        gitnexusTaskBinding: context.gitnexusTaskBindings.get(task.id),
       });
     }
 
     return executeTaskWithAgent(task, {
       ...context,
       worktree: context.worktrees.get(task.id),
+      gitnexusTaskBinding: context.gitnexusTaskBindings.get(task.id),
     });
   }
 }
