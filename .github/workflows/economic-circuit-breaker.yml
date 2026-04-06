@@ -1,10 +1,10 @@
 name: 🔴 Economic Circuit Breaker
-# AGENTS.md v5.0 - Economic Governance Protocol準拠
-# Reference: ai-course-content-generator economic-circuit-breaker.yml
+# Economic Governance Protocol準拠
+# 1時間ごとにクラウドコストを監視し、予算超過時にサーキットブレーカーを作動させる
 
 on:
   schedule:
-    - cron: '0 * * * *'  # 1時間ごとにコスト監視
+    - cron: '0 * * * *'
   workflow_dispatch:
     inputs:
       force_check:
