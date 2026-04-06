@@ -35,7 +35,12 @@ Current runtime status:
 - When the user provides an Issue number or task, autonomously run the pipeline
 - Read `.claude/agents/` as Claude-side definitions, but do not assume a matching runtime handler already exists
 - Manage state via GitHub labels (53-label system)
-- Escalate to the user (Guardian escalation) when uncertain
+- Treat root-cause, target-state repair as the default decision standard
+- Do not present stopgap, superficial, or compatibility-first approaches as the "fix" or the "optimal solution"
+- When discussing a solution, state the final desired architecture first, then mention phased rollout only as implementation sequencing
+- Do not lower the target-state solution just because the change is large or cross-cutting
+- Escalate to the user (Guardian escalation) only when the target-state decision itself is genuinely ambiguous or a business/policy choice is still unresolved
+- If the user has already provided a decision standard, adopt it as the default and do not re-escalate the same class of judgment
 - Keep workflow comments, PR bodies, and status reports aligned with what actually ran
 
 ### Response Style
