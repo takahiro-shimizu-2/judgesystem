@@ -8,6 +8,8 @@ import { createDeploymentAgentHandler } from '../agents/handlers/deployment.js';
 import { createPrAgentHandler } from '../agents/handlers/pr.js';
 import { createReviewAgentHandler } from '../agents/handlers/review.js';
 import { createTestAgentHandler } from '../agents/handlers/test.js';
+import type { AutomationAgentName } from '../decomposition/llm-decomposer.js';
+import type { GitNexusTaskBinding } from '../gitnexus/runtime-contract.js';
 
 type SmokeStatus = 'passed' | 'failed';
 
@@ -95,6 +97,43 @@ function assert(condition: unknown, message: string): asserts condition {
   }
 }
 
+function createGitNexusBinding(
+  taskId: string,
+  taskTitle: string,
+  agent: AutomationAgentName,
+): GitNexusTaskBinding {
+  return {
+    taskId,
+    taskTitle,
+    agent,
+    queryHighlights: [`Function ${taskId} planning context`],
+    anchorSymbols: [
+      {
+        symbolName: `anchor:${agent}`,
+        context: {
+          uid: `Function:smoke:${agent}`,
+          name: `anchor:${agent}`,
+          kind: 'Function',
+          filePath: `scripts/automation/agents/handlers/${agent.toLowerCase()}.ts`,
+          incomingCalls: ['smoke'],
+          outgoingCalls: [],
+          processes: [],
+        },
+        impact: {
+          target: `anchor:${agent}`,
+          risk: 'LOW',
+          impactedCount: 1,
+          directCount: 1,
+          processesAffected: 1,
+          modulesAffected: 1,
+          depthOneBreakers: ['smoke'],
+        },
+      },
+    ],
+    notes: ['Use the issue-level GitNexus query hits before touching this handler.'],
+  };
+}
+
 async function runReviewSmoke(): Promise<SmokeReport> {
   const repo = createRepo('judgesystem-review-smoke');
   const testHandler = createTestAgentHandler({ rootDir: repo.rootDir, env: {} });
@@ -146,6 +185,8 @@ async function runReviewSmoke(): Promise<SmokeReport> {
       rootDir: repo.rootDir,
       dryRun: false,
       logger,
+      gitnexusArtifactPath: '.ai/parallel-reports/gitnexus-runtime-quality-smoke.json',
+      gitnexusTaskBinding: createGitNexusBinding('quality-smoke-test', 'Test smoke', 'TestAgent'),
       env: testEnv,
     },
   });
@@ -177,6 +218,8 @@ async function runReviewSmoke(): Promise<SmokeReport> {
       rootDir: repo.rootDir,
       dryRun: false,
       logger,
+      gitnexusArtifactPath: '.ai/parallel-reports/gitnexus-runtime-quality-smoke.json',
+      gitnexusTaskBinding: createGitNexusBinding('quality-smoke-other-test', 'Other Test smoke', 'TestAgent'),
       env: testEnv,
     },
   });
@@ -208,6 +251,8 @@ async function runReviewSmoke(): Promise<SmokeReport> {
       rootDir: repo.rootDir,
       dryRun: false,
       logger,
+      gitnexusArtifactPath: '.ai/parallel-reports/gitnexus-runtime-quality-smoke.json',
+      gitnexusTaskBinding: createGitNexusBinding('quality-smoke-review', 'Review smoke', 'ReviewAgent'),
       env: {
         AUTOMATION_REVIEW_MIN_SCORE: '90',
         AUTOMATION_REVIEW_MAX_RETRIES: '0',
@@ -297,6 +342,8 @@ async function runTestSmoke(): Promise<SmokeReport> {
       rootDir: repo.rootDir,
       dryRun: false,
       logger,
+      gitnexusArtifactPath: '.ai/parallel-reports/gitnexus-runtime-test-smoke.json',
+      gitnexusTaskBinding: createGitNexusBinding('test-smoke-test', 'Test smoke', 'TestAgent'),
       env: {
         AUTOMATION_TEST_COVERAGE_THRESHOLD: '85',
         AUTOMATION_TEST_COVERAGE_LABELS: 'coverage',

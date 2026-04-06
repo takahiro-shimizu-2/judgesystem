@@ -36,6 +36,7 @@ async function main() {
     const manager = new TaskManager(
       {
         rootDir,
+        gitnexusRootDir: process.cwd(),
         dryRun: false,
         concurrency: 2,
         useWorktree: true,
@@ -68,6 +69,7 @@ async function main() {
           },
         } as any,
         taskRunner: async (task, context) => {
+          assert(context.gitnexusTaskBinding, `Expected GitNexus task binding for ${task.id}.`);
           executions.push({
             taskId: task.id,
             agent: task.agent,
@@ -90,6 +92,7 @@ async function main() {
     assert(taskIds.includes('task-801-1-test'), 'Synthetic TestAgent task was not added.');
     assert(taskIds.includes('task-801-1-review'), 'Synthetic ReviewAgent task was not added.');
     assert(taskIds.includes('task-801-1-pr'), 'Synthetic PRAgent task was not added.');
+    assert(result.plan.gitnexus.taskBindings.length === result.plan.tasks.length, 'Expected GitNexus bindings for every task.');
     assert(executions.length === 4, `Expected 4 executed tasks, got ${executions.length}.`);
 
     const worktreePaths = [...new Set(executions.map((entry) => entry.worktreePath).filter(Boolean))];

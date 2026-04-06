@@ -1,6 +1,6 @@
 import * as path from 'path';
 
-import { truncateText } from '../core/utils.js';
+import { truncateText, unique } from '../core/utils.js';
 import type { OmegaDeliverable, OmegaLearningArtifact } from '../omega/integration.js';
 import type { ExecutionPlan, TaskManagerRunResult } from '../orchestration/task-manager.js';
 import type { ExecutionReport, TaskExecutionRecord } from '../orchestration/task-executor.js';
@@ -24,6 +24,7 @@ export function buildLivingPlanMarkdown(args: LivingPlanMarkdownArgs) {
   const sections = [
     renderHeader(args),
     renderOverview(args, issueBody, totalEstimatedMinutes),
+    renderGitNexus(args),
     renderOmegaUnderstanding(args),
     renderStrategicPlan(args),
     renderPriorLearning(args),
@@ -39,6 +40,59 @@ export function buildLivingPlanMarkdown(args: LivingPlanMarkdownArgs) {
   ];
 
   return sections.join('\n\n');
+}
+
+function renderGitNexus(args: LivingPlanMarkdownArgs) {
+  const { gitnexus } = args.plan;
+  const planningAnchors = gitnexus.planningAnchors
+    .map(
+      (anchor) =>
+        `- \`${anchor.symbolName}\` — ${anchor.impact.risk} / blast radius ${anchor.impact.impactedCount} / ${toRelativePath(
+          args.rootDir,
+          anchor.context.filePath,
+        )}`,
+    )
+    .join('\n');
+  const taskBindings = gitnexus.taskBindings
+    .map(
+      (binding) => `- \`${binding.taskId}\` (${binding.agent})
+  - Highlights: ${binding.queryHighlights.length > 0 ? binding.queryHighlights.join(' | ') : 'none'}
+  - Anchors: ${
+    binding.anchorSymbols.length > 0
+      ? binding.anchorSymbols
+          .map((anchor) => `${anchor.symbolName} (${anchor.impact.risk}, ${anchor.impact.impactedCount})`)
+          .join(', ')
+      : 'none'
+  }`,
+    )
+    .join('\n');
+
+  return `## GitNexus Runtime Context
+
+- **Repo**: \`${gitnexus.repo}\`
+- **Generated**: ${formatTimestamp(gitnexus.generatedAt)}
+- **Issue Query**: ${gitnexus.issueQuery.query}
+- **Goal**: ${gitnexus.issueQuery.goal}
+- **Planning Artifact**: \`${toRelativePath(args.rootDir, args.artifactPaths.gitnexusPath)}\`
+
+### Issue Query Highlights
+
+${renderBulletList(
+  unique([
+    ...gitnexus.issueQuery.processSummaries.slice(0, 5),
+    ...gitnexus.issueQuery.definitionHits
+      .slice(0, 5)
+      .map((definition) => `${definition.kind} ${definition.name} (${definition.filePath})`),
+  ]),
+)}
+
+### Planning Anchors
+
+${planningAnchors || '- none'}
+
+### Task Bindings
+
+${taskBindings || '- none'}`;
 }
 
 function renderHeader(args: LivingPlanMarkdownArgs) {
@@ -479,6 +533,9 @@ function toPercent(value: number, total: number) {
 }
 
 function toRelativePath(rootDir: string, absolutePath: string) {
+  if (!path.isAbsolute(absolutePath)) {
+    return absolutePath;
+  }
   const relative = path.relative(rootDir, absolutePath);
   return relative.length > 0 ? relative : path.basename(absolutePath);
 }

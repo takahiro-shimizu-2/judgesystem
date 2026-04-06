@@ -66,6 +66,7 @@ export async function runAgentsParallelExecCli(argv = process.argv, env = proces
       console.log(`   Plans:  ${result.artifactPaths.plansPath}`);
       console.log(`   Intent: ${result.artifactPaths.intentPath}`);
       console.log(`   Omega:  ${result.artifactPaths.strategicPlanPath}`);
+      console.log(`   Nexus:  ${result.artifactPaths.gitnexusPath}`);
 
       if (report.warnings.length > 0) {
         console.log('   Warnings:');

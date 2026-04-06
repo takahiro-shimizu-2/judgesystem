@@ -1,5 +1,6 @@
 import type { AutomationLogger } from '../core/logger.js';
 import type { AutomationAgentName, DecomposedTask } from '../decomposition/llm-decomposer.js';
+import type { GitNexusTaskBinding } from '../gitnexus/runtime-contract.js';
 import type { WorktreeAssignment } from '../orchestration/worktree-coordinator.js';
 
 export const AUTOMATION_AGENT_NAMES = [
@@ -34,6 +35,8 @@ export interface AutomationAgentRuntimeContext {
   logger: AutomationLogger;
   env: NodeJS.ProcessEnv;
   worktree?: WorktreeAssignment;
+  gitnexusArtifactPath?: string;
+  gitnexusTaskBinding?: GitNexusTaskBinding;
 }
 
 export interface AutomationAgentHandlerRequest {

@@ -28,6 +28,7 @@ async function main() {
     const manager = new TaskManager(
       {
         rootDir,
+        gitnexusRootDir: process.cwd(),
         dryRun: true,
         concurrency: 2,
         logLevel: 'error',

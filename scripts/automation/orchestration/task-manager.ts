@@ -19,6 +19,11 @@ import {
 } from '../omega/integration.js';
 import { buildTaskDag, type TaskDag } from './dag-manager.js';
 import { buildLivingPlanMarkdown } from '../planning/plans-generator.js';
+import { buildGitNexusRuntimeArtifact } from '../gitnexus/runtime-context.js';
+import {
+  findGitNexusTaskBinding,
+  type GitNexusRuntimeArtifact,
+} from '../gitnexus/runtime-contract.js';
 import { TaskExecutor, type ExecutionReport, type TaskExecutionRunner } from './task-executor.js';
 import { WorktreeCoordinator, type WorktreeAssignment } from './worktree-coordinator.js';
 
@@ -34,6 +39,7 @@ export interface ExecutionPlan {
   concurrency: number;
   dryRun: boolean;
   worktrees: WorktreeAssignment[];
+  gitnexus: GitNexusRuntimeArtifact;
 }
 
 export interface TaskManagerOptions {
@@ -44,6 +50,8 @@ export interface TaskManagerOptions {
   autoCleanupWorktrees?: boolean;
   logLevel?: LogLevel;
   deviceIdentifier?: string;
+  gitnexusRootDir?: string;
+  gitnexusRepo?: string;
 }
 
 export interface TaskManagerDependencies {
@@ -63,6 +71,7 @@ export interface TaskManagerRunResult {
     strategicPlanPath: string;
     deliverablePath: string;
     learningPath: string;
+    gitnexusPath: string;
     logPath: string;
   };
 }
@@ -75,6 +84,8 @@ export class TaskManager {
   private readonly autoCleanupWorktrees: boolean;
   private readonly logLevel: LogLevel;
   private readonly deviceIdentifier: string;
+  private readonly gitnexusRootDir: string;
+  private readonly gitnexusRepo: string;
   private readonly decomposer: LLMDecomposer;
   private readonly taskRunner?: TaskExecutionRunner;
   private readonly agentRegistry: AgentRegistry;
@@ -87,6 +98,8 @@ export class TaskManager {
     this.autoCleanupWorktrees = options.autoCleanupWorktrees ?? false;
     this.logLevel = options.logLevel ?? 'info';
     this.deviceIdentifier = options.deviceIdentifier ?? 'local-runner';
+    this.gitnexusRootDir = options.gitnexusRootDir ?? process.cwd();
+    this.gitnexusRepo = options.gitnexusRepo ?? process.env.AUTOMATION_GITNEXUS_REPO ?? 'judgesystem';
     this.decomposer = dependencies.decomposer ?? new LLMDecomposer();
     this.taskRunner = dependencies.taskRunner;
     this.agentRegistry = dependencies.agentRegistry ?? createAgentRegistry({ rootDir: this.rootDir });
@@ -109,6 +122,10 @@ export class TaskManager {
       plan.worktrees = worktreeCoordinator.materializeAssignments(plan.worktrees);
     }
     const worktrees = new Map(plan.worktrees.map((assignment) => [assignment.taskId, assignment]));
+    const gitnexusArtifactPath = path.join(
+      ensureDirectory(path.join(this.rootDir, '.ai', 'parallel-reports')),
+      `gitnexus-runtime-${plan.sessionId}.json`,
+    );
 
     logger.info('Starting orchestration execution');
     const executor = new TaskExecutor({
@@ -129,6 +146,8 @@ export class TaskManager {
         env: process.env,
         worktrees,
         agentRegistry: this.agentRegistry,
+        gitnexusArtifactPath,
+        gitnexusTaskBindings: new Map(plan.gitnexus.taskBindings.map((binding) => [binding.taskId, binding])),
       },
       this.taskRunner,
     );
@@ -200,6 +219,21 @@ export class TaskManager {
 
     const concurrency = Math.max(1, Math.min(this.concurrency, Math.max(1, dag.maxParallelism), 5));
     const worktrees = worktreeCoordinator.planAssignments(issue.number, validated.tasks);
+    logger.info('Capturing mandatory GitNexus runtime context');
+    const gitnexus = buildGitNexusRuntimeArtifact({
+      gitnexusRootDir: this.gitnexusRootDir,
+      repo: this.gitnexusRepo,
+      issue,
+      tasks: validated.tasks,
+      sessionId,
+      logger,
+    });
+
+    for (const task of validated.tasks) {
+      if (!findGitNexusTaskBinding(gitnexus, task.id)) {
+        throw new Error(`GitNexus runtime context did not create a task binding for ${task.id}.`);
+      }
+    }
 
     return {
       sessionId,
@@ -213,6 +247,7 @@ export class TaskManager {
       concurrency,
       dryRun: this.dryRun,
       worktrees,
+      gitnexus,
     };
   }
 
@@ -230,6 +265,7 @@ export class TaskManager {
     const strategicPlanPath = path.join(reportsDir, `strategic-plan-${plan.sessionId}.md`);
     const deliverablePath = path.join(reportsDir, `omega-deliverable-${plan.sessionId}.json`);
     const learningPath = path.join(reportsDir, `omega-learning-${plan.sessionId}.json`);
+    const gitnexusPath = path.join(reportsDir, `gitnexus-runtime-${plan.sessionId}.json`);
 
     fs.writeFileSync(
       planPath,
@@ -243,6 +279,7 @@ export class TaskManager {
           concurrency: plan.concurrency,
           dryRun: plan.dryRun,
           warnings: plan.warnings,
+          gitnexus: plan.gitnexus,
           dag: {
             nodes: plan.dag.nodes,
             edges: plan.dag.edges,
@@ -257,6 +294,7 @@ export class TaskManager {
     );
     fs.writeFileSync(reportPath, JSON.stringify(report, null, 2), 'utf8');
     fs.writeFileSync(intentPath, JSON.stringify(plan.omega.intent, null, 2), 'utf8');
+    fs.writeFileSync(gitnexusPath, JSON.stringify(plan.gitnexus, null, 2), 'utf8');
 
     const artifactPaths = {
       planPath,
@@ -266,6 +304,7 @@ export class TaskManager {
       strategicPlanPath,
       deliverablePath,
       learningPath,
+      gitnexusPath,
       logPath: logger.getLogFilePath(),
     };
 

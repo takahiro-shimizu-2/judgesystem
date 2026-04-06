@@ -29,6 +29,7 @@ async function main() {
     const manager = new TaskManager(
       {
         rootDir,
+        gitnexusRootDir: process.cwd(),
         dryRun: true,
         concurrency: 2,
         logLevel: 'error',
@@ -92,6 +93,7 @@ async function main() {
     assert(existsSync(result.artifactPaths.strategicPlanPath), 'Strategic plan artifact was not created.');
     assert(existsSync(result.artifactPaths.deliverablePath), 'Omega deliverable artifact was not created.');
     assert(existsSync(result.artifactPaths.learningPath), 'Omega learning artifact was not created.');
+    assert(existsSync(result.artifactPaths.gitnexusPath), 'GitNexus runtime artifact was not created.');
 
     const markdown = readFileSync(result.artifactPaths.plansPath, 'utf8');
     const strategicPlan = readFileSync(result.artifactPaths.strategicPlanPath, 'utf8');
@@ -117,6 +119,7 @@ async function main() {
       'Omega intent did not capture preferred capabilities.',
     );
     assert(markdown.includes('## Omega Understanding'), 'Living plan is missing Omega Understanding.');
+    assert(markdown.includes('## GitNexus Runtime Context'), 'Living plan is missing GitNexus Runtime Context.');
     assert(markdown.includes('## Strategic Plan'), 'Living plan is missing Strategic Plan.');
     assert(markdown.includes('## Deliverable Integration'), 'Living plan is missing Deliverable Integration.');
     assert(markdown.includes('## Learning Artifact'), 'Living plan is missing Learning Artifact.');
@@ -151,15 +154,18 @@ async function main() {
     );
     assert(summary.deliverablePath === result.artifactPaths.deliverablePath, 'Summary did not resolve the deliverable artifact.');
     assert(summary.learningPath === result.artifactPaths.learningPath, 'Summary did not resolve the learning artifact.');
+    assert(summary.gitnexusPath === result.artifactPaths.gitnexusPath, 'Summary did not resolve the GitNexus artifact.');
     assert(summary.markdown.includes('Planning Artifact'), 'Summary markdown did not mention the planning artifact.');
     assert(summary.markdown.includes('Strategic Plan'), 'Summary markdown did not mention the strategic plan artifact.');
     assert(summary.markdown.includes('Deliverable Artifact'), 'Summary markdown did not mention the deliverable artifact.');
     assert(summary.markdown.includes('Learning Artifact'), 'Summary markdown did not mention the learning artifact.');
+    assert(summary.markdown.includes('GitNexus Artifact'), 'Summary markdown did not mention the GitNexus artifact.');
 
     console.log('[passed] planning-artifact');
     console.log(`  - ${path.basename(result.artifactPaths.plansPath)}`);
     console.log(`  - ${path.basename(result.artifactPaths.strategicPlanPath)}`);
     console.log(`  - ${path.basename(result.artifactPaths.deliverablePath)}`);
+    console.log(`  - ${path.basename(result.artifactPaths.gitnexusPath)}`);
     console.log(`  - status=${summary.status}`);
   } finally {
     rmSync(rootDir, { recursive: true, force: true });

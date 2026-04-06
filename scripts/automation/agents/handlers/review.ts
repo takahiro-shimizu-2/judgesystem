@@ -3,6 +3,7 @@ import * as path from 'path';
 import { spawnSync } from 'child_process';
 
 import { ensureDirectory, slugify, truncateText } from '../../core/utils.js';
+import { renderGitNexusBindingNote, requireGitNexusTaskBinding } from '../../gitnexus/runtime-contract.js';
 import { resolveRepositoryContext } from '../../reporting/repository-metrics.js';
 import { LabelStateMachine } from '../../state/label-state-machine.js';
 import type { AgentHandlerBinding } from '../handler-contract.js';
@@ -91,6 +92,8 @@ interface ReviewArtifactPayload {
   maxRetries: number;
   reviewCwd: string;
   worktreePath?: string;
+  gitnexusArtifactPath?: string;
+  gitnexusNote: string;
   escalation: ReviewEscalation;
   testHandoff: ReviewTestHandoffSummary;
   security: ReviewSecuritySummary;
@@ -141,6 +144,8 @@ export function createReviewAgentHandler(options: ReviewAgentHandlerFactoryOptio
     description:
       'Runs repo-local review commands, consumes TestAgent artifacts as an explicit handoff, and can iterate with an optional fix command before escalating.',
     execute: async ({ task, definition, context }) => {
+      const gitnexusBinding = requireGitNexusTaskBinding(task, context);
+      const gitnexusNote = renderGitNexusBindingNote(gitnexusBinding, context.gitnexusArtifactPath);
       const rootDir = context.rootDir || options.rootDir;
       const reviewCwd = resolveReviewWorkingDirectory(rootDir, context.env, context.worktree?.worktreePath);
       const checks = resolveReviewChecks(context.env);
@@ -219,6 +224,8 @@ export function createReviewAgentHandler(options: ReviewAgentHandlerFactoryOptio
         score,
         minScore,
         maxRetries,
+        gitnexusArtifactPath: context.gitnexusArtifactPath,
+        gitnexusNote,
         results,
         escalation,
         security,
@@ -246,6 +253,7 @@ export function createReviewAgentHandler(options: ReviewAgentHandlerFactoryOptio
           reviewCwd,
           context.env,
         )}.`,
+        gitnexusNote,
         context.worktree?.worktreePath
           ? `Pipeline worktree: ${relativeOrSelf(rootDir, context.worktree.worktreePath)}.`
           : '',
@@ -650,6 +658,8 @@ function writeReviewArtifacts(params: {
   score: number;
   minScore: number;
   maxRetries: number;
+  gitnexusArtifactPath?: string;
+  gitnexusNote: string;
   results: ReviewCheckResult[];
   escalation: ReviewEscalation;
   security: ReviewSecuritySummary;
@@ -671,6 +681,8 @@ function writeReviewArtifacts(params: {
     maxRetries: params.maxRetries,
     reviewCwd: params.reviewCwd,
     worktreePath: params.worktreePath,
+    gitnexusArtifactPath: params.gitnexusArtifactPath,
+    gitnexusNote: params.gitnexusNote,
     escalation: params.escalation,
     testHandoff: params.testHandoff,
     security: params.security,
@@ -698,6 +710,8 @@ function buildReviewMarkdown(payload: ReviewArtifactPayload) {
 - Session: ${payload.sessionId}
 - Task: ${payload.taskId}
 - Title: ${payload.taskTitle}
+- GitNexus artifact: ${payload.gitnexusArtifactPath || 'n/a'}
+- GitNexus note: ${payload.gitnexusNote}
 
 ## Gate
 - Score: ${payload.score}/100
