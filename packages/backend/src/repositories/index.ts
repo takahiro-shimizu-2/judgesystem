@@ -7,3 +7,4 @@ export { EvaluationOrdererWorkflowRepository } from "./evaluationOrdererWorkflow
 export { EvaluationPartnerCandidateRepository } from "./evaluationPartnerCandidateRepository";
 export { EvaluationPartnerWorkflowRepository } from "./evaluationPartnerWorkflowRepository";
 export { EvaluationPartnerFileRepository } from "./evaluationPartnerFileRepository";
+export { BidRequirementRepository } from "./bidRequirementRepository";

@@ -17,6 +17,7 @@ const StaffListPage = lazy(() => import('./pages/StaffListPage'));
 const AnalyticsPage = lazy(() => import('./pages/AnalyticsPage'));
 const MasterRegisterPage = lazy(() => import('./pages/MasterRegisterPage'));
 const MasterRegisterConfirmPage = lazy(() => import('./pages/MasterRegisterConfirmPage'));
+const BidRequirementSearchPage = lazy(() => import('./pages/BidRequirementSearchPage'));
 
 const Loading = () => (
   <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '50vh' }}>
@@ -83,6 +84,7 @@ function App() {
                 <Route path="/analytics" element={<AnalyticsPage />} />
                 <Route path="/master/register" element={<MasterRegisterPage />} />
                 <Route path="/master/register/confirm" element={<MasterRegisterConfirmPage />} />
+                <Route path="/bid-requirements/search" element={<BidRequirementSearchPage />} />
               </Routes>
               </Suspense>
             </MainLayout>

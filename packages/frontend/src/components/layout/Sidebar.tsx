@@ -18,6 +18,7 @@ import {
   Person as PersonIcon,
   BarChart as BarChartIcon,
   Gavel as GavelIcon,
+  Search as SearchIcon,
   ViewSidebar as ViewSidebarIcon,
   Close as CloseIcon,
   AddBox as AddBoxIcon,
@@ -65,6 +66,12 @@ const menuItems: MenuItem[] = [
     label: '担当者',
     path: '/staff',
     icon: <PersonIcon />,
+  },
+  {
+    id: 'bid-requirement-search',
+    label: '要件検索',
+    path: '/bid-requirements/search',
+    icon: <SearchIcon />,
   },
   {
     id: 'master-register',
