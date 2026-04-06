@@ -39,7 +39,7 @@
 
 ### 参考にはなるが古い可能性があるもの
 
-5. `doc/master_description/`  
+5. `docs/master_description/`
    項目の意味は詳しいが、現在のスキーマとズレている可能性がある
 
 ---
@@ -593,7 +593,7 @@ PostgreSQL
 
 ### 1. マスター説明書が古い
 
-`doc/master_description/` は、項目の意味は詳しいですが、  
+`docs/master_description/` は、項目の意味は詳しいですが、
 現在のスキーマとズレている可能性があります。
 
 ### 2. employee 系マスターの扱いが分裂している
@@ -634,7 +634,7 @@ DBには `camelCase`、`snake_case`、`PascalCase` が混在しており、
 
 - マスター一覧と項目一覧は、今後この文書を起点に1か所へ寄せる
 - 最新の真実は `db/migrations/` を基準にする
-- `doc/master_description/` は参考資料として扱う
+- `docs/master_description/` は参考資料として扱う
 - ファイル資源は将来的に保存方針を統一する
 - employee 系マスターは「現行で正式採用か」「今後必要な設計か」を明確にする
 

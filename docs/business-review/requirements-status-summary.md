@@ -26,7 +26,7 @@
 公告取り込み、文書取得、OCR、要件登録、判定、人の確認、画面利用まで、流れを確認できる状態です。
 
 参照文書:
-[business-process-review.md](/home/shimizu/project/package/judgesystem/doc/business-review/business-process-review.md)
+[business-process-review.md](/home/shimizu/project/package/judgesystem/docs/business-review/business-process-review.md)
 
 ### 2. 業務ルールの候補
 
@@ -34,7 +34,7 @@
 何を正式な公告とみなすか、情報不足をどう扱うか、最終判定を人が持つかなど、主要ルールのおすすめ案があります。
 
 参照文書:
-[business-rules-confirmation.md](/home/shimizu/project/package/judgesystem/doc/business-review/business-rules-confirmation.md)
+[business-rules-confirmation.md](/home/shimizu/project/package/judgesystem/docs/business-review/business-rules-confirmation.md)
 
 ### 3. 全体アーキテクチャのおすすめ方針
 
@@ -42,7 +42,7 @@
 Backend を正規入口にする、API仕様を正本にする、段階移行にする、といった方針が示されています。
 
 参照文書:
-[rearchitecture-basic-policy.md](/home/shimizu/project/package/judgesystem/doc/best-practice/rearchitecture-basic-policy.md)
+[rearchitecture-basic-policy.md](/home/shimizu/project/package/judgesystem/docs/best-practice/rearchitecture-basic-policy.md)
 
 ### 4. DBとマスターの現状
 
@@ -50,7 +50,7 @@ Backend を正規入口にする、API仕様を正本にする、段階移行に
 どんなマスターがあり、主な項目は何か、どの資源がどこに置かれているかを確認できます。
 
 参照文書:
-[master-and-storage-inventory.md](/home/shimizu/project/package/judgesystem/doc/business-review/master-and-storage-inventory.md)
+[master-and-storage-inventory.md](/home/shimizu/project/package/judgesystem/docs/business-review/master-and-storage-inventory.md)
 
 ### 5. 受入の考え方
 
@@ -58,7 +58,7 @@ Backend を正規入口にする、API仕様を正本にする、段階移行に
 何ができれば「業務的に使える」と言えるかの基準があります。
 
 参照文書:
-[acceptance-criteria.md](/home/shimizu/project/package/judgesystem/doc/business-review/acceptance-criteria.md)
+[acceptance-criteria.md](/home/shimizu/project/package/judgesystem/docs/business-review/acceptance-criteria.md)
 
 ---
 
@@ -113,10 +113,10 @@ Backend を正規入口にする、API仕様を正本にする、段階移行に
 
 以下の文書を見て承認すると、要件が正式化しやすくなります。
 
-1. [business-requirements-approval-sheet.md](/home/shimizu/project/package/judgesystem/doc/business-review/business-requirements-approval-sheet.md)
-2. [solution-architecture-approval-sheet.md](/home/shimizu/project/package/judgesystem/doc/business-review/solution-architecture-approval-sheet.md)
-3. [functional-requirements-approval-sheet.md](/home/shimizu/project/package/judgesystem/doc/business-review/functional-requirements-approval-sheet.md)
-4. [non-functional-requirements-approval-sheet.md](/home/shimizu/project/package/judgesystem/doc/business-review/non-functional-requirements-approval-sheet.md)
+1. [business-requirements-approval-sheet.md](/home/shimizu/project/package/judgesystem/docs/business-review/business-requirements-approval-sheet.md)
+2. [solution-architecture-approval-sheet.md](/home/shimizu/project/package/judgesystem/docs/business-review/solution-architecture-approval-sheet.md)
+3. [functional-requirements-approval-sheet.md](/home/shimizu/project/package/judgesystem/docs/business-review/functional-requirements-approval-sheet.md)
+4. [non-functional-requirements-approval-sheet.md](/home/shimizu/project/package/judgesystem/docs/business-review/non-functional-requirements-approval-sheet.md)
 
 ---
 
