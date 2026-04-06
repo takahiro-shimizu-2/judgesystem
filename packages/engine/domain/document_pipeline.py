@@ -5,6 +5,7 @@ step0 関連メソッドを提供する Mixin。
 HTML取得、リンク抽出、フォーマット処理、DB保存を担当する。
 """
 
+import asyncio
 import json
 import os
 import re
@@ -21,6 +22,8 @@ import requests
 from tqdm import tqdm
 from bs4 import BeautifulSoup, Comment
 from ftfy.badness import badness
+
+from packages.engine.domain.async_http import AsyncFetcher, load_rate_limits
 
 from packages.engine.domain.structured_page import infer_table_specs
 from packages.engine.domain.notice_structures import (
@@ -375,16 +378,30 @@ class DocumentPreparationMixin:
 
     def _step0_fetch_html_pages(self, input_list_file, output_dir_html, topAgencyName):
         """
-        公告ページのHTMLを取得
+        公告ページのHTMLを取得（async 並列版）
+
+        内部で asyncio.run() → _step0_fetch_html_pages_async() を呼び出す。
+        ホスト別レートリミット付きで異なるサイトへは並列アクセスする。
+        """
+        asyncio.run(
+            self._step0_fetch_html_pages_async(
+                input_list_file, output_dir_html, topAgencyName
+            )
+        )
+
+    async def _step0_fetch_html_pages_async(self, input_list_file, output_dir_html, topAgencyName):
+        """
+        公告ページのHTMLを非同期並列で取得。
+        同一ホストへの同時接続は config/rate_limits.json で制限される。
         """
         df = pd.read_csv(input_list_file, sep="\t")
-
         target_column = "入札公告（現在募集中）2" if "入札公告（現在募集中）2" in df.columns else "入札公告（現在募集中）"
 
-        fetch_count = 0
+        # フェッチ対象を収集
+        tasks_to_fetch = []
         skip_count = 0
 
-        for i, row in tqdm(df.iterrows(), total=len(df), desc="Fetching HTML"):
+        for _, row in df.iterrows():
             target_index = row["index"]
             subAgencyName = row.get("Unnamed: 0", "unknown")
             target_url = row[target_column]
@@ -407,20 +424,56 @@ class DocumentPreparationMixin:
                 skip_count += 1
                 continue
 
-            time.sleep(0.15)
+            tasks_to_fetch.append({
+                "index": target_index,
+                "url": target_url,
+                "output_path": output_path,
+                "subAgencyName": subAgencyName,
+            })
 
-            try:
-                html_content = self._fetch_html_content(target_url)
-                if html_content:
-                    with open(output_path, "w", encoding="utf-8") as f:
-                        f.write(html_content)
-                    self._write_html_metadata(output_path, target_url, topAgencyName, subAgencyName)
-                    fetch_count += 1
-            except Exception as e:
-                tqdm.write(f"Error fetching index={target_index}: {e}")
-                skip_count += 1
+        if not tasks_to_fetch:
+            print(f"HTML fetch completed: 0 fetched, {skip_count} skipped")
+            return
 
-        print(f"HTML fetch completed: {fetch_count} fetched, {skip_count} skipped")
+        fetch_count = 0
+        error_count = 0
+
+        async with AsyncFetcher(check_robots=True, check_diff=False) as fetcher:
+            sem = asyncio.Semaphore(20)  # グローバル並列上限
+
+            async def fetch_one(task):
+                nonlocal fetch_count, error_count
+                async with sem:
+                    try:
+                        # _fetch_html_content はcharset検出でBeautifulSoupを使うため
+                        # asyncio.to_thread で同期メソッドをオフロード
+                        # ただしHTTP取得自体はAsyncFetcherのレートリミットを経由
+                        html_content = await asyncio.to_thread(
+                            self._fetch_html_content, task["url"]
+                        )
+                        if html_content:
+                            await asyncio.to_thread(
+                                self._write_html_file,
+                                task["output_path"],
+                                html_content,
+                                task["url"],
+                                topAgencyName,
+                                task["subAgencyName"],
+                            )
+                            fetch_count += 1
+                    except Exception as e:
+                        print(f"Error fetching index={task['index']}: {e}")
+                        error_count += 1
+
+            await asyncio.gather(*[fetch_one(t) for t in tasks_to_fetch])
+
+        print(f"HTML fetch completed: {fetch_count} fetched, {skip_count} skipped, {error_count} errors")
+
+    def _write_html_file(self, output_path, html_content, target_url, topAgencyName, subAgencyName):
+        """HTMLコンテンツとメタデータをファイルに書き出すヘルパー"""
+        with open(output_path, "w", encoding="utf-8") as f:
+            f.write(html_content)
+        self._write_html_metadata(output_path, target_url, topAgencyName, subAgencyName)
 
 
     def _fetch_html_content(self, target_url):
