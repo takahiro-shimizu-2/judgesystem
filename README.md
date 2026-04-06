@@ -104,14 +104,14 @@ python -m packages.engine.main --bid_announcements_pre_file data/bid_announcemen
 
 pdoc で作成できます。作成ファイルはレポジトリには登録していませんので、pdoc で作成してください。
 
-以下を実行すれば、`doc/pdoc_bid_announcement_judgement_tools` 以下に html ファイルが作成されます。まずは `doc/pdoc_bid_announcement_judgement_tools/index.html` を参照してください。
+以下を実行すれば、`docs/pdoc_bid_announcement_judgement_tools` 以下に html ファイルが作成されます。まずは `docs/pdoc_bid_announcement_judgement_tools/index.html` を参照してください。
 
-`pdoc packages/engine/main.py packages/engine/requirements/experience.py packages/engine/requirements/grade_item.py packages/engine/requirements/ineligibility.py packages/engine/requirements/location.py packages/engine/requirements/technician.py -o doc/pdoc_bid_announcement_judgement_tools`
+`pdoc packages/engine/main.py packages/engine/requirements/experience.py packages/engine/requirements/grade_item.py packages/engine/requirements/ineligibility.py packages/engine/requirements/location.py packages/engine/requirements/technician.py -o docs/pdoc_bid_announcement_judgement_tools`
 
 
 ### マスターデスクリプション
 
-`doc/master_description` 参照。
+`docs/master_description` 参照。
 
 
 ## webアプリのデプロイ

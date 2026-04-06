@@ -36,7 +36,7 @@ judgesystem/
 │   └── migrate.sh
 ├── deploy/                  ← docker-compose統合
 │   └── docker-compose.yml
-├── doc/
+├── docs/
 ├── scripts/
 ├── .github/workflows/
 └── package.json             ← npm workspaces root

@@ -163,9 +163,9 @@ Engine（内部ワーカー）
 この方針で進める場合、次に参照すべき文書は次の2つです。
 
 1. **再設計の基本方針書**  
-   [rearchitecture-basic-policy.md](/home/shimizu/project/package/judgesystem/doc/best-practice/rearchitecture-basic-policy.md)
+   [rearchitecture-basic-policy.md](/home/shimizu/project/package/judgesystem/docs/best-practice/rearchitecture-basic-policy.md)
 
 2. **段階移行ロードマップ**  
-   [rearchitecture-migration-roadmap.md](/home/shimizu/project/package/judgesystem/doc/best-practice/rearchitecture-migration-roadmap.md)
+   [rearchitecture-migration-roadmap.md](/home/shimizu/project/package/judgesystem/docs/best-practice/rearchitecture-migration-roadmap.md)
 
 この2つがあると、個別Issueの優先順位が明確になり、場当たり修正に戻りにくくなります。
