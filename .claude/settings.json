@@ -29,8 +29,7 @@
           {
             "type": "command",
             "command": "PROJECT_ROOT=$(git rev-parse --show-toplevel) && bash \"$PROJECT_ROOT/.claude/hooks/ci-gate-post-push.sh\"",
-            "if": "Bash(git push:*)",
-            "timeout": 30,
+            "timeout": 45,
             "statusMessage": "CI 状態を確認中..."
           }
         ]
