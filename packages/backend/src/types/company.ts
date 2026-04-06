@@ -1,7 +1,7 @@
 /**
- * Partner domain types for Repository layer return values.
+ * Company domain types for Repository layer return values.
  *
- * These types match the actual query results produced by PartnerRepository,
+ * These types match the actual query results produced by CompanyRepository,
  * eliminating the use of `any` in method signatures.
  */
 
@@ -9,20 +9,20 @@
 // Shared sub-types
 // ---------------------------------------------------------------------------
 
-/** A category assigned to a partner (group may be null). */
-export interface PartnerCategory {
+/** A category assigned to a company (group may be null). */
+export interface CompanyCategory {
   group: string | null;
   name: string;
 }
 
-/** A branch / office belonging to a partner. */
-export interface PartnerBranch {
+/** A branch / office belonging to a company. */
+export interface CompanyBranch {
   name: string;
   address: string;
 }
 
-/** A past project (evaluation) linked to a partner. */
-export interface PartnerPastProject {
+/** A past project (evaluation) linked to a company. */
+export interface CompanyPastProject {
   evaluationId: string;
   announcementId: string;
   announcementNo: number | null;
@@ -64,7 +64,7 @@ export interface OrdererQualification {
 }
 
 /** Qualifications block containing both unified and orderer-specific data. */
-export interface PartnerQualifications {
+export interface CompanyQualifications {
   unified: UnifiedQualification[];
   orderers: OrdererQualification[];
 }
@@ -73,8 +73,8 @@ export interface PartnerQualifications {
 // findWithFilters — list summary (minimal fields)
 // ---------------------------------------------------------------------------
 
-/** Row returned by `PartnerRepository.findWithFilters`. */
-export interface PartnerListSummary {
+/** Row returned by `CompanyRepository.findWithFilters`. */
+export interface CompanyListSummary {
   id: string;
   no: number;
   name: string;
@@ -84,15 +84,15 @@ export interface PartnerListSummary {
   rating: number | null;
   resultCount: number | null;
   hasPrimeQualification: boolean;
-  categories: PartnerCategory[];
+  categories: CompanyCategory[];
 }
 
 // ---------------------------------------------------------------------------
 // findAll / findById — full detail
 // ---------------------------------------------------------------------------
 
-/** Row returned by `PartnerRepository.findAll` / `findById`. */
-export interface PartnerDetail {
+/** Row returned by `CompanyRepository.findAll` / `findById`. */
+export interface CompanyDetail {
   id: string;
   no: number;
   name: string;
@@ -109,8 +109,8 @@ export interface PartnerDetail {
   established: string;
   capital: number | null;
   employeeCount: number | null;
-  categories: PartnerCategory[];
-  pastProjects: PartnerPastProject[];
-  branches: PartnerBranch[];
-  qualifications: PartnerQualifications;
+  categories: CompanyCategory[];
+  pastProjects: CompanyPastProject[];
+  branches: CompanyBranch[];
+  qualifications: CompanyQualifications;
 }

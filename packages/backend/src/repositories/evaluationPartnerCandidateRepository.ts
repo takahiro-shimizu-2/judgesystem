@@ -36,7 +36,7 @@ export interface UpdateEvaluationPartnerCandidateInput {
 }
 
 export class EvaluationPartnerCandidateRepository {
-  private readonly tableName = `${schemaPrefix}${TABLES.evaluationPartnerCandidates}`;
+  private readonly tableName = `${schemaPrefix}${TABLES.evaluationCompanyCandidates}`;
 
   private mapRow(row: any): EvaluationPartnerCandidateRecord {
     return {

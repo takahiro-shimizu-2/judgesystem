@@ -303,20 +303,20 @@ export class AnnouncementRepository {
           cbj.evaluation_no::text AS "evaluationId",
           cbj.announcement_no::text AS "announcementNo",
           cbj.company_no::text AS "companyId",
-          COALESCE(cm.company_name, '') AS "companyName",
+          COALESCE(cm.name, '') AS "companyName",
           cbj.office_no::text AS "branchId",
           COALESCE(om.office_name, '') AS "branchName",
           COALESCE(om.office_address, '') AS "branchAddress",
-          COALESCE(cm.company_address, '') AS "companyAddress",
+          COALESCE(cm.address, '') AS "companyAddress",
           1 AS priority,
           COALESCE(evs."workStatus", 'not_started') AS "workStatus",
           ${statusExpression} AS "evaluationStatus",
           COALESCE(evs."updatedAt", cbj."updatedDate"::timestamptz) AS "updatedAt"
         FROM ${schemaPrefix}company_bid_judgement cbj
-        JOIN ${schemaPrefix}company_master cm
-          ON cm.company_no::text = cbj.company_no::text
+        JOIN ${schemaPrefix}companies cm
+          ON cm.company_no = cbj.company_no
         LEFT JOIN ${schemaPrefix}office_master om
-          ON om.office_no::text = cbj.office_no::text
+          ON om.office_no = cbj.office_no
         LEFT JOIN ${schemaPrefix}${TABLES.evaluationStatuses} evs
           ON evs."evaluationNo" = cbj.evaluation_no::text
         WHERE cbj.announcement_no = $1

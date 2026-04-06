@@ -17,7 +17,7 @@ import type {
 import type { OrdererWorkflowState } from "../repositories/evaluationOrdererWorkflowRepository";
 import type { PartnerWorkflowState } from "../repositories/evaluationPartnerWorkflowRepository";
 import type { PartnerFileFlowType, PartnerFileMetadata, PartnerFileRecord } from "../repositories/evaluationPartnerFileRepository";
-import type { EvaluationPartnerCandidate } from "../types/evaluationPartnerCandidate";
+import type { EvaluationPartnerCandidateRecord } from "../repositories/evaluationPartnerCandidateRepository";
 
 export interface CreatePartnerCandidateParams {
   partnerId: string;
@@ -183,14 +183,14 @@ export class EvaluationService {
     return await this.repository.getCompanyOptions(search);
   }
 
-  async getPartnerCandidates(evaluationNo: string): Promise<EvaluationPartnerCandidate[]> {
+  async getPartnerCandidates(evaluationNo: string): Promise<EvaluationPartnerCandidateRecord[]> {
     return await this.partnerCandidateRepository.findByEvaluation(evaluationNo);
   }
 
   async createPartnerCandidate(
     evaluationNo: string,
     params: CreatePartnerCandidateParams
-  ): Promise<EvaluationPartnerCandidate> {
+  ): Promise<EvaluationPartnerCandidateRecord> {
     return await this.partnerCandidateRepository.create(evaluationNo, params);
   }
 
@@ -198,7 +198,7 @@ export class EvaluationService {
     evaluationNo: string,
     candidateId: string,
     params: UpdatePartnerCandidateParams
-  ): Promise<EvaluationPartnerCandidate | null> {
+  ): Promise<EvaluationPartnerCandidateRecord | null> {
     return await this.partnerCandidateRepository.update(evaluationNo, candidateId, params);
   }
 
