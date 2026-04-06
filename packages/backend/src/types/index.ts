@@ -1,22 +1,22 @@
 export type { JsonValue } from "./json";
 export type {
-  PartnerCategory,
-  PartnerBranch,
-  PartnerPastProject,
+  CompanyCategory,
+  CompanyBranch,
+  CompanyPastProject,
   UnifiedQualification,
   OrdererQualificationItem,
   OrdererQualification,
-  PartnerQualifications,
-  PartnerListSummary,
-  PartnerDetail,
-} from "./partner";
+  CompanyQualifications,
+  CompanyListSummary,
+  CompanyDetail,
+} from "./company";
 export type {
   EvaluationListItem,
   EvaluationDetail,
   EvaluationWorkStatusResult,
   EvaluationStats,
 } from "./evaluation";
-export type { EvaluationPartnerCandidate } from "./evaluationPartnerCandidate";
+export type { EvaluationCompanyCandidate } from "./evaluationCompanyCandidate";
 export type {
   AnnouncementListItem,
   AnnouncementDetail,
@@ -50,7 +50,7 @@ export type BidType =
   | "unknown"
   | "preferred_designation"
   | "other";
-export type PartnerStatus =
+export type CompanyStatus =
   | "not_called"
   | "unavailable"
   | "waiting_documents"

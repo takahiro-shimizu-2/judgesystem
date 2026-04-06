@@ -49,9 +49,9 @@ const menuItems: MenuItem[] = [
     icon: <DescriptionIcon />,
   },
   {
-    id: 'partners',
+    id: 'companies',
     label: '会社情報',
-    path: '/partners',
+    path: '/companies',
     icon: <BusinessIcon />,
   },
   {

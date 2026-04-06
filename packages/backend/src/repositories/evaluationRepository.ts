@@ -20,7 +20,7 @@ interface EvaluationListRow extends EvaluationListItem {
 type QualifiedTables = {
   companyBidJudgement: string;
   bidAnnouncements: string;
-  companyMaster: string;
+  companies: string;
   officeMaster: string;
   documents: string;
   announcementDates: string;
@@ -73,8 +73,8 @@ export class EvaluationRepository {
       const dataQuery = `
         SELECT
           COUNT(*) OVER() AS total_count,
-          cbj.evaluation_no::text AS id,
-          cbj.evaluation_no::text AS "evaluationNo",
+          cbj.evaluation_no AS id,
+          cbj.evaluation_no AS "evaluationNo",
           jsonb_build_object(
             'title', COALESCE(ba."workName", ''),
             'organization', COALESCE(ba."topAgencyName", ''),
@@ -88,7 +88,7 @@ export class EvaluationRepository {
             'estimatedAmountMax', aea.estimated_amount_max
           ) AS announcement,
           jsonb_build_object(
-            'name', COALESCE(cm.company_name, ''),
+            'name', COALESCE(cm.name, ''),
             'priority', ${priorityExpression}
           ) AS company,
           jsonb_build_object(
@@ -270,8 +270,8 @@ export class EvaluationRepository {
           GROUP BY req1.announcement_no, req2.office_no
         )
         SELECT
-          cbj.evaluation_no::text AS id,
-          cbj.evaluation_no::text AS "evaluationNo",
+          cbj.evaluation_no AS id,
+          cbj.evaluation_no AS "evaluationNo",
           jsonb_build_object(
             'id', CONCAT('ann-', cbj.announcement_no),
             'ordererId', COALESCE(ba.orderer_id::text, ''),
@@ -310,8 +310,8 @@ export class EvaluationRepository {
           ) AS announcement,
           jsonb_build_object(
             'id', CONCAT('com-', cbj.company_no),
-            'name', COALESCE(cm.company_name, ''),
-            'address', COALESCE(cm.company_address, ''),
+            'name', COALESCE(cm.name, ''),
+            'address', COALESCE(cm.address, ''),
             'grade', 'A',
             'priority', ${priorityExpression}
           ) AS company,
@@ -331,14 +331,14 @@ export class EvaluationRepository {
           ${currentStepExpression} AS "currentStep",
           cbj."updatedDate" AS "evaluatedAt"
         ${baseFromClause}
-        LEFT JOIN documents doc ON doc.announcement_id::text = cbj.announcement_no::text
-        LEFT JOIN competing_companies companies ON companies.announcement_id::text = cbj.announcement_no::text
-        LEFT JOIN submission_docs sd ON sd.announcement_no::text = cbj.announcement_no::text
+        LEFT JOIN documents doc ON doc.announcement_id = cbj.announcement_no
+        LEFT JOIN competing_companies companies ON companies.announcement_id = cbj.announcement_no
+        LEFT JOIN submission_docs sd ON sd.announcement_no = cbj.announcement_no
         LEFT JOIN requirement_details req
-          ON req.announcement_no::text = cbj.announcement_no::text
-         AND COALESCE(req.office_no::text, '-1') = COALESCE(cbj.office_no::text, '-1')
-        LEFT JOIN step_assignees sa ON sa.evaluation_no::text = cbj.evaluation_no::text
-        WHERE cbj.evaluation_no::text = $1
+          ON req.announcement_no = cbj.announcement_no
+         AND COALESCE(req.office_no, '-1') = COALESCE(cbj.office_no, '-1')
+        LEFT JOIN step_assignees sa ON sa.evaluation_no = cbj.evaluation_no
+        WHERE cbj.evaluation_no = $1
         `,
         [id]
       );
@@ -583,7 +583,7 @@ export class EvaluationRepository {
       whereClauses.push(
         `(ba."workName" ILIKE $${paramIndex} OR ` +
         `ba."topAgencyName" ILIKE $${paramIndex} OR ` +
-        `cm.company_name ILIKE $${paramIndex} OR ` +
+        `cm.name ILIKE $${paramIndex} OR ` +
         `ba.category ILIKE $${paramIndex})`
       );
       queryParams.push(`%${escapeLikePattern(filters.searchQuery)}%`);
@@ -640,7 +640,7 @@ export class EvaluationRepository {
       workStatus: workStatusExpression,
       priority: `${priorityExpression}`,
       title: `ba."workName"`,
-      company: `cm.company_name`,
+      company: `cm.name`,
       organization: `ba."topAgencyName"`,
       category: `ba.category`,
       bidType: `ba."bidType"`,
@@ -713,7 +713,7 @@ export class EvaluationRepository {
     return {
       companyBidJudgement: `${schemaPrefix}company_bid_judgement`,
       bidAnnouncements: `${schemaPrefix}bid_announcements`,
-      companyMaster: `${schemaPrefix}company_master`,
+      companies: `${schemaPrefix}${TABLES.companies}`,
       officeMaster: `${schemaPrefix}office_master`,
       documents: `${schemaPrefix}announcements_documents_master`,
       announcementDates: `${schemaPrefix}bid_announcements_dates`,
@@ -731,11 +731,11 @@ export class EvaluationRepository {
   private getBaseFromClause(tables: QualifiedTables): string {
     return `
       FROM ${tables.companyBidJudgement} cbj
-      JOIN ${tables.bidAnnouncements} ba ON ba.announcement_no::text = cbj.announcement_no::text
-      JOIN ${tables.companyMaster} cm ON cm.company_no::text = cbj.company_no::text
-      LEFT JOIN ${tables.officeMaster} om ON om.office_no::text = cbj.office_no::text
-      LEFT JOIN ${tables.announcementsEstimatedAmounts} aea ON aea.announcement_no::text = cbj.announcement_no::text
-      LEFT JOIN ${tables.evaluationStatuses} evs ON evs."evaluationNo" = cbj.evaluation_no::text
+      JOIN ${tables.bidAnnouncements} ba ON ba.announcement_no = cbj.announcement_no
+      JOIN ${tables.companies} cm ON cm.company_no = cbj.company_no
+      LEFT JOIN ${tables.officeMaster} om ON om.office_no = cbj.office_no
+      LEFT JOIN ${tables.announcementsEstimatedAmounts} aea ON aea.announcement_no = cbj.announcement_no
+      LEFT JOIN ${tables.evaluationStatuses} evs ON evs."evaluationNo" = cbj.evaluation_no
     `;
   }
 
@@ -808,7 +808,7 @@ export class EvaluationRepository {
 
     if (search && search.trim()) {
       const normalized = `%${escapeLikePattern(search.trim())}%`;
-      whereClause = `WHERE (cm.company_name ILIKE $${paramIndex} OR COALESCE(om.office_name, '') ILIKE $${paramIndex})`;
+      whereClause = `WHERE (cm.name ILIKE $${paramIndex} OR COALESCE(om.office_name, '') ILIKE $${paramIndex})`;
       params.push(normalized);
       paramIndex += 1;
     }
@@ -818,16 +818,16 @@ export class EvaluationRepository {
     paramIndex += 1;
 
     const query = `
-      SELECT DISTINCT ON (cbj.office_no::text)
-        cbj.company_no::text AS "companyNo",
-        cbj.office_no::text AS "officeNo",
-        COALESCE(cm.company_name, '') AS "companyName",
+      SELECT DISTINCT ON (cbj.office_no)
+        cbj.company_no AS "companyNo",
+        cbj.office_no AS "officeNo",
+        COALESCE(cm.name, '') AS "companyName",
         COALESCE(om.office_name, '') AS "branchName"
       FROM ${tables.companyBidJudgement} cbj
-      JOIN ${tables.companyMaster} cm ON cm.company_no::text = cbj.company_no::text
-      JOIN ${tables.officeMaster} om ON om.office_no::text = cbj.office_no::text
+      JOIN ${tables.companies} cm ON cm.company_no = cbj.company_no
+      JOIN ${tables.officeMaster} om ON om.office_no = cbj.office_no
       ${whereClause}
-      ORDER BY cbj.office_no::text, cm.company_name ASC, om.office_name ASC
+      ORDER BY cbj.office_no, cm.name ASC, om.office_name ASC
       LIMIT $${limitParamIndex}
     `;
 

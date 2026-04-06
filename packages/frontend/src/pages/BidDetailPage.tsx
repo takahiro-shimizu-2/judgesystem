@@ -24,7 +24,7 @@ import type {
   WorkStatus,
 } from "../types";
 import { useSimilarCases } from "../hooks/useSimilarCases";
-import { usePartnerAssignment } from "../hooks/usePartnerAssignment";
+import { useCompanyAssignment } from "../hooks/useCompanyAssignment";
 import { priorityLabels, priorityColors } from "../constants/priority";
 import { WORKFLOW_STEP_CONFIG, WORKFLOW_STEP_IDS } from "../constants/workflow";
 import { pageStyles, colors, fontSizes, iconStyles, borderRadius } from "../constants/styles";
@@ -40,7 +40,7 @@ import {
   OrdererInfoSection,
   JudgmentSection,
   OrdererWorkflowSection,
-  PartnerSection,
+  CompanySection,
   RequestSection,
   AwardSection,
   StaffAssignmentPanel,
@@ -266,13 +266,13 @@ export default function BidDetailPage() {
 
   // 協力会社フック
   const {
-    partners,
+    companies: partners,
     isLoading: partnersLoading,
-    addPartner: handlePartnerAdd,
-    removePartner: handlePartnerRemove,
-    changePartnerStatus: handlePartnerStatusChange,
-    togglePartnerSurvey: handlePartnerSurveyToggle,
-  } = usePartnerAssignment(evaluation?.evaluationNo);
+    addCompany: handlePartnerAdd,
+    removeCompany: handlePartnerRemove,
+    changeCompanyStatus: handlePartnerStatusChange,
+    toggleCompanySurvey: handlePartnerSurveyToggle,
+  } = useCompanyAssignment(evaluation?.evaluationNo);
 
   // 担当者変更ハンドラ
   const handleAssigneeChange = useCallback(async (stepId: string, staffId: string) => {
@@ -417,7 +417,7 @@ export default function BidDetailPage() {
       case WORKFLOW_STEP_IDS.PARTNER: {
         const partnerAssignee = stepAssignees.find((a) => a.stepId === WORKFLOW_STEP_IDS.PARTNER);
         return (
-          <PartnerSection
+          <CompanySection
             evaluation={evaluation}
             partners={partners}
             workflowAssigneeId={partnerAssignee?.staffId}

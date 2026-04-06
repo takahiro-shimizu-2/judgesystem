@@ -184,8 +184,10 @@ class JudgementMixin:
             return
 
         # ループの外で全てのマスターデータを事前に読み込み（高速化のため）
-        print("Loading master data files...")
-        master_data_company = pd.read_csv("data/master/company_master.txt", sep="\t")
+        print("Loading master data...")
+        # companies + company_disqualifications は DB から取得 (#188 企業マスタ統合)
+        master_data_company = db_operator.selectToTable(tablename="companies", where_clause="WHERE is_customer = true")
+        master_data_disqualifications = db_operator.selectToTable(tablename="company_disqualifications")
         master_data_office_registration_authorization = pd.read_csv("data/master/office_registration_authorization_master.txt", sep="\t")
         master_data_office_registration_authorization_with_converter = pd.read_csv("data/master/office_registration_authorization_master.txt", sep="\t", converters={"construction_no": lambda x: str(x)})
         master_data_agency = pd.read_csv("data/master/agency_master.txt", sep="\t")
@@ -259,6 +261,7 @@ class JudgementMixin:
         # マスターデータを辞書にまとめる
         master_data_dict = {
             'company': master_data_company,
+            'disqualifications': master_data_disqualifications,
             'office': master_data_office,
             'office_registration_authorization': master_data_office_registration_authorization,
             'office_registration_authorization_with_converter': master_data_office_registration_authorization_with_converter,

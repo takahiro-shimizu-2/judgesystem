@@ -41,7 +41,7 @@ import {
 } from '../../../constants/emailTemplates';
 import { fetchCompanyList, type CompanyWithDetails } from '../../../data/companies';
 import { PersonIcon } from '../../../constants/icons';
-import type { Partner, BidEvaluation } from '../../../types';
+import type { CompanyCandidate, BidEvaluation } from '../../../types';
 import { useStaffDirectory } from '../../../contexts/StaffContext';
 
 // ============================================================================
@@ -50,7 +50,7 @@ import { useStaffDirectory } from '../../../contexts/StaffContext';
 
 export interface RequestSectionProps {
   evaluation?: BidEvaluation;
-  partners?: Partner[];
+  partners?: CompanyCandidate[];
   /** ワークフロー（確認依頼タブ）の担当者ID */
   workflowAssigneeId?: string;
 }

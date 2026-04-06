@@ -104,11 +104,11 @@ export interface ConfirmItem {
 }
 
 // ============================================================================
-// パートナー関連
+// 協力会社関連
 // ============================================================================
 
-/** パートナーステータス */
-export type PartnerStatus =
+/** 協力会社ステータス */
+export type CompanyStatus =
   | 'not_called'           // 未架電
   | 'unavailable'          // 対応不可
   | 'waiting_documents'    // 資料送付待ち
@@ -117,49 +117,49 @@ export type PartnerStatus =
   | 'estimate_completed'   // 見積書受領
   | 'estimate_adopted';    // 見積採用
 
-// ステータスのラベル・色・優先度は constants/partnerStatus.ts に定義
+// ステータスのラベル・色・優先度は constants/companyStatus.ts に定義
 
-/** パートナーメモ */
-export interface PartnerMemo {
+/** 協力会社メモ */
+export interface CompanyMemo {
   id: string;
   content: string;
   createdAt: string;
   updatedAt?: string;
 }
 
-/** パートナー文字起こし */
-export interface PartnerTranscription {
+/** 協力会社文字起こし */
+export interface CompanyTranscription {
   id: string;
   content: string;
   date: string;
 }
 
-/** パートナー受信資料 */
-export interface PartnerReceivedDocument {
+/** 協力会社受信資料 */
+export interface CompanyReceivedDocument {
   id: string;
   name: string;
   date: string;
 }
 
-/** パートナー情報 */
-export interface Partner {
+/** 協力会社候補情報（ワークフロー内） */
+export interface CompanyCandidate {
   id: string;
   name: string;              // 企業名
   contactPerson: string;     // 担当者名
   phone: string;             // 電話番号
   email: string;             // メールアドレス
   fax: string;               // FAX
-  status: PartnerStatus;     // 進捗状況
-  memos: PartnerMemo[];      // メモ
-  transcriptions: PartnerTranscription[]; // 文字起こし
+  status: CompanyStatus;     // 進捗状況
+  memos: CompanyMemo[];      // メモ
+  transcriptions: CompanyTranscription[]; // 文字起こし
   talkScript: string;        // トークスクリプト
   surveyApproved: boolean;   // 現地調査OK
-  receivedDocuments: PartnerReceivedDocument[]; // 受信資料
+  receivedDocuments: CompanyReceivedDocument[]; // 受信資料
   assignedStaffId?: string;  // 担当者ID
 }
 
 /** 協力会社候補追加時の入力 */
-export interface PartnerCandidatePayload {
+export interface CompanyCandidatePayload {
   partnerId: string;
   partnerName: string;
   contactPerson?: string;

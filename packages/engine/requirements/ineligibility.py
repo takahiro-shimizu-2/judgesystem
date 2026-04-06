@@ -23,10 +23,20 @@ def isOfficeSuspended(officeNo, office_registration_authorization_data=pd.read_c
 
     return False
 
-# 企業Noが一致する行(M_COMPANY)を返す(無ければnull)
-def findCompanyRow(companyNo, company_data = pd.read_csv("data/master/company_master.txt",sep="\t")):
-    # 企業マスター
-    # company_data
+# 企業Noが一致する行(companies)を返す(無ければNone)
+def findCompanyRow(companyNo, company_data=None):
+    """
+    company_data (DataFrame) から company_no が一致する行を返す。
+
+    Args:
+        companyNo: 企業番号 (INTEGER)
+        company_data: companies テーブルの DataFrame。必須。
+
+    Returns:
+        DataFrame (1行) or None
+    """
+    if company_data is None:
+        raise ValueError("company_data must be provided")
 
     data = company_data[company_data["company_no"] == companyNo]
     if data.shape[0] == 0:
@@ -36,40 +46,52 @@ def findCompanyRow(companyNo, company_data = pd.read_csv("data/master/company_ma
             print(f"Warning: 企業No={companyNo} に対して複数行ヒット({data.shape[0]}行)")
         return data.head(1)
 
-def checkIneligibilityDynamic(requirementText, companyNo, officeNo, company_data = pd.read_csv("data/master/company_master.txt",sep="\t"), office_registration_authorization_data=pd.read_csv("data/master/office_registration_authorization_master.txt",sep="\t")):
-    compRow = findCompanyRow(companyNo, company_data = company_data)
-    if compRow.shape[0] == 0:
+def checkIneligibilityDynamic(requirementText, companyNo, officeNo, company_data=None, disqualification_data=None, office_registration_authorization_data=None):
+    """
+    欠格要件の動的判定。
+
+    Args:
+        requirementText: 要件文テキスト
+        companyNo: 企業番号 (INTEGER)
+        officeNo: 拠点番号
+        company_data: companies テーブルの DataFrame。必須。
+        disqualification_data: company_disqualifications テーブルの DataFrame。必須。
+        office_registration_authorization_data: 拠点登録許可マスターの DataFrame。
+    """
+    if company_data is None:
+        raise ValueError("company_data must be provided")
+    if disqualification_data is None:
+        raise ValueError("disqualification_data must be provided")
+
+    compRow = findCompanyRow(companyNo, company_data=company_data)
+    if compRow is None or compRow.shape[0] == 0:
         # 会社そのものが見つからなければNG
         return { "is_ok": False, "reason": fr"欠格要件：企業No={companyNo}が見つからない" }
 
-    # 例: M_COMPANY想定カラム
-    # 10: article70Flg
-    # 11: article71Flg
-    # 12: bankruptFlg
-    # 13: rehabFlg
-    # 14: rehabStartDt
-    # 15: reobtainedDt
-    # 16: violentFlg
-    # 17: legalIncapFlg
-    # 18: foreignFlg
-    # 19: terroristFlg
-    # 20: socialInsOk
-    # 21: infoSecFlg
-    # 22: isSuspByBOJ
-    # .item() で bool の値だけ取り出している。
-    article70Flg = compRow["article_70_flag"].item()
-    article71Flg = compRow["article_71_flag"].item()
-    bankruptFlg = compRow["bankruptcy_flag"].item()
-    rehabFlg = compRow["Corporate_Reorganization_Flag"].item()
-    rehabStartDt = compRow["Corporate_Reorganization_start_date"].item()
-    reobtainedDt = compRow["Post_Reorganization_Reacquisition_Date"].item()
-    violentFlg = compRow["Anti_Social_Forces_Flag"].item()
-    legalIncapFlg = compRow["Adult_Ward_Flag"].item()
-    foreignFlg = compRow["Foreign_Legal_Restriction_Flag"].item()
-    terroristFlg = compRow["Subversive_Organization_Flag"].item()
-    socialInsOk = compRow["No_Social_Insurance_Arrears_Flag"].item()
-    infoSecFlg = compRow["Information_Security_Framework_Flag"].item()
-    isSuspByBOJ = compRow["BOJ_Transaction_Suspension_flag"].item()
+    # companies テーブルの id を使って company_disqualifications を引く
+    company_id = compRow["id"].item()
+    disqRow = disqualification_data[disqualification_data["company_id"] == company_id]
+
+    if disqRow.shape[0] == 0:
+        # 欠格データがない場合は全てOK
+        return { "is_ok": True, "reason": "欠格要件：欠格データなし => OK" }
+
+    disqRow = disqRow.head(1)
+
+    # company_disqualifications テーブルから snake_case カラムで取得
+    article70Flg = disqRow["article_70_flag"].item()
+    article71Flg = disqRow["article_71_flag"].item()
+    bankruptFlg = disqRow["bankruptcy_flag"].item()
+    rehabFlg = disqRow["corporate_reorganization_flag"].item()
+    rehabStartDt = disqRow["corporate_reorganization_start_date"].item()
+    reobtainedDt = disqRow["post_reorganization_reacquisition_date"].item()
+    violentFlg = disqRow["anti_social_forces_flag"].item()
+    legalIncapFlg = disqRow["adult_ward_flag"].item()
+    foreignFlg = disqRow["foreign_legal_restriction_flag"].item()
+    terroristFlg = disqRow["subversive_organization_flag"].item()
+    socialInsOk = disqRow["no_social_insurance_arrears_flag"].item()
+    infoSecFlg = disqRow["information_security_framework_flag"].item()
+    isSuspByBOJ = disqRow["boj_transaction_suspension_flag"].item()
 
     # (1) 70条
     if re.search(r"70条", requirementText):
@@ -169,26 +191,40 @@ def checkIneligibilityDynamic(requirementText, companyNo, officeNo, company_data
     return { "is_ok": True, "reason": "欠格要件：該当キーワードなし => OK"}
 
 if __name__ == "__main__":
-    companyNo = 1
-    officeNo = 1
-    requirementText = "70条および破産"
-    # テストコード
-    print(checkIneligibilityDynamic(requirementText=requirementText, companyNo=companyNo, officeNo=officeNo))
+    # テストコード: TSV ファイルからデータを読み込んでテスト
+    # 本番では db_operator 経由で companies / company_disqualifications を取得する
+    import os
+    company_tsv = "data/master/companies.txt"
+    disq_tsv = "data/master/company_disqualifications.txt"
+    office_reg_tsv = "data/master/office_registration_authorization_master.txt"
 
-    companyNo = 1
-    officeNo = 1
-    requirementText = "予算決算及び会計令(昭和22年勅令第165号。以下「予決令」という。)第70条及び第71条の規定に該当しない者であること。"    
-    print(checkIneligibilityDynamic(requirementText=requirementText, companyNo=companyNo, officeNo=officeNo))
+    if not os.path.exists(company_tsv):
+        print(f"Warning: {company_tsv} not found. Skipping test.")
+    else:
+        test_company_data = pd.read_csv(company_tsv, sep="\t")
+        test_disq_data = pd.read_csv(disq_tsv, sep="\t") if os.path.exists(disq_tsv) else pd.DataFrame()
+        test_office_data = pd.read_csv(office_reg_tsv, sep="\t") if os.path.exists(office_reg_tsv) else pd.DataFrame()
 
-    companyNo = 1
-    officeNo = 1
-    requirementText = "会社更生法に基づき更生手続開始の申立てがなされている者又は民事再生法に基づき再生手続開始の申立てがなされている者(再度級別の格付けを受けた者を除く。)でないこと。"
-    print(checkIneligibilityDynamic(requirementText=requirementText, companyNo=companyNo, officeNo=officeNo))
+        companyNo = 1
+        officeNo = 1
+        requirementText = "70条および破産"
+        print(checkIneligibilityDynamic(requirementText=requirementText, companyNo=companyNo, officeNo=officeNo,
+              company_data=test_company_data, disqualification_data=test_disq_data,
+              office_registration_authorization_data=test_office_data))
 
+        requirementText = "予算決算及び会計令(昭和22年勅令第165号。以下「予決令」という。)第70条及び第71条の規定に該当しない者であること。"
+        print(checkIneligibilityDynamic(requirementText=requirementText, companyNo=companyNo, officeNo=officeNo,
+              company_data=test_company_data, disqualification_data=test_disq_data,
+              office_registration_authorization_data=test_office_data))
 
-    companyNo = 1
-    officeNo = 1
-    requirementText = "都道府県警察から暴力団関係業者として防衛省が発注する業務から排除するよう要請があり、当該状態が継続している有資格業者については、競争参加を認めない。"
-    print(checkIneligibilityDynamic(requirementText=requirementText, companyNo=companyNo, officeNo=officeNo))
+        requirementText = "会社更生法に基づき更生手続開始の申立てがなされている者又は民事再生法に基づき再生手続開始の申立てがなされている者(再度級別の格付けを受けた者を除く。)でないこと。"
+        print(checkIneligibilityDynamic(requirementText=requirementText, companyNo=companyNo, officeNo=officeNo,
+              company_data=test_company_data, disqualification_data=test_disq_data,
+              office_registration_authorization_data=test_office_data))
+
+        requirementText = "都道府県警察から暴力団関係業者として防衛省が発注する業務から排除するよう要請があり、当該状態が継続している有資格業者については、競争参加を認めない。"
+        print(checkIneligibilityDynamic(requirementText=requirementText, companyNo=companyNo, officeNo=officeNo,
+              company_data=test_company_data, disqualification_data=test_disq_data,
+              office_registration_authorization_data=test_office_data))
 
 

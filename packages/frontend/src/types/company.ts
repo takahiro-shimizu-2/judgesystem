@@ -79,9 +79,9 @@ export interface Qualifications {
 
 /**
  * 協力会社一覧用の型（企業情報を統合）
- * ※ワークフロー内の協力会社は workflow.ts の Partner を使用
+ * ※ワークフロー内の協力会社は workflow.ts の Company (旧Partner) を使用
  */
-export interface PartnerListItem {
+export interface CompanyListItem {
   id: string;
   no: number;              // NO
   name: string;            // 会社名

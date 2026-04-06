@@ -16,13 +16,13 @@ import {
   Phone as PhoneIcon,
 } from '@mui/icons-material';
 import type { GridSortModel } from '@mui/x-data-grid';
-import { fetchPartnerList, allCategories } from '../data';
-import type { PartnerListRow } from '../data';
+import { fetchCompanyMasterList, allCategories } from '../data';
+import type { CompanyListRow } from '../data';
 import { colors, pageStyles, fontSizes, chipStyles, listFilterChipStyles, iconStyles, borderRadius } from '../constants/styles';
 import { extractPrefecture } from '../constants/prefectures';
 import { CustomPagination } from '../components/bid';
 import { RightSidePanel } from '../components/layout';
-import { PartnerDisplayConditionsPanel, type PartnerFilterState } from '../components/partner';
+import { CompanyDisplayConditionsPanel, type CompanyFilterState } from '../components/company';
 import { useSidebar } from '../contexts/SidebarContext';
 
 
@@ -44,7 +44,7 @@ interface RowData {
 /**
  * 会社情報カード
  */
-function PartnerCard({ row, onClick }: { row: RowData; onClick: () => void }) {
+function CompanyCard({ row, onClick }: { row: RowData; onClick: () => void }) {
   // 評価に応じた色
   const getRatingColor = (rating: number | null) => {
     if (rating == null) return colors.text.muted;
@@ -265,7 +265,7 @@ function PartnerCard({ row, onClick }: { row: RowData; onClick: () => void }) {
 // ナビゲーション追跡用
 const NAV_TRACKING_KEY = 'lastVisitedPath';
 
-export default function PartnerListPage() {
+export default function CompanyListPage() {
   const navigate = useNavigate();
   const { rightPanelOpen, toggleRightPanel, closeRightPanel, isMobile } = useSidebar();
   const [conditionTab, setConditionTab] = useState<'sort' | 'filter'>('sort');
@@ -273,7 +273,7 @@ export default function PartnerListPage() {
 
   // サーバーサイド データ
   const [loading, setLoading] = useState(true);
-  const [partnerRows, setPartnerRows] = useState<RowData[]>([]);
+  const [companyRows, setCompanyRows] = useState<RowData[]>([]);
   const [total, setTotal] = useState(0);
 
   // 検索クエリ（入力値とデバウンス後の値を分離）
@@ -284,7 +284,7 @@ export default function PartnerListPage() {
   const [sortModel, setSortModel] = useState<GridSortModel>([]);
 
   // フィルター状態
-  const [filters, setFilters] = useState<PartnerFilterState>({
+  const [filters, setFilters] = useState<CompanyFilterState>({
     ratings: [],
     hasPrimeQualification: 'all',
     categories: [],
@@ -296,8 +296,8 @@ export default function PartnerListPage() {
   const [paginationModel, setPaginationModel] = useState<{ page: number; pageSize: number }>(() => {
     try {
       const lastPath = sessionStorage.getItem(NAV_TRACKING_KEY);
-      if (lastPath && /^\/partners\//.test(lastPath)) {
-        const saved = localStorage.getItem('partnerlist-page');
+      if (lastPath && /^\/companies\//.test(lastPath)) {
+        const saved = localStorage.getItem('companylist-page');
         if (saved) return JSON.parse(saved);
       }
     } catch { /* ignore */ }
@@ -307,8 +307,8 @@ export default function PartnerListPage() {
   // ページ番号を保存 & 現在のパスを記録
   useEffect(() => {
     try {
-      localStorage.setItem('partnerlist-page', JSON.stringify(paginationModel));
-      sessionStorage.setItem(NAV_TRACKING_KEY, '/partners');
+      localStorage.setItem('companylist-page', JSON.stringify(paginationModel));
+      sessionStorage.setItem(NAV_TRACKING_KEY, '/companies');
     } catch { /* ignore */ }
   }, [paginationModel]);
 
@@ -335,7 +335,7 @@ export default function PartnerListPage() {
       setLoading(true);
       try {
         const sort = sortModel[0];
-        const result = await fetchPartnerList(
+        const result = await fetchCompanyMasterList(
           {
             page: paginationModel.page,
             pageSize: paginationModel.pageSize,
@@ -351,8 +351,8 @@ export default function PartnerListPage() {
           controller.signal,
         );
         if (!controller.signal.aborted) {
-          setPartnerRows(
-            result.data.map((p: PartnerListRow) => ({
+          setCompanyRows(
+            result.data.map((p: CompanyListRow) => ({
               id: p.id,
               no: String(p.no).padStart(8, '0'),
               name: p.name,
@@ -370,7 +370,7 @@ export default function PartnerListPage() {
         }
       } catch (err) {
         if (!controller.signal.aborted) {
-          console.error('Failed to fetch partners:', err);
+          console.error('Failed to fetch companies:', err);
         }
       } finally {
         if (!controller.signal.aborted) {
@@ -397,7 +397,7 @@ export default function PartnerListPage() {
     filters.prefectures.length;
 
   const handleCardClick = (id: string) => {
-    navigate(`/partners/${id}`);
+    navigate(`/companies/${id}`);
   };
 
   const handleClearAll = useCallback(() => {
@@ -541,7 +541,7 @@ export default function PartnerListPage() {
               position: 'relative',
             }}
           >
-            {loading && partnerRows.length === 0 ? (
+            {loading && companyRows.length === 0 ? (
               <Box sx={{ p: 4, textAlign: 'center' }}>
                 <CircularProgress size={32} />
               </Box>
@@ -552,14 +552,14 @@ export default function PartnerListPage() {
                     <CircularProgress size={20} />
                   </Box>
                 )}
-                {partnerRows.map((row) => (
-                  <PartnerCard
+                {companyRows.map((row) => (
+                  <CompanyCard
                     key={row.id}
                     row={row}
                     onClick={() => handleCardClick(row.id)}
                   />
                 ))}
-                {!loading && partnerRows.length === 0 && (
+                {!loading && companyRows.length === 0 && (
                   <Box sx={{ p: 4, textAlign: 'center', color: colors.text.muted }}>
                     該当する会社がありません
                   </Box>
@@ -587,7 +587,7 @@ export default function PartnerListPage() {
         onOpenWithTab={handleOpenWithTab}
         isMobile={isMobile}
       >
-        <PartnerDisplayConditionsPanel
+        <CompanyDisplayConditionsPanel
           searchQuery={searchQuery}
           onSearchChange={setSearchQuery}
           sortModel={sortModel}

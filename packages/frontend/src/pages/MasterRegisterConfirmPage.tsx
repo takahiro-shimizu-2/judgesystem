@@ -3,24 +3,24 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { Box, Paper, Typography, Button, Chip, Snackbar, Alert } from '@mui/material';
 import { ArrowBackIcon, CheckIcon, BusinessIcon, OrdererIcon, PersonIcon } from '../constants/icons';
 import {
-  PartnerConfirmView,
+  CompanyConfirmView,
   OrdererConfirmView,
   StaffConfirmView,
 } from '../components/master/confirm';
 import { formPageStyles, formSubmitButtonStyles, formResetButtonStyles } from '../constants/formStyles';
 import { colors, fontSizes } from '../constants/styles';
-import type { PartnerFormData } from '../hooks/usePartnerForm';
+import type { CompanyFormData } from '../hooks/useCompanyForm';
 import type { OrdererFormData } from '../hooks/useOrdererForm';
 import type { StaffFormData } from '../hooks/useStaffForm';
 import { useStaffDirectory } from '../contexts/StaffContext';
 import { createOrdererRecord, updateOrdererRecord } from '../data/orderers';
-import { createPartnerRecord, updatePartnerRecord } from '../data/partners';
-import type { PartnerUpdateData } from '../data/partners';
+import { createCompanyRecord, updateCompanyRecord } from '../data/companies-master';
+import type { CompanyUpdateData } from '../data/companies-master';
 
 type FormType = 'partner' | 'orderer' | 'staff';
 
 interface ConfirmPageState {
-  formData: PartnerFormData | OrdererFormData | StaffFormData;
+  formData: CompanyFormData | OrdererFormData | StaffFormData;
   formType: FormType;
   editMode?: boolean;
   entityId?: string;
@@ -38,8 +38,8 @@ function isConfirmPageState(value: unknown): value is ConfirmPageState {
   return true;
 }
 
-/** PartnerFormData を API 更新用の PartnerUpdateData に変換する */
-function toPartnerUpdateData(formData: PartnerFormData): PartnerUpdateData {
+/** CompanyFormData を API 更新用の CompanyUpdateData に変換する */
+function toCompanyUpdateData(formData: CompanyFormData): CompanyUpdateData {
   return {
     name: formData.name,
     postalCode: formData.postalCode,
@@ -111,7 +111,7 @@ export default function MasterRegisterConfirmPage() {
     if (isSubmitting) return;
 
     const redirectPath = {
-      partner: '/partners',
+      partner: '/companies',
       orderer: '/orderers',
       staff: '/staff',
     }[formType];
@@ -139,12 +139,12 @@ export default function MasterRegisterConfirmPage() {
           if (!created) throw new Error('Failed to create orderer');
         }
       } else if (formType === 'partner') {
-        const partnerData = formData as PartnerFormData;
+        const partnerData = formData as CompanyFormData;
         if (editMode && entityId) {
-          const updated = await updatePartnerRecord(entityId, toPartnerUpdateData(partnerData));
+          const updated = await updateCompanyRecord(entityId, toCompanyUpdateData(partnerData));
           if (!updated) throw new Error('Failed to update partner');
         } else {
-          const created = await createPartnerRecord({
+          const created = await createCompanyRecord({
             ...partnerData,
             categories: partnerData.categories.map((name) => ({ group: null, name })),
           });
@@ -175,7 +175,7 @@ export default function MasterRegisterConfirmPage() {
   const renderConfirmView = () => {
     switch (formType) {
       case 'partner':
-        return <PartnerConfirmView data={formData as PartnerFormData} />;
+        return <CompanyConfirmView data={formData as CompanyFormData} />;
       case 'orderer':
         return <OrdererConfirmView data={formData as OrdererFormData} />;
       case 'staff':

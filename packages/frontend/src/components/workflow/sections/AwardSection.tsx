@@ -43,7 +43,7 @@ import { PersonIcon } from '../../../constants/icons';
 import { useStaffDirectory } from '../../../contexts/StaffContext';
 import type {
   BidEvaluation,
-  Partner,
+  CompanyCandidate,
   EmailTemplate,
   CompetingCompany,
   Announcement,
@@ -55,7 +55,7 @@ import type {
 
 export interface AwardSectionProps {
   evaluation?: BidEvaluation;
-  partners?: Partner[];
+  partners?: CompanyCandidate[];
   /** ワークフロー（落札タブ）の担当者ID */
   workflowAssigneeId?: string;
 }

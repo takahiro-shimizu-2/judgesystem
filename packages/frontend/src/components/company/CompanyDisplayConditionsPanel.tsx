@@ -16,7 +16,7 @@ import {
 import type { GridSortModel } from '@mui/x-data-grid';
 import { colors, rightPanelColors, rightPanelStyles, fontSizes, iconStyles, borderRadius } from '../../constants/styles';
 import { prefecturesByRegion } from '../../constants/prefectures';
-import type { PartnerFilterState } from './PartnerFilterModal';
+import type { CompanyFilterState } from './CompanyFilterModal';
 
 // ソートオプションの定義
 const SORT_FIELDS = [
@@ -43,8 +43,8 @@ interface Props {
   onSearchChange: (query: string) => void;
   sortModel: GridSortModel;
   onSortModelChange: (model: GridSortModel) => void;
-  filters: PartnerFilterState;
-  onFilterChange: (filters: PartnerFilterState) => void;
+  filters: CompanyFilterState;
+  onFilterChange: (filters: CompanyFilterState) => void;
   onClearAll: () => void;
   categories: string[];
   activeTab?: 'sort' | 'filter';
@@ -105,7 +105,7 @@ function FilterButton({
   );
 }
 
-export function PartnerDisplayConditionsPanel({
+export function CompanyDisplayConditionsPanel({
   searchQuery,
   onSearchChange,
   sortModel,
