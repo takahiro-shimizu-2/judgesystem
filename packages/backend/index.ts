@@ -15,6 +15,7 @@ import {
   CompanyController,
   BidRequirementController,
 } from "./src/controllers";
+import { PublicAnnouncementController } from "./src/controllers/publicAnnouncementController";
 
 const app = express();
 
@@ -79,8 +80,17 @@ const ordererController = new OrdererController();
 const contactController = new ContactController();
 const companyController = new CompanyController();
 const bidRequirementController = new BidRequirementController();
+const publicAnnouncementController = new PublicAnnouncementController();
 
-// Apply authentication to all /api routes
+// =========================================================================
+// Public API routes — 認証不要、入札案件一覧のみ
+// /public/api は authenticate を経由しない
+// =========================================================================
+app.get("/public/api/announcements", publicAnnouncementController.getList);
+
+// =========================================================================
+// Internal API routes — 認証必須
+// =========================================================================
 app.use("/api", authenticate);
 
 // Evaluation routes
