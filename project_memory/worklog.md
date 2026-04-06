@@ -131,3 +131,13 @@ Context-and-impact phase E appends audit entries here.
 - Moved parity tracking forward so `bridge-revalidation` is complete and `parity-dod-v2` is now the active final slice.
 - Synchronized the final truthfulness layer for parity DoD: `AGENTS.md`, `CLAUDE.md`, and command docs now describe the current repo-local runtime as `Issue -> Omega -> CodeGen -> Test -> Review -> PR -> Deploy -> Water Spider`, instead of leaving stale `TestAgent absorbed` claims behind.
 - Closed the parity plan in `project_memory/tasks.json`: all parity tasks are now completed, with `miyabi-parity-plan.md` and `autonomous-runtime-operations.md` serving as the maintained operational references.
+
+## 2026-04-06
+
+- Reopened planning with a runtime-specific target because GitNexus existed mostly as guidance, hooks, and Claude-side instructions while the actual `TaskManager -> TaskExecutor -> handler` path could still run without any GitNexus artifact.
+- Recorded a dedicated GitNexus runtime integration plan in `docs/gitnexus-runtime-integration-plan.md` instead of treating the change as an untracked follow-up.
+- Added `scripts/automation/gitnexus/runtime-context.ts` and `runtime-contract.ts`, which make planning emit a mandatory `gitnexus-runtime-*.json` artifact containing issue-level query results plus context/impact snapshots for stable runtime anchor symbols.
+- Updated `TaskManager` so every task now receives a GitNexus binding before execution, and updated `TaskExecutor` so a missing binding becomes a hard failure instead of a silent omission.
+- Updated `CodeGenAgent`, `TestAgent`, and `ReviewAgent` so their artifacts now preserve GitNexus notes and anchor-symbol context as first-class handoff data.
+- Extended the living plan, workflow summary, and CLI output so GitNexus artifact paths are visible alongside the existing Omega / planning / deliverable artifacts.
+- Strengthened the smoke suite so `planning-artifacts`, `quality-pipeline`, `handler-contracts`, `worktree-lifecycle`, and `omega-integration-learning` all execute against the new mandatory GitNexus contract.

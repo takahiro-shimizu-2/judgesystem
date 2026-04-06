@@ -18,6 +18,7 @@ repo runtime 側では implementation brief を必ず生成し、
 
 - `scripts/automation/agents/handlers/codegen.ts` に接続済み
 - 実行時は implementation brief を local artifact として生成する
+- implementation brief と codegen summary には GitNexus runtime note が残る
 - `AUTOMATION_ENABLE_CODEGEN_WRITE=true` かつ `AUTOMATION_CODEGEN_COMMAND` がある場合だけ、repo root で明示 command を実行する
 - `AUTOMATION_CODEGEN_ALLOWED_PATHS`, `AUTOMATION_CODEGEN_REQUIRE_CHANGES`, `AUTOMATION_CODEGEN_POSTCHECK_COMMAND` があれば stronger write contract として適用する
 - code-writing command には issue / task / brief / worktree / branch 情報が env として渡される
@@ -46,6 +47,7 @@ repo runtime 側では implementation brief を必ず生成し、
 ## 成功条件
 
 - implementation brief artifact が生成される
+- GitNexus runtime artifact / anchor symbol note が brief と summary に残る
 - delegated writer が有効なら、その実行結果と changed files が report に残る
 - stronger write contract が有効なら、allowlist / require-changes / post-check の結果も artifact に残る
 - worktree / branch / 次の実装ステップが明示される
