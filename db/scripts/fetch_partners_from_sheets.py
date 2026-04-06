@@ -3,7 +3,7 @@
 Google Sheets から協力会社データを取得し、seed.sh 用のCSVファイルを生成する。
 
 4つのスプレッドシート（合計47都道府県分）のデータを読み取り、
-data/master/ 配下に partners_master.csv と partners_categories.csv を出力する。
+data/master/ 配下に companies.csv と companies_categories.csv を出力する。
 DB投入は既存の seed.sh に任せる。
 
 Usage:
@@ -42,7 +42,7 @@ DEFAULT_SPREADSHEET_IDS = [
     "1h1wIauQg7urfjtC5QEskS8COYQdaJztHALd6kgwYigg",
 ]
 
-# スプレッドシートから使うカラム → partners_master のカラムにマッピング
+# スプレッドシートから使うカラム → companies のカラムにマッピング
 MASTER_COLUMN_MAP = {
     "会社名": "name",
     "郵便番号": "postalCode",
@@ -54,7 +54,7 @@ MASTER_COLUMN_MAP = {
     "詳細ページのURL": "detail_url",
 }
 
-# カテゴリ系カラム（カンマ区切りを分割して partners_categories に投入）
+# カテゴリ系カラム（カンマ区切りを分割して companies_categories に投入）
 CATEGORY_COLUMNS = [
     "業種",
     "取り扱い",
@@ -69,25 +69,26 @@ CATEGORY_COLUMNS = [
     "リフォーム",
 ]
 
-# seed.sh が期待する partners_master.csv のカラム順
+# seed.sh が期待する companies.csv のカラム順
 MASTER_CSV_COLUMNS = [
-    "partner_id",
+    "id",              # was partner_id
     "name",
-    "postalCode",
+    "postal_code",     # was postalCode
     "address",
     "phone",
     "email",
     "fax",
     "url",
-    "surveyCount",
+    "survey_count",    # was surveyCount
     "rating",
-    "resultCount",
+    "result_count",    # was resultCount
     "representative",
     "establishment_date",
     "capital",
-    "employeeCount",
+    "employee_count",  # was employeeCount
     "detail_url",
     "region",
+    "is_partner",      # new: always "true" for this script
 ]
 
 SCOPES = [
@@ -95,8 +96,8 @@ SCOPES = [
 ]
 
 
-def generate_partner_id(name: str, address: str) -> str:
-    """会社名+住所から決定的なpartner_idを生成（べき等性保証）。"""
+def generate_company_id(name: str, address: str) -> str:
+    """会社名+住所から決定的なcompany_idを生成（べき等性保証）。"""
     key = f"{name or ''}::{address or ''}"
     return str(uuid.uuid5(uuid.NAMESPACE_URL, key))
 
@@ -279,26 +280,27 @@ def transform_row(row: dict, sheet_name: str):
         return None, []
 
     address = str(row.get("住所", "")).strip()
-    partner_id = generate_partner_id(name, address)
+    company_id = generate_company_id(name, address)
 
     master = {
-        "partner_id": partner_id,
+        "id": company_id,
         "name": name,
-        "postalCode": str(row.get("郵便番号", "")).strip(),
+        "postal_code": str(row.get("郵便番号", "")).strip(),
         "address": address,
         "phone": str(row.get("電話番号", "")).strip(),
         "email": str(row.get("メールアドレス", "")).strip(),
         "fax": str(row.get("FAX番号", "")).strip(),
         "url": str(row.get("ホームページURL", "")).strip(),
-        "surveyCount": "0",
+        "survey_count": "0",
         "rating": "",
-        "resultCount": "0",
+        "result_count": "0",
         "representative": "",
         "establishment_date": "",
         "capital": "",
-        "employeeCount": "0",
+        "employee_count": "0",
         "detail_url": str(row.get("詳細ページのURL", "")).strip(),
         "region": sheet_name,
+        "is_partner": "true",
     }
 
     # カテゴリ収集: 各カラムの値をパースして (group, item) ペアで統合
@@ -321,8 +323,8 @@ def write_csv_files(masters: dict, categories_map: dict, output_dir: str):
     """seed.sh 用の CSV ファイルを出力する。"""
     os.makedirs(output_dir, exist_ok=True)
 
-    # --- partners_master.csv ---
-    master_path = os.path.join(output_dir, "partners_master.csv")
+    # --- companies.csv ---
+    master_path = os.path.join(output_dir, "companies.csv")
     with open(master_path, "w", newline="", encoding="utf-8") as f:
         writer = csv.writer(f)
         writer.writerow(MASTER_CSV_COLUMNS)
@@ -330,12 +332,12 @@ def write_csv_files(masters: dict, categories_map: dict, output_dir: str):
             writer.writerow([m[col] for col in MASTER_CSV_COLUMNS])
     print(f"  {master_path} ({len(masters)} rows)")
 
-    # --- partners_categories.csv ---
-    cat_path = os.path.join(output_dir, "partners_categories.csv")
+    # --- companies_categories.csv ---
+    cat_path = os.path.join(output_dir, "companies_categories.csv")
     cat_count = 0
     with open(cat_path, "w", newline="", encoding="utf-8") as f:
         writer = csv.writer(f)
-        writer.writerow(["partner_id", "category_group", "categories"])
+        writer.writerow(["company_id", "category_group", "categories"])
         for pid, cats in categories_map.items():
             for group, item in cats:
                 writer.writerow([pid, group or "", item])
@@ -391,7 +393,7 @@ def main(argv=None):
             skip_count += 1
             continue
 
-        pid = master["partner_id"]
+        pid = master["id"]
         if pid in masters:
             duplicate_count += 1
             existing = set(categories_map.get(pid, []))
